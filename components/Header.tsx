@@ -6,6 +6,7 @@ import { DownloadIcon } from './icons/DownloadIcon';
 import { UploadIcon } from './icons/UploadIcon';
 import { TrashIcon } from './icons/TrashIcon';
 import { UsersIcon } from './icons/UsersIcon';
+import { LogOutIcon } from './icons/LogOutIcon';
 
 interface HeaderProps {
     toggleSidebar: () => void;
@@ -15,9 +16,10 @@ interface HeaderProps {
     onImportData: (e: React.ChangeEvent<HTMLInputElement>) => void;
     onResetData: () => void;
     onOpenUserManagement: () => void;
+    onLogout: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ toggleSidebar, userRole, onExportData, onImportData, onResetData, onOpenUserManagement }) => {
+export const Header: React.FC<HeaderProps> = ({ toggleSidebar, userRole, onExportData, onImportData, onResetData, onOpenUserManagement, onLogout }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleImportClick = () => {
@@ -82,12 +84,20 @@ export const Header: React.FC<HeaderProps> = ({ toggleSidebar, userRole, onExpor
                 </div>
 
                 <div className="flex items-center space-x-2">
-                    <span className="text-sm font-medium text-gray-500 hidden md:inline">
-                        {userRole === UserRole.OWNER ? 'Administrador' : 'Empleado'}
-                    </span>
+                    <div className="hidden md:flex flex-col items-end mr-2">
+                        <span className="text-sm font-medium text-gray-700">
+                            {userRole === UserRole.OWNER ? 'Administrador' : 'Empleado'}
+                        </span>
+                        <span className="text-xs text-green-600 font-bold cursor-pointer hover:underline" onClick={onLogout}>
+                            Cerrar Sesión
+                        </span>
+                    </div>
                     <div className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold">
                         {userRole === UserRole.OWNER ? 'A' : 'E'}
                     </div>
+                    <button onClick={onLogout} className="md:hidden p-2 text-gray-500 hover:text-red-600" title="Salir">
+                        <LogOutIcon className="w-6 h-6" />
+                    </button>
                 </div>
              </div>
         </header>

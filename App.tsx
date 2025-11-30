@@ -166,10 +166,18 @@ const App: React.FC = () => {
         setUserRole(role);
         setIsAuthenticated(true);
     }
+    
+    const handleLogout = () => {
+        setIsAuthenticated(false);
+        setCurrentView('dashboard');
+    }
 
     // User Management
     const handleAddUser = (newUser: AppUser) => {
         setUsers([...users, newUser]);
+    }
+    const handleEditUser = (updatedUser: AppUser) => {
+        setUsers(users.map(u => u.id === updatedUser.id ? updatedUser : u));
     }
     const handleDeleteUser = (id: string) => {
         setUsers(users.filter(u => u.id !== id));
@@ -320,13 +328,16 @@ const App: React.FC = () => {
                 
                 if (data.items && data.movements) {
                     if (window.confirm('Esta acción reemplazará todos los datos actuales. ¿Desea continuar?')) {
-                        setItems(data.items);
-                        setMovements(data.movements.map((m: any) => ({...m, timestamp: new Date(m.timestamp)})));
-                        if (data.personnel) setPersonnel(data.personnel);
-                        if (data.purchaseOrders) setPurchaseOrders(data.purchaseOrders.map((po: any) => ({...po, orderDate: new Date(po.orderDate)})));
-                        if (data.projects) setProjects(data.projects);
-                        if (data.users) setUsers(data.users);
-                        alert('Datos importados correctamente.');
+                        // Guardar directamente en LocalStorage para evitar problemas de estado asíncrono
+                        localStorage.setItem('inventory_items', JSON.stringify(data.items));
+                        localStorage.setItem('inventory_movements', JSON.stringify(data.movements));
+                        if (data.personnel) localStorage.setItem('inventory_personnel', JSON.stringify(data.personnel));
+                        if (data.purchaseOrders) localStorage.setItem('inventory_purchase_orders', JSON.stringify(data.purchaseOrders));
+                        if (data.projects) localStorage.setItem('inventory_projects', JSON.stringify(data.projects));
+                        if (data.users) localStorage.setItem('inventory_users', JSON.stringify(data.users));
+                        
+                        alert('Datos importados correctamente. La página se recargará.');
+                        window.location.reload(); // Forzar recarga para leer los datos nuevos
                     }
                 } else {
                     alert('El archivo no tiene el formato correcto.');
@@ -346,6 +357,7 @@ const App: React.FC = () => {
         
         if (password === '00') {
             if (window.confirm('¿Está absolutamente seguro? Se eliminarán todos los registros.')) {
+                // Guardar listas vacías explícitamente para sobreescribir los datos viejos
                 const emptyArr = JSON.stringify([]);
                 localStorage.setItem('inventory_items', emptyArr);
                 localStorage.setItem('inventory_movements', emptyArr);
@@ -353,18 +365,20 @@ const App: React.FC = () => {
                 localStorage.setItem('inventory_purchase_orders', emptyArr);
                 localStorage.setItem('inventory_projects', emptyArr);
                 
+                // Actualizar estado para reflejar cambios en la UI
                 setItems([]);
                 setMovements([]);
                 setPersonnel([]);
                 setPurchaseOrders([]);
                 setProjects([]);
                 
+                // Preservar al usuario admin actual para no bloquearlo
                 const adminUser = users.find(u => u.role === UserRole.OWNER) || mockUsers[0];
                 const adminArr = JSON.stringify([adminUser]);
                 localStorage.setItem('inventory_users', adminArr);
                 setUsers([adminUser]);
 
-                alert("El sistema se ha restablecido correctamente.");
+                alert("El sistema se ha restablecido a cero (Tabula Rasa).");
             }
         } else if (password !== null) {
             alert("Contraseña incorrecta. Acción cancelada.");
@@ -537,6 +551,7 @@ const App: React.FC = () => {
                     onImportData={handleImportData}
                     onResetData={handleResetData}
                     onOpenUserManagement={() => setUserManagementOpen(true)}
+                    onLogout={handleLogout}
                 />
                 <main className="flex-1 p-4 md:p-6 overflow-y-auto">
                     {renderView()}
@@ -590,6 +605,7 @@ const App: React.FC = () => {
                 users={users}
                 onAddUser={handleAddUser}
                 onDeleteUser={handleDeleteUser}
+                onEditUser={handleEditUser}
             />
         </div>
     );
