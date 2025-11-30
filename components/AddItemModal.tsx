@@ -121,10 +121,6 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onA
                     </div>
                 </form>
             </div>
-             <style jsx>{`
-                .input-style { padding: 0.5rem 0.75rem; border: 1px solid #d1d5db; border-radius: 0.375rem; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); }
-                .input-style:focus { outline: none; --tw-ring-color: #3b82f6; box-shadow: 0 0 0 2px var(--tw-ring-color); border-color: #3b82f6; }
-            `}</style>
         </div>
     );
 };

@@ -1,9 +1,10 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Item, Movement } from "../types";
 
-// FIX: Conditionally initialize GoogleGenAI to prevent crashing when API_KEY is not set.
+// Parche para TypeScript en Vercel
+declare const process: any;
+
 let ai: GoogleGenAI | undefined;
-// FIX: Use process.env.API_KEY directly in initialization as per guidelines.
 if (process.env.API_KEY) {
   ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 } else {
@@ -11,12 +12,10 @@ if (process.env.API_KEY) {
 }
 
 export const generateInventoryAnalysis = async (items: Item[], movements: Movement[]): Promise<string> => {
-    // FIX: Check for the initialized 'ai' instance instead of the API_KEY string.
     if(!ai) {
         return "Error: La clave de API de Gemini no está configurada. Por favor, configure la variable de entorno API_KEY.";
     }
 
-  // FIX: Enriched movement data with item name and category for better AI analysis.
   const movementData = movements.map(m => {
     const item = items.find(i => i.id === m.itemId);
     return {

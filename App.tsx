@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { AddItemModal } from './components/AddItemModal';
 import { EditItemModal } from './components/EditItemModal';
@@ -332,8 +331,18 @@ const App: React.FC = () => {
         const password = prompt("PELIGRO: Esto borrará todo el sistema.\nIngrese la CLAVE MAESTRA para confirmar:");
         
         if (password === '00') {
-            if (window.confirm('¿Está absolutamente seguro? No se podrá deshacer.')) {
-                localStorage.clear();
+            if (window.confirm('¿Está absolutamente seguro? Se eliminarán todos los registros.')) {
+                // Borrar datos y establecer arrays vacíos explícitamente para evitar recarga de mocks
+                localStorage.setItem('inventory_items', '[]');
+                localStorage.setItem('inventory_movements', '[]');
+                localStorage.setItem('inventory_personnel', '[]');
+                localStorage.setItem('inventory_purchase_orders', '[]');
+                localStorage.setItem('inventory_projects', '[]');
+                
+                // Mantener el usuario administrador por defecto o actual
+                const adminUser = users.find(u => u.role === UserRole.OWNER) || mockUsers[0];
+                localStorage.setItem('inventory_users', JSON.stringify([adminUser]));
+
                 window.location.reload();
             }
         } else if (password !== null) {
