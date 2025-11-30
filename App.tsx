@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { AddItemModal } from './components/AddItemModal';
 import { EditItemModal } from './components/EditItemModal';
@@ -13,7 +14,7 @@ import { PurchaseOrdersView } from './components/PurchaseOrdersView';
 import { ProjectsView } from './components/ProjectsView';
 import { LoansView } from './components/LoansView';
 import { ItemHistoryModal } from './components/ItemHistoryModal';
-import { UserManagementModal } from './components/UserManagementModal'; // Nuevo modal
+import { UserManagementModal } from './components/UserManagementModal';
 
 import { mockItems, mockMovements, mockPersonnel, mockPurchaseOrders, mockProjects, mockUsers } from './mockData';
 import { Item, Movement, MovementType, Personnel, PurchaseOrder, PurchaseOrderStatus, UserRole, InventoryType, Project, AppUser } from './types';
@@ -137,6 +138,9 @@ const App: React.FC = () => {
     const [currentView, setCurrentView] = useState<View>('dashboard');
     const [selectedMovementFilter, setSelectedMovementFilter] = useState<InventoryType | null>(null);
     const [selectedSubCategory, setSelectedSubCategory] = useState<string | null>(null);
+    // Nuevo estado para filtrar por los tipos principales (botones laterales)
+    const [selectedInventoryType, setSelectedInventoryType] = useState<InventoryType | null>(null);
+    
     const [isSidebarOpen, setSidebarOpen] = useState(true);
 
     // Modal State
@@ -240,6 +244,16 @@ const App: React.FC = () => {
         setPersonnel(prev => [...prev, newPerson]);
     };
 
+    const handleEditPersonnel = (updatedPerson: Personnel) => {
+        setPersonnel(prev => prev.map(p => p.id === updatedPerson.id ? updatedPerson : p));
+    };
+
+    const handleDeletePersonnel = (id: string) => {
+        if (window.confirm('¿Eliminar a esta persona del sistema?')) {
+            setPersonnel(prev => prev.filter(p => p.id !== id));
+        }
+    };
+
     const handleAddProject = (project: Omit<Project, 'id'>) => {
         const newProject: Project = { ...project, id: `proj-${Date.now()}` };
         setProjects(prev => [...prev, newProject]);
@@ -332,28 +346,47 @@ const App: React.FC = () => {
         
         if (password === '00') {
             if (window.confirm('¿Está absolutamente seguro? Se eliminarán todos los registros.')) {
-                // Borrar datos y establecer arrays vacíos explícitamente para evitar recarga de mocks
-                localStorage.setItem('inventory_items', '[]');
-                localStorage.setItem('inventory_movements', '[]');
-                localStorage.setItem('inventory_personnel', '[]');
-                localStorage.setItem('inventory_purchase_orders', '[]');
-                localStorage.setItem('inventory_projects', '[]');
+                const emptyArr = JSON.stringify([]);
+                localStorage.setItem('inventory_items', emptyArr);
+                localStorage.setItem('inventory_movements', emptyArr);
+                localStorage.setItem('inventory_personnel', emptyArr);
+                localStorage.setItem('inventory_purchase_orders', emptyArr);
+                localStorage.setItem('inventory_projects', emptyArr);
                 
-                // Mantener el usuario administrador por defecto o actual
+                setItems([]);
+                setMovements([]);
+                setPersonnel([]);
+                setPurchaseOrders([]);
+                setProjects([]);
+                
                 const adminUser = users.find(u => u.role === UserRole.OWNER) || mockUsers[0];
-                localStorage.setItem('inventory_users', JSON.stringify([adminUser]));
+                const adminArr = JSON.stringify([adminUser]);
+                localStorage.setItem('inventory_users', adminArr);
+                setUsers([adminUser]);
 
-                window.location.reload();
+                alert("El sistema se ha restablecido correctamente.");
             }
         } else if (password !== null) {
             alert("Contraseña incorrecta. Acción cancelada.");
         }
     };
     
+    // Filtro principal de items
     const filteredItems = useMemo(() => {
-        if (!selectedSubCategory) return items;
-        return items.filter(item => item.subCategory === selectedSubCategory);
-    }, [items, selectedSubCategory]);
+        let result = items;
+        
+        // 1. Filtrar por Tipo de Inventario (Botones laterales principales)
+        if (selectedInventoryType) {
+            result = result.filter(item => item.inventoryType === selectedInventoryType);
+        }
+
+        // 2. Filtrar por SubCategoría (Botones de detalle)
+        if (selectedSubCategory) {
+            result = result.filter(item => item.subCategory === selectedSubCategory);
+        }
+
+        return result;
+    }, [items, selectedSubCategory, selectedInventoryType]);
 
     const handleNavigation = () => {
         if (window.innerWidth < 768) {
@@ -365,36 +398,53 @@ const App: React.FC = () => {
         setCurrentView(view);
         setSelectedMovementFilter(null);
         setSelectedSubCategory(null);
+        setSelectedInventoryType(null); // Resetear tipo
         handleNavigation();
     }
     
-    const selectMovementFilter = (type: InventoryType) => {
-        setCurrentView('movements');
-        setSelectedMovementFilter(type);
+    // Función para seleccionar categorías principales (Eléctrica, Manual, etc.)
+    const selectInventoryTypeFilter = (type: InventoryType) => {
+        setCurrentView('inventory');
+        setSelectedInventoryType(type);
         setSelectedSubCategory(null);
+        setSelectedMovementFilter(null);
         handleNavigation();
     }
 
     const selectInventorySubCategory = (subCategory: string | null) => {
         setCurrentView('inventory');
         setSelectedSubCategory(subCategory);
+        // Si seleccionamos "Todo el inventario" (null), reseteamos el tipo también para ver TODO
+        if (subCategory === null) {
+            setSelectedInventoryType(null);
+        }
         setSelectedMovementFilter(null);
         handleNavigation();
     }
 
     const renderView = () => {
         const onGoBack = () => selectView('dashboard');
+        // Título dinámico para la vista de inventario
+        const inventoryTitle = selectedSubCategory || selectedInventoryType || 'Todos los Artículos';
+
         switch (currentView) {
             case 'dashboard':
                 return <Dashboard items={items} movements={movements} />;
             case 'inventory':
-                return <InventoryView items={filteredItems} openAddItemModal={() => setAddItemModalOpen(true)} onEditItem={openEditItemModal} onDeleteItem={handleDeleteItem} onItemHistory={openItemHistory} userRole={userRole} category={selectedSubCategory} onGoBack={onGoBack} />;
+                return <InventoryView items={filteredItems} openAddItemModal={() => setAddItemModalOpen(true)} onEditItem={openEditItemModal} onDeleteItem={handleDeleteItem} onItemHistory={openItemHistory} userRole={userRole} category={inventoryTitle} onGoBack={onGoBack} />;
             case 'movements':
                 return <MovementsView movements={movements} items={items} personnel={personnel} openLogMovementModal={() => setLogMovementModalOpen(true)} filterType={selectedMovementFilter} onGoBack={onGoBack} />;
             case 'purchaseOrders':
                 return <PurchaseOrdersView purchaseOrders={purchaseOrders} items={items} openAddPurchaseOrderModal={() => setAddPOModalOpen(true)} onUpdateStatus={handleUpdatePOStatus} userRole={userRole} onGoBack={onGoBack} />;
             case 'personnel':
-                return <PersonnelView personnel={personnel} openAddPersonnelModal={() => setAddPersonnelModalOpen(true)} onGoBack={onGoBack} />;
+                return <PersonnelView 
+                    personnel={personnel} 
+                    openAddPersonnelModal={() => setAddPersonnelModalOpen(true)} 
+                    onGoBack={onGoBack} 
+                    onEditPersonnel={handleEditPersonnel}
+                    onDeletePersonnel={handleDeletePersonnel}
+                    userRole={userRole}
+                />;
             case 'projects':
                 return <ProjectsView projects={projects} movements={movements} items={items} onAddProject={handleAddProject} onGoBack={onGoBack} userRole={userRole} />;
             case 'loans':
@@ -458,8 +508,14 @@ const App: React.FC = () => {
                         <NavItem icon={ClockIcon} label="Préstamos / Devol." onClick={() => selectView('loans')} isActive={currentView === 'loans'} />
                         <NavItem icon={MovementsIcon} label="Todos los Movimientos" onClick={() => selectView('movements')} isActive={currentView === 'movements'} />
 
-                        <NavHeader label="Inventario" />
-                        <NavItem icon={InventoryIcon} label="Todo el Inventario" onClick={() => selectInventorySubCategory(null)} isActive={currentView === 'inventory' && selectedSubCategory === null} />
+                        <NavHeader label="Categorías Principales" />
+                        <NavItem icon={HandToolIcon} label="Herramienta Manual" onClick={() => selectInventoryTypeFilter(InventoryType.HAND_TOOL)} isActive={currentView === 'inventory' && selectedInventoryType === InventoryType.HAND_TOOL} />
+                        <NavItem icon={ElectricalToolIcon} label="Herramienta Eléctrica" onClick={() => selectInventoryTypeFilter(InventoryType.ELECTRICAL_TOOL)} isActive={currentView === 'inventory' && selectedInventoryType === InventoryType.ELECTRICAL_TOOL} />
+                        <NavItem icon={PpeIcon} label="Indumentaria (EPP)" onClick={() => selectInventoryTypeFilter(InventoryType.PPE)} isActive={currentView === 'inventory' && selectedInventoryType === InventoryType.PPE} />
+                        <NavItem icon={SingleUseIcon} label="Material de Consumo" onClick={() => selectInventoryTypeFilter(InventoryType.SINGLE_USE)} isActive={currentView === 'inventory' && selectedInventoryType === InventoryType.SINGLE_USE} />
+
+                        <NavHeader label="Inventario Detallado" />
+                        <NavItem icon={InventoryIcon} label="Ver Todo" onClick={() => selectInventorySubCategory(null)} isActive={currentView === 'inventory' && selectedSubCategory === null && selectedInventoryType === null} />
                         {uniqueSubCategories.map(subCat => (
                             <button key={subCat} onClick={() => selectInventorySubCategory(subCat)} className={`w-full text-left pl-12 pr-4 py-2 text-sm font-medium rounded-lg transition-colors duration-200 ${selectedSubCategory === subCat ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-100'}`}>
                                 {subCat}
@@ -508,6 +564,7 @@ const App: React.FC = () => {
                 personnel={personnel}
                 projects={projects}
                 userRole={userRole}
+                filterInventoryType={selectedInventoryType || undefined} // Pasar el filtro al modal para que solo muestre items del tipo seleccionado si aplica
             />
             <AddPersonnelModal
                 isOpen={isAddPersonnelModalOpen}

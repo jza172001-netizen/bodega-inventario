@@ -1,16 +1,36 @@
-
 import React from 'react';
-import { Personnel } from '../types';
+import { Personnel, UserRole } from '../types';
 import { PlusIcon } from './icons/PlusIcon';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
+import { TrashIcon } from './icons/TrashIcon';
+import { EditIcon } from './icons/EditIcon';
 
 interface PersonnelViewProps {
     personnel: Personnel[];
     openAddPersonnelModal: () => void;
     onGoBack: () => void;
+    onEditPersonnel?: (person: Personnel) => void;
+    onDeletePersonnel?: (id: string) => void;
+    userRole?: UserRole;
 }
 
-export const PersonnelView: React.FC<PersonnelViewProps> = ({ personnel, openAddPersonnelModal, onGoBack }) => {
+export const PersonnelView: React.FC<PersonnelViewProps> = ({ 
+    personnel, 
+    openAddPersonnelModal, 
+    onGoBack, 
+    onEditPersonnel, 
+    onDeletePersonnel,
+    userRole 
+}) => {
+    
+    const handleEdit = (p: Personnel) => {
+        if (!onEditPersonnel) return;
+        const newName = prompt("Nuevo nombre para " + p.name + ":", p.name);
+        if (newName && newName.trim() !== "") {
+            onEditPersonnel({ ...p, name: newName.trim() });
+        }
+    }
+
     return (
         <div className="bg-white p-6 rounded-xl shadow-md">
             <div className="flex justify-between items-center mb-4">
@@ -27,14 +47,39 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({ personnel, openAdd
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {personnel.map(p => (
-                    <div key={p.id} className="p-4 border rounded-lg bg-gray-50 flex items-center space-x-3">
-                        <div className="w-10 h-10 rounded-full bg-blue-200 text-blue-600 flex items-center justify-center font-bold text-lg">
-                            {p.name.charAt(0)}
+                    <div key={p.id} className="p-4 border rounded-lg bg-gray-50 flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                            <div className="w-10 h-10 rounded-full bg-blue-200 text-blue-600 flex items-center justify-center font-bold text-lg">
+                                {p.name.charAt(0)}
+                            </div>
+                            <span className="font-medium text-gray-700 truncate max-w-[120px]" title={p.name}>{p.name}</span>
                         </div>
-                        <span className="font-medium text-gray-700">{p.name}</span>
+                        {userRole === UserRole.OWNER && (
+                            <div className="flex space-x-1">
+                                <button 
+                                    onClick={() => handleEdit(p)}
+                                    className="p-1 text-gray-400 hover:text-indigo-600 rounded"
+                                    title="Editar nombre"
+                                >
+                                    <EditIcon className="w-4 h-4"/>
+                                </button>
+                                <button 
+                                    onClick={() => onDeletePersonnel && onDeletePersonnel(p.id)}
+                                    className="p-1 text-gray-400 hover:text-red-600 rounded"
+                                    title="Eliminar"
+                                >
+                                    <TrashIcon className="w-4 h-4"/>
+                                </button>
+                            </div>
+                        )}
                     </div>
                 ))}
             </div>
+             {personnel.length === 0 && (
+                <div className="text-center py-10 text-gray-500">
+                    <p>No hay personal registrado.</p>
+                </div>
+            )}
         </div>
     );
 };
