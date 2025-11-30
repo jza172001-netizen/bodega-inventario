@@ -1,5 +1,6 @@
+
 import React, { useState, useMemo } from 'react';
-import { Item, Movement, Personnel, UserRole, InventoryType } from '../types';
+import { Item, Movement, Personnel, UserRole, InventoryType, Project } from '../types';
 import { MovementType } from '../types';
 import { XIcon } from './icons/XIcon';
 
@@ -9,15 +10,18 @@ interface LogMovementModalProps {
     onLogMovement: (movement: Omit<Movement, 'id' | 'timestamp'>) => void;
     items: Item[];
     personnel: Personnel[];
+    projects: Project[];
     userRole: UserRole;
     filterInventoryType?: InventoryType;
 }
 
-export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onClose, onLogMovement, items, personnel, userRole, filterInventoryType }) => {
+export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onClose, onLogMovement, items, personnel, projects, userRole, filterInventoryType }) => {
     const [itemId, setItemId] = useState('');
     const [type, setType] = useState<MovementType>(MovementType.CHECK_OUT);
     const [quantity, setQuantity] = useState(1);
     const [personnelId, setPersonnelId] = useState('');
+    const [projectId, setProjectId] = useState('');
+    const [isLoan, setIsLoan] = useState(false);
     const [notes, setNotes] = useState('');
 
     const filteredItems = useMemo(() => {
@@ -32,12 +36,22 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
             alert('Por favor, seleccione un artículo y una cantidad válida.');
             return;
         }
-        onLogMovement({ itemId, type, quantity, personnelId: personnelId || undefined, notes });
+        onLogMovement({ 
+            itemId, 
+            type, 
+            quantity, 
+            personnelId: personnelId || undefined, 
+            projectId: projectId || undefined,
+            isLoan: type === MovementType.CHECK_OUT ? isLoan : false,
+            notes 
+        });
         // Reset form
         setItemId('');
         setType(MovementType.CHECK_OUT);
         setQuantity(1);
         setPersonnelId('');
+        setProjectId('');
+        setIsLoan(false);
         setNotes('');
         onClose();
     };
@@ -82,6 +96,34 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
                             </select>
                         </div>
                     </div>
+                    
+                    {/* Campos adicionales para SALIDAS */}
+                    {(type === MovementType.CHECK_OUT || type === MovementType.WASTE) && (
+                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Proyecto (Opcional)</label>
+                                <select value={projectId} onChange={e => setProjectId(e.target.value)} className="w-full input-style">
+                                    <option value="">Ninguno / General</option>
+                                    {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                </select>
+                            </div>
+                            {type === MovementType.CHECK_OUT && (
+                                <div className="flex items-center mt-6">
+                                    <input
+                                        id="isLoan"
+                                        type="checkbox"
+                                        checked={isLoan}
+                                        onChange={e => setIsLoan(e.target.checked)}
+                                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                    />
+                                    <label htmlFor="isLoan" className="ml-2 block text-sm text-gray-900">
+                                        ¿Es un préstamo? (Requiere devolución)
+                                    </label>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Notas (Opcional)</label>
                         <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} className="w-full input-style" placeholder="Ej: Para el proyecto Edificio Central" />

@@ -12,8 +12,12 @@ import { AddPersonnelModal } from './components/AddPersonnelModal';
 import { PersonnelView } from './components/PersonnelView';
 import { AddPurchaseOrderModal } from './components/AddPurchaseOrderModal';
 import { PurchaseOrdersView } from './components/PurchaseOrdersView';
-import { mockItems, mockMovements, mockPersonnel, mockPurchaseOrders } from './mockData';
-import { Item, Movement, MovementType, Personnel, PurchaseOrder, PurchaseOrderStatus, UserRole, InventoryType } from './types';
+import { ProjectsView } from './components/ProjectsView';
+import { LoansView } from './components/LoansView';
+import { ItemHistoryModal } from './components/ItemHistoryModal';
+
+import { mockItems, mockMovements, mockPersonnel, mockPurchaseOrders, mockProjects } from './mockData';
+import { Item, Movement, MovementType, Personnel, PurchaseOrder, PurchaseOrderStatus, UserRole, InventoryType, Project } from './types';
 import { LoginView } from './components/LoginView';
 
 // Icons for Sidebar
@@ -26,8 +30,10 @@ import { HandToolIcon } from './components/icons/HandToolIcon';
 import { ElectricalToolIcon } from './components/icons/ElectricalToolIcon';
 import { PpeIcon } from './components/icons/PpeIcon';
 import { SingleUseIcon } from './components/icons/SingleUseIcon';
+import { HardHatIcon } from './components/icons/HardHatIcon';
+import { ClockIcon } from './components/icons/ClockIcon';
 
-type View = 'dashboard' | 'inventory' | 'movements' | 'purchaseOrders' | 'personnel';
+type View = 'dashboard' | 'inventory' | 'movements' | 'purchaseOrders' | 'personnel' | 'projects' | 'loans';
 
 const App: React.FC = () => {
     // State Management
@@ -85,6 +91,16 @@ const App: React.FC = () => {
         }
     });
 
+    const [projects, setProjects] = useState<Project[]>(() => {
+        try {
+            const savedProjects = localStorage.getItem('inventory_projects');
+            return savedProjects ? JSON.parse(savedProjects) : mockProjects;
+        } catch (e) {
+            console.error("Failed to parse projects from localStorage", e);
+            return mockProjects;
+        }
+    });
+
     const [userRole, setUserRole] = useState<UserRole>(UserRole.OWNER);
 
     // FIX: Add useEffect hooks to save state changes to localStorage.
@@ -120,6 +136,14 @@ const App: React.FC = () => {
         }
     }, [purchaseOrders]);
 
+    useEffect(() => {
+        try {
+            localStorage.setItem('inventory_projects', JSON.stringify(projects));
+        } catch (e) {
+            console.error("Failed to save projects to localStorage", e);
+        }
+    }, [projects]);
+
 
     // UI State
     const [currentView, setCurrentView] = useState<View>('dashboard');
@@ -135,6 +159,10 @@ const App: React.FC = () => {
     const [isAddPersonnelModalOpen, setAddPersonnelModalOpen] = useState(false);
     const [isAddPOModalOpen, setAddPOModalOpen] = useState(false);
     
+    // Kardex State
+    const [itemForHistory, setItemForHistory] = useState<Item | null>(null);
+    const [isHistoryModalOpen, setHistoryModalOpen] = useState(false);
+
     const uniqueSubCategories = useMemo(() => {
         const subCategories = new Set(items.map(item => item.subCategory));
         return Array.from(subCategories).sort();
@@ -162,8 +190,18 @@ const App: React.FC = () => {
         setEditModalOpen(true);
     };
 
+    const openItemHistory = (item: Item) => {
+        setItemForHistory(item);
+        setHistoryModalOpen(true);
+    };
+
     const handleLogMovement = (movement: Omit<Movement, 'id' | 'timestamp'>) => {
-        const newMovement: Movement = { ...movement, id: `move-${Date.now()}`, timestamp: new Date() };
+        const newMovement: Movement = { 
+            ...movement, 
+            id: `move-${Date.now()}`, 
+            timestamp: new Date(),
+            isReturned: false // Default for loans
+        };
         setMovements(prev => [newMovement, ...prev]);
 
         // Update item quantity
@@ -179,9 +217,30 @@ const App: React.FC = () => {
         }
     };
 
+    const handleReturnLoan = (movementId: string) => {
+        const movement = movements.find(m => m.id === movementId);
+        if (!movement || movement.isReturned) return;
+
+        if (window.confirm(`¿Confirmar devolución de: ${items.find(i => i.id === movement.itemId)?.name}?`)) {
+            // Update movement status
+            setMovements(prev => prev.map(m => m.id === movementId ? { ...m, isReturned: true } : m));
+
+            // Return stock to inventory
+            const item = items.find(i => i.id === movement.itemId);
+            if (item) {
+                handleEditItem({ ...item, quantity: item.quantity + movement.quantity });
+            }
+        }
+    };
+
     const handleAddPersonnel = (person: Omit<Personnel, 'id'>) => {
         const newPerson: Personnel = { ...person, id: `person-${Date.now()}` };
         setPersonnel(prev => [...prev, newPerson]);
+    };
+
+    const handleAddProject = (project: Omit<Project, 'id'>) => {
+        const newProject: Project = { ...project, id: `proj-${Date.now()}` };
+        setProjects(prev => [...prev, newProject]);
     };
 
     const handleAddPurchaseOrder = (order: Omit<PurchaseOrder, 'id'>) => {
@@ -218,6 +277,7 @@ const App: React.FC = () => {
             movements,
             personnel,
             purchaseOrders,
+            projects,
             exportDate: new Date().toISOString()
         };
         const dataStr = JSON.stringify(data, null, 2);
@@ -252,6 +312,7 @@ const App: React.FC = () => {
                             expectedDeliveryDate: po.expectedDeliveryDate ? new Date(po.expectedDeliveryDate) : undefined,
                             receivedDate: po.receivedDate ? new Date(po.receivedDate) : undefined,
                         })));
+                        if (data.projects) setProjects(data.projects);
                         alert('Datos importados correctamente.');
                     }
                 } else {
@@ -263,8 +324,14 @@ const App: React.FC = () => {
             }
         };
         reader.readAsText(file);
-        // Reset the input value so the same file can be selected again if needed
         event.target.value = '';
+    };
+
+    const handleResetData = () => {
+        if (window.confirm('¡ATENCIÓN! Esto BORRARÁ todos los datos locales y reiniciará la aplicación al estado original. ¿Estás seguro?')) {
+            localStorage.clear();
+            window.location.reload();
+        }
     };
     
     const filteredItems = useMemo(() => {
@@ -273,7 +340,7 @@ const App: React.FC = () => {
     }, [items, selectedSubCategory]);
 
     const handleNavigation = () => {
-        if (window.innerWidth < 768) { // Tailwind `md` breakpoint
+        if (window.innerWidth < 768) {
             setSidebarOpen(false);
         }
     }
@@ -312,13 +379,17 @@ const App: React.FC = () => {
             case 'dashboard':
                 return <Dashboard items={items} movements={movements} />;
             case 'inventory':
-                return <InventoryView items={filteredItems} openAddItemModal={() => setAddItemModalOpen(true)} onEditItem={openEditItemModal} onDeleteItem={handleDeleteItem} userRole={userRole} category={selectedSubCategory} onGoBack={onGoBack} />;
+                return <InventoryView items={filteredItems} openAddItemModal={() => setAddItemModalOpen(true)} onEditItem={openEditItemModal} onDeleteItem={handleDeleteItem} onItemHistory={openItemHistory} userRole={userRole} category={selectedSubCategory} onGoBack={onGoBack} />;
             case 'movements':
                 return <MovementsView movements={movements} items={items} personnel={personnel} openLogMovementModal={() => setLogMovementModalOpen(true)} filterType={selectedMovementFilter} onGoBack={onGoBack} />;
             case 'purchaseOrders':
                 return <PurchaseOrdersView purchaseOrders={purchaseOrders} items={items} openAddPurchaseOrderModal={() => setAddPOModalOpen(true)} onUpdateStatus={handleUpdatePOStatus} userRole={userRole} onGoBack={onGoBack} />;
             case 'personnel':
                 return <PersonnelView personnel={personnel} openAddPersonnelModal={() => setAddPersonnelModalOpen(true)} onGoBack={onGoBack} />;
+            case 'projects':
+                return <ProjectsView projects={projects} movements={movements} items={items} onAddProject={handleAddProject} onGoBack={onGoBack} userRole={userRole} />;
+            case 'loans':
+                return <LoansView movements={movements} items={items} personnel={personnel} onReturnItem={handleReturnLoan} onGoBack={onGoBack} />;
             default:
                 return <div>Seleccione una vista</div>;
         }
@@ -367,17 +438,16 @@ const App: React.FC = () => {
                 flex flex-col
             `}>
                 <div className="h-16 flex-shrink-0 flex items-center justify-center border-b">
-                    <h2 className="text-2xl font-bold text-blue-600">BODEGA</h2>
+                    <h2 className="text-2xl font-bold text-blue-600">BODEGA MAESTRA</h2>
                 </div>
                 <div className="flex-1 overflow-y-auto">
                     <nav className="p-2">
-                        <NavItem icon={DashboardIcon} label="Dashboard" onClick={() => selectView('dashboard')} isActive={currentView === 'dashboard'} />
+                        <NavItem icon={DashboardIcon} label="Tablero" onClick={() => selectView('dashboard')} isActive={currentView === 'dashboard'} />
                         
-                        <NavHeader label="Movimientos" />
-                        {Object.values(InventoryType).map(type => {
-                             const Icon = inventoryTypeIcons[type];
-                             return <NavItem key={type} icon={Icon} label={type} onClick={() => selectMovementFilter(type)} isActive={currentView === 'movements' && selectedMovementFilter === type} isSubItem />
-                        })}
+                        <NavHeader label="Operación" />
+                        <NavItem icon={HardHatIcon} label="Proyectos" onClick={() => selectView('projects')} isActive={currentView === 'projects'} />
+                        <NavItem icon={ClockIcon} label="Préstamos / Devol." onClick={() => selectView('loans')} isActive={currentView === 'loans'} />
+                        <NavItem icon={MovementsIcon} label="Todos los Movimientos" onClick={() => selectView('movements')} isActive={currentView === 'movements'} />
 
                         <NavHeader label="Inventario" />
                         <NavItem icon={InventoryIcon} label="Todo el Inventario" onClick={() => selectInventorySubCategory(null)} isActive={currentView === 'inventory' && selectedSubCategory === null} />
@@ -387,7 +457,7 @@ const App: React.FC = () => {
                             </button>
                         ))}
 
-                        <NavHeader label="Gestión" />
+                        <NavHeader label="Administración" />
                         <NavItem icon={PurchaseOrdersIcon} label="Órdenes de Compra" onClick={() => selectView('purchaseOrders')} isActive={currentView === 'purchaseOrders'}/>
                         <NavItem icon={PersonnelIcon} label="Personal" onClick={() => selectView('personnel')} isActive={currentView === 'personnel'} />
                     </nav>
@@ -400,6 +470,7 @@ const App: React.FC = () => {
                     setUserRole={setUserRole}
                     onExportData={handleExportData}
                     onImportData={handleImportData}
+                    onResetData={handleResetData}
                 />
                 <main className="flex-1 p-4 md:p-6 overflow-y-auto">
                     {renderView()}
@@ -425,6 +496,7 @@ const App: React.FC = () => {
                 onLogMovement={handleLogMovement}
                 items={items}
                 personnel={personnel}
+                projects={projects}
                 userRole={userRole}
             />
             <AddPersonnelModal
@@ -437,6 +509,13 @@ const App: React.FC = () => {
                 onClose={() => setAddPOModalOpen(false)}
                 onAddPurchaseOrder={handleAddPurchaseOrder}
                 items={items}
+            />
+            <ItemHistoryModal
+                isOpen={isHistoryModalOpen}
+                onClose={() => setHistoryModalOpen(false)}
+                item={itemForHistory}
+                movements={movements}
+                personnel={personnel}
             />
         </div>
     );

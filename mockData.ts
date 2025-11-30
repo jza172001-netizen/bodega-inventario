@@ -1,4 +1,5 @@
-import { Item, Movement, Personnel, PurchaseOrder, InventoryType, MovementType, PurchaseOrderStatus } from './types';
+
+import { Item, Movement, Personnel, PurchaseOrder, InventoryType, MovementType, PurchaseOrderStatus, Project } from './types';
 
 // Helper to generate recent dates for mock data
 const getDate = (daysAgo: number): Date => {
@@ -7,6 +8,12 @@ const getDate = (daysAgo: number): Date => {
     date.setHours(10, 0, 0, 0); // Normalize time
     return date;
 };
+
+export const mockProjects: Project[] = [
+    { id: 'proj-1', name: 'Torre Residencial A', description: 'Obra principal centro', status: 'active' },
+    { id: 'proj-2', name: 'Remodelación Oficinas', description: 'Piso 4 y 5', status: 'active' },
+    { id: 'proj-3', name: 'Mantenimiento General', description: 'Reparaciones varias', status: 'active' },
+];
 
 export const mockItems: Item[] = [
     { id: 'item-1', name: 'Taladro Percutor 1/2"', category: 'Herramientas', subCategory: 'Herramientas Eléctricas de Rotación', inventoryType: InventoryType.ELECTRICAL_TOOL, quantity: 15, minStock: 5, price: 120.50, unit: 'unidades', color: 'Azul' },
@@ -26,23 +33,16 @@ export const mockPersonnel: Personnel[] = [
 ];
 
 export const mockMovements: Movement[] = [
-    { id: 'move-1', itemId: 'item-1', type: MovementType.CHECK_OUT, quantity: 2, timestamp: getDate(2), personnelId: 'person-1', notes: 'Proyecto Edificio Central' },
-    { id: 'move-2', itemId: 'item-3', type: MovementType.CHECK_OUT, quantity: 10, timestamp: getDate(3), personnelId: 'person-2' },
+    { id: 'move-1', itemId: 'item-1', type: MovementType.CHECK_OUT, quantity: 2, timestamp: getDate(2), personnelId: 'person-1', projectId: 'proj-1', isLoan: true, isReturned: false, notes: 'Prestamo para obra' },
+    { id: 'move-2', itemId: 'item-3', type: MovementType.CHECK_OUT, quantity: 10, timestamp: getDate(3), personnelId: 'person-2', projectId: 'proj-1' },
     { id: 'move-3', itemId: 'item-2', type: MovementType.CHECK_IN, quantity: 5, timestamp: getDate(5), personnelId: 'person-1' },
     { id: 'move-4', itemId: 'item-5', type: MovementType.WASTE, quantity: 1, timestamp: getDate(6), notes: 'Dañada en uso' },
     { id: 'move-5', itemId: 'item-4', type: MovementType.PURCHASE, quantity: 1000, timestamp: getDate(10) },
-    { id: 'move-6', itemId: 'item-8', type: MovementType.CHECK_OUT, quantity: 30, timestamp: getDate(1), personnelId: 'person-3', notes: 'Instalación Baños' },
-    { id: 'move-7', itemId: 'item-4', type: MovementType.CHECK_OUT, quantity: 50, timestamp: getDate(4), personnelId: 'person-1', notes: 'Fijaciones para estructura' },
-    { id: 'move-8', itemId: 'item-6', type: MovementType.CHECK_OUT, quantity: 1, timestamp: getDate(8), personnelId: 'person-2' },
-    { id: 'move-9', itemId: 'item-4', type: MovementType.CHECK_OUT, quantity: 25, timestamp: getDate(9), personnelId: 'person-3' },
-    { id: 'move-10', itemId: 'item-2', type: MovementType.CHECK_OUT, quantity: 3, timestamp: getDate(12), personnelId: 'person-1' },
-    { id: 'move-11', itemId: 'item-3', type: MovementType.CHECK_OUT, quantity: 20, timestamp: getDate(15), personnelId: 'person-2' },
-    { id: 'move-12', itemId: 'item-4', type: MovementType.CHECK_OUT, quantity: 30, timestamp: getDate(3), personnelId: 'person-2' },
-    { id: 'move-13', itemId: 'item-4', type: MovementType.CHECK_OUT, quantity: 40, timestamp: getDate(5), personnelId: 'person-1' },
-    { id: 'move-14', itemId: 'item-4', type: MovementType.CHECK_OUT, quantity: 20, timestamp: getDate(7), personnelId: 'person-3' },
-    { id: 'move-15', itemId: 'item-4', type: MovementType.CHECK_OUT, quantity: 15, timestamp: getDate(11), personnelId: 'person-1' },
-    { id: 'move-16', itemId: 'item-3', type: MovementType.CHECK_OUT, quantity: 10, timestamp: getDate(6), personnelId: 'person-3' },
-    { id: 'move-17', itemId: 'item-3', type: MovementType.CHECK_OUT, quantity: 5, timestamp: getDate(14), personnelId: 'person-2' },
+    { id: 'move-6', itemId: 'item-8', type: MovementType.CHECK_OUT, quantity: 30, timestamp: getDate(1), personnelId: 'person-3', projectId: 'proj-2', notes: 'Instalación Baños' },
+    { id: 'move-7', itemId: 'item-4', type: MovementType.CHECK_OUT, quantity: 50, timestamp: getDate(4), personnelId: 'person-1', projectId: 'proj-1', notes: 'Fijaciones para estructura' },
+    { id: 'move-8', itemId: 'item-6', type: MovementType.CHECK_OUT, quantity: 1, timestamp: getDate(8), personnelId: 'person-2', projectId: 'proj-3', isLoan: true, isReturned: true },
+    { id: 'move-9', itemId: 'item-4', type: MovementType.CHECK_OUT, quantity: 25, timestamp: getDate(9), personnelId: 'person-3', projectId: 'proj-2' },
+    { id: 'move-10', itemId: 'item-2', type: MovementType.CHECK_OUT, quantity: 3, timestamp: getDate(12), personnelId: 'person-1', projectId: 'proj-1' },
 ];
 
 export const mockPurchaseOrders: PurchaseOrder[] = [

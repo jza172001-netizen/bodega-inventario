@@ -1,3 +1,4 @@
+
 // FIX: Define all necessary types and enums to resolve compilation errors across the project.
 export enum UserRole {
     OWNER = 'owner',
@@ -38,6 +39,13 @@ export interface Item {
     color?: string;
 }
 
+export interface Project {
+    id: string;
+    name: string;
+    description?: string;
+    status: 'active' | 'completed';
+}
+
 export interface Movement {
     id: string;
     itemId: string;
@@ -46,6 +54,9 @@ export interface Movement {
     timestamp: Date;
     personnelId?: string;
     notes?: string;
+    projectId?: string; // Link movement to a project
+    isLoan?: boolean;   // Track if this is a loan
+    isReturned?: boolean; // Track if the loan has been returned
 }
 
 export interface Personnel {

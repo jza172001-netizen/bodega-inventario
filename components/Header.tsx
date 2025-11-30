@@ -4,6 +4,7 @@ import { UserRole } from '../types';
 import { MenuIcon } from './icons/MenuIcon';
 import { DownloadIcon } from './icons/DownloadIcon';
 import { UploadIcon } from './icons/UploadIcon';
+import { TrashIcon } from './icons/TrashIcon';
 
 interface HeaderProps {
     toggleSidebar: () => void;
@@ -11,9 +12,10 @@ interface HeaderProps {
     setUserRole: (role: UserRole) => void;
     onExportData: () => void;
     onImportData: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    onResetData: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ toggleSidebar, userRole, setUserRole, onExportData, onImportData }) => {
+export const Header: React.FC<HeaderProps> = ({ toggleSidebar, userRole, setUserRole, onExportData, onImportData, onResetData }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleImportClick = () => {
@@ -47,6 +49,14 @@ export const Header: React.FC<HeaderProps> = ({ toggleSidebar, userRole, setUser
                     >
                         <UploadIcon className="w-5 h-5 md:mr-1" />
                         <span className="hidden md:inline text-xs font-medium">Restaurar</span>
+                    </button>
+                     <button 
+                        onClick={onResetData}
+                        className="p-2 text-gray-600 hover:text-red-600 hover:bg-gray-100 rounded-full flex items-center"
+                        title="Borrar todos los datos y reiniciar"
+                    >
+                        <TrashIcon className="w-5 h-5 md:mr-1" />
+                        <span className="hidden md:inline text-xs font-medium">Reset</span>
                     </button>
                     <input 
                         type="file" 

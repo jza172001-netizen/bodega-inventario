@@ -1,21 +1,24 @@
+
 import React, { useMemo } from 'react';
 import { Item, InventoryType, UserRole } from '../types';
 import { PlusIcon } from './icons/PlusIcon';
 import { EditIcon } from './icons/EditIcon';
 import { TrashIcon } from './icons/TrashIcon';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
+import { HistoryIcon } from './icons/HistoryIcon';
 
 interface InventoryViewProps {
     items: Item[];
     openAddItemModal: () => void;
     onEditItem: (item: Item) => void;
     onDeleteItem: (itemId: string) => void;
+    onItemHistory: (item: Item) => void;
     userRole: UserRole;
     category: string | null;
     onGoBack: () => void;
 }
 
-export const InventoryView: React.FC<InventoryViewProps> = ({ items, openAddItemModal, onEditItem, onDeleteItem, userRole, category, onGoBack }) => {
+export const InventoryView: React.FC<InventoryViewProps> = ({ items, openAddItemModal, onEditItem, onDeleteItem, onItemHistory, userRole, category, onGoBack }) => {
 
     const getStockStatusColor = (item: Item) => {
         if (item.minStock <= 0) return 'bg-gray-200 text-gray-800';
@@ -58,30 +61,39 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, openAddItem
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sub-Clasificación</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cantidad</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unidad</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Color</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
-                            {userRole === UserRole.OWNER && <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>}
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                         {items.map(item => (
-                            <tr key={item.id}>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.name}</td>
+                            <tr key={item.id} className="hover:bg-gray-50">
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 cursor-pointer" onClick={() => onItemHistory(item)}>
+                                    {item.name}
+                                </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.subCategory}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 font-semibold">{item.quantity}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.unit}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.color || 'N/A'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">
                                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStockStatusColor(item)}`}>
                                         {getStockStatusText(item)}
                                     </span>
                                 </td>
-                                {userRole === UserRole.OWNER && (
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                                        <button onClick={() => onEditItem(item)} className="text-indigo-600 hover:text-indigo-900 p-1"><EditIcon className="w-5 h-5"/></button>
-                                        <button onClick={() => onDeleteItem(item.id)} className="text-red-600 hover:text-red-900 p-1"><TrashIcon className="w-5 h-5"/></button>
-                                    </td>
-                                )}
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                                    <button onClick={() => onItemHistory(item)} className="text-blue-600 hover:text-blue-900 p-1" title="Ver Historial (Kardex)">
+                                        <HistoryIcon className="w-5 h-5"/>
+                                    </button>
+                                    {userRole === UserRole.OWNER && (
+                                        <>
+                                            <button onClick={() => onEditItem(item)} className="text-indigo-600 hover:text-indigo-900 p-1" title="Editar">
+                                                <EditIcon className="w-5 h-5"/>
+                                            </button>
+                                            <button onClick={() => onDeleteItem(item.id)} className="text-red-600 hover:text-red-900 p-1" title="Eliminar">
+                                                <TrashIcon className="w-5 h-5"/>
+                                            </button>
+                                        </>
+                                    )}
+                                </td>
                             </tr>
                         ))}
                     </tbody>
