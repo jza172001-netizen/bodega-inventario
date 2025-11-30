@@ -1,13 +1,15 @@
+
 import React, { useState } from 'react';
+import { AppUser, UserRole } from '../types';
 import { InventoryIcon } from './icons/InventoryIcon';
 import { CheckCircleIcon } from './icons/CheckCircleIcon';
 import { BrainIcon } from './icons/BrainIcon';
 import { TruckIcon } from './icons/TruckIcon';
 import { PurchaseOrdersIcon } from './icons/PurchaseOrdersIcon';
 
-
 interface LoginViewProps {
-    onLoginSuccess: () => void;
+    onLoginSuccess: (role: UserRole) => void;
+    users: AppUser[];
 }
 
 const Benefit: React.FC<{ icon: React.ElementType; title: string; children: React.ReactNode }> = ({ icon: Icon, title, children }) => (
@@ -23,17 +25,21 @@ const Benefit: React.FC<{ icon: React.ElementType; title: string; children: Reac
 );
 
 
-export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
+export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, users }) => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (username.toLowerCase() === 'juli' && password === '00') {
-            onLoginSuccess();
+        
+        // Validación estricta (case-sensitive por defecto en JS)
+        const user = users.find(u => u.username === username && u.password === password);
+
+        if (user) {
+            onLoginSuccess(user.role);
         } else {
-            setError('Usuario o contraseña incorrectos.');
+            setError('Usuario o contraseña incorrectos. Verifique mayúsculas.');
         }
     };
 
@@ -87,7 +93,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                                     value={username}
                                     onChange={(e) => setUsername(e.target.value)}
                                     className="relative block w-full px-4 py-3 text-gray-900 placeholder-gray-500 border border-gray-300 rounded-lg appearance-none focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                                    placeholder="Usuario"
+                                    placeholder="Usuario (ej: juli)"
                                 />
                             </div>
                             <div>
@@ -107,7 +113,9 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                         </div>
 
                         {error && (
-                            <p className="text-sm text-center text-red-600">{error}</p>
+                            <div className="bg-red-50 border border-red-200 text-red-600 text-sm p-3 rounded text-center">
+                                {error}
+                            </div>
                         )}
 
                         <div>
@@ -119,7 +127,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                             </button>
                         </div>
                          <p className="text-xs text-center text-gray-500 pt-2">
-                            Usuario de prueba: <strong>juli</strong> / Contraseña: <strong>00</strong>
+                            * El sistema distingue mayúsculas y minúsculas.
                         </p>
                     </form>
                 </div>

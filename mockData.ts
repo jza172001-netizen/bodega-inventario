@@ -1,5 +1,5 @@
 
-import { Item, Movement, Personnel, PurchaseOrder, InventoryType, MovementType, PurchaseOrderStatus, Project } from './types';
+import { Item, Movement, Personnel, PurchaseOrder, InventoryType, MovementType, PurchaseOrderStatus, Project, AppUser, UserRole } from './types';
 
 // Helper to generate recent dates for mock data
 const getDate = (daysAgo: number): Date => {
@@ -8,6 +8,17 @@ const getDate = (daysAgo: number): Date => {
     date.setHours(10, 0, 0, 0); // Normalize time
     return date;
 };
+
+// Usuario Maestro por defecto
+export const mockUsers: AppUser[] = [
+    {
+        id: 'user-master',
+        username: 'juli',
+        password: '00',
+        role: UserRole.OWNER,
+        name: 'Administrador Maestro'
+    }
+];
 
 export const mockProjects: Project[] = [
     { id: 'proj-1', name: 'Torre Residencial A', description: 'Obra principal centro', status: 'active' },

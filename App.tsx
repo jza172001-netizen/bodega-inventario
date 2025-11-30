@@ -1,5 +1,4 @@
 
-// FIX: Implement the main App component to orchestrate the application's state and UI.
 import React, { useState, useMemo, useEffect } from 'react';
 import { AddItemModal } from './components/AddItemModal';
 import { EditItemModal } from './components/EditItemModal';
@@ -15,9 +14,10 @@ import { PurchaseOrdersView } from './components/PurchaseOrdersView';
 import { ProjectsView } from './components/ProjectsView';
 import { LoansView } from './components/LoansView';
 import { ItemHistoryModal } from './components/ItemHistoryModal';
+import { UserManagementModal } from './components/UserManagementModal'; // Nuevo modal
 
-import { mockItems, mockMovements, mockPersonnel, mockPurchaseOrders, mockProjects } from './mockData';
-import { Item, Movement, MovementType, Personnel, PurchaseOrder, PurchaseOrderStatus, UserRole, InventoryType, Project } from './types';
+import { mockItems, mockMovements, mockPersonnel, mockPurchaseOrders, mockProjects, mockUsers } from './mockData';
+import { Item, Movement, MovementType, Personnel, PurchaseOrder, PurchaseOrderStatus, UserRole, InventoryType, Project, AppUser } from './types';
 import { LoginView } from './components/LoginView';
 
 // Icons for Sidebar
@@ -39,13 +39,23 @@ const App: React.FC = () => {
     // State Management
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     
-    // FIX: Use lazy initializer with localStorage to persist data across sessions.
+    // Users Management State
+    const [users, setUsers] = useState<AppUser[]>(() => {
+        try {
+            const savedUsers = localStorage.getItem('inventory_users');
+            return savedUsers ? JSON.parse(savedUsers) : mockUsers;
+        } catch (e) {
+            console.error("Failed to parse users", e);
+            return mockUsers;
+        }
+    });
+
     const [items, setItems] = useState<Item[]>(() => {
         try {
             const savedItems = localStorage.getItem('inventory_items');
             return savedItems ? JSON.parse(savedItems) : mockItems;
         } catch (e) {
-            console.error("Failed to parse items from localStorage", e);
+            console.error("Failed to parse items", e);
             return mockItems;
         }
     });
@@ -58,7 +68,7 @@ const App: React.FC = () => {
             }
             return mockMovements;
         } catch (e) {
-            console.error("Failed to parse movements from localStorage", e);
+            console.error("Failed to parse movements", e);
             return mockMovements;
         }
     });
@@ -68,7 +78,7 @@ const App: React.FC = () => {
             const savedPersonnel = localStorage.getItem('inventory_personnel');
             return savedPersonnel ? JSON.parse(savedPersonnel) : mockPersonnel;
         } catch (e) {
-            console.error("Failed to parse personnel from localStorage", e);
+            console.error("Failed to parse personnel", e);
             return mockPersonnel;
         }
     });
@@ -86,7 +96,7 @@ const App: React.FC = () => {
             }
             return mockPurchaseOrders;
         } catch (e) {
-            console.error("Failed to parse purchase orders from localStorage", e);
+            console.error("Failed to parse purchase orders", e);
             return mockPurchaseOrders;
         }
     });
@@ -96,52 +106,31 @@ const App: React.FC = () => {
             const savedProjects = localStorage.getItem('inventory_projects');
             return savedProjects ? JSON.parse(savedProjects) : mockProjects;
         } catch (e) {
-            console.error("Failed to parse projects from localStorage", e);
+            console.error("Failed to parse projects", e);
             return mockProjects;
         }
     });
 
     const [userRole, setUserRole] = useState<UserRole>(UserRole.OWNER);
 
-    // FIX: Add useEffect hooks to save state changes to localStorage.
+    // Persist Data Hooks
     useEffect(() => {
-        try {
-            localStorage.setItem('inventory_items', JSON.stringify(items));
-        } catch (e) {
-            console.error("Failed to save items to localStorage", e);
-        }
+        localStorage.setItem('inventory_users', JSON.stringify(users));
+    }, [users]);
+    useEffect(() => {
+        localStorage.setItem('inventory_items', JSON.stringify(items));
     }, [items]);
-
     useEffect(() => {
-        try {
-            localStorage.setItem('inventory_movements', JSON.stringify(movements));
-        } catch (e) {
-            console.error("Failed to save movements to localStorage", e);
-        }
+        localStorage.setItem('inventory_movements', JSON.stringify(movements));
     }, [movements]);
-
     useEffect(() => {
-        try {
-            localStorage.setItem('inventory_personnel', JSON.stringify(personnel));
-        } catch (e) {
-            console.error("Failed to save personnel to localStorage", e);
-        }
+        localStorage.setItem('inventory_personnel', JSON.stringify(personnel));
     }, [personnel]);
-
     useEffect(() => {
-        try {
-            localStorage.setItem('inventory_purchase_orders', JSON.stringify(purchaseOrders));
-        } catch (e) {
-            console.error("Failed to save purchase orders to localStorage", e);
-        }
+        localStorage.setItem('inventory_purchase_orders', JSON.stringify(purchaseOrders));
     }, [purchaseOrders]);
-
     useEffect(() => {
-        try {
-            localStorage.setItem('inventory_projects', JSON.stringify(projects));
-        } catch (e) {
-            console.error("Failed to save projects to localStorage", e);
-        }
+        localStorage.setItem('inventory_projects', JSON.stringify(projects));
     }, [projects]);
 
 
@@ -158,6 +147,7 @@ const App: React.FC = () => {
     const [isLogMovementModalOpen, setLogMovementModalOpen] = useState(false);
     const [isAddPersonnelModalOpen, setAddPersonnelModalOpen] = useState(false);
     const [isAddPOModalOpen, setAddPOModalOpen] = useState(false);
+    const [isUserManagementOpen, setUserManagementOpen] = useState(false);
     
     // Kardex State
     const [itemForHistory, setItemForHistory] = useState<Item | null>(null);
@@ -169,6 +159,19 @@ const App: React.FC = () => {
     }, [items]);
 
     // Handlers
+    const handleLogin = (role: UserRole) => {
+        setUserRole(role);
+        setIsAuthenticated(true);
+    }
+
+    // User Management
+    const handleAddUser = (newUser: AppUser) => {
+        setUsers([...users, newUser]);
+    }
+    const handleDeleteUser = (id: string) => {
+        setUsers(users.filter(u => u.id !== id));
+    }
+
     const handleAddItem = (item: Omit<Item, 'id'>) => {
         const newItem: Item = { ...item, id: `item-${Date.now()}` };
         setItems(prev => [...prev, newItem]);
@@ -278,6 +281,7 @@ const App: React.FC = () => {
             personnel,
             purchaseOrders,
             projects,
+            users,
             exportDate: new Date().toISOString()
         };
         const dataStr = JSON.stringify(data, null, 2);
@@ -301,18 +305,14 @@ const App: React.FC = () => {
                 const json = e.target?.result as string;
                 const data = JSON.parse(json);
                 
-                if (data.items && data.movements && data.personnel && data.purchaseOrders) {
-                    if (window.confirm('Esta acción reemplazará todos los datos actuales con los del archivo de respaldo. ¿Desea continuar?')) {
+                if (data.items && data.movements) {
+                    if (window.confirm('Esta acción reemplazará todos los datos actuales. ¿Desea continuar?')) {
                         setItems(data.items);
                         setMovements(data.movements.map((m: any) => ({...m, timestamp: new Date(m.timestamp)})));
-                        setPersonnel(data.personnel);
-                        setPurchaseOrders(data.purchaseOrders.map((po: any) => ({
-                            ...po,
-                            orderDate: new Date(po.orderDate),
-                            expectedDeliveryDate: po.expectedDeliveryDate ? new Date(po.expectedDeliveryDate) : undefined,
-                            receivedDate: po.receivedDate ? new Date(po.receivedDate) : undefined,
-                        })));
+                        if (data.personnel) setPersonnel(data.personnel);
+                        if (data.purchaseOrders) setPurchaseOrders(data.purchaseOrders.map((po: any) => ({...po, orderDate: new Date(po.orderDate)})));
                         if (data.projects) setProjects(data.projects);
+                        if (data.users) setUsers(data.users);
                         alert('Datos importados correctamente.');
                     }
                 } else {
@@ -327,10 +327,17 @@ const App: React.FC = () => {
         event.target.value = '';
     };
 
+    // RESET SEGURO
     const handleResetData = () => {
-        if (window.confirm('¡ATENCIÓN! Esto BORRARÁ todos los datos locales y reiniciará la aplicación al estado original. ¿Estás seguro?')) {
-            localStorage.clear();
-            window.location.reload();
+        const password = prompt("PELIGRO: Esto borrará todo el sistema.\nIngrese la CLAVE MAESTRA para confirmar:");
+        
+        if (password === '00') {
+            if (window.confirm('¿Está absolutamente seguro? No se podrá deshacer.')) {
+                localStorage.clear();
+                window.location.reload();
+            }
+        } else if (password !== null) {
+            alert("Contraseña incorrecta. Acción cancelada.");
         }
     };
     
@@ -365,13 +372,6 @@ const App: React.FC = () => {
         setSelectedMovementFilter(null);
         handleNavigation();
     }
-
-    const inventoryTypeIcons = {
-        [InventoryType.HAND_TOOL]: HandToolIcon,
-        [InventoryType.ELECTRICAL_TOOL]: ElectricalToolIcon,
-        [InventoryType.PPE]: PpeIcon,
-        [InventoryType.SINGLE_USE]: SingleUseIcon,
-    };
 
     const renderView = () => {
         const onGoBack = () => selectView('dashboard');
@@ -422,7 +422,7 @@ const App: React.FC = () => {
     );
     
     if (!isAuthenticated) {
-        return <LoginView onLoginSuccess={() => setIsAuthenticated(true)} />;
+        return <LoginView onLoginSuccess={handleLogin} users={users} />;
     }
 
     return (
@@ -471,6 +471,7 @@ const App: React.FC = () => {
                     onExportData={handleExportData}
                     onImportData={handleImportData}
                     onResetData={handleResetData}
+                    onOpenUserManagement={() => setUserManagementOpen(true)}
                 />
                 <main className="flex-1 p-4 md:p-6 overflow-y-auto">
                     {renderView()}
@@ -516,6 +517,13 @@ const App: React.FC = () => {
                 item={itemForHistory}
                 movements={movements}
                 personnel={personnel}
+            />
+            <UserManagementModal 
+                isOpen={isUserManagementOpen}
+                onClose={() => setUserManagementOpen(false)}
+                users={users}
+                onAddUser={handleAddUser}
+                onDeleteUser={handleDeleteUser}
             />
         </div>
     );

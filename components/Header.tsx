@@ -5,6 +5,7 @@ import { MenuIcon } from './icons/MenuIcon';
 import { DownloadIcon } from './icons/DownloadIcon';
 import { UploadIcon } from './icons/UploadIcon';
 import { TrashIcon } from './icons/TrashIcon';
+import { UsersIcon } from './icons/UsersIcon';
 
 interface HeaderProps {
     toggleSidebar: () => void;
@@ -13,9 +14,10 @@ interface HeaderProps {
     onExportData: () => void;
     onImportData: (e: React.ChangeEvent<HTMLInputElement>) => void;
     onResetData: () => void;
+    onOpenUserManagement: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ toggleSidebar, userRole, setUserRole, onExportData, onImportData, onResetData }) => {
+export const Header: React.FC<HeaderProps> = ({ toggleSidebar, userRole, onExportData, onImportData, onResetData, onOpenUserManagement }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleImportClick = () => {
@@ -32,6 +34,18 @@ export const Header: React.FC<HeaderProps> = ({ toggleSidebar, userRole, setUser
                  <h1 className="text-xl md:text-2xl font-semibold text-gray-800 hidden md:block">Sistema de Gestión de Bodega</h1>
             </div>
              <div className="flex items-center space-x-2 md:space-x-4">
+                {/* User Management (Owner Only) */}
+                {userRole === UserRole.OWNER && (
+                    <button 
+                        onClick={onOpenUserManagement}
+                        className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-full flex items-center"
+                        title="Gestionar Usuarios"
+                    >
+                        <UsersIcon className="w-5 h-5 md:mr-1" />
+                        <span className="hidden md:inline text-xs font-medium">Usuarios</span>
+                    </button>
+                )}
+
                 {/* Data Management Buttons */}
                 <div className="flex items-center space-x-1 border-r pr-4 mr-2 border-gray-300">
                     <button 
@@ -53,7 +67,7 @@ export const Header: React.FC<HeaderProps> = ({ toggleSidebar, userRole, setUser
                      <button 
                         onClick={onResetData}
                         className="p-2 text-gray-600 hover:text-red-600 hover:bg-gray-100 rounded-full flex items-center"
-                        title="Borrar todos los datos y reiniciar"
+                        title="Borrar todos los datos y reiniciar (Requiere Clave)"
                     >
                         <TrashIcon className="w-5 h-5 md:mr-1" />
                         <span className="hidden md:inline text-xs font-medium">Reset</span>
@@ -68,15 +82,12 @@ export const Header: React.FC<HeaderProps> = ({ toggleSidebar, userRole, setUser
                 </div>
 
                 <div className="flex items-center space-x-2">
-                    <span className="text-sm font-medium text-gray-500 hidden md:inline">Rol:</span>
-                    <select 
-                        value={userRole} 
-                        onChange={(e) => setUserRole(e.target.value as UserRole)}
-                        className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-32 md:w-full p-2"
-                    >
-                        <option value={UserRole.OWNER}>Propietario</option>
-                        <option value={UserRole.EMPLOYEE}>Empleado</option>
-                    </select>
+                    <span className="text-sm font-medium text-gray-500 hidden md:inline">
+                        {userRole === UserRole.OWNER ? 'Administrador' : 'Empleado'}
+                    </span>
+                    <div className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold">
+                        {userRole === UserRole.OWNER ? 'A' : 'E'}
+                    </div>
                 </div>
              </div>
         </header>

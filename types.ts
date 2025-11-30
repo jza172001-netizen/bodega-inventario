@@ -1,8 +1,16 @@
 
-// FIX: Define all necessary types and enums to resolve compilation errors across the project.
 export enum UserRole {
     OWNER = 'owner',
     EMPLOYEE = 'employee',
+}
+
+// Nueva interfaz para usuarios del sistema
+export interface AppUser {
+    id: string;
+    username: string; // Sensible a mayúsculas/minúsculas
+    password: string;
+    role: UserRole;
+    name: string; // Nombre real (ej: Juan Perez)
 }
 
 export enum InventoryType {
