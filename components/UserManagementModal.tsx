@@ -31,14 +31,12 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
             return;
         }
 
-        // Si estamos creando uno nuevo, verificar duplicados
         if (!editingUserId && users.some(u => u.username === newUsername)) {
             alert("El nombre de usuario ya existe.");
             return;
         }
 
         if (editingUserId) {
-            // Modo Edición
             const updatedUser: AppUser = {
                 id: editingUserId,
                 username: newUsername,
@@ -47,9 +45,8 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                 role: newRole
             };
             onEditUser(updatedUser);
-            setEditingUserId(null); // Salir de modo edición
+            setEditingUserId(null);
         } else {
-            // Modo Creación
             const newUser: AppUser = {
                 id: `user-${Date.now()}`,
                 username: newUsername,
@@ -60,7 +57,6 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
             onAddUser(newUser);
         }
 
-        // Resetear formulario
         setNewUsername('');
         setNewPassword('');
         setNewName('');
@@ -87,99 +83,98 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
             <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-2xl m-4 max-h-[90vh] overflow-y-auto">
                 <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-2xl font-bold text-gray-800">Gestión de Usuarios</h2>
+                    <h2 className="text-2xl font-bold text-gray-800">Seguridad y Usuarios</h2>
                     <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><XIcon className="w-6 h-6" /></button>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    {/* Formulario Crear/Editar */}
-                    <div className="bg-gray-50 p-4 rounded-lg h-fit">
-                        <h3 className="font-semibold text-lg mb-4 text-blue-700">
-                            {editingUserId ? 'Editar Usuario' : 'Crear Nuevo Usuario'}
+                    <div className="bg-gray-50 p-6 rounded-2xl h-fit border border-gray-100">
+                        <h3 className="font-black text-sm mb-4 text-blue-700 uppercase tracking-widest">
+                            {editingUserId ? 'Editar Acceso' : 'Nuevo Usuario'}
                         </h3>
-                        <form onSubmit={handleSubmit} className="space-y-3">
+                        <form onSubmit={handleSubmit} className="space-y-4">
                             <div>
-                                <label className="text-xs text-gray-500">Nombre Real</label>
+                                <label className="text-[10px] font-black text-gray-400 uppercase">Nombre Completo</label>
                                 <input
                                     type="text"
-                                    placeholder="Ej: Carlos"
                                     value={newName}
                                     onChange={e => setNewName(e.target.value)}
-                                    className="w-full p-2 border rounded"
+                                    className="w-full p-3 border-2 border-gray-100 rounded-xl focus:border-blue-500 outline-none font-bold"
                                 />
                             </div>
                             <div>
-                                <label className="text-xs text-gray-500">Usuario Login</label>
+                                <label className="text-[10px] font-black text-gray-400 uppercase">Usuario para Login</label>
                                 <input
                                     type="text"
-                                    placeholder="Ej: carlos"
                                     value={newUsername}
                                     onChange={e => setNewUsername(e.target.value)}
-                                    className="w-full p-2 border rounded"
+                                    className="w-full p-3 border-2 border-gray-100 rounded-xl focus:border-blue-500 outline-none font-bold"
                                 />
                             </div>
                             <div>
-                                <label className="text-xs text-gray-500">Contraseña</label>
+                                <label className="text-[10px] font-black text-gray-400 uppercase">Contraseña</label>
                                 <input
                                     type="password"
-                                    placeholder="••••••"
+                                    placeholder="••••••••"
                                     value={newPassword}
                                     onChange={e => setNewPassword(e.target.value)}
-                                    className="w-full p-2 border rounded"
+                                    className="w-full p-3 border-2 border-gray-100 rounded-xl focus:border-blue-500 outline-none font-bold"
                                 />
                             </div>
                             <div>
-                                <label className="text-xs text-gray-500">Rol</label>
+                                <label className="text-[10px] font-black text-gray-400 uppercase">Nivel de Permisos</label>
                                 <select 
                                     value={newRole}
                                     onChange={e => setNewRole(e.target.value as UserRole)}
-                                    className="w-full p-2 border rounded"
+                                    className="w-full p-3 border-2 border-gray-100 rounded-xl outline-none font-bold"
                                 >
-                                    <option value={UserRole.EMPLOYEE}>Empleado</option>
-                                    <option value={UserRole.OWNER}>Administrador</option>
+                                    <option value={UserRole.EMPLOYEE}>Bodeguero / Empleado</option>
+                                    <option value={UserRole.OWNER}>Administrador Supremo</option>
                                 </select>
                             </div>
                             
-                            <div className="flex space-x-2">
+                            <div className="flex space-x-2 pt-2">
                                 {editingUserId && (
-                                    <button type="button" onClick={handleCancelEdit} className="flex-1 bg-gray-300 text-gray-800 py-2 rounded hover:bg-gray-400 font-medium">
+                                    <button type="button" onClick={handleCancelEdit} className="flex-1 bg-gray-200 text-gray-600 py-3 rounded-xl hover:bg-gray-300 font-bold uppercase text-xs transition-colors">
                                         Cancelar
                                     </button>
                                 )}
-                                <button type="submit" className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700 font-medium">
-                                    {editingUserId ? 'Actualizar' : 'Guardar'}
+                                <button type="submit" className="flex-1 bg-blue-600 text-white py-3 rounded-xl hover:bg-blue-700 font-bold uppercase text-xs shadow-md">
+                                    {editingUserId ? 'Actualizar' : 'Guardar Acceso'}
                                 </button>
                             </div>
                         </form>
                     </div>
 
-                    {/* Lista de Usuarios */}
                     <div>
-                        <h3 className="font-semibold text-lg mb-4 text-gray-700">Usuarios Existentes</h3>
-                        <div className="space-y-2 max-h-96 overflow-y-auto">
+                        <h3 className="font-black text-sm mb-4 text-gray-400 uppercase tracking-widest">Personal con Acceso</h3>
+                        <div className="space-y-3">
                             {users.map(user => (
-                                <div key={user.id} className={`flex justify-between items-center border p-3 rounded shadow-sm ${editingUserId === user.id ? 'bg-blue-50 border-blue-300' : 'bg-white'}`}>
+                                <div key={user.id} className={`flex justify-between items-center border-2 p-4 rounded-2xl transition-all ${editingUserId === user.id ? 'bg-blue-50 border-blue-400' : 'bg-white border-gray-50'}`}>
                                     <div>
-                                        <p className="font-bold text-gray-800">{user.username}</p>
-                                        <p className="text-xs text-gray-500">{user.name} - {user.role === UserRole.OWNER ? 'Admin' : 'Empleado'}</p>
+                                        <p className="font-black text-gray-800 uppercase text-xs">{user.username}</p>
+                                        <p className="text-[10px] text-gray-400 font-bold">{user.name}</p>
+                                        <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${user.role === UserRole.OWNER ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'}`}>
+                                            {user.role === UserRole.OWNER ? 'Admin Supremo' : 'Bodeguero'}
+                                        </span>
                                     </div>
                                     <div className="flex space-x-1">
                                         <button 
                                             onClick={() => handleEditClick(user)}
-                                            className="text-blue-500 hover:bg-blue-50 p-2 rounded"
+                                            className="p-2 text-blue-500 hover:bg-blue-100 rounded-full transition-colors"
                                             title="Editar"
                                         >
-                                            <EditIcon className="w-4 h-4"/>
+                                            <EditIcon className="w-5 h-5"/>
                                         </button>
                                         {user.username !== 'juli' && (
                                             <button 
                                                 onClick={() => {
-                                                    if(window.confirm(`¿Borrar usuario ${user.username}?`)) onDeleteUser(user.id);
+                                                    if(window.confirm(`¿Seguro que desea eliminar el acceso de ${user.username}?`)) onDeleteUser(user.id);
                                                 }}
-                                                className="text-red-500 hover:bg-red-50 p-2 rounded"
+                                                className="p-2 text-red-500 hover:bg-red-100 rounded-full transition-colors"
                                                 title="Eliminar"
                                             >
-                                                <TrashIcon className="w-4 h-4"/>
+                                                <TrashIcon className="w-5 h-5"/>
                                             </button>
                                         )}
                                     </div>

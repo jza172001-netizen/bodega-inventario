@@ -138,7 +138,6 @@ const App: React.FC = () => {
     const [currentView, setCurrentView] = useState<View>('dashboard');
     const [selectedMovementFilter, setSelectedMovementFilter] = useState<InventoryType | null>(null);
     const [selectedSubCategory, setSelectedSubCategory] = useState<string | null>(null);
-    // Nuevo estado para filtrar por los tipos principales (botones laterales)
     const [selectedInventoryType, setSelectedInventoryType] = useState<InventoryType | null>(null);
     
     const [isSidebarOpen, setSidebarOpen] = useState(true);
@@ -168,11 +167,12 @@ const App: React.FC = () => {
     }
     
     const handleLogout = () => {
-        setIsAuthenticated(false);
-        setCurrentView('dashboard');
+        if (window.confirm('¿Desea cerrar sesión y volver a la pantalla de inicio?')) {
+            setIsAuthenticated(false);
+            setCurrentView('dashboard');
+        }
     }
 
-    // User Management
     const handleAddUser = (newUser: AppUser) => {
         setUsers([...users, newUser]);
     }
@@ -214,11 +214,10 @@ const App: React.FC = () => {
             ...movement, 
             id: `move-${Date.now()}`, 
             timestamp: new Date(),
-            isReturned: false // Default for loans
+            isReturned: false 
         };
         setMovements(prev => [newMovement, ...prev]);
 
-        // Update item quantity
         const item = items.find(i => i.id === movement.itemId);
         if (item) {
             let newQuantity = item.quantity;
@@ -235,11 +234,9 @@ const App: React.FC = () => {
         const movement = movements.find(m => m.id === movementId);
         if (!movement || movement.isReturned) return;
 
-        if (window.confirm(`¿Confirmar devolución de: ${items.find(i => i.id === movement.itemId)?.name}?`)) {
-            // Update movement status
+        const itemName = items.find(i => i.id === movement.itemId)?.name || 'artículo';
+        if (window.confirm(`¿Confirmar devolución de: ${itemName}?`)) {
             setMovements(prev => prev.map(m => m.id === movementId ? { ...m, isReturned: true } : m));
-
-            // Return stock to inventory
             const item = items.find(i => i.id === movement.itemId);
             if (item) {
                 handleEditItem({ ...item, quantity: item.quantity + movement.quantity });
@@ -278,7 +275,6 @@ const App: React.FC = () => {
                 const updatedOrder = { ...order, status };
                 if (status === PurchaseOrderStatus.RECEIVED) {
                     updatedOrder.receivedDate = new Date();
-                    // Automatically add items to inventory
                     updatedOrder.items.forEach(orderItem => {
                         handleLogMovement({
                             itemId: orderItem.itemId,
@@ -294,17 +290,8 @@ const App: React.FC = () => {
         }));
     };
 
-    // Backup Functions
     const handleExportData = () => {
-        const data = {
-            items,
-            movements,
-            personnel,
-            purchaseOrders,
-            projects,
-            users,
-            exportDate: new Date().toISOString()
-        };
+        const data = { items, movements, personnel, purchaseOrders, projects, users, exportDate: new Date().toISOString() };
         const dataStr = JSON.stringify(data, null, 2);
         const blob = new Blob([dataStr], { type: "application/json" });
         const url = URL.createObjectURL(blob);
@@ -319,16 +306,14 @@ const App: React.FC = () => {
     const handleImportData = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
-
         const reader = new FileReader();
         reader.onload = (e) => {
             try {
                 const json = e.target?.result as string;
                 const data = JSON.parse(json);
-                
                 if (data.items && data.movements) {
-                    if (window.confirm('Esta acción reemplazará todos los datos actuales. ¿Desea continuar?')) {
-                        // Guardar directamente en LocalStorage para evitar problemas de estado asíncrono
+                    if (window.confirm('¿Seguro que desea RESTAURAR los datos? Esto sobreescribirá todo lo actual.')) {
+                        // Guardar todo en localStorage
                         localStorage.setItem('inventory_items', JSON.stringify(data.items));
                         localStorage.setItem('inventory_movements', JSON.stringify(data.movements));
                         if (data.personnel) localStorage.setItem('inventory_personnel', JSON.stringify(data.personnel));
@@ -336,109 +321,67 @@ const App: React.FC = () => {
                         if (data.projects) localStorage.setItem('inventory_projects', JSON.stringify(data.projects));
                         if (data.users) localStorage.setItem('inventory_users', JSON.stringify(data.users));
                         
-                        alert('Datos importados correctamente. La página se recargará.');
-                        window.location.reload(); // Forzar recarga para leer los datos nuevos
+                        alert('Base de datos restaurada con éxito. Reiniciando sistema...');
+                        window.location.reload();
                     }
                 } else {
-                    alert('El archivo no tiene el formato correcto.');
+                    alert('El archivo no es un respaldo válido de Bodega Maestra.');
                 }
             } catch (error) {
                 console.error("Error importing data", error);
-                alert('Error al leer el archivo. Asegúrate de que sea un JSON válido.');
+                alert('Error crítico al procesar el archivo. Verifique que sea el archivo .json correcto.');
             }
         };
         reader.readAsText(file);
         event.target.value = '';
     };
 
-    // RESET SEGURO
     const handleResetData = () => {
         const password = prompt("PELIGRO: Esto borrará todo el sistema.\nIngrese la CLAVE MAESTRA para confirmar:");
-        
         if (password === '00') {
             if (window.confirm('¿Está absolutamente seguro? Se eliminarán todos los registros.')) {
-                // Guardar listas vacías explícitamente para sobreescribir los datos viejos
-                const emptyArr = JSON.stringify([]);
-                localStorage.setItem('inventory_items', emptyArr);
-                localStorage.setItem('inventory_movements', emptyArr);
-                localStorage.setItem('inventory_personnel', emptyArr);
-                localStorage.setItem('inventory_purchase_orders', emptyArr);
-                localStorage.setItem('inventory_projects', emptyArr);
-                
-                // Actualizar estado para reflejar cambios en la UI
-                setItems([]);
-                setMovements([]);
-                setPersonnel([]);
-                setPurchaseOrders([]);
-                setProjects([]);
-                
-                // Preservar al usuario admin actual para no bloquearlo
-                const adminUser = users.find(u => u.role === UserRole.OWNER) || mockUsers[0];
-                const adminArr = JSON.stringify([adminUser]);
-                localStorage.setItem('inventory_users', adminArr);
-                setUsers([adminUser]);
-
-                alert("El sistema se ha restablecido a cero (Tabula Rasa).");
+                localStorage.clear();
+                alert("El sistema se ha restablecido a cero. La página se recargará.");
+                window.location.reload();
             }
         } else if (password !== null) {
-            alert("Contraseña incorrecta. Acción cancelada.");
+            alert("Contraseña incorrecta.");
         }
     };
     
-    // Filtro principal de items
     const filteredItems = useMemo(() => {
         let result = items;
-        
-        // 1. Filtrar por Tipo de Inventario (Botones laterales principales)
-        if (selectedInventoryType) {
-            result = result.filter(item => item.inventoryType === selectedInventoryType);
-        }
-
-        // 2. Filtrar por SubCategoría (Botones de detalle)
-        if (selectedSubCategory) {
-            result = result.filter(item => item.subCategory === selectedSubCategory);
-        }
-
+        if (selectedInventoryType) result = result.filter(item => item.inventoryType === selectedInventoryType);
+        if (selectedSubCategory) result = result.filter(item => item.subCategory === selectedSubCategory);
         return result;
     }, [items, selectedSubCategory, selectedInventoryType]);
-
-    const handleNavigation = () => {
-        if (window.innerWidth < 768) {
-            setSidebarOpen(false);
-        }
-    }
 
     const selectView = (view: View) => {
         setCurrentView(view);
         setSelectedMovementFilter(null);
         setSelectedSubCategory(null);
-        setSelectedInventoryType(null); // Resetear tipo
-        handleNavigation();
+        setSelectedInventoryType(null);
+        if (window.innerWidth < 768) setSidebarOpen(false);
     }
     
-    // Función para seleccionar categorías principales (Eléctrica, Manual, etc.)
     const selectInventoryTypeFilter = (type: InventoryType) => {
         setCurrentView('inventory');
         setSelectedInventoryType(type);
         setSelectedSubCategory(null);
         setSelectedMovementFilter(null);
-        handleNavigation();
+        if (window.innerWidth < 768) setSidebarOpen(false);
     }
 
     const selectInventorySubCategory = (subCategory: string | null) => {
         setCurrentView('inventory');
         setSelectedSubCategory(subCategory);
-        // Si seleccionamos "Todo el inventario" (null), reseteamos el tipo también para ver TODO
-        if (subCategory === null) {
-            setSelectedInventoryType(null);
-        }
+        if (subCategory === null) setSelectedInventoryType(null);
         setSelectedMovementFilter(null);
-        handleNavigation();
+        if (window.innerWidth < 768) setSidebarOpen(false);
     }
 
     const renderView = () => {
         const onGoBack = () => selectView('dashboard');
-        // Título dinámico para la vista de inventario
         const inventoryTitle = selectedSubCategory || selectedInventoryType || 'Todos los Artículos';
 
         switch (currentView) {
@@ -447,20 +390,13 @@ const App: React.FC = () => {
             case 'inventory':
                 return <InventoryView items={filteredItems} openAddItemModal={() => setAddItemModalOpen(true)} onEditItem={openEditItemModal} onDeleteItem={handleDeleteItem} onItemHistory={openItemHistory} userRole={userRole} category={inventoryTitle} onGoBack={onGoBack} />;
             case 'movements':
-                return <MovementsView movements={movements} items={items} personnel={personnel} openLogMovementModal={() => setLogMovementModalOpen(true)} filterType={selectedMovementFilter} onGoBack={onGoBack} />;
+                return <MovementsView movements={movements} items={items} personnel={personnel} openLogMovementModal={() => setLogMovementModalOpen(true)} onReturnLoan={handleReturnLoan} onGoBack={onGoBack} />;
             case 'purchaseOrders':
                 return <PurchaseOrdersView purchaseOrders={purchaseOrders} items={items} openAddPurchaseOrderModal={() => setAddPOModalOpen(true)} onUpdateStatus={handleUpdatePOStatus} userRole={userRole} onGoBack={onGoBack} />;
             case 'personnel':
-                return <PersonnelView 
-                    personnel={personnel} 
-                    openAddPersonnelModal={() => setAddPersonnelModalOpen(true)} 
-                    onGoBack={onGoBack} 
-                    onEditPersonnel={handleEditPersonnel}
-                    onDeletePersonnel={handleDeletePersonnel}
-                    userRole={userRole}
-                />;
+                return <PersonnelView personnel={personnel} openAddPersonnelModal={() => setAddPersonnelModalOpen(true)} onGoBack={onGoBack} onEditPersonnel={handleEditPersonnel} onDeletePersonnel={handleDeletePersonnel} userRole={userRole} />;
             case 'projects':
-                return <ProjectsView projects={projects} movements={movements} items={items} onAddProject={handleAddProject} onGoBack={onGoBack} userRole={userRole} />;
+                return <ProjectsView projects={projects} movements={movements} items={items} personnel={personnel} onAddProject={handleAddProject} onGoBack={onGoBack} userRole={userRole} />;
             case 'loans':
                 return <LoansView movements={movements} items={items} personnel={personnel} onReturnItem={handleReturnLoan} onGoBack={onGoBack} />;
             default:
@@ -468,147 +404,58 @@ const App: React.FC = () => {
         }
     };
     
-    const NavItem: React.FC<{
-        icon: React.ElementType,
-        label: string,
-        onClick: () => void,
-        isActive: boolean,
-        isSubItem?: boolean,
-    }> = ({ icon: Icon, label, onClick, isActive, isSubItem = false }) => (
-        <button
-            onClick={onClick}
-            className={`w-full flex items-center text-left px-4 py-2.5 text-sm font-medium rounded-lg transition-colors duration-200 ${
-                isSubItem ? 'pl-8' : ''
-            } ${
-                isActive
-                ? 'bg-blue-600 text-white'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
-        >
-            <Icon className="w-5 h-5 mr-3" />
-            {label}
-        </button>
-    );
-
-    const NavHeader: React.FC<{label: string}> = ({label}) => (
-        <h3 className="px-4 pt-4 pb-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">{label}</h3>
-    );
-    
-    if (!isAuthenticated) {
-        return <LoginView onLoginSuccess={handleLogin} users={users} />;
-    }
+    if (!isAuthenticated) return <LoginView onLoginSuccess={handleLogin} users={users} />;
 
     return (
         <div className="flex h-screen bg-gray-100">
             {isSidebarOpen && <div onClick={() => setSidebarOpen(false)} className="fixed inset-0 bg-black/50 z-20 md:hidden" />}
-
-            <aside className={`
-                bg-white border-r border-gray-200 transition-all duration-300 ease-in-out
-                fixed md:relative inset-y-0 left-0 z-30
-                transform md:transform-none
-                ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-                md:${isSidebarOpen ? 'w-64' : 'w-0 overflow-hidden'}
-                flex flex-col
-            `}>
-                <div className="h-16 flex-shrink-0 flex items-center justify-center border-b">
-                    <h2 className="text-2xl font-bold text-blue-600">BODEGA MAESTRA</h2>
-                </div>
+            <aside className={`bg-white border-r border-gray-200 transition-all duration-300 ease-in-out fixed md:relative inset-y-0 left-0 z-30 transform md:transform-none ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:${isSidebarOpen ? 'w-64' : 'w-0 overflow-hidden'} flex flex-col`}>
+                <div className="h-16 flex-shrink-0 flex items-center justify-center border-b bg-blue-600 text-white"><h2 className="text-xl font-bold tracking-tighter">BODEGA MAESTRA</h2></div>
                 <div className="flex-1 overflow-y-auto">
                     <nav className="p-2">
                         <NavItem icon={DashboardIcon} label="Tablero" onClick={() => selectView('dashboard')} isActive={currentView === 'dashboard'} />
-                        
                         <NavHeader label="Operación" />
-                        <NavItem icon={HardHatIcon} label="Proyectos" onClick={() => selectView('projects')} isActive={currentView === 'projects'} />
+                        <NavItem icon={HardHatIcon} label="Proyectos / Obras" onClick={() => selectView('projects')} isActive={currentView === 'projects'} />
                         <NavItem icon={ClockIcon} label="Préstamos / Devol." onClick={() => selectView('loans')} isActive={currentView === 'loans'} />
-                        <NavItem icon={MovementsIcon} label="Todos los Movimientos" onClick={() => selectView('movements')} isActive={currentView === 'movements'} />
-
-                        <NavHeader label="Categorías Principales" />
+                        <NavItem icon={MovementsIcon} label="Movimientos" onClick={() => selectView('movements')} isActive={currentView === 'movements'} />
+                        <NavHeader label="Categorías" />
                         <NavItem icon={HandToolIcon} label="Herramienta Manual" onClick={() => selectInventoryTypeFilter(InventoryType.HAND_TOOL)} isActive={currentView === 'inventory' && selectedInventoryType === InventoryType.HAND_TOOL} />
                         <NavItem icon={ElectricalToolIcon} label="Herramienta Eléctrica" onClick={() => selectInventoryTypeFilter(InventoryType.ELECTRICAL_TOOL)} isActive={currentView === 'inventory' && selectedInventoryType === InventoryType.ELECTRICAL_TOOL} />
                         <NavItem icon={PpeIcon} label="Indumentaria (EPP)" onClick={() => selectInventoryTypeFilter(InventoryType.PPE)} isActive={currentView === 'inventory' && selectedInventoryType === InventoryType.PPE} />
                         <NavItem icon={SingleUseIcon} label="Material de Consumo" onClick={() => selectInventoryTypeFilter(InventoryType.SINGLE_USE)} isActive={currentView === 'inventory' && selectedInventoryType === InventoryType.SINGLE_USE} />
-
-                        <NavHeader label="Inventario Detallado" />
-                        <NavItem icon={InventoryIcon} label="Ver Todo" onClick={() => selectInventorySubCategory(null)} isActive={currentView === 'inventory' && selectedSubCategory === null && selectedInventoryType === null} />
-                        {uniqueSubCategories.map(subCat => (
-                            <button key={subCat} onClick={() => selectInventorySubCategory(subCat)} className={`w-full text-left pl-12 pr-4 py-2 text-sm font-medium rounded-lg transition-colors duration-200 ${selectedSubCategory === subCat ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-100'}`}>
-                                {subCat}
-                            </button>
-                        ))}
-
                         <NavHeader label="Administración" />
                         <NavItem icon={PurchaseOrdersIcon} label="Órdenes de Compra" onClick={() => selectView('purchaseOrders')} isActive={currentView === 'purchaseOrders'}/>
                         <NavItem icon={PersonnelIcon} label="Personal" onClick={() => selectView('personnel')} isActive={currentView === 'personnel'} />
                     </nav>
                 </div>
+                <div className="p-4 border-t bg-gray-50">
+                    <button onClick={handleLogout} className="w-full flex items-center justify-center px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-bold text-xs transition-colors">
+                        SALIR / CAMBIAR USUARIO
+                    </button>
+                </div>
             </aside>
             <div className="flex-1 flex flex-col">
-                <Header 
-                    toggleSidebar={() => setSidebarOpen(!isSidebarOpen)}
-                    userRole={userRole}
-                    setUserRole={setUserRole}
-                    onExportData={handleExportData}
-                    onImportData={handleImportData}
-                    onResetData={handleResetData}
-                    onOpenUserManagement={() => setUserManagementOpen(true)}
-                    onLogout={handleLogout}
-                />
-                <main className="flex-1 p-4 md:p-6 overflow-y-auto">
-                    {renderView()}
-                </main>
+                <Header toggleSidebar={() => setSidebarOpen(!isSidebarOpen)} userRole={userRole} setUserRole={setUserRole} onExportData={handleExportData} onImportData={handleImportData} onResetData={handleResetData} onOpenUserManagement={() => setUserManagementOpen(true)} onLogout={handleLogout} />
+                <main className="flex-1 p-4 md:p-6 overflow-y-auto">{renderView()}</main>
             </div>
-
-            {/* Modals */}
-            <AddItemModal 
-                isOpen={isAddItemModalOpen}
-                onClose={() => setAddItemModalOpen(false)}
-                onAddItem={handleAddItem}
-                userRole={userRole}
-            />
-            <EditItemModal
-                isOpen={isEditModalOpen}
-                onClose={() => setEditModalOpen(false)}
-                onEditItem={handleEditItem}
-                itemToEdit={itemToEdit}
-            />
-            <LogMovementModal
-                isOpen={isLogMovementModalOpen}
-                onClose={() => setLogMovementModalOpen(false)}
-                onLogMovement={handleLogMovement}
-                items={items}
-                personnel={personnel}
-                projects={projects}
-                userRole={userRole}
-                filterInventoryType={selectedInventoryType || undefined} // Pasar el filtro al modal para que solo muestre items del tipo seleccionado si aplica
-            />
-            <AddPersonnelModal
-                isOpen={isAddPersonnelModalOpen}
-                onClose={() => setAddPersonnelModalOpen(false)}
-                onAddPersonnel={handleAddPersonnel}
-            />
-            <AddPurchaseOrderModal
-                isOpen={isAddPOModalOpen}
-                onClose={() => setAddPOModalOpen(false)}
-                onAddPurchaseOrder={handleAddPurchaseOrder}
-                items={items}
-            />
-            <ItemHistoryModal
-                isOpen={isHistoryModalOpen}
-                onClose={() => setHistoryModalOpen(false)}
-                item={itemForHistory}
-                movements={movements}
-                personnel={personnel}
-            />
-            <UserManagementModal 
-                isOpen={isUserManagementOpen}
-                onClose={() => setUserManagementOpen(false)}
-                users={users}
-                onAddUser={handleAddUser}
-                onDeleteUser={handleDeleteUser}
-                onEditUser={handleEditUser}
-            />
+            <AddItemModal isOpen={isAddItemModalOpen} onClose={() => setAddItemModalOpen(false)} onAddItem={handleAddItem} userRole={userRole} />
+            <EditItemModal isOpen={isEditModalOpen} onClose={() => setEditModalOpen(false)} onEditItem={handleEditItem} itemToEdit={itemToEdit} />
+            <LogMovementModal isOpen={isLogMovementModalOpen} onClose={() => setLogMovementModalOpen(false)} onLogMovement={handleLogMovement} items={items} personnel={personnel} projects={projects} userRole={userRole} filterInventoryType={selectedInventoryType || undefined} />
+            <AddPersonnelModal isOpen={isAddPersonnelModalOpen} onClose={() => setAddPersonnelModalOpen(false)} onAddPersonnel={handleAddPersonnel} />
+            <AddPurchaseOrderModal isOpen={isAddPOModalOpen} onClose={() => setAddPOModalOpen(false)} onAddPurchaseOrder={handleAddPurchaseOrder} items={items} />
+            <ItemHistoryModal isOpen={isHistoryModalOpen} onClose={() => setHistoryModalOpen(false)} item={itemForHistory} movements={movements} personnel={personnel} />
+            <UserManagementModal isOpen={isUserManagementOpen} onClose={() => setUserManagementOpen(false)} users={users} onAddUser={handleAddUser} onDeleteUser={handleDeleteUser} onEditUser={handleEditUser} />
         </div>
     );
 };
+
+const NavItem: React.FC<{ icon: React.ElementType, label: string, onClick: () => void, isActive: boolean, isSubItem?: boolean }> = ({ icon: Icon, label, onClick, isActive, isSubItem = false }) => (
+    <button onClick={onClick} className={`w-full flex items-center text-left px-4 py-2.5 text-sm font-medium rounded-lg transition-colors duration-200 ${isSubItem ? 'pl-8' : ''} ${isActive ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-600 hover:bg-gray-100'}`}>
+        <Icon className="w-5 h-5 mr-3" />
+        {label}
+    </button>
+);
+
+const NavHeader: React.FC<{label: string}> = ({label}) => <h3 className="px-4 pt-4 pb-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">{label}</h3>;
 
 export default App;

@@ -1,5 +1,5 @@
+
 import React, { useMemo } from 'react';
-// FIX: Import `MovementType` to resolve compilation errors.
 import { Movement, Item, Personnel, InventoryType, MovementType } from '../types';
 import { TruckIcon } from './icons/TruckIcon';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
@@ -10,10 +10,11 @@ interface MovementsViewProps {
     personnel: Personnel[];
     filterType?: InventoryType;
     openLogMovementModal?: () => void;
+    onReturnLoan?: (movementId: string) => void;
     onGoBack: () => void;
 }
 
-export const MovementsView: React.FC<MovementsViewProps> = ({ movements, items, personnel, filterType, openLogMovementModal, onGoBack }) => {
+export const MovementsView: React.FC<MovementsViewProps> = ({ movements, items, personnel, filterType, openLogMovementModal, onReturnLoan, onGoBack }) => {
     
     const filteredMovements = useMemo(() => {
         if (!filterType) return movements;
@@ -59,29 +60,40 @@ export const MovementsView: React.FC<MovementsViewProps> = ({ movements, items, 
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Artículo</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cantidad</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cant.</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Personal</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notas</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                         {filteredMovements.map(m => (
-                            <tr key={m.id}>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(m.timestamp).toLocaleString()}</td>
+                            <tr key={m.id} className="hover:bg-gray-50">
+                                <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500">{new Date(m.timestamp).toLocaleString()}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{getItemName(m.itemId)}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">
                                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getMovementTypeClass(m.type)}`}>
                                         {m.type}
                                     </span>
+                                    {m.isLoan && !m.isReturned && <span className="ml-2 text-xs text-orange-600 font-bold">[PRESTADO]</span>}
+                                    {m.isLoan && m.isReturned && <span className="ml-2 text-xs text-green-600">[DEVUELTO]</span>}
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{m.quantity}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 font-bold">{m.quantity}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{getPersonnelName(m.personnelId)}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{m.notes}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                    {m.isLoan && !m.isReturned && onReturnLoan && (
+                                        <button 
+                                            onClick={() => onReturnLoan(m.id)}
+                                            className="text-xs bg-indigo-600 text-white px-3 py-1 rounded hover:bg-indigo-700"
+                                        >
+                                            Devolver
+                                        </button>
+                                    )}
+                                </td>
                             </tr>
                         ))}
                          {filteredMovements.length === 0 && (
                             <tr>
-                                <td colSpan={6} className="text-center py-10 text-gray-500">No se han registrado movimientos para esta categoría.</td>
+                                <td colSpan={6} className="text-center py-10 text-gray-500">No se han registrado movimientos.</td>
                             </tr>
                         )}
                     </tbody>
