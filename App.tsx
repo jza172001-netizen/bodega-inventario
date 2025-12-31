@@ -32,6 +32,7 @@ import { PpeIcon } from './components/icons/PpeIcon';
 import { SingleUseIcon } from './components/icons/SingleUseIcon';
 import { HardHatIcon } from './components/icons/HardHatIcon';
 import { ClockIcon } from './components/icons/ClockIcon';
+import { LogOutIcon } from './components/icons/LogOutIcon';
 
 type View = 'dashboard' | 'inventory' | 'movements' | 'purchaseOrders' | 'personnel' | 'projects' | 'loans';
 
@@ -64,7 +65,7 @@ const App: React.FC = () => {
         try {
             const savedMovements = localStorage.getItem('inventory_movements');
             if (savedMovements) {
-                return JSON.parse(savedMovements).map((m: Movement) => ({ ...m, timestamp: new Date(m.timestamp) }));
+                return JSON.parse(savedMovements).map((m: any) => ({ ...m, timestamp: new Date(m.timestamp) }));
             }
             return mockMovements;
         } catch (e) {
@@ -87,7 +88,7 @@ const App: React.FC = () => {
         try {
             const savedPOs = localStorage.getItem('inventory_purchase_orders');
             if (savedPOs) {
-                return JSON.parse(savedPOs).map((po: PurchaseOrder) => ({
+                return JSON.parse(savedPOs).map((po: any) => ({
                     ...po,
                     orderDate: new Date(po.orderDate),
                     expectedDeliveryDate: po.expectedDeliveryDate ? new Date(po.expectedDeliveryDate) : undefined,
@@ -136,10 +137,8 @@ const App: React.FC = () => {
 
     // UI State
     const [currentView, setCurrentView] = useState<View>('dashboard');
-    const [selectedMovementFilter, setSelectedMovementFilter] = useState<InventoryType | null>(null);
     const [selectedSubCategory, setSelectedSubCategory] = useState<string | null>(null);
     const [selectedInventoryType, setSelectedInventoryType] = useState<InventoryType | null>(null);
-    
     const [isSidebarOpen, setSidebarOpen] = useState(true);
 
     // Modal State
@@ -160,6 +159,18 @@ const App: React.FC = () => {
         return Array.from(subCategories).sort();
     }, [items]);
 
+    // Computed filtered items based on active filters to resolve line 427 error
+    const filteredItems = useMemo(() => {
+        let result = items;
+        if (selectedInventoryType) {
+            result = result.filter(item => item.inventoryType === selectedInventoryType);
+        }
+        if (selectedSubCategory) {
+            result = result.filter(item => item.subCategory === selectedSubCategory);
+        }
+        return result;
+    }, [items, selectedInventoryType, selectedSubCategory]);
+
     // Handlers
     const handleLogin = (role: UserRole) => {
         setUserRole(role);
@@ -167,7 +178,7 @@ const App: React.FC = () => {
     }
     
     const handleLogout = () => {
-        if (window.confirm('¿Desea cerrar sesión y volver a la pantalla de inicio?')) {
+        if (window.confirm('¿Desea cerrar sesión para cambiar de usuario?')) {
             setIsAuthenticated(false);
             setCurrentView('dashboard');
         }
@@ -291,13 +302,22 @@ const App: React.FC = () => {
     };
 
     const handleExportData = () => {
-        const data = { items, movements, personnel, purchaseOrders, projects, users, exportDate: new Date().toISOString() };
+        const data = { 
+            items, 
+            movements, 
+            personnel, 
+            purchaseOrders, 
+            projects, 
+            users, 
+            version: "2.0",
+            exportDate: new Date().toISOString() 
+        };
         const dataStr = JSON.stringify(data, null, 2);
         const blob = new Blob([dataStr], { type: "application/json" });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = `backup_bodega_${new Date().toISOString().split('T')[0]}.json`;
+        link.download = `backup_bodega_cop_${new Date().toISOString().split('T')[0]}.json`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -311,25 +331,28 @@ const App: React.FC = () => {
             try {
                 const json = e.target?.result as string;
                 const data = JSON.parse(json);
-                if (data.items && data.movements) {
-                    if (window.confirm('¿Seguro que desea RESTAURAR los datos? Esto sobreescribirá todo lo actual.')) {
-                        // Guardar todo en localStorage
+                
+                // Validación estricta para asegurar que el backup sea compatible
+                if (data.items && data.movements && data.personnel && data.projects) {
+                    if (window.confirm('¡ATENCIÓN! Se reemplazarán todos los datos por el respaldo. ¿Confirmar restauración?')) {
+                        // Limpiar y guardar
+                        localStorage.clear();
                         localStorage.setItem('inventory_items', JSON.stringify(data.items));
                         localStorage.setItem('inventory_movements', JSON.stringify(data.movements));
-                        if (data.personnel) localStorage.setItem('inventory_personnel', JSON.stringify(data.personnel));
+                        localStorage.setItem('inventory_personnel', JSON.stringify(data.personnel));
+                        localStorage.setItem('inventory_projects', JSON.stringify(data.projects));
                         if (data.purchaseOrders) localStorage.setItem('inventory_purchase_orders', JSON.stringify(data.purchaseOrders));
-                        if (data.projects) localStorage.setItem('inventory_projects', JSON.stringify(data.projects));
                         if (data.users) localStorage.setItem('inventory_users', JSON.stringify(data.users));
                         
-                        alert('Base de datos restaurada con éxito. Reiniciando sistema...');
+                        alert('Restauración completada. El sistema se reiniciará para aplicar los cambios.');
                         window.location.reload();
                     }
                 } else {
-                    alert('El archivo no es un respaldo válido de Bodega Maestra.');
+                    alert('Error: El archivo de backup no es válido o está incompleto.');
                 }
             } catch (error) {
                 console.error("Error importing data", error);
-                alert('Error crítico al procesar el archivo. Verifique que sea el archivo .json correcto.');
+                alert('Error al leer el archivo. Asegúrese de que sea un JSON válido.');
             }
         };
         reader.readAsText(file);
@@ -337,28 +360,19 @@ const App: React.FC = () => {
     };
 
     const handleResetData = () => {
-        const password = prompt("PELIGRO: Esto borrará todo el sistema.\nIngrese la CLAVE MAESTRA para confirmar:");
+        const password = prompt("ADVERTENCIA: Se borrará TODO.\nIngrese la CLAVE MAESTRA para confirmar:");
         if (password === '00') {
-            if (window.confirm('¿Está absolutamente seguro? Se eliminarán todos los registros.')) {
+            if (window.confirm('¿Está absolutamente seguro de borrar la base de datos?')) {
                 localStorage.clear();
-                alert("El sistema se ha restablecido a cero. La página se recargará.");
                 window.location.reload();
             }
         } else if (password !== null) {
-            alert("Contraseña incorrecta.");
+            alert("Clave incorrecta.");
         }
     };
     
-    const filteredItems = useMemo(() => {
-        let result = items;
-        if (selectedInventoryType) result = result.filter(item => item.inventoryType === selectedInventoryType);
-        if (selectedSubCategory) result = result.filter(item => item.subCategory === selectedSubCategory);
-        return result;
-    }, [items, selectedSubCategory, selectedInventoryType]);
-
     const selectView = (view: View) => {
         setCurrentView(view);
-        setSelectedMovementFilter(null);
         setSelectedSubCategory(null);
         setSelectedInventoryType(null);
         if (window.innerWidth < 768) setSidebarOpen(false);
@@ -368,7 +382,6 @@ const App: React.FC = () => {
         setCurrentView('inventory');
         setSelectedInventoryType(type);
         setSelectedSubCategory(null);
-        setSelectedMovementFilter(null);
         if (window.innerWidth < 768) setSidebarOpen(false);
     }
 
@@ -376,68 +389,63 @@ const App: React.FC = () => {
         setCurrentView('inventory');
         setSelectedSubCategory(subCategory);
         if (subCategory === null) setSelectedInventoryType(null);
-        setSelectedMovementFilter(null);
         if (window.innerWidth < 768) setSidebarOpen(false);
     }
 
-    const renderView = () => {
-        const onGoBack = () => selectView('dashboard');
-        const inventoryTitle = selectedSubCategory || selectedInventoryType || 'Todos los Artículos';
-
-        switch (currentView) {
-            case 'dashboard':
-                return <Dashboard items={items} movements={movements} />;
-            case 'inventory':
-                return <InventoryView items={filteredItems} openAddItemModal={() => setAddItemModalOpen(true)} onEditItem={openEditItemModal} onDeleteItem={handleDeleteItem} onItemHistory={openItemHistory} userRole={userRole} category={inventoryTitle} onGoBack={onGoBack} />;
-            case 'movements':
-                return <MovementsView movements={movements} items={items} personnel={personnel} openLogMovementModal={() => setLogMovementModalOpen(true)} onReturnLoan={handleReturnLoan} onGoBack={onGoBack} />;
-            case 'purchaseOrders':
-                return <PurchaseOrdersView purchaseOrders={purchaseOrders} items={items} openAddPurchaseOrderModal={() => setAddPOModalOpen(true)} onUpdateStatus={handleUpdatePOStatus} userRole={userRole} onGoBack={onGoBack} />;
-            case 'personnel':
-                return <PersonnelView personnel={personnel} openAddPersonnelModal={() => setAddPersonnelModalOpen(true)} onGoBack={onGoBack} onEditPersonnel={handleEditPersonnel} onDeletePersonnel={handleDeletePersonnel} userRole={userRole} />;
-            case 'projects':
-                return <ProjectsView projects={projects} movements={movements} items={items} personnel={personnel} onAddProject={handleAddProject} onGoBack={onGoBack} userRole={userRole} />;
-            case 'loans':
-                return <LoansView movements={movements} items={items} personnel={personnel} onReturnItem={handleReturnLoan} onGoBack={onGoBack} />;
-            default:
-                return <div>Seleccione una vista</div>;
-        }
-    };
-    
     if (!isAuthenticated) return <LoginView onLoginSuccess={handleLogin} users={users} />;
 
     return (
-        <div className="flex h-screen bg-gray-100">
+        <div className="flex h-screen bg-gray-50 overflow-hidden font-sans">
             {isSidebarOpen && <div onClick={() => setSidebarOpen(false)} className="fixed inset-0 bg-black/50 z-20 md:hidden" />}
-            <aside className={`bg-white border-r border-gray-200 transition-all duration-300 ease-in-out fixed md:relative inset-y-0 left-0 z-30 transform md:transform-none ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:${isSidebarOpen ? 'w-64' : 'w-0 overflow-hidden'} flex flex-col`}>
-                <div className="h-16 flex-shrink-0 flex items-center justify-center border-b bg-blue-600 text-white"><h2 className="text-xl font-bold tracking-tighter">BODEGA MAESTRA</h2></div>
-                <div className="flex-1 overflow-y-auto">
-                    <nav className="p-2">
-                        <NavItem icon={DashboardIcon} label="Tablero" onClick={() => selectView('dashboard')} isActive={currentView === 'dashboard'} />
-                        <NavHeader label="Operación" />
-                        <NavItem icon={HardHatIcon} label="Proyectos / Obras" onClick={() => selectView('projects')} isActive={currentView === 'projects'} />
-                        <NavItem icon={ClockIcon} label="Préstamos / Devol." onClick={() => selectView('loans')} isActive={currentView === 'loans'} />
-                        <NavItem icon={MovementsIcon} label="Movimientos" onClick={() => selectView('movements')} isActive={currentView === 'movements'} />
-                        <NavHeader label="Categorías" />
+            
+            <aside className={`bg-white border-r border-gray-200 shadow-xl transition-all duration-300 ease-in-out fixed md:relative inset-y-0 left-0 z-30 transform md:transform-none ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:${isSidebarOpen ? 'w-64' : 'w-0 overflow-hidden'} flex flex-col`}>
+                <div className="h-16 flex-shrink-0 flex items-center px-6 border-b bg-blue-700 text-white">
+                    <h2 className="text-xl font-black tracking-tighter uppercase">Bodega Maestra</h2>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto py-4 scrollbar-hide">
+                    <nav className="px-2 space-y-1">
+                        <NavItem icon={DashboardIcon} label="Tablero Principal" onClick={() => selectView('dashboard')} isActive={currentView === 'dashboard'} />
+                        <NavHeader label="Proyectos" />
+                        <NavItem icon={HardHatIcon} label="Obras y Gastos" onClick={() => selectView('projects')} isActive={currentView === 'projects'} />
+                        <NavItem icon={ClockIcon} label="Herramienta en Préstamo" onClick={() => selectView('loans')} isActive={currentView === 'loans'} />
+                        <NavItem icon={MovementsIcon} label="Kardex General" onClick={() => selectView('movements')} isActive={currentView === 'movements'} />
+                        
+                        <NavHeader label="Inventario" />
                         <NavItem icon={HandToolIcon} label="Herramienta Manual" onClick={() => selectInventoryTypeFilter(InventoryType.HAND_TOOL)} isActive={currentView === 'inventory' && selectedInventoryType === InventoryType.HAND_TOOL} />
                         <NavItem icon={ElectricalToolIcon} label="Herramienta Eléctrica" onClick={() => selectInventoryTypeFilter(InventoryType.ELECTRICAL_TOOL)} isActive={currentView === 'inventory' && selectedInventoryType === InventoryType.ELECTRICAL_TOOL} />
                         <NavItem icon={PpeIcon} label="Indumentaria (EPP)" onClick={() => selectInventoryTypeFilter(InventoryType.PPE)} isActive={currentView === 'inventory' && selectedInventoryType === InventoryType.PPE} />
                         <NavItem icon={SingleUseIcon} label="Material de Consumo" onClick={() => selectInventoryTypeFilter(InventoryType.SINGLE_USE)} isActive={currentView === 'inventory' && selectedInventoryType === InventoryType.SINGLE_USE} />
-                        <NavHeader label="Administración" />
+                        
+                        <NavHeader label="Empresa" />
                         <NavItem icon={PurchaseOrdersIcon} label="Órdenes de Compra" onClick={() => selectView('purchaseOrders')} isActive={currentView === 'purchaseOrders'}/>
                         <NavItem icon={PersonnelIcon} label="Personal" onClick={() => selectView('personnel')} isActive={currentView === 'personnel'} />
+                        
+                        <div className="pt-8 px-2">
+                             <button onClick={handleLogout} className="w-full flex items-center justify-center p-3 bg-red-100 text-red-700 rounded-xl hover:bg-red-200 transition-colors font-bold text-xs">
+                                <LogOutIcon className="w-5 h-5 mr-2" />
+                                SALIR DEL SISTEMA
+                             </button>
+                        </div>
                     </nav>
                 </div>
-                <div className="p-4 border-t bg-gray-50">
-                    <button onClick={handleLogout} className="w-full flex items-center justify-center px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-bold text-xs transition-colors">
-                        SALIR / CAMBIAR USUARIO
-                    </button>
-                </div>
             </aside>
-            <div className="flex-1 flex flex-col">
+
+            <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
                 <Header toggleSidebar={() => setSidebarOpen(!isSidebarOpen)} userRole={userRole} setUserRole={setUserRole} onExportData={handleExportData} onImportData={handleImportData} onResetData={handleResetData} onOpenUserManagement={() => setUserManagementOpen(true)} onLogout={handleLogout} />
-                <main className="flex-1 p-4 md:p-6 overflow-y-auto">{renderView()}</main>
+                <main className="flex-1 p-4 md:p-6 overflow-y-auto bg-gray-50">
+                    <div className="max-w-7xl mx-auto">
+                        {currentView === 'dashboard' && <Dashboard items={items} movements={movements} />}
+                        {currentView === 'inventory' && <InventoryView items={filteredItems} openAddItemModal={() => setAddItemModalOpen(true)} onEditItem={openEditItemModal} onDeleteItem={handleDeleteItem} onItemHistory={openItemHistory} userRole={userRole} category={selectedSubCategory || selectedInventoryType || 'Todos'} onGoBack={() => selectView('dashboard')} />}
+                        {currentView === 'movements' && <MovementsView movements={movements} items={items} personnel={personnel} openLogMovementModal={() => setLogMovementModalOpen(true)} onReturnLoan={handleReturnLoan} onGoBack={() => selectView('dashboard')} />}
+                        {currentView === 'purchaseOrders' && <PurchaseOrdersView purchaseOrders={purchaseOrders} items={items} openAddPurchaseOrderModal={() => setAddPOModalOpen(true)} onUpdateStatus={handleUpdatePOStatus} userRole={userRole} onGoBack={() => selectView('dashboard')} />}
+                        {currentView === 'personnel' && <PersonnelView personnel={personnel} openAddPersonnelModal={() => setAddPersonnelModalOpen(true)} onGoBack={() => selectView('dashboard')} onEditPersonnel={handleEditPersonnel} onDeletePersonnel={handleDeletePersonnel} userRole={userRole} />}
+                        {currentView === 'projects' && <ProjectsView projects={projects} movements={movements} items={items} personnel={personnel} onAddProject={handleAddProject} onGoBack={() => selectView('dashboard')} userRole={userRole} />}
+                        {currentView === 'loans' && <LoansView movements={movements} items={items} personnel={personnel} onReturnItem={handleReturnLoan} onGoBack={() => selectView('dashboard')} />}
+                    </div>
+                </main>
             </div>
+
             <AddItemModal isOpen={isAddItemModalOpen} onClose={() => setAddItemModalOpen(false)} onAddItem={handleAddItem} userRole={userRole} />
             <EditItemModal isOpen={isEditModalOpen} onClose={() => setEditModalOpen(false)} onEditItem={handleEditItem} itemToEdit={itemToEdit} />
             <LogMovementModal isOpen={isLogMovementModalOpen} onClose={() => setLogMovementModalOpen(false)} onLogMovement={handleLogMovement} items={items} personnel={personnel} projects={projects} userRole={userRole} filterInventoryType={selectedInventoryType || undefined} />
@@ -449,13 +457,15 @@ const App: React.FC = () => {
     );
 };
 
-const NavItem: React.FC<{ icon: React.ElementType, label: string, onClick: () => void, isActive: boolean, isSubItem?: boolean }> = ({ icon: Icon, label, onClick, isActive, isSubItem = false }) => (
-    <button onClick={onClick} className={`w-full flex items-center text-left px-4 py-2.5 text-sm font-medium rounded-lg transition-colors duration-200 ${isSubItem ? 'pl-8' : ''} ${isActive ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-600 hover:bg-gray-100'}`}>
-        <Icon className="w-5 h-5 mr-3" />
+const NavItem: React.FC<{ icon: React.ElementType, label: string, onClick: () => void, isActive: boolean }> = ({ icon: Icon, label, onClick, isActive }) => (
+    <button onClick={onClick} className={`w-full flex items-center text-left px-4 py-3 text-sm font-semibold rounded-xl transition-all duration-200 ${isActive ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'}`}>
+        <Icon className={`w-5 h-5 mr-3 ${isActive ? 'text-white' : 'text-gray-400'}`} />
         {label}
     </button>
 );
 
-const NavHeader: React.FC<{label: string}> = ({label}) => <h3 className="px-4 pt-4 pb-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">{label}</h3>;
+const NavHeader: React.FC<{label: string}> = ({label}) => (
+    <h3 className="px-5 pt-6 pb-2 text-[10px] font-black text-gray-400 uppercase tracking-widest">{label}</h3>
+);
 
 export default App;

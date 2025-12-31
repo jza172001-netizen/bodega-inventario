@@ -1,83 +1,79 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { Item, Movement } from "../types";
 
 // Parche para TypeScript en Vercel
 declare const process: any;
 
-let ai: GoogleGenAI | undefined;
-if (process.env.API_KEY) {
-  ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-} else {
-  console.warn("API_KEY environment variable not set. AI features will be disabled.");
-}
-
+// Genera un análisis profundo del inventario utilizando Gemini 3 Pro
 export const generateInventoryAnalysis = async (items: Item[], movements: Movement[]): Promise<string> => {
-    if(!ai) {
-        return "Error: La clave de API de Gemini no está configurada. Por favor, configure la variable de entorno API_KEY.";
+    if (!process.env.API_KEY) {
+        return "Error: La clave de API de Gemini no está configurada.";
     }
 
-  const movementData = movements.map(m => {
-    const item = items.find(i => i.id === m.itemId);
-    return {
-        item_nombre: item?.name || 'Desconocido',
-        item_categoria: item?.category || 'Desconocida',
-        tipo: m.type,
-        cantidad: m.quantity,
-        fecha: m.timestamp.toLocaleDateString()
-    };
-  });
+    // Always create a new instance right before use to ensure the latest API key from process.env is used.
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-  const prompt = `
-    Analiza el siguiente estado de inventario y movimientos de una bodega de materiales de construcción y genera un resumen ejecutivo.
+    const movementData = movements.map(m => {
+        const item = items.find(i => i.id === m.itemId);
+        return {
+            item_nombre: item?.name || 'Desconocido',
+            item_tipo: item?.inventoryType || 'Desconocido',
+            tipo_mov: m.type,
+            cantidad: m.quantity,
+            fecha: m.timestamp.toLocaleDateString()
+        };
+    });
 
-    **Contexto:**
-    Eres un asistente de gestión de inventarios experto (impulsado por Gemini 3 Pro). Tu objetivo es proporcionar un análisis estratégico, claro y conciso que ayude a la toma de decisiones operativa.
-
-    **Datos de Inventario Actual (Items):**
-    ${JSON.stringify(items.map(i => ({nombre: i.name, categoria: i.category, cantidad: i.quantity, stock_minimo: i.minStock, precio_unitario: i.price})), null, 2)}
-
-    **Historial de Movimientos Recientes (Movimientos):**
-    ${JSON.stringify(movementData, null, 2)}
-
-    **Tu Tarea:**
-    Genera un informe en formato Markdown con las siguientes secciones:
-    1.  **Resumen General:** Un párrafo breve sobre el estado de salud del inventario.
-    2.  **Alertas de Stock Bajo:** Lista de los 5 artículos más urgentes que están por debajo o cerca de su stock mínimo. Incluye el nombre, la cantidad actual y el stock mínimo.
-    3.  **Análisis de Gastos:** Calcula el valor total del inventario actual y el gasto total en compras (movimientos de tipo "Compra") y mermas (movimientos de tipo "Merma").
-    4.  **Tendencias de Uso:** Identifica las 3 categorías de materiales con más salidas (movimientos de tipo "Salida").
-    5.  **Recomendaciones Estratégicas:** Proporciona 2 recomendaciones accionables para optimizar el inventario, como sugerencias de compra o revisión de stock mínimo.
+    const prompt = `
+    Analiza el inventario de una bodega de construcción en Colombia.
     
-    El informe debe ser en español.
+    **Reglas de Negocio Importantes:**
+    1. Las herramientas (Manuales y Eléctricas) son ACTIVOS. No son gastos directos, sino préstamos.
+    2. Los materiales de consumo y EPP son GASTOS. Generan el costo real de la obra.
+    3. La moneda es el Peso Colombiano (COP).
+    4. Tu objetivo es ayudar al bodeguero a saber qué se está gastando y qué herramientas están en riesgo de pérdida.
+
+    **Datos Actuales:**
+    Items: ${JSON.stringify(items.map(i => ({ nombre: i.name, tipo: i.inventoryType, cant: i.quantity, precio: i.price })), null, 2)}
+    Movimientos: ${JSON.stringify(movementData, null, 2)}
+
+    **Genera un reporte Markdown con:**
+    1. Resumen de Inversión (en COP): Solo suma el valor de materiales de consumo y EPP.
+    2. Control de Activos: Cuántas herramientas hay en stock vs qué tanto se mueven.
+    3. Alertas de Reabastecimiento: Top 5 materiales urgentes por comprar.
+    4. Recomendaciones: Consejos para evitar mermas en materiales y robo de herramientas.
+    
+    Responde en español con un tono profesional y directo.
   `;
 
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
-      contents: prompt,
-    });
-    return response.text || "No se pudo generar el reporte.";
-  } catch (error) {
-    console.error("Error generating inventory analysis:", error);
-    return "Se produjo un error al generar el análisis. Por favor, revisa la consola para más detalles.";
-  }
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-pro-preview',
+            contents: prompt,
+        });
+        return response.text || "No se pudo generar el reporte.";
+    } catch (error) {
+        console.error("Error generating inventory analysis:", error);
+        return "Error al generar análisis con IA.";
+    }
 };
 
+// Genera recomendaciones de rotación de stock utilizando Gemini 3 Pro con salida JSON
 export const generateRotationAnalysis = async (
     rotationData: { subCategory: string; totalOut: number; frequency: number }[]
 ): Promise<{ [key: string]: { recommendation: string; severity: string } }> => {
-    if (!ai) {
-        throw new Error("La clave de API de Gemini no está configurada.");
+    if (!process.env.API_KEY) {
+        throw new Error("Clave de API no configurada.");
     }
+
+    // Always create a new instance right before use to ensure the latest API key from process.env is used.
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
     const prompt = `
-        Analiza los siguientes datos de rotación de inventario de sub-categorías de una bodega de construcción. 
-        Para cada sub-categoría, proporciona una recomendación concisa y accionable y un nivel de severidad.
-
-        Datos de Rotación (últimos 30 días):
-        ${JSON.stringify(rotationData.map(d => ({ sub_categoria: d.subCategory, total_salidas: d.totalOut, frecuencia_salidas: d.frequency })), null, 2)}
-
-        Tu Tarea:
-        Genera una respuesta en formato JSON que sea un array de objetos según el esquema proporcionado.
+        Analiza la rotación de materiales de construcción en Colombia. 
+        Datos: ${JSON.stringify(rotationData, null, 2)}
+        Genera recomendaciones breves de compra o control para cada sub-categoría.
     `;
 
     const responseSchema = {
@@ -86,11 +82,10 @@ export const generateRotationAnalysis = async (
             type: Type.OBJECT,
             properties: {
                 subCategory: { type: Type.STRING },
-                recommendation: { type: Type.STRING, description: "Recomendación en español (máx 15 palabras)." },
+                recommendation: { type: Type.STRING, description: "Máximo 12 palabras." },
                 severity: { 
                     type: Type.STRING,
-                    enum: ["CRITICAL", "HIGH", "MEDIUM", "LOW"],
-                    description: "Nivel de severidad: CRITICAL, HIGH, MEDIUM, o LOW."
+                    enum: ["CRITICAL", "HIGH", "MEDIUM", "LOW"]
                 },
             },
             required: ["subCategory", "recommendation", "severity"]
@@ -107,26 +102,16 @@ export const generateRotationAnalysis = async (
             },
         });
         
-        const text = response.text;
-        if (!text) return {};
-
-        const parsedResponse = JSON.parse(text);
-
+        const parsedResponse = JSON.parse(response.text || "[]");
         const recommendationsMap: { [key: string]: { recommendation: string; severity: string } } = {};
         if (Array.isArray(parsedResponse)) {
-            for (const item of parsedResponse) {
-                if(item.subCategory) {
-                    recommendationsMap[item.subCategory] = {
-                        recommendation: item.recommendation,
-                        severity: item.severity,
-                    };
-                }
-            }
+            parsedResponse.forEach(item => {
+                if(item.subCategory) recommendationsMap[item.subCategory] = { recommendation: item.recommendation, severity: item.severity };
+            });
         }
         return recommendationsMap;
-
     } catch (error) {
         console.error("Error generating rotation analysis:", error);
-        throw new Error("Se produjo un error al generar el análisis de rotación.");
+        return {};
     }
 };
