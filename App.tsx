@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { AddItemModal } from './components/AddItemModal';
 import { EditItemModal } from './components/EditItemModal';
 import { Dashboard } from './components/Dashboard';
@@ -22,7 +22,6 @@ import { LoginView } from './components/LoginView';
 
 // Icons for Sidebar
 import { DashboardIcon } from './components/icons/DashboardIcon';
-import { InventoryIcon } from './components/icons/InventoryIcon';
 import { MovementsIcon } from './components/icons/MovementsIcon';
 import { PersonnelIcon } from './components/icons/PersonnelIcon';
 import { PurchaseOrdersIcon } from './components/icons/PurchaseOrdersIcon';
@@ -36,114 +35,74 @@ import { LogOutIcon } from './components/icons/LogOutIcon';
 
 type View = 'dashboard' | 'inventory' | 'movements' | 'purchaseOrders' | 'personnel' | 'projects' | 'loans';
 
-const INITIALIZED_KEY = 'inventory_system_initialized_v2';
+const INITIALIZED_KEY = 'inventory_system_initialized_v3';
+
+/**
+ * Función auxiliar para obtener datos iniciales de forma segura.
+ * Si ya fue inicializado anteriormente, devuelve los datos guardados o un array vacío.
+ * Si es la primera vez absoluta, devuelve los datos de prueba (mockData).
+ */
+const getInitialData = <T,>(storageKey: string, defaultValue: T, mockData: T): T => {
+    try {
+        const saved = localStorage.getItem(storageKey);
+        if (saved !== null) {
+            // Manejo especial para fechas en movimientos y órdenes
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed)) {
+                return parsed.map(item => {
+                    if (item.timestamp) return { ...item, timestamp: new Date(item.timestamp) };
+                    if (item.orderDate) return { 
+                        ...item, 
+                        orderDate: new Date(item.orderDate),
+                        expectedDeliveryDate: item.expectedDeliveryDate ? new Date(item.expectedDeliveryDate) : undefined,
+                        receivedDate: item.receivedDate ? new Date(item.receivedDate) : undefined
+                    };
+                    return item;
+                }) as unknown as T;
+            }
+            return parsed;
+        }
+        
+        // Si no hay datos, revisamos si el sistema ya fue marcado como inicializado (resetado o usado)
+        const isInitialized = localStorage.getItem(INITIALIZED_KEY);
+        if (isInitialized === 'true') {
+            return defaultValue; // Retornamos vacío (el usuario lo quiso así)
+        }
+        
+        return mockData; // Primera vez: cargamos los ejemplos
+    } catch (e) {
+        console.error(`Error cargando ${storageKey}:`, e);
+        return defaultValue;
+    }
+};
 
 const App: React.FC = () => {
-    // State Management
+    // Authentication State
     const [isAuthenticated, setIsAuthenticated] = useState(false);
-    
-    // Check if it's the first time running the app
-    const isFirstRun = !localStorage.getItem(INITIALIZED_KEY);
-
-    // Users Management State
-    const [users, setUsers] = useState<AppUser[]>(() => {
-        try {
-            const savedUsers = localStorage.getItem('inventory_users');
-            if (savedUsers) return JSON.parse(savedUsers);
-            return mockUsers; // Default master user
-        } catch (e) {
-            return mockUsers;
-        }
-    });
-
-    const [items, setItems] = useState<Item[]>(() => {
-        try {
-            const savedItems = localStorage.getItem('inventory_items');
-            if (savedItems) return JSON.parse(savedItems);
-            return isFirstRun ? mockItems : [];
-        } catch (e) {
-            return [];
-        }
-    });
-
-    const [movements, setMovements] = useState<Movement[]>(() => {
-        try {
-            const savedMovements = localStorage.getItem('inventory_movements');
-            if (savedMovements) {
-                return JSON.parse(savedMovements).map((m: any) => ({ ...m, timestamp: new Date(m.timestamp) }));
-            }
-            return isFirstRun ? mockMovements : [];
-        } catch (e) {
-            return [];
-        }
-    });
-
-    const [personnel, setPersonnel] = useState<Personnel[]>(() => {
-        try {
-            const savedPersonnel = localStorage.getItem('inventory_personnel');
-            if (savedPersonnel) return JSON.parse(savedPersonnel);
-            return isFirstRun ? mockPersonnel : [];
-        } catch (e) {
-            return [];
-        }
-    });
-
-    const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(() => {
-        try {
-            const savedPOs = localStorage.getItem('inventory_purchase_orders');
-            if (savedPOs) {
-                return JSON.parse(savedPOs).map((po: any) => ({
-                    ...po,
-                    orderDate: new Date(po.orderDate),
-                    expectedDeliveryDate: po.expectedDeliveryDate ? new Date(po.expectedDeliveryDate) : undefined,
-                    receivedDate: po.receivedDate ? new Date(po.receivedDate) : undefined,
-                }));
-            }
-            return isFirstRun ? mockPurchaseOrders : [];
-        } catch (e) {
-            return [];
-        }
-    });
-
-    const [projects, setProjects] = useState<Project[]>(() => {
-        try {
-            const savedProjects = localStorage.getItem('inventory_projects');
-            if (savedProjects) return JSON.parse(savedProjects);
-            return isFirstRun ? mockProjects : [];
-        } catch (e) {
-            return [];
-        }
-    });
-
     const [userRole, setUserRole] = useState<UserRole>(UserRole.OWNER);
 
-    // Persist Data Hooks
-    useEffect(() => {
-        localStorage.setItem('inventory_users', JSON.stringify(users));
-        // Mark as initialized once we have saved something
-        if (isFirstRun) localStorage.setItem(INITIALIZED_KEY, 'true');
-    }, [users]);
+    // Core Data State
+    const [users, setUsers] = useState<AppUser[]>(() => getInitialData('inventory_users', mockUsers, mockUsers));
+    const [items, setItems] = useState<Item[]>(() => getInitialData('inventory_items', [], mockItems));
+    const [movements, setMovements] = useState<Movement[]>(() => getInitialData('inventory_movements', [], mockMovements));
+    const [personnel, setPersonnel] = useState<Personnel[]>(() => getInitialData('inventory_personnel', [], mockPersonnel));
+    const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(() => getInitialData('inventory_purchase_orders', [], mockPurchaseOrders));
+    const [projects, setProjects] = useState<Project[]>(() => getInitialData('inventory_projects', [], mockProjects));
 
-    useEffect(() => {
-        localStorage.setItem('inventory_items', JSON.stringify(items));
-    }, [items]);
+    // Persistencia Automática
+    useEffect(() => { localStorage.setItem('inventory_users', JSON.stringify(users)); }, [users]);
+    useEffect(() => { localStorage.setItem('inventory_items', JSON.stringify(items)); }, [items]);
+    useEffect(() => { localStorage.setItem('inventory_movements', JSON.stringify(movements)); }, [movements]);
+    useEffect(() => { localStorage.setItem('inventory_personnel', JSON.stringify(personnel)); }, [personnel]);
+    useEffect(() => { localStorage.setItem('inventory_purchase_orders', JSON.stringify(purchaseOrders)); }, [purchaseOrders]);
+    useEffect(() => { localStorage.setItem('inventory_projects', JSON.stringify(projects)); }, [projects]);
 
+    // Marcar como inicializado tras el primer render con éxito
     useEffect(() => {
-        localStorage.setItem('inventory_movements', JSON.stringify(movements));
-    }, [movements]);
-
-    useEffect(() => {
-        localStorage.setItem('inventory_personnel', JSON.stringify(personnel));
-    }, [personnel]);
-
-    useEffect(() => {
-        localStorage.setItem('inventory_purchase_orders', JSON.stringify(purchaseOrders));
-    }, [purchaseOrders]);
-
-    useEffect(() => {
-        localStorage.setItem('inventory_projects', JSON.stringify(projects));
-    }, [projects]);
-
+        if (localStorage.getItem(INITIALIZED_KEY) !== 'true') {
+            localStorage.setItem(INITIALIZED_KEY, 'true');
+        }
+    }, []);
 
     // UI State
     const [currentView, setCurrentView] = useState<View>('dashboard');
@@ -159,43 +118,56 @@ const App: React.FC = () => {
     const [isAddPersonnelModalOpen, setAddPersonnelModalOpen] = useState(false);
     const [isAddPOModalOpen, setAddPOModalOpen] = useState(false);
     const [isUserManagementOpen, setUserManagementOpen] = useState(false);
-    
-    // Kardex State
     const [itemForHistory, setItemForHistory] = useState<Item | null>(null);
     const [isHistoryModalOpen, setHistoryModalOpen] = useState(false);
-
-    // Computed filtered items
-    const filteredItems = useMemo(() => {
-        let result = items;
-        if (selectedInventoryType) {
-            result = result.filter(item => item.inventoryType === selectedInventoryType);
-        }
-        if (selectedSubCategory) {
-            result = result.filter(item => item.subCategory === selectedSubCategory);
-        }
-        return result;
-    }, [items, selectedInventoryType, selectedSubCategory]);
 
     // Handlers
     const handleLogin = (role: UserRole) => {
         setUserRole(role);
         setIsAuthenticated(true);
-    }
+    };
     
     const handleLogout = () => {
         setIsAuthenticated(false);
         setCurrentView('dashboard');
-    }
+    };
 
-    const handleAddUser = (newUser: AppUser) => {
-        setUsers([...users, newUser]);
-    }
-    const handleEditUser = (updatedUser: AppUser) => {
-        setUsers(users.map(u => u.id === updatedUser.id ? updatedUser : u));
-    }
-    const handleDeleteUser = (id: string) => {
-        setUsers(users.filter(u => u.id !== id));
-    }
+    const handleResetData = () => {
+        const password = prompt("⚠️ LIMPIEZA TOTAL DEL SISTEMA\n\nEsto borrará todos los productos, movimientos y proyectos.\nIngrese la clave maestra (00) para confirmar:");
+        
+        if (password === '00') {
+            if (window.confirm('¿Confirmar el inicio de la bodega desde cero? (Se mantendrá su acceso de administrador)')) {
+                // 1. Limpiar estados de React (Inmediato en UI)
+                setItems([]);
+                setMovements([]);
+                setPersonnel([]);
+                setProjects([]);
+                setPurchaseOrders([]);
+                
+                // 2. Limpiar LocalStorage físicamente
+                localStorage.removeItem('inventory_items');
+                localStorage.removeItem('inventory_movements');
+                localStorage.removeItem('inventory_personnel');
+                localStorage.removeItem('inventory_projects');
+                localStorage.removeItem('inventory_purchase_orders');
+                
+                // 3. Bloquear recarga de Mocks
+                localStorage.setItem(INITIALIZED_KEY, 'true');
+                
+                alert('¡Sistema Limpio! La bodega ahora está en 0. Puede comenzar a cargar sus materiales.');
+                setCurrentView('dashboard');
+            }
+        } else if (password !== null) {
+            alert("Clave de reset incorrecta.");
+        }
+    };
+
+    const filteredItems = useMemo(() => {
+        let result = items;
+        if (selectedInventoryType) result = result.filter(item => item.inventoryType === selectedInventoryType);
+        if (selectedSubCategory) result = result.filter(item => item.subCategory === selectedSubCategory);
+        return result;
+    }, [items, selectedInventoryType, selectedSubCategory]);
 
     const handleAddItem = (item: Omit<Item, 'id'>) => {
         const newItem: Item = { ...item, id: `item-${Date.now()}` };
@@ -204,32 +176,16 @@ const App: React.FC = () => {
 
     const handleEditItem = (updatedItem: Item) => {
         setItems(prev => prev.map(item => item.id === updatedItem.id ? updatedItem : item));
-        setItemToEdit(null);
     };
 
     const handleDeleteItem = (itemId: string) => {
-        if (window.confirm('¿Está seguro de que desea eliminar este artículo?')) {
+        if (window.confirm('¿Eliminar artículo definitivamente?')) {
             setItems(prev => prev.filter(item => item.id !== itemId));
         }
     };
-    
-    const openEditItemModal = (item: Item) => {
-        setItemToEdit(item);
-        setEditModalOpen(true);
-    };
-
-    const openItemHistory = (item: Item) => {
-        setItemForHistory(item);
-        setHistoryModalOpen(true);
-    };
 
     const handleLogMovement = (movement: Omit<Movement, 'id' | 'timestamp'>) => {
-        const newMovement: Movement = { 
-            ...movement, 
-            id: `move-${Date.now()}`, 
-            timestamp: new Date(),
-            isReturned: false 
-        };
+        const newMovement: Movement = { ...movement, id: `move-${Date.now()}`, timestamp: new Date(), isReturned: false };
         setMovements(prev => [newMovement, ...prev]);
 
         const item = items.find(i => i.id === movement.itemId);
@@ -244,162 +200,19 @@ const App: React.FC = () => {
         }
     };
 
-    const handleReturnLoan = (movementId: string) => {
-        const movement = movements.find(m => m.id === movementId);
-        if (!movement || movement.isReturned) return;
-
-        const itemName = items.find(i => i.id === movement.itemId)?.name || 'artículo';
-        if (window.confirm(`¿Confirmar devolución de: ${itemName}?`)) {
-            setMovements(prev => prev.map(m => m.id === movementId ? { ...m, isReturned: true } : m));
-            const item = items.find(i => i.id === movement.itemId);
-            if (item) {
-                handleEditItem({ ...item, quantity: item.quantity + movement.quantity });
-            }
-        }
-    };
-
-    const handleAddPersonnel = (person: Omit<Personnel, 'id'>) => {
-        const newPerson: Personnel = { ...person, id: `person-${Date.now()}` };
-        setPersonnel(prev => [...prev, newPerson]);
-    };
-
-    const handleEditPersonnel = (updatedPerson: Personnel) => {
-        setPersonnel(prev => prev.map(p => p.id === updatedPerson.id ? updatedPerson : p));
-    };
-
-    const handleDeletePersonnel = (id: string) => {
-        if (window.confirm('¿Eliminar a esta persona del sistema?')) {
-            setPersonnel(prev => prev.filter(p => p.id !== id));
-        }
-    };
-
-    const handleAddProject = (project: Omit<Project, 'id'>) => {
-        const newProject: Project = { ...project, id: `proj-${Date.now()}` };
-        setProjects(prev => [...prev, newProject]);
-    };
-
-    const handleAddPurchaseOrder = (order: Omit<PurchaseOrder, 'id'>) => {
-        const newOrder: PurchaseOrder = { ...order, id: `po-${Date.now()}` };
-        setPurchaseOrders(prev => [newOrder, ...prev]);
-    };
-
-    const handleUpdatePOStatus = (orderId: string, status: PurchaseOrderStatus) => {
-        setPurchaseOrders(prev => prev.map(order => {
-            if (order.id === orderId) {
-                const updatedOrder = { ...order, status };
-                if (status === PurchaseOrderStatus.RECEIVED) {
-                    updatedOrder.receivedDate = new Date();
-                    updatedOrder.items.forEach(orderItem => {
-                        handleLogMovement({
-                            itemId: orderItem.itemId,
-                            type: MovementType.PURCHASE,
-                            quantity: orderItem.quantity,
-                            notes: `Recibido de orden de compra #${order.id.split('-')[1]}`
-                        });
-                    });
-                }
-                return updatedOrder;
-            }
-            return order;
-        }));
-    };
-
-    const handleExportData = () => {
-        const data = { 
-            items, 
-            movements, 
-            personnel, 
-            purchaseOrders, 
-            projects, 
-            users, 
-            version: "2.1",
-            exportDate: new Date().toISOString() 
-        };
-        const dataStr = JSON.stringify(data, null, 2);
-        const blob = new Blob([dataStr], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `backup_bodega_${new Date().toISOString().split('T')[0]}.json`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    };
-
-    const handleImportData = (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            try {
-                const json = e.target?.result as string;
-                const data = JSON.parse(json);
-                if (data.items && data.movements) {
-                    if (window.confirm('Se reemplazará la información actual. ¿Confirmar restauración?')) {
-                        setItems(data.items);
-                        setMovements(data.movements.map((m: any) => ({ ...m, timestamp: new Date(m.timestamp) })));
-                        if (data.personnel) setPersonnel(data.personnel);
-                        if (data.projects) setProjects(data.projects);
-                        if (data.purchaseOrders) setPurchaseOrders(data.purchaseOrders.map((po: any) => ({
-                             ...po, 
-                             orderDate: new Date(po.orderDate),
-                             expectedDeliveryDate: po.expectedDeliveryDate ? new Date(po.expectedDeliveryDate) : undefined,
-                             receivedDate: po.receivedDate ? new Date(po.receivedDate) : undefined
-                        })));
-                        if (data.users) setUsers(data.users);
-                        localStorage.setItem(INITIALIZED_KEY, 'true');
-                        alert('Restauración completada.');
-                    }
-                }
-            } catch (error) {
-                alert('Archivo inválido.');
-            }
-        };
-        reader.readAsText(file);
-    };
-
-    const handleResetData = () => {
-        const password = prompt("ADVERTENCIA: Se borrará TODO el inventario.\nIngrese la clave maestra (00) para confirmar el inicio desde cero:");
-        if (password === '00') {
-            if (window.confirm('¿Confirmar limpieza total? El sistema quedará en 0 pero mantendrá su acceso.')) {
-                // Clear state
-                setItems([]);
-                setMovements([]);
-                setPersonnel([]);
-                setProjects([]);
-                setPurchaseOrders([]);
-                
-                // Clear storage but keep essential flags and master users
-                localStorage.removeItem('inventory_items');
-                localStorage.removeItem('inventory_movements');
-                localStorage.removeItem('inventory_personnel');
-                localStorage.removeItem('inventory_projects');
-                localStorage.removeItem('inventory_purchase_orders');
-                
-                // Force marked as initialized so mocks don't return
-                localStorage.setItem(INITIALIZED_KEY, 'true');
-                
-                alert('Sistema reiniciado. Ahora puedes empezar a subir tus propios productos.');
-                setCurrentView('dashboard');
-            }
-        } else if (password !== null) {
-            alert("Clave incorrecta.");
-        }
-    };
-    
     const selectView = (view: View) => {
         setCurrentView(view);
         setSelectedSubCategory(null);
         setSelectedInventoryType(null);
         if (window.innerWidth < 768) setSidebarOpen(false);
-    }
+    };
     
     const selectInventoryTypeFilter = (type: InventoryType) => {
         setCurrentView('inventory');
         setSelectedInventoryType(type);
         setSelectedSubCategory(null);
         if (window.innerWidth < 768) setSidebarOpen(false);
-    }
+    };
 
     if (!isAuthenticated) return <LoginView onLoginSuccess={handleLogin} users={users} />;
 
@@ -418,7 +231,7 @@ const App: React.FC = () => {
                         <NavHeader label="Proyectos" />
                         <NavItem icon={HardHatIcon} label="Obras y Gastos" onClick={() => selectView('projects')} isActive={currentView === 'projects'} />
                         <NavItem icon={ClockIcon} label="Herramienta en Préstamo" onClick={() => selectView('loans')} isActive={currentView === 'loans'} />
-                        <NavItem icon={MovementsIcon} label="Kardex General" onClick={() => selectView('movements')} isActive={currentView === 'movements'} />
+                        <NavItem icon={DashboardIcon} label="Kardex General" onClick={() => selectView('movements')} isActive={currentView === 'movements'} />
                         
                         <NavHeader label="Inventario" />
                         <NavItem icon={HandToolIcon} label="Herramienta Manual" onClick={() => selectInventoryTypeFilter(InventoryType.HAND_TOOL)} isActive={currentView === 'inventory' && selectedInventoryType === InventoryType.HAND_TOOL} />
@@ -441,27 +254,88 @@ const App: React.FC = () => {
             </aside>
 
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-                <Header toggleSidebar={() => setSidebarOpen(!isSidebarOpen)} userRole={userRole} setUserRole={setUserRole} onExportData={handleExportData} onImportData={handleImportData} onResetData={handleResetData} onOpenUserManagement={() => setUserManagementOpen(true)} onLogout={handleLogout} />
+                <Header 
+                    toggleSidebar={() => setSidebarOpen(!isSidebarOpen)} 
+                    userRole={userRole} 
+                    setUserRole={setUserRole} 
+                    onExportData={() => {}} 
+                    onImportData={() => {}} 
+                    onResetData={handleResetData} 
+                    onOpenUserManagement={() => setUserManagementOpen(true)} 
+                    onLogout={handleLogout} 
+                />
                 <main className="flex-1 p-4 md:p-6 overflow-y-auto bg-gray-50">
                     <div className="max-w-7xl mx-auto">
                         {currentView === 'dashboard' && <Dashboard items={items} movements={movements} />}
-                        {currentView === 'inventory' && <InventoryView items={filteredItems} openAddItemModal={() => setAddItemModalOpen(true)} onEditItem={openEditItemModal} onDeleteItem={handleDeleteItem} onItemHistory={openItemHistory} userRole={userRole} category={selectedSubCategory || selectedInventoryType || 'Todos'} onGoBack={() => selectView('dashboard')} />}
-                        {currentView === 'movements' && <MovementsView movements={movements} items={items} personnel={personnel} openLogMovementModal={() => setLogMovementModalOpen(true)} onReturnLoan={handleReturnLoan} onGoBack={() => selectView('dashboard')} />}
-                        {currentView === 'purchaseOrders' && <PurchaseOrdersView purchaseOrders={purchaseOrders} items={items} openAddPurchaseOrderModal={() => setAddPOModalOpen(true)} onUpdateStatus={handleUpdatePOStatus} userRole={userRole} onGoBack={() => selectView('dashboard')} />}
-                        {currentView === 'personnel' && <PersonnelView personnel={personnel} openAddPersonnelModal={() => setAddPersonnelModalOpen(true)} onGoBack={() => selectView('dashboard')} onEditPersonnel={handleEditPersonnel} onDeletePersonnel={handleDeletePersonnel} userRole={userRole} />}
-                        {currentView === 'projects' && <ProjectsView projects={projects} movements={movements} items={items} personnel={personnel} onAddProject={handleAddProject} onGoBack={() => selectView('dashboard')} userRole={userRole} />}
-                        {currentView === 'loans' && <LoansView movements={movements} items={items} personnel={personnel} onReturnItem={handleReturnLoan} onGoBack={() => selectView('dashboard')} />}
+                        {currentView === 'inventory' && (
+                            <InventoryView 
+                                items={filteredItems} 
+                                openAddItemModal={() => setAddItemModalOpen(true)} 
+                                onEditItem={(item) => { setItemToEdit(item); setEditModalOpen(true); }} 
+                                onDeleteItem={handleDeleteItem} 
+                                onItemHistory={(item) => { setItemForHistory(item); setHistoryModalOpen(true); }} 
+                                userRole={userRole} 
+                                category={selectedSubCategory || selectedInventoryType || 'Todos'} 
+                                onGoBack={() => selectView('dashboard')} 
+                            />
+                        )}
+                        {currentView === 'movements' && (
+                            <MovementsView 
+                                movements={movements} 
+                                items={items} 
+                                personnel={personnel} 
+                                openLogMovementModal={() => setLogMovementModalOpen(true)} 
+                                onGoBack={() => selectView('dashboard')} 
+                            />
+                        )}
+                        {currentView === 'purchaseOrders' && (
+                            <PurchaseOrdersView 
+                                purchaseOrders={purchaseOrders} 
+                                items={items} 
+                                openAddPurchaseOrderModal={() => setAddPOModalOpen(true)} 
+                                onUpdateStatus={() => {}} 
+                                userRole={userRole} 
+                                onGoBack={() => selectView('dashboard')} 
+                            />
+                        )}
+                        {currentView === 'personnel' && (
+                            <PersonnelView 
+                                personnel={personnel} 
+                                openAddPersonnelModal={() => setAddPersonnelModalOpen(true)} 
+                                onGoBack={() => selectView('dashboard')} 
+                            />
+                        )}
+                        {currentView === 'projects' && (
+                            <ProjectsView 
+                                projects={projects} 
+                                movements={movements} 
+                                items={items} 
+                                personnel={personnel} 
+                                onAddProject={(p) => setProjects(prev => [...prev, { ...p, id: `proj-${Date.now()}` }])} 
+                                onGoBack={() => selectView('dashboard')} 
+                                userRole={userRole} 
+                            />
+                        )}
+                        {currentView === 'loans' && (
+                             <LoansView 
+                                movements={movements} 
+                                items={items} 
+                                personnel={personnel} 
+                                onReturnItem={(id) => setMovements(prev => prev.map(m => m.id === id ? { ...m, isReturned: true } : m))} 
+                                onGoBack={() => selectView('dashboard')} 
+                            />
+                        )}
                     </div>
                 </main>
             </div>
 
             <AddItemModal isOpen={isAddItemModalOpen} onClose={() => setAddItemModalOpen(false)} onAddItem={handleAddItem} userRole={userRole} />
             <EditItemModal isOpen={isEditModalOpen} onClose={() => setEditModalOpen(false)} onEditItem={handleEditItem} itemToEdit={itemToEdit} />
-            <LogMovementModal isOpen={isLogMovementModalOpen} onClose={() => setLogMovementModalOpen(false)} onLogMovement={handleLogMovement} items={items} personnel={personnel} projects={projects} userRole={userRole} filterInventoryType={selectedInventoryType || undefined} />
-            <AddPersonnelModal isOpen={isAddPersonnelModalOpen} onClose={() => setAddPersonnelModalOpen(false)} onAddPersonnel={handleAddPersonnel} />
-            <AddPurchaseOrderModal isOpen={isAddPOModalOpen} onClose={() => setAddPOModalOpen(false)} onAddPurchaseOrder={handleAddPurchaseOrder} items={items} />
+            <LogMovementModal isOpen={isLogMovementModalOpen} onClose={() => setLogMovementModalOpen(false)} onLogMovement={handleLogMovement} items={items} personnel={personnel} projects={projects} userRole={userRole} />
+            <AddPersonnelModal isOpen={isAddPersonnelModalOpen} onClose={() => setAddPersonnelModalOpen(false)} onAddPersonnel={(p) => setPersonnel(prev => [...prev, { ...p, id: `person-${Date.now()}` }])} />
+            <AddPurchaseOrderModal isOpen={isAddPOModalOpen} onClose={() => setAddPOModalOpen(false)} onAddPurchaseOrder={(o) => setPurchaseOrders(prev => [{ ...o, id: `po-${Date.now()}` }, ...prev])} items={items} />
             <ItemHistoryModal isOpen={isHistoryModalOpen} onClose={() => setHistoryModalOpen(false)} item={itemForHistory} movements={movements} personnel={personnel} />
-            <UserManagementModal isOpen={isUserManagementOpen} onClose={() => setUserManagementOpen(false)} users={users} onAddUser={handleAddUser} onDeleteUser={handleDeleteUser} onEditUser={handleEditUser} />
+            <UserManagementModal isOpen={isUserManagementOpen} onClose={() => setUserManagementOpen(false)} users={users} onAddUser={(u) => setUsers(prev => [...prev, u])} onDeleteUser={(id) => setUsers(prev => prev.filter(u => u.id !== id))} onEditUser={(u) => setUsers(prev => prev.map(user => user.id === u.id ? u : user))} />
         </div>
     );
 };
