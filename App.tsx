@@ -36,17 +36,22 @@ import { LogOutIcon } from './components/icons/LogOutIcon';
 
 type View = 'dashboard' | 'inventory' | 'movements' | 'purchaseOrders' | 'personnel' | 'projects' | 'loans';
 
+const INITIALIZED_KEY = 'inventory_system_initialized_v2';
+
 const App: React.FC = () => {
     // State Management
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     
+    // Check if it's the first time running the app
+    const isFirstRun = !localStorage.getItem(INITIALIZED_KEY);
+
     // Users Management State
     const [users, setUsers] = useState<AppUser[]>(() => {
         try {
             const savedUsers = localStorage.getItem('inventory_users');
-            return savedUsers ? JSON.parse(savedUsers) : mockUsers;
+            if (savedUsers) return JSON.parse(savedUsers);
+            return mockUsers; // Default master user
         } catch (e) {
-            console.error("Failed to parse users", e);
             return mockUsers;
         }
     });
@@ -54,10 +59,10 @@ const App: React.FC = () => {
     const [items, setItems] = useState<Item[]>(() => {
         try {
             const savedItems = localStorage.getItem('inventory_items');
-            return savedItems ? JSON.parse(savedItems) : mockItems;
+            if (savedItems) return JSON.parse(savedItems);
+            return isFirstRun ? mockItems : [];
         } catch (e) {
-            console.error("Failed to parse items", e);
-            return mockItems;
+            return [];
         }
     });
 
@@ -67,20 +72,19 @@ const App: React.FC = () => {
             if (savedMovements) {
                 return JSON.parse(savedMovements).map((m: any) => ({ ...m, timestamp: new Date(m.timestamp) }));
             }
-            return mockMovements;
+            return isFirstRun ? mockMovements : [];
         } catch (e) {
-            console.error("Failed to parse movements", e);
-            return mockMovements;
+            return [];
         }
     });
 
     const [personnel, setPersonnel] = useState<Personnel[]>(() => {
         try {
             const savedPersonnel = localStorage.getItem('inventory_personnel');
-            return savedPersonnel ? JSON.parse(savedPersonnel) : mockPersonnel;
+            if (savedPersonnel) return JSON.parse(savedPersonnel);
+            return isFirstRun ? mockPersonnel : [];
         } catch (e) {
-            console.error("Failed to parse personnel", e);
-            return mockPersonnel;
+            return [];
         }
     });
 
@@ -95,20 +99,19 @@ const App: React.FC = () => {
                     receivedDate: po.receivedDate ? new Date(po.receivedDate) : undefined,
                 }));
             }
-            return mockPurchaseOrders;
+            return isFirstRun ? mockPurchaseOrders : [];
         } catch (e) {
-            console.error("Failed to parse purchase orders", e);
-            return mockPurchaseOrders;
+            return [];
         }
     });
 
     const [projects, setProjects] = useState<Project[]>(() => {
         try {
             const savedProjects = localStorage.getItem('inventory_projects');
-            return savedProjects ? JSON.parse(savedProjects) : mockProjects;
+            if (savedProjects) return JSON.parse(savedProjects);
+            return isFirstRun ? mockProjects : [];
         } catch (e) {
-            console.error("Failed to parse projects", e);
-            return mockProjects;
+            return [];
         }
     });
 
@@ -117,19 +120,26 @@ const App: React.FC = () => {
     // Persist Data Hooks
     useEffect(() => {
         localStorage.setItem('inventory_users', JSON.stringify(users));
+        // Mark as initialized once we have saved something
+        if (isFirstRun) localStorage.setItem(INITIALIZED_KEY, 'true');
     }, [users]);
+
     useEffect(() => {
         localStorage.setItem('inventory_items', JSON.stringify(items));
     }, [items]);
+
     useEffect(() => {
         localStorage.setItem('inventory_movements', JSON.stringify(movements));
     }, [movements]);
+
     useEffect(() => {
         localStorage.setItem('inventory_personnel', JSON.stringify(personnel));
     }, [personnel]);
+
     useEffect(() => {
         localStorage.setItem('inventory_purchase_orders', JSON.stringify(purchaseOrders));
     }, [purchaseOrders]);
+
     useEffect(() => {
         localStorage.setItem('inventory_projects', JSON.stringify(projects));
     }, [projects]);
@@ -154,12 +164,7 @@ const App: React.FC = () => {
     const [itemForHistory, setItemForHistory] = useState<Item | null>(null);
     const [isHistoryModalOpen, setHistoryModalOpen] = useState(false);
 
-    const uniqueSubCategories = useMemo(() => {
-        const subCategories = new Set(items.map(item => item.subCategory));
-        return Array.from(subCategories).sort();
-    }, [items]);
-
-    // Computed filtered items based on active filters to resolve line 427 error
+    // Computed filtered items
     const filteredItems = useMemo(() => {
         let result = items;
         if (selectedInventoryType) {
@@ -178,10 +183,8 @@ const App: React.FC = () => {
     }
     
     const handleLogout = () => {
-        if (window.confirm('¿Desea cerrar sesión para cambiar de usuario?')) {
-            setIsAuthenticated(false);
-            setCurrentView('dashboard');
-        }
+        setIsAuthenticated(false);
+        setCurrentView('dashboard');
     }
 
     const handleAddUser = (newUser: AppUser) => {
@@ -309,7 +312,7 @@ const App: React.FC = () => {
             purchaseOrders, 
             projects, 
             users, 
-            version: "2.0",
+            version: "2.1",
             exportDate: new Date().toISOString() 
         };
         const dataStr = JSON.stringify(data, null, 2);
@@ -317,7 +320,7 @@ const App: React.FC = () => {
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = `backup_bodega_cop_${new Date().toISOString().split('T')[0]}.json`;
+        link.download = `backup_bodega_${new Date().toISOString().split('T')[0]}.json`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -331,40 +334,53 @@ const App: React.FC = () => {
             try {
                 const json = e.target?.result as string;
                 const data = JSON.parse(json);
-                
-                // Validación estricta para asegurar que el backup sea compatible
-                if (data.items && data.movements && data.personnel && data.projects) {
-                    if (window.confirm('¡ATENCIÓN! Se reemplazarán todos los datos por el respaldo. ¿Confirmar restauración?')) {
-                        // Limpiar y guardar
-                        localStorage.clear();
-                        localStorage.setItem('inventory_items', JSON.stringify(data.items));
-                        localStorage.setItem('inventory_movements', JSON.stringify(data.movements));
-                        localStorage.setItem('inventory_personnel', JSON.stringify(data.personnel));
-                        localStorage.setItem('inventory_projects', JSON.stringify(data.projects));
-                        if (data.purchaseOrders) localStorage.setItem('inventory_purchase_orders', JSON.stringify(data.purchaseOrders));
-                        if (data.users) localStorage.setItem('inventory_users', JSON.stringify(data.users));
-                        
-                        alert('Restauración completada. El sistema se reiniciará para aplicar los cambios.');
-                        window.location.reload();
+                if (data.items && data.movements) {
+                    if (window.confirm('Se reemplazará la información actual. ¿Confirmar restauración?')) {
+                        setItems(data.items);
+                        setMovements(data.movements.map((m: any) => ({ ...m, timestamp: new Date(m.timestamp) })));
+                        if (data.personnel) setPersonnel(data.personnel);
+                        if (data.projects) setProjects(data.projects);
+                        if (data.purchaseOrders) setPurchaseOrders(data.purchaseOrders.map((po: any) => ({
+                             ...po, 
+                             orderDate: new Date(po.orderDate),
+                             expectedDeliveryDate: po.expectedDeliveryDate ? new Date(po.expectedDeliveryDate) : undefined,
+                             receivedDate: po.receivedDate ? new Date(po.receivedDate) : undefined
+                        })));
+                        if (data.users) setUsers(data.users);
+                        localStorage.setItem(INITIALIZED_KEY, 'true');
+                        alert('Restauración completada.');
                     }
-                } else {
-                    alert('Error: El archivo de backup no es válido o está incompleto.');
                 }
             } catch (error) {
-                console.error("Error importing data", error);
-                alert('Error al leer el archivo. Asegúrese de que sea un JSON válido.');
+                alert('Archivo inválido.');
             }
         };
         reader.readAsText(file);
-        event.target.value = '';
     };
 
     const handleResetData = () => {
-        const password = prompt("ADVERTENCIA: Se borrará TODO.\nIngrese la CLAVE MAESTRA para confirmar:");
+        const password = prompt("ADVERTENCIA: Se borrará TODO el inventario.\nIngrese la clave maestra (00) para confirmar el inicio desde cero:");
         if (password === '00') {
-            if (window.confirm('¿Está absolutamente seguro de borrar la base de datos?')) {
-                localStorage.clear();
-                window.location.reload();
+            if (window.confirm('¿Confirmar limpieza total? El sistema quedará en 0 pero mantendrá su acceso.')) {
+                // Clear state
+                setItems([]);
+                setMovements([]);
+                setPersonnel([]);
+                setProjects([]);
+                setPurchaseOrders([]);
+                
+                // Clear storage but keep essential flags and master users
+                localStorage.removeItem('inventory_items');
+                localStorage.removeItem('inventory_movements');
+                localStorage.removeItem('inventory_personnel');
+                localStorage.removeItem('inventory_projects');
+                localStorage.removeItem('inventory_purchase_orders');
+                
+                // Force marked as initialized so mocks don't return
+                localStorage.setItem(INITIALIZED_KEY, 'true');
+                
+                alert('Sistema reiniciado. Ahora puedes empezar a subir tus propios productos.');
+                setCurrentView('dashboard');
             }
         } else if (password !== null) {
             alert("Clave incorrecta.");
@@ -382,13 +398,6 @@ const App: React.FC = () => {
         setCurrentView('inventory');
         setSelectedInventoryType(type);
         setSelectedSubCategory(null);
-        if (window.innerWidth < 768) setSidebarOpen(false);
-    }
-
-    const selectInventorySubCategory = (subCategory: string | null) => {
-        setCurrentView('inventory');
-        setSelectedSubCategory(subCategory);
-        if (subCategory === null) setSelectedInventoryType(null);
         if (window.innerWidth < 768) setSidebarOpen(false);
     }
 
