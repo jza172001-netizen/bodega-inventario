@@ -1,18 +1,20 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { Item, Movement } from "../types";
 
-// Parche para TypeScript en Vercel
 declare const process: any;
 
-// Genera un análisis profundo del inventario utilizando Gemini 3 Pro
-export const generateInventoryAnalysis = async (items: Item[], movements: Movement[]): Promise<string> => {
-    if (!process.env.API_KEY) {
-        return "Error: La clave de API de Gemini no está configurada.";
-    }
+// Clave con fallback directo para AI Studio
+const getApiKey = (): string => {
+    if (process?.env?.API_KEY) return process.env.API_KEY;
+    if ((window as any).__GEMINI_KEY__) return (window as any).__GEMINI_KEY__;
+    return "AIzaSyB-dcPYxSD2K7F8RztjHTo2rldI5k0ZlD0";
+};
 
-    // Always create a new instance right before use to ensure the latest API key from process.env is used.
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+export const generateInventoryAnalysis = async (items: Item[], movements: Movement[]): Promise<string> => {
+    const apiKey = getApiKey();
+    if (!apiKey) return "Error: La clave de API de Gemini no esta configurada.";
+
+    const ai = new GoogleGenAI({ apiKey });
 
     const movementData = movements.map(m => {
         const item = items.find(i => i.id === m.itemId);
@@ -21,59 +23,56 @@ export const generateInventoryAnalysis = async (items: Item[], movements: Moveme
             item_tipo: item?.inventoryType || 'Desconocido',
             tipo_mov: m.type,
             cantidad: m.quantity,
-            fecha: m.timestamp.toLocaleDateString()
+            fecha: m.timestamp instanceof Date ? m.timestamp.toLocaleDateString() : String(m.timestamp)
         };
     });
 
     const prompt = `
-    Analiza el inventario de una bodega de construcción en Colombia.
-    
+    Analiza el inventario de una bodega de construccion en Colombia.
+
     **Reglas de Negocio Importantes:**
-    1. Las herramientas (Manuales y Eléctricas) son ACTIVOS. No son gastos directos, sino préstamos.
+    1. Las herramientas (Manuales y Electricas) son ACTIVOS. No son gastos directos, sino prestamos.
     2. Los materiales de consumo y EPP son GASTOS. Generan el costo real de la obra.
     3. La moneda es el Peso Colombiano (COP).
-    4. Tu objetivo es ayudar al bodeguero a saber qué se está gastando y qué herramientas están en riesgo de pérdida.
+    4. Tu objetivo es ayudar al bodeguero a saber que se esta gastando y que herramientas estan en riesgo de perdida.
 
     **Datos Actuales:**
     Items: ${JSON.stringify(items.map(i => ({ nombre: i.name, tipo: i.inventoryType, cant: i.quantity, precio: i.price })), null, 2)}
     Movimientos: ${JSON.stringify(movementData, null, 2)}
 
     **Genera un reporte Markdown con:**
-    1. Resumen de Inversión (en COP): Solo suma el valor de materiales de consumo y EPP.
-    2. Control de Activos: Cuántas herramientas hay en stock vs qué tanto se mueven.
+    1. Resumen de Inversion (en COP): Solo suma el valor de materiales de consumo y EPP.
+    2. Control de Activos: Cuantas herramientas hay en stock vs que tanto se mueven.
     3. Alertas de Reabastecimiento: Top 5 materiales urgentes por comprar.
     4. Recomendaciones: Consejos para evitar mermas en materiales y robo de herramientas.
-    
-    Responde en español con un tono profesional y directo.
+
+    Responde en espanol con un tono profesional y directo.
   `;
 
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-3-pro-preview',
+            model: 'gemini-2.5-flash',
             contents: prompt,
         });
         return response.text || "No se pudo generar el reporte.";
     } catch (error) {
         console.error("Error generating inventory analysis:", error);
-        return "Error al generar análisis con IA.";
+        return `Error al generar analisis con IA: ${error}`;
     }
 };
 
-// Genera recomendaciones de rotación de stock utilizando Gemini 3 Pro con salida JSON
 export const generateRotationAnalysis = async (
     rotationData: { subCategory: string; totalOut: number; frequency: number }[]
 ): Promise<{ [key: string]: { recommendation: string; severity: string } }> => {
-    if (!process.env.API_KEY) {
-        throw new Error("Clave de API no configurada.");
-    }
+    const apiKey = getApiKey();
+    if (!apiKey) throw new Error("Clave de API no configurada.");
 
-    // Always create a new instance right before use to ensure the latest API key from process.env is used.
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    
+    const ai = new GoogleGenAI({ apiKey });
+
     const prompt = `
-        Analiza la rotación de materiales de construcción en Colombia. 
+        Analiza la rotacion de materiales de construccion en Colombia.
         Datos: ${JSON.stringify(rotationData, null, 2)}
-        Genera recomendaciones breves de compra o control para cada sub-categoría.
+        Genera recomendaciones breves de compra o control para cada sub-categoria.
     `;
 
     const responseSchema = {
@@ -82,8 +81,8 @@ export const generateRotationAnalysis = async (
             type: Type.OBJECT,
             properties: {
                 subCategory: { type: Type.STRING },
-                recommendation: { type: Type.STRING, description: "Máximo 12 palabras." },
-                severity: { 
+                recommendation: { type: Type.STRING, description: "Maximo 12 palabras." },
+                severity: {
                     type: Type.STRING,
                     enum: ["CRITICAL", "HIGH", "MEDIUM", "LOW"]
                 },
@@ -94,19 +93,19 @@ export const generateRotationAnalysis = async (
 
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-3-pro-preview',
+            model: 'gemini-2.5-flash',
             contents: prompt,
             config: {
                 responseMimeType: "application/json",
                 responseSchema: responseSchema,
             },
         });
-        
+
         const parsedResponse = JSON.parse(response.text || "[]");
         const recommendationsMap: { [key: string]: { recommendation: string; severity: string } } = {};
         if (Array.isArray(parsedResponse)) {
             parsedResponse.forEach(item => {
-                if(item.subCategory) recommendationsMap[item.subCategory] = { recommendation: item.recommendation, severity: item.severity };
+                if (item.subCategory) recommendationsMap[item.subCategory] = { recommendation: item.recommendation, severity: item.severity };
             });
         }
         return recommendationsMap;

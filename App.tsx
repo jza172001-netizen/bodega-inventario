@@ -19,6 +19,7 @@ import { UserManagementModal } from './components/UserManagementModal';
 import { mockItems, mockMovements, mockPersonnel, mockPurchaseOrders, mockProjects, mockUsers } from './mockData';
 import { Item, Movement, MovementType, Personnel, PurchaseOrder, UserRole, InventoryType, Project, AppUser } from './types';
 import { LoginView } from './components/LoginView';
+import { saveToLocalStorage, loadFromLocalStorage, exportToFile, importFromFile } from './storage';
 
 // Icons
 import { DashboardIcon } from './components/icons/DashboardIcon';
@@ -34,50 +35,19 @@ import { ClockIcon } from './components/icons/ClockIcon';
 
 type View = 'dashboard' | 'inventory' | 'movements' | 'purchaseOrders' | 'personnel' | 'projects' | 'loans';
 
-const getInitialData = <T,>(storageKey: string, defaultValue: T): T => {
-    try {
-        const saved = localStorage.getItem(storageKey);
-        if (saved !== null) {
-            const parsed = JSON.parse(saved);
-            if (Array.isArray(parsed)) {
-                return parsed.map(item => {
-                    if (item.timestamp) return { ...item, timestamp: new Date(item.timestamp) };
-                    if (item.orderDate) return { 
-                        ...item, 
-                        orderDate: new Date(item.orderDate),
-                        expectedDeliveryDate: item.expectedDeliveryDate ? new Date(item.expectedDeliveryDate) : undefined,
-                        receivedDate: item.receivedDate ? new Date(item.receivedDate) : undefined
-                    };
-                    return item;
-                }) as unknown as T;
-            }
-            return parsed;
-        }
-        return defaultValue;
-    } catch (e) {
-        return defaultValue;
-    }
-};
-
 const App: React.FC = () => {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [userRole, setUserRole] = useState<UserRole>(UserRole.OWNER);
 
-    // Estados con carga inicial (si no hay nada en local, carga los mocks para que no esté vacío al principio)
-    const [users, setUsers] = useState<AppUser[]>(() => getInitialData('inv_users', mockUsers));
-    const [items, setItems] = useState<Item[]>(() => getInitialData('inv_items', mockItems));
-    const [movements, setMovements] = useState<Movement[]>(() => getInitialData('inv_movements', mockMovements));
-    const [personnel, setPersonnel] = useState<Personnel[]>(() => getInitialData('inv_personnel', mockPersonnel));
-    const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(() => getInitialData('inv_pos', mockPurchaseOrders));
-    const [projects, setProjects] = useState<Project[]>(() => getInitialData('inv_projs', mockProjects));
+    // Estados con carga inicial
+    const [users, setUsers] = useState<AppUser[]>(() => { const s = loadFromLocalStorage(); return s?.users ?? mockUsers; });
+    const [items, setItems] = useState<Item[]>(() => { const s = loadFromLocalStorage(); return s?.items ?? mockItems; });
+    const [movements, setMovements] = useState<Movement[]>(() => { const s = loadFromLocalStorage(); return s?.movements ?? mockMovements; });
+    const [personnel, setPersonnel] = useState<Personnel[]>(() => { const s = loadFromLocalStorage(); return s?.personnel ?? mockPersonnel; });
+    const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(() => { const s = loadFromLocalStorage(); return s?.purchaseOrders ?? mockPurchaseOrders; });
+    const [projects, setProjects] = useState<Project[]>(() => { const s = loadFromLocalStorage(); return s?.projects ?? mockProjects; });
 
-    // Persistencia automática
-    useEffect(() => { localStorage.setItem('inv_users', JSON.stringify(users)); }, [users]);
-    useEffect(() => { localStorage.setItem('inv_items', JSON.stringify(items)); }, [items]);
-    useEffect(() => { localStorage.setItem('inv_movements', JSON.stringify(movements)); }, [movements]);
-    useEffect(() => { localStorage.setItem('inv_personnel', JSON.stringify(personnel)); }, [personnel]);
-    useEffect(() => { localStorage.setItem('inv_pos', JSON.stringify(purchaseOrders)); }, [purchaseOrders]);
-    useEffect(() => { localStorage.setItem('inv_projs', JSON.stringify(projects)); }, [projects]);
+    useEffect(() => { saveToLocalStorage({ items, movements, personnel, purchaseOrders, projects, users }); }, [items, movements, personnel, purchaseOrders, projects, users]);
 
     const [currentView, setCurrentView] = useState<View>('dashboard');
     const [selectedInventoryType, setSelectedInventoryType] = useState<InventoryType | null>(null);
@@ -92,6 +62,16 @@ const App: React.FC = () => {
     const [isUserManagementOpen, setUserManagementOpen] = useState(false);
     const [isHistoryModalOpen, setHistoryModalOpen] = useState(false);
     const [itemForHistory, setItemForHistory] = useState<Item | null>(null);
+
+    const handleExportData = () => exportToFile({ items, movements, personnel, purchaseOrders, projects, users });
+    const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => importFromFile(e, (data) => { 
+        setItems(data.items || []); 
+        setMovements(data.movements || []); 
+        setPersonnel(data.personnel || []); 
+        setPurchaseOrders(data.purchaseOrders || []); 
+        if(data.projects) setProjects(data.projects); 
+        if(data.users) setUsers(data.users); 
+    }, (msg) => alert(msg));
 
     const handleLogin = (role: UserRole) => {
         setUserRole(role);
@@ -152,8 +132,8 @@ const App: React.FC = () => {
                     onStartNewBusiness={handleResetAllData}
                     onOpenUserManagement={() => setUserManagementOpen(true)} 
                     onLogout={() => setIsAuthenticated(false)} 
-                    onExportData={() => {}} 
-                    onImportData={() => {}} 
+                    onExportData={handleExportData} 
+                    onImportData={handleImportData} 
                     onResetData={handleResetAllData}
                     setUserRole={() => {}} 
                 />
