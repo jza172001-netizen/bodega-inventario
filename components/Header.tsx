@@ -1,12 +1,9 @@
 
-import React, { useRef } from 'react';
+import React from 'react';
 import { UserRole } from '../types';
 import { MenuIcon } from './icons/MenuIcon';
-import { DownloadIcon } from './icons/DownloadIcon';
-import { UploadIcon } from './icons/UploadIcon';
 import { TrashIcon } from './icons/TrashIcon';
 import { UsersIcon } from './icons/UsersIcon';
-import { LogOutIcon } from './icons/LogOutIcon';
 
 interface HeaderProps {
     toggleSidebar: () => void;
@@ -17,87 +14,50 @@ interface HeaderProps {
     onResetData: () => void;
     onOpenUserManagement: () => void;
     onLogout: () => void;
+    onStartNewBusiness: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ toggleSidebar, userRole, onExportData, onImportData, onResetData, onOpenUserManagement, onLogout }) => {
-    const fileInputRef = useRef<HTMLInputElement>(null);
-
-    const handleImportClick = () => {
-        fileInputRef.current?.click();
-    };
-
+export const Header: React.FC<HeaderProps> = ({ toggleSidebar, userRole, onResetData, onOpenUserManagement, onLogout }) => {
     return (
         <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 md:px-6">
             <div className="flex items-center">
                  <button onClick={toggleSidebar} className="p-1 rounded-full text-gray-500 hover:bg-gray-100 mr-4">
                     <MenuIcon className="w-6 h-6"/>
                 </button>
-                 <h1 className="text-xl font-semibold text-gray-800 md:hidden">Bodega</h1>
-                 <h1 className="text-xl md:text-2xl font-semibold text-gray-800 hidden md:block">Sistema de Gestión de Bodega</h1>
+                 <h1 className="text-xl font-black text-gray-800 uppercase tracking-tighter">Gestión Bodega</h1>
             </div>
              <div className="flex items-center space-x-2 md:space-x-4">
-                {/* User Management (Owner Only) */}
                 {userRole === UserRole.OWNER && (
-                    <button 
-                        onClick={onOpenUserManagement}
-                        className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-full flex items-center"
-                        title="Gestionar Usuarios"
-                    >
-                        <UsersIcon className="w-5 h-5 md:mr-1" />
-                        <span className="hidden md:inline text-xs font-medium">Usuarios</span>
-                    </button>
+                    <div className="flex items-center space-x-2 border-r pr-4 border-gray-200">
+                         <button 
+                            onClick={onResetData}
+                            className="flex items-center px-4 py-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-all group"
+                            title="Vaciar toda la base de datos"
+                        >
+                            <TrashIcon className="w-5 h-5 md:mr-2 group-hover:scale-110 transition-transform" />
+                            <span className="hidden md:inline text-[10px] font-black uppercase tracking-widest">Vaciar Bodega</span>
+                        </button>
+                        
+                         <button 
+                            onClick={onOpenUserManagement}
+                            className="p-2 text-gray-400 hover:text-indigo-600 rounded-full"
+                            title="Gestionar Usuarios"
+                        >
+                            <UsersIcon className="w-5 h-5" />
+                        </button>
+                    </div>
                 )}
 
-                {/* Data Management Buttons */}
-                <div className="flex items-center space-x-1 border-r pr-4 mr-2 border-gray-300">
-                    <button 
-                        onClick={onExportData}
-                        className="p-2 text-gray-600 hover:text-blue-600 hover:bg-gray-100 rounded-full flex items-center"
-                        title="Hacer Copia de Seguridad (Descargar)"
-                    >
-                        <DownloadIcon className="w-5 h-5 md:mr-1" />
-                        <span className="hidden md:inline text-xs font-medium">Backup</span>
-                    </button>
-                    <button 
-                        onClick={handleImportClick}
-                        className="p-2 text-gray-600 hover:text-blue-600 hover:bg-gray-100 rounded-full flex items-center"
-                        title="Restaurar Copia de Seguridad"
-                    >
-                        <UploadIcon className="w-5 h-5 md:mr-1" />
-                        <span className="hidden md:inline text-xs font-medium">Restaurar</span>
-                    </button>
-                     <button 
-                        onClick={onResetData}
-                        className="p-2 text-gray-600 hover:text-red-600 hover:bg-gray-100 rounded-full flex items-center"
-                        title="Borrar todos los datos y reiniciar (Requiere Clave)"
-                    >
-                        <TrashIcon className="w-5 h-5 md:mr-1" />
-                        <span className="hidden md:inline text-xs font-medium">Reset</span>
-                    </button>
-                    <input 
-                        type="file" 
-                        ref={fileInputRef}
-                        onChange={onImportData}
-                        accept=".json"
-                        className="hidden" 
-                    />
-                </div>
-
-                <div className="flex items-center space-x-2">
-                    <div className="hidden md:flex flex-col items-end mr-2">
-                        <span className="text-sm font-medium text-gray-700">
-                            {userRole === UserRole.OWNER ? 'Administrador' : 'Empleado'}
+                <div className="flex items-center space-x-3">
+                    <div className="hidden md:flex flex-col items-end">
+                        <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest leading-none mb-1">
+                            {userRole === UserRole.OWNER ? 'Admin' : 'Operativo'}
                         </span>
-                        <span className="text-xs text-green-600 font-bold cursor-pointer hover:underline" onClick={onLogout}>
-                            Cerrar Sesión
-                        </span>
+                        <span onClick={onLogout} className="text-[9px] text-gray-400 font-bold uppercase hover:text-red-600 cursor-pointer">Salir</span>
                     </div>
-                    <div className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold">
-                        {userRole === UserRole.OWNER ? 'A' : 'E'}
+                    <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center font-black text-lg border-2 border-white shadow-sm">
+                        {userRole === UserRole.OWNER ? 'A' : 'O'}
                     </div>
-                    <button onClick={onLogout} className="md:hidden p-2 text-gray-500 hover:text-red-600" title="Salir">
-                        <LogOutIcon className="w-6 h-6" />
-                    </button>
                 </div>
              </div>
         </header>

@@ -1,8 +1,9 @@
 
 import React, { useMemo } from 'react';
-import { Movement, Item, Personnel, InventoryType, MovementType } from '../types';
+import { Movement, Item, Personnel, InventoryType, MovementType, UserRole } from '../types';
 import { TruckIcon } from './icons/TruckIcon';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
+import { TrashIcon } from './icons/TrashIcon';
 
 interface MovementsViewProps {
     movements: Movement[];
@@ -11,10 +12,11 @@ interface MovementsViewProps {
     filterType?: InventoryType;
     openLogMovementModal?: () => void;
     onReturnLoan?: (movementId: string) => void;
+    onDeleteMovement?: (id: string) => void;
     onGoBack: () => void;
 }
 
-export const MovementsView: React.FC<MovementsViewProps> = ({ movements, items, personnel, filterType, openLogMovementModal, onReturnLoan, onGoBack }) => {
+export const MovementsView: React.FC<MovementsViewProps> = ({ movements, items, personnel, filterType, openLogMovementModal, onReturnLoan, onDeleteMovement, onGoBack }) => {
     
     const filteredMovements = useMemo(() => {
         if (!filterType) return movements;
@@ -43,11 +45,11 @@ export const MovementsView: React.FC<MovementsViewProps> = ({ movements, items, 
                         <ArrowLeftIcon className="w-6 h-6 text-gray-600" />
                     </button>
                     <h2 className="text-xl font-semibold text-gray-800">
-                        Historial de Movimientos{filterType ? `: ${filterType}` : ''}
+                        Historial (Kardex)
                     </h2>
                 </div>
                 {openLogMovementModal && (
-                    <button onClick={openLogMovementModal} className="flex items-center bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
+                    <button onClick={openLogMovementModal} className="flex items-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
                         <TruckIcon className="w-5 h-5 mr-2" />
                         Registrar Movimiento
                     </button>
@@ -74,12 +76,10 @@ export const MovementsView: React.FC<MovementsViewProps> = ({ movements, items, 
                                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getMovementTypeClass(m.type)}`}>
                                         {m.type}
                                     </span>
-                                    {m.isLoan && !m.isReturned && <span className="ml-2 text-xs text-orange-600 font-bold">[PRESTADO]</span>}
-                                    {m.isLoan && m.isReturned && <span className="ml-2 text-xs text-green-600">[DEVUELTO]</span>}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 font-bold">{m.quantity}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{getPersonnelName(m.personnelId)}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium flex space-x-2">
                                     {m.isLoan && !m.isReturned && onReturnLoan && (
                                         <button 
                                             onClick={() => onReturnLoan(m.id)}
@@ -88,14 +88,17 @@ export const MovementsView: React.FC<MovementsViewProps> = ({ movements, items, 
                                             Devolver
                                         </button>
                                     )}
+                                    {onDeleteMovement && (
+                                        <button 
+                                            onClick={() => { if(window.confirm('¿Borrar este registro?')) onDeleteMovement(m.id)}}
+                                            className="text-red-400 hover:text-red-600 p-1"
+                                        >
+                                            <TrashIcon className="w-4 h-4" />
+                                        </button>
+                                    )}
                                 </td>
                             </tr>
                         ))}
-                         {filteredMovements.length === 0 && (
-                            <tr>
-                                <td colSpan={6} className="text-center py-10 text-gray-500">No se han registrado movimientos.</td>
-                            </tr>
-                        )}
                     </tbody>
                 </table>
             </div>
