@@ -1,74 +1,119 @@
-import { AppUser, Item, Movement, Personnel, Project, PurchaseOrder } from './types';
+/**
+ * storage.ts — Persistencia automática local
+ * ==========================================
+ * Guarda todos los datos en localStorage cada vez que cambian.
+ * Al abrir la app, carga automáticamente los datos guardados.
+ * También permite exportar/importar como archivo JSON local.
+ */
 
-export interface AppData {
-  items: Item[];
-  movements: Movement[];
-  personnel: Personnel[];
-  purchaseOrders: PurchaseOrder[];
-  projects: Project[];
-  users: AppUser[];
-}
+import { Item, Movement, Personnel, PurchaseOrder, Project, AppUser } from './types';
 
 const STORAGE_KEY = 'warehouse_inventory_pro_data';
+const STORAGE_VERSION = '2.0';
 
-export const saveToLocalStorage = (data: AppData) => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-};
+export interface AppData {
+    version: string;
+    savedAt: string;
+    items: Item[];
+    movements: Movement[];
+    personnel: Personnel[];
+    purchaseOrders: PurchaseOrder[];
+    projects: Project[];
+    users: AppUser[];
+}
 
-export const loadFromLocalStorage = (): AppData | null => {
-  const saved = localStorage.getItem(STORAGE_KEY);
-  if (!saved) return null;
-  try {
-    const data = JSON.parse(saved);
-    // Convert date strings back to Date objects
-    if (data.movements) {
-      data.movements = data.movements.map((m: any) => ({
-        ...m,
-        timestamp: new Date(m.timestamp)
-      }));
-    }
-    if (data.purchaseOrders) {
-      data.purchaseOrders = data.purchaseOrders.map((po: any) => ({
-        ...po,
-        orderDate: new Date(po.orderDate),
-        expectedDeliveryDate: po.expectedDeliveryDate ? new Date(po.expectedDeliveryDate) : undefined,
-        receivedDate: po.receivedDate ? new Date(po.receivedDate) : undefined
-      }));
-    }
-    return data;
-  } catch (e) {
-    console.error("Failed to load from local storage", e);
-    return null;
-  }
-};
-
-export const exportToFile = (data: AppData) => {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `inventory_backup_${new Date().toISOString().split('T')[0]}.json`;
-  link.click();
-  URL.revokeObjectURL(url);
-};
-
-export const importFromFile = (
-  e: React.ChangeEvent<HTMLInputElement>,
-  onSuccess: (data: AppData) => void,
-  onError: (msg: string) => void
-) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = (event) => {
+// ── AUTO-SAVE: guarda en localStorage ──────────────────────
+export function saveToLocalStorage(data: Omit<AppData, 'version' | 'savedAt'>): void {
     try {
-      const data = JSON.parse(event.target?.result as string);
-      // Basic validation could be added here
-      onSuccess(data);
-    } catch (err) {
-      onError("Error al importar el archivo. Asegúrate de que sea un JSON válido.");
+        const payload: AppData = {
+            version: STORAGE_VERSION,
+            savedAt: new Date().toISOString(),
+            ...data,
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    } catch (e) {
+        console.warn('Error guardando en localStorage:', e);
     }
-  };
-  reader.readAsText(file);
-};
+}
+
+// ── AUTO-LOAD: carga desde localStorage al iniciar ─────────
+export function loadFromLocalStorage(): Partial<AppData> | null {
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return null;
+        const data = JSON.parse(raw) as AppData;
+        // Restaurar fechas (JSON serializa Date como string)
+        data.movements = data.movements.map(m => ({
+            ...m,
+            timestamp: new Date(m.timestamp),
+        }));
+        data.purchaseOrders = data.purchaseOrders.map(po => ({
+            ...po,
+            orderDate: new Date(po.orderDate),
+            expectedDeliveryDate: po.expectedDeliveryDate ? new Date(po.expectedDeliveryDate) : undefined,
+            receivedDate: po.receivedDate ? new Date(po.receivedDate) : undefined,
+        }));
+        return data;
+    } catch (e) {
+        console.warn('Error cargando desde localStorage:', e);
+        return null;
+    }
+}
+
+// ── EXPORT: descarga archivo JSON ──────────────────────────
+export function exportToFile(data: Omit<AppData, 'version' | 'savedAt'>): void {
+    const payload: AppData = {
+        version: STORAGE_VERSION,
+        savedAt: new Date().toISOString(),
+        ...data,
+    };
+    const json = JSON.stringify(payload, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const fecha = new Date().toISOString().split('T')[0];
+    a.href = url;
+    a.download = `bodega_backup_${fecha}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+// ── IMPORT: carga desde archivo JSON seleccionado ──────────
+export function importFromFile(
+    e: React.ChangeEvent<HTMLInputElement>,
+    onSuccess: (data: AppData) => void,
+    onError?: (msg: string) => void
+): void {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+        try {
+            const data = JSON.parse(event.target?.result as string) as AppData;
+            // Restaurar fechas
+            data.movements = (data.movements || []).map(m => ({
+                ...m,
+                timestamp: new Date(m.timestamp),
+            }));
+            data.purchaseOrders = (data.purchaseOrders || []).map(po => ({
+                ...po,
+                orderDate: new Date(po.orderDate),
+                expectedDeliveryDate: po.expectedDeliveryDate ? new Date(po.expectedDeliveryDate) : undefined,
+                receivedDate: po.receivedDate ? new Date(po.receivedDate) : undefined,
+            }));
+            onSuccess(data);
+        } catch {
+            onError?.('Archivo inválido. Asegúrate de importar un JSON exportado desde esta app.');
+        }
+    };
+    reader.readAsText(file);
+    // Reset input para permitir reimportar el mismo archivo
+    e.target.value = '';
+}
+
+// ── CLEAR: borra localStorage ──────────────────────────────
+export function clearLocalStorage(): void {
+    localStorage.removeItem(STORAGE_KEY);
+}
