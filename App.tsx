@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AddItemModal } from './components/AddItemModal';
 import { EditItemModal } from './components/EditItemModal';
 import { Dashboard } from './components/Dashboard';
@@ -17,9 +17,10 @@ import { ItemHistoryModal } from './components/ItemHistoryModal';
 import { UserManagementModal } from './components/UserManagementModal';
 import CopilotView from './components/CopilotView';
 
+import { mockItems, mockMovements, mockPersonnel, mockPurchaseOrders, mockProjects, mockUsers } from './mockData';
 import { Item, Movement, MovementType, Personnel, PurchaseOrder, UserRole, InventoryType, Project, AppUser, PurchaseOrderStatus } from './types';
 import { LoginView } from './components/LoginView';
-import { exportToFile, importFromFile } from './storage';
+import { saveToLocalStorage, loadFromLocalStorage, exportToFile, importFromFile } from './storage';
 import * as db from './services/supabaseService';
 
 // Icons
@@ -40,14 +41,27 @@ type View = 'dashboard' | 'inventory' | 'movements' | 'purchaseOrders' | 'person
 const App: React.FC = () => {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [userRole, setUserRole] = useState<UserRole>(UserRole.OWNER);
-    const [isLoading, setIsLoading] = useState(true);
 
-    const [users, setUsers] = useState<AppUser[]>([]);
-    const [items, setItems] = useState<Item[]>([]);
-    const [movements, setMovements] = useState<Movement[]>([]);
-    const [personnel, setPersonnel] = useState<Personnel[]>([]);
-    const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
-    const [projects, setProjects] = useState<Project[]>([]);
+    // Carga inicial síncrona desde localStorage (igual que antes), con fallback a mockData
+    const [users, setUsers] = useState<AppUser[]>(() => { const s = loadFromLocalStorage(); return s?.users ?? mockUsers; });
+    const [items, setItems] = useState<Item[]>(() => { const s = loadFromLocalStorage(); return s?.items ?? mockItems; });
+    const [movements, setMovements] = useState<Movement[]>(() => { const s = loadFromLocalStorage(); return s?.movements ?? mockMovements; });
+    const [personnel, setPersonnel] = useState<Personnel[]>(() => { const s = loadFromLocalStorage(); return s?.personnel ?? mockPersonnel; });
+    const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(() => { const s = loadFromLocalStorage(); return s?.purchaseOrders ?? mockPurchaseOrders; });
+    const [projects, setProjects] = useState<Project[]>(() => { const s = loadFromLocalStorage(); return s?.projects ?? mockProjects; });
+
+    // Auto-save a localStorage en cada cambio (igual que antes)
+    useEffect(() => { saveToLocalStorage({ items, movements, personnel, purchaseOrders, projects, users }); }, [items, movements, personnel, purchaseOrders, projects, users]);
+
+    // Sync desde Supabase en background al montar (no bloquea la UI)
+    useEffect(() => {
+        db.fetchUsers().then(data => { if (data.length > 0) setUsers(data); }).catch(() => {});
+        db.fetchItems().then(data => { if (data.length > 0) setItems(data); }).catch(() => {});
+        db.fetchMovements().then(data => { if (data.length > 0) setMovements(data); }).catch(() => {});
+        db.fetchPersonnel().then(data => { if (data.length > 0) setPersonnel(data); }).catch(() => {});
+        db.fetchPurchaseOrders().then(data => { if (data.length > 0) setPurchaseOrders(data); }).catch(() => {});
+        db.fetchProjects().then(data => { if (data.length > 0) setProjects(data); }).catch(() => {});
+    }, []);
 
     const [currentView, setCurrentView] = useState<View>('dashboard');
     const [selectedInventoryType, setSelectedInventoryType] = useState<InventoryType | null>(null);
@@ -63,73 +77,29 @@ const App: React.FC = () => {
     const [isHistoryModalOpen, setHistoryModalOpen] = useState(false);
     const [itemForHistory, setItemForHistory] = useState<Item | null>(null);
 
-    // Carga inicial desde Supabase
-    const loadAllData = useCallback(async () => {
-        setIsLoading(true);
-        try {
-            const [fetchedItems, fetchedMovements, fetchedPersonnel, fetchedOrders, fetchedProjects, fetchedUsers] =
-                await Promise.all([
-                    db.fetchItems(),
-                    db.fetchMovements(),
-                    db.fetchPersonnel(),
-                    db.fetchPurchaseOrders(),
-                    db.fetchProjects(),
-                    db.fetchUsers(),
-                ]);
-            setItems(fetchedItems);
-            setMovements(fetchedMovements);
-            setPersonnel(fetchedPersonnel);
-            setPurchaseOrders(fetchedOrders);
-            setProjects(fetchedProjects);
-            setUsers(fetchedUsers);
-        } catch (e) {
-            console.error('Error cargando datos de Supabase:', e);
-        } finally {
-            setIsLoading(false);
-        }
-    }, []);
-
-    useEffect(() => { loadAllData(); }, [loadAllData]);
-
-    // ── Export / Import ──────────────────────────────────────────────────────
-    const handleExportData = () =>
-        exportToFile({ items, movements, personnel, purchaseOrders, projects, users });
-
-    const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) =>
-        importFromFile(e, async (data) => {
-            try {
-                await Promise.all([
-                    ...( data.items || []).map(i => db.addItem(i)),
-                    ...(data.personnel || []).map(p => db.addPersonnel(p)),
-                    ...(data.projects || []).map(p => db.addProject(p)),
-                ]);
-                await loadAllData();
-            } catch (err) {
-                alert('Error al importar datos: ' + (err as Error).message);
-            }
-        }, (msg) => alert(msg));
+    const handleExportData = () => exportToFile({ items, movements, personnel, purchaseOrders, projects, users });
+    const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => importFromFile(e, (data) => {
+        setItems(data.items || []);
+        setMovements(data.movements || []);
+        setPersonnel(data.personnel || []);
+        setPurchaseOrders(data.purchaseOrders || []);
+        if (data.projects) setProjects(data.projects);
+        if (data.users) setUsers(data.users);
+    }, (msg) => alert(msg));
 
     const handleLogin = (role: UserRole) => {
         setUserRole(role);
         setIsAuthenticated(true);
     };
 
-    const handleResetAllData = async () => {
-        if (!window.confirm('¿ESTÁS SEGURO? Se borrarán todos los datos de la base de datos. Esta acción no se puede deshacer.')) return;
-        try {
-            await Promise.all([
-                ...movements.map(m => db.deleteMovement(m.id)),
-                ...purchaseOrders.map(o => db.deletePurchaseOrder(o.id)),
-            ]);
-            await Promise.all([
-                ...items.map(i => db.deleteItem(i.id)),
-                ...personnel.map(p => db.deletePersonnel(p.id)),
-                ...projects.map(p => db.deleteProject(p.id)),
-            ]);
-            await loadAllData();
-            alert('Bodega limpia. Ahora puedes empezar a registrar tus propios materiales.');
-        } catch (err) {
-            alert('Error al limpiar datos: ' + (err as Error).message);
+    const handleResetAllData = () => {
+        if (window.confirm("¿ESTÁS SEGURO? Se borrarán todos los productos, trabajadores y movimientos. Esta acción no se puede deshacer.")) {
+            setItems([]);
+            setMovements([]);
+            setPersonnel([]);
+            setPurchaseOrders([]);
+            setProjects([]);
+            alert("Bodega limpia. Ahora puedes empezar a registrar tus propios materiales.");
         }
     };
 
@@ -139,131 +109,125 @@ const App: React.FC = () => {
         if (window.innerWidth < 768) setSidebarOpen(false);
     };
 
-    // ── Items ────────────────────────────────────────────────────────────────
-    const handleAddItem = async (i: Omit<Item, 'id'>) => {
-        const created = await db.addItem(i);
-        setItems(prev => [...prev, created]);
+    // ── Handlers síncronos (igual que original) + sync Supabase en background ──
+
+    const handleAddItem = (i: Omit<Item, 'id'>) => {
+        const newItem = { ...i, id: `i-${Date.now()}` };
+        setItems(prev => [...prev, newItem]);
+        db.addItem(i).then(created => setItems(prev => prev.map(x => x.id === newItem.id ? created : x))).catch(() => {});
     };
 
-    const handleEditItem = async (updated: Item) => {
-        await db.updateItem(updated);
+    const handleEditItem = (updated: Item) => {
         setItems(prev => prev.map(i => i.id === updated.id ? updated : i));
+        db.updateItem(updated).catch(() => {});
     };
 
-    const handleDeleteItem = async (id: string) => {
-        await db.deleteItem(id);
+    const handleDeleteItem = (id: string) => {
         setItems(prev => prev.filter(i => i.id !== id));
+        db.deleteItem(id).catch(() => {});
     };
 
-    // ── Movements ────────────────────────────────────────────────────────────
-    const handleLogMovement = async (m: Omit<Movement, 'id'>) => {
-        const created = await db.addMovement({ ...m, timestamp: new Date() });
-        setMovements(prev => [created, ...prev]);
-
-        // Actualizar stock en DB y en estado local
-        const item = items.find(i => i.id === m.itemId);
-        if (item) {
-            let newQty = item.quantity;
-            if (m.type === MovementType.CHECK_OUT || m.type === MovementType.WASTE) {
-                newQty -= m.quantity;
-            } else {
-                newQty += m.quantity;
+    const handleLogMovement = (m: Omit<Movement, 'id'>) => {
+        const newMov = { ...m, id: `mov-${Date.now()}`, timestamp: new Date() };
+        setMovements(prev => [newMov, ...prev]);
+        setItems(prev => prev.map(item => {
+            if (item.id === m.itemId) {
+                let newQty = item.quantity;
+                if (m.type === MovementType.CHECK_OUT || m.type === MovementType.WASTE) newQty -= m.quantity;
+                else newQty += m.quantity;
+                db.updateItemQuantity(item.id, newQty).catch(() => {});
+                return { ...item, quantity: newQty };
             }
-            await db.updateItemQuantity(m.itemId, newQty);
-            setItems(prev => prev.map(i => i.id === m.itemId ? { ...i, quantity: newQty } : i));
-        }
+            return item;
+        }));
+        db.addMovement({ ...m, timestamp: new Date() })
+            .then(created => setMovements(prev => prev.map(x => x.id === newMov.id ? created : x)))
+            .catch(() => {});
     };
 
-    const handleDeleteMovement = async (id: string) => {
-        await db.deleteMovement(id);
+    const handleDeleteMovement = (id: string) => {
         setMovements(prev => prev.filter(m => m.id !== id));
+        db.deleteMovement(id).catch(() => {});
     };
 
-    const handleReturnItem = async (id: string) => {
-        await db.markMovementReturned(id);
+    const handleReturnItem = (id: string) => {
         setMovements(prev => prev.map(m => m.id === id ? { ...m, isReturned: true } : m));
+        db.markMovementReturned(id).catch(() => {});
     };
 
-    // ── Personnel ────────────────────────────────────────────────────────────
-    const handleAddPersonnel = async (p: Omit<Personnel, 'id'>) => {
-        const created = await db.addPersonnel(p);
-        setPersonnel(prev => [...prev, created]);
+    const handleAddPersonnel = (p: Omit<Personnel, 'id'>) => {
+        const newP = { ...p, id: `per-${Date.now()}` };
+        setPersonnel(prev => [...prev, newP]);
+        db.addPersonnel(p).then(created => setPersonnel(prev => prev.map(x => x.id === newP.id ? created : x))).catch(() => {});
     };
 
-    const handleEditPersonnel = async (p: Personnel) => {
-        await db.updatePersonnel(p);
+    const handleEditPersonnel = (p: Personnel) => {
         setPersonnel(prev => prev.map(pers => pers.id === p.id ? p : pers));
+        db.updatePersonnel(p).catch(() => {});
     };
 
-    const handleDeletePersonnel = async (id: string) => {
-        await db.deletePersonnel(id);
+    const handleDeletePersonnel = (id: string) => {
         setPersonnel(prev => prev.filter(p => p.id !== id));
+        db.deletePersonnel(id).catch(() => {});
     };
 
-    // ── Projects ─────────────────────────────────────────────────────────────
-    const handleAddProject = async (p: Omit<Project, 'id'>) => {
-        const created = await db.addProject(p);
-        setProjects(prev => [...prev, created]);
+    const handleAddProject = (p: Omit<Project, 'id'>) => {
+        const newP = { ...p, id: `p-${Date.now()}` };
+        setProjects(prev => [...prev, newP]);
+        db.addProject(p).then(created => setProjects(prev => prev.map(x => x.id === newP.id ? created : x))).catch(() => {});
     };
 
-    const handleDeleteProject = async (id: string) => {
-        await db.deleteProject(id);
+    const handleDeleteProject = (id: string) => {
         setProjects(prev => prev.filter(p => p.id !== id));
+        db.deleteProject(id).catch(() => {});
     };
 
-    // ── Purchase Orders ──────────────────────────────────────────────────────
-    const handleAddPurchaseOrder = async (o: Omit<PurchaseOrder, 'id'>) => {
-        const created = await db.addPurchaseOrder(o);
-        setPurchaseOrders(prev => [created, ...prev]);
+    const handleAddPurchaseOrder = (o: Omit<PurchaseOrder, 'id'>) => {
+        const newO = { ...o, id: `po-${Date.now()}` };
+        setPurchaseOrders(prev => [newO, ...prev]);
+        db.addPurchaseOrder(o).then(created => setPurchaseOrders(prev => prev.map(x => x.id === newO.id ? created : x))).catch(() => {});
     };
 
-    const handleUpdatePOStatus = async (id: string, status: PurchaseOrderStatus) => {
-        await db.updatePurchaseOrderStatus(id, status);
-        setPurchaseOrders(prev =>
-            prev.map(o => o.id === id
-                ? { ...o, status, ...(status === PurchaseOrderStatus.RECEIVED ? { receivedDate: new Date() } : {}) }
-                : o
-            )
-        );
+    const handleUpdatePOStatus = (id: string, status: PurchaseOrderStatus) => {
+        setPurchaseOrders(prev => prev.map(o => o.id === id
+            ? { ...o, status, ...(status === PurchaseOrderStatus.RECEIVED ? { receivedDate: new Date() } : {}) }
+            : o
+        ));
+        db.updatePurchaseOrderStatus(id, status).catch(() => {});
     };
 
-    const handleDeletePO = async (id: string) => {
-        await db.deletePurchaseOrder(id);
+    const handleDeletePO = (id: string) => {
         setPurchaseOrders(prev => prev.filter(o => o.id !== id));
+        db.deletePurchaseOrder(id).catch(() => {});
     };
 
-    // ── Users ────────────────────────────────────────────────────────────────
-    const handleAddUser = async (u: AppUser) => {
-        const created = await db.addUser(u);
-        setUsers(prev => [...prev, created]);
+    const handleAddUser = (u: AppUser) => {
+        setUsers(prev => [...prev, u]);
+        db.addUser(u).catch(() => {});
     };
 
-    const handleEditUser = async (u: AppUser) => {
-        await db.updateUser(u);
+    const handleEditUser = (u: AppUser) => {
         setUsers(prev => prev.map(user => user.id === u.id ? u : user));
+        db.updateUser(u).catch(() => {});
     };
 
-    const handleDeleteUser = async (id: string) => {
-        await db.deleteUser(id);
+    const handleDeleteUser = (id: string) => {
         setUsers(prev => prev.filter(u => u.id !== id));
+        db.deleteUser(id).catch(() => {});
     };
-
-    // ── Render ───────────────────────────────────────────────────────────────
-    if (isLoading) {
-        return (
-            <div className="flex h-screen items-center justify-center bg-gray-50">
-                <div className="text-center">
-                    <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                    <p className="text-gray-500 font-medium">Cargando bodega…</p>
-                </div>
-            </div>
-        );
-    }
 
     if (!isAuthenticated) return <LoginView onLoginSuccess={handleLogin} users={users} />;
 
     return (
         <div className="flex h-screen bg-gray-50 overflow-hidden font-sans">
+            {/* Backdrop mobile: cierra el sidebar al tocar fuera */}
+            {isSidebarOpen && (
+                <div
+                    className="fixed inset-0 bg-black/30 z-20 md:hidden"
+                    onClick={() => setSidebarOpen(false)}
+                />
+            )}
+
             <aside className={`bg-white border-r border-gray-200 shadow-xl transition-all duration-300 ease-in-out fixed md:relative inset-y-0 left-0 z-30 transform md:transform-none ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:${isSidebarOpen ? 'w-64' : 'w-0 overflow-hidden'} flex flex-col`}>
                 <div className="h-16 flex-shrink-0 flex items-center px-6 border-b bg-blue-700 text-white">
                     <h2 className="text-xl font-black tracking-tighter uppercase italic">Bodega Pro</h2>
@@ -272,7 +236,7 @@ const App: React.FC = () => {
                 <div className="flex-1 overflow-y-auto py-4">
                     <nav className="px-2 space-y-1">
                         <NavItem icon={DashboardIcon} label="Resumen" onClick={() => selectView('dashboard')} isActive={currentView === 'dashboard'} />
-                        <NavItem icon={BrainIcon} label="Copiloto IA" onClick={() => selectView('copilot')} isActive={currentView === 'copilot'} />
+                        <NavItem icon={BrainIcon} label="Análisis" onClick={() => selectView('copilot')} isActive={currentView === 'copilot'} />
                         <NavHeader label="Gestión" />
                         <NavItem icon={HardHatIcon} label="Proyectos" onClick={() => selectView('projects')} isActive={currentView === 'projects'} />
                         <NavItem icon={MovementsIcon} label="Kardex" onClick={() => selectView('movements')} isActive={currentView === 'movements'} />
