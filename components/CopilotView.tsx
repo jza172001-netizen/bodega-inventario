@@ -1,67 +1,228 @@
-import React, { useState, useRef, useCallback } from 'react';
-import { Item, Movement, Personnel, PurchaseOrder } from '../types';
-import { askCopilot, SUGGESTED_PROMPTS, CopilotMessage, WarehouseContext } from '../services/copilotService';
+import React, { useState } from 'react';
+import { Item, Movement, Personnel, PurchaseOrder, MovementType, PurchaseOrderStatus } from '../types';
+import { generateInventoryAnalysis } from '../services/geminiService';
 
-const BotIcon = () => (<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth={2} className='w-5 h-5'><rect x='3' y='11' width='18' height='10' rx='2'/><circle cx='12' cy='5' r='2'/><path d='M12 7v4'/><line x1='8' y1='15' x2='8' y2='17'/><line x1='16' y1='15' x2='16' y2='17'/></svg>);
-const SendIcon = () => (<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth={2} className='w-5 h-5'><line x1='22' y1='2' x2='11' y2='13'/><polygon points='22 2 15 22 11 13 2 9 22 2'/></svg>);
+interface CopilotViewProps {
+    items: Item[];
+    movements: Movement[];
+    personnel: Personnel[];
+    purchaseOrders: PurchaseOrder[];
+}
 
-interface Props { items: Item[]; movements: Movement[]; personnel: Personnel[]; purchaseOrders: PurchaseOrder[]; }
+type ResultCard = { title: string; content: React.ReactNode };
 
-const CopilotView: React.FC<Props> = ({ items, movements, personnel, purchaseOrders }) => {
-    const [messages, setMessages] = useState<CopilotMessage[]>([{ role: 'assistant', content: 'Hola! Soy tu **Copiloto de Bodega**. Estoy conectado a tu inventario en tiempo real. Preguntame sobre stock, movimientos, prestamos, gastos y mas.', timestamp: new Date() }]);
-    const [input, setInput] = useState('');
-    const [loading, setLoading] = useState(false);
-    const messagesEndRef = useRef<HTMLDivElement>(null);
-    const ctx: WarehouseContext = { items, movements, personnel, purchaseOrders };
+const CopilotView: React.FC<CopilotViewProps> = ({ items, movements, personnel, purchaseOrders }) => {
+    const [result, setResult] = useState<ResultCard | null>(null);
+    const [informe, setInforme] = useState<string>('');
+    const [loadingInforme, setLoadingInforme] = useState(false);
 
-    React.useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+    const days = (d: Date) => Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
 
-    const sendMessage = useCallback(async (text: string) => {
-        const trimmed = text.trim();
-        if (!trimmed || loading) return;
-        setInput(''); setLoading(true);
-        setMessages(prev => [...prev, { role: 'user', content: trimmed, timestamp: new Date() }]);
+    const actions = [
+        {
+            label: '📋 Órdenes de compra pendientes',
+            run: () => {
+                const pending = purchaseOrders.filter(o =>
+                    o.status === PurchaseOrderStatus.ORDERED || o.status === PurchaseOrderStatus.SHIPPED
+                );
+                setResult({
+                    title: 'Órdenes de compra pendientes',
+                    content: pending.length === 0
+                        ? <p className="text-gray-500">No hay órdenes pendientes.</p>
+                        : <ul className="divide-y divide-gray-100">
+                            {pending.map(o => (
+                                <li key={o.id} className="py-2 flex justify-between items-center">
+                                    <div>
+                                        <p className="font-semibold text-gray-800">{o.supplier}</p>
+                                        <p className="text-xs text-gray-500">{o.items.length} ítem(s) · {new Date(o.orderDate).toLocaleDateString('es-CO')}</p>
+                                    </div>
+                                    <span className={`text-xs font-bold px-2 py-1 rounded-full ${o.status === PurchaseOrderStatus.ORDERED ? 'bg-blue-100 text-blue-700' : 'bg-indigo-100 text-indigo-700'}`}>
+                                        {o.status}
+                                    </span>
+                                </li>
+                            ))}
+                        </ul>
+                });
+            }
+        },
+        {
+            label: '🔥 Material más consumido (30 días)',
+            run: () => {
+                const last30 = movements.filter(m => days(m.timestamp) <= 30 && m.type === MovementType.CHECK_OUT);
+                const totals: Record<string, number> = {};
+                last30.forEach(m => { totals[m.itemId] = (totals[m.itemId] || 0) + m.quantity; });
+                const top = Object.entries(totals)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 8)
+                    .map(([id, qty]) => ({ item: items.find(i => i.id === id), qty }))
+                    .filter(x => x.item);
+                setResult({
+                    title: 'Material más consumido (últimos 30 días)',
+                    content: top.length === 0
+                        ? <p className="text-gray-500">Sin salidas en los últimos 30 días.</p>
+                        : <ul className="divide-y divide-gray-100">
+                            {top.map(({ item, qty }, i) => (
+                                <li key={item!.id} className="py-2 flex justify-between items-center">
+                                    <span className="text-gray-800">
+                                        <span className="font-bold text-blue-600 mr-2">#{i + 1}</span>
+                                        {item!.name}
+                                    </span>
+                                    <span className="font-semibold text-red-600">{qty} {item!.unit}</span>
+                                </li>
+                            ))}
+                        </ul>
+                });
+            }
+        },
+        {
+            label: '🕒 Últimos 10 movimientos',
+            run: () => {
+                const last10 = [...movements]
+                    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                    .slice(0, 10);
+                setResult({
+                    title: 'Últimos 10 movimientos',
+                    content: last10.length === 0
+                        ? <p className="text-gray-500">No hay movimientos registrados.</p>
+                        : <ul className="divide-y divide-gray-100">
+                            {last10.map(m => {
+                                const item = items.find(i => i.id === m.itemId);
+                                const person = personnel.find(p => p.id === m.personnelId);
+                                return (
+                                    <li key={m.id} className="py-2">
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <p className="font-semibold text-gray-800 text-sm">{item?.name ?? 'Ítem eliminado'}</p>
+                                                <p className="text-xs text-gray-500">{person?.name ?? '—'} · {new Date(m.timestamp).toLocaleDateString('es-CO')}</p>
+                                            </div>
+                                            <span className={`text-xs font-bold px-2 py-1 rounded-full ${m.type === MovementType.CHECK_OUT || m.type === MovementType.WASTE ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                                                {m.type} {m.quantity} {item?.unit}
+                                            </span>
+                                        </div>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                });
+            }
+        },
+        {
+            label: '🚨 Stock bajo mínimo',
+            run: () => {
+                const bajo = items.filter(i => i.quantity <= i.minStock);
+                setResult({
+                    title: 'Ítems con stock bajo mínimo',
+                    content: bajo.length === 0
+                        ? <p className="text-green-600 font-semibold">✅ Todo el inventario está por encima del mínimo.</p>
+                        : <ul className="divide-y divide-gray-100">
+                            {bajo.map(i => (
+                                <li key={i.id} className="py-2 flex justify-between items-center">
+                                    <div>
+                                        <p className="font-semibold text-gray-800">{i.name}</p>
+                                        <p className="text-xs text-gray-500">{i.category}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className={`font-bold text-sm ${i.quantity === 0 ? 'text-red-600' : 'text-orange-500'}`}>
+                                            {i.quantity === 0 ? '🔴 AGOTADO' : `🟠 ${i.quantity} ${i.unit}`}
+                                        </p>
+                                        <p className="text-xs text-gray-400">mín: {i.minStock} {i.unit}</p>
+                                    </div>
+                                </li>
+                            ))}
+                        </ul>
+                });
+            }
+        },
+        {
+            label: '🔑 Herramientas en préstamo',
+            run: () => {
+                const prestamos = movements.filter(m => m.isLoan && !m.isReturned);
+                setResult({
+                    title: 'Herramientas actualmente en préstamo',
+                    content: prestamos.length === 0
+                        ? <p className="text-green-600 font-semibold">✅ No hay herramientas en préstamo.</p>
+                        : <ul className="divide-y divide-gray-100">
+                            {prestamos.map(m => {
+                                const item = items.find(i => i.id === m.itemId);
+                                const person = personnel.find(p => p.id === m.personnelId);
+                                const diasFuera = days(m.timestamp);
+                                return (
+                                    <li key={m.id} className="py-2 flex justify-between items-center">
+                                        <div>
+                                            <p className="font-semibold text-gray-800">{item?.name ?? '—'}</p>
+                                            <p className="text-xs text-gray-500">Responsable: {person?.name ?? 'Sin asignar'}</p>
+                                        </div>
+                                        <span className={`text-xs font-bold px-2 py-1 rounded-full ${diasFuera > 7 ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                            {diasFuera}d fuera
+                                        </span>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                });
+            }
+        },
+    ];
+
+    const handleGenerarInforme = async () => {
+        setLoadingInforme(true);
+        setResult(null);
+        setInforme('');
         try {
-            const response = await askCopilot(trimmed, ctx);
-            setMessages(prev => [...prev, { role: 'assistant', content: response, timestamp: new Date() }]);
-        } catch { setMessages(prev => [...prev, { role: 'assistant', content: 'Error procesando consulta.', timestamp: new Date() }]); }
-        finally { setLoading(false); }
-    }, [loading, ctx]);
-
-    const renderContent = (text: string) => text.split('\n').map((line, i) => {
-        if (line.startsWith('**') && line.endsWith('**')) return <p key={i} className='font-bold text-gray-800 mt-1'>{line.slice(2,-2)}</p>;
-        if (line.startsWith('- ')) return <div key={i} className='flex gap-1 text-sm'><span className='text-indigo-500'>•</span><span dangerouslySetInnerHTML={{__html: line.slice(2).replace(/\*\*([^*]+)\*\*/g,'<strong></strong>')}} /></div>;
-        if (!line.trim()) return <div key={i} className='h-1'/>;
-        return <p key={i} className='text-sm' dangerouslySetInnerHTML={{__html: line.replace(/\*\*([^*]+)\*\*/g,'<strong></strong>')}} />;
-    });
+            const texto = await generateInventoryAnalysis(items, movements);
+            setInforme(texto);
+        } catch {
+            setInforme('Error generando el informe.');
+        } finally {
+            setLoadingInforme(false);
+        }
+    };
 
     return (
-        <div className='flex flex-col h-full bg-gray-50'>
-            <div className='bg-white border-b px-6 py-4 flex items-center gap-3'>
-                <div className='w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white'><BotIcon /></div>
-                <div><h2 className='font-bold text-gray-800'>Copiloto de Bodega</h2><p className='text-xs text-gray-500'>IA open-source · Sin API key · Datos locales</p></div>
-                <div className='ml-auto flex items-center gap-2'><div className='flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 rounded-full'><div className='w-2 h-2 bg-emerald-500 rounded-full animate-pulse'/><span className='text-xs font-medium text-emerald-600'>En linea</span></div></div>
+        <div className="space-y-6">
+            <div>
+                <h1 className="text-2xl font-black text-gray-800">Análisis de Bodega</h1>
+                <p className="text-gray-500 text-sm mt-1">Consultas rápidas sobre tu inventario en tiempo real.</p>
             </div>
-            <div className='flex-1 overflow-y-auto px-4 pt-4 pb-2'>
-                {messages.map((msg, i) => (
-                    <div key={i} className={'flex gap-3 ' + (msg.role === 'user' ? 'flex-row-reverse' : 'flex-row') + ' mb-3'}>
-                        <div className={'w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ' + (msg.role === 'user' ? 'bg-blue-500' : 'bg-gradient-to-br from-violet-500 to-indigo-600')}>{msg.role === 'user' ? 'Tu' : <BotIcon />}</div>
-                        <div className={'max-w-xs md:max-w-md rounded-2xl px-4 py-3 ' + (msg.role === 'user' ? 'bg-blue-500 text-white rounded-tr-sm' : 'bg-white text-gray-800 border border-gray-100 rounded-tl-sm shadow-sm')}>
-                            <div className='space-y-0.5'>{renderContent(msg.content)}</div>
-                            <p className={'text-xs mt-1 ' + (msg.role === 'user' ? 'text-blue-200 text-right' : 'text-gray-400')}>{msg.timestamp.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})}</p>
-                        </div>
-                    </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {actions.map(a => (
+                    <button
+                        key={a.label}
+                        onClick={() => { setInforme(''); a.run(); }}
+                        className="text-left bg-white border border-gray-200 hover:border-blue-400 hover:shadow-md rounded-xl px-4 py-4 transition-all duration-150 text-sm font-semibold text-gray-700 hover:text-blue-700"
+                    >
+                        {a.label}
+                    </button>
                 ))}
-                {loading && (<div className='flex gap-3 mb-3'><div className='w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white'><BotIcon /></div><div className='bg-white rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border'><div className='flex gap-1'><div className='w-2 h-2 bg-gray-400 rounded-full animate-bounce' style={{animationDelay:'0ms'}}/><div className='w-2 h-2 bg-gray-400 rounded-full animate-bounce' style={{animationDelay:'150ms'}}/><div className='w-2 h-2 bg-gray-400 rounded-full animate-bounce' style={{animationDelay:'300ms'}}/></div></div></div>)}
-                {messages.length === 1 && (<div className='mb-3'><p className='text-xs text-gray-400 mb-2 uppercase tracking-wide'>Preguntas frecuentes</p><div className='flex flex-wrap gap-2'>{SUGGESTED_PROMPTS.map((p,i)=>(<button key={i} onClick={()=>sendMessage(p)} className='px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs text-gray-600 hover:border-indigo-300 hover:text-indigo-600 transition-all shadow-sm'>{p}</button>))}</div></div>)}
-                <div ref={messagesEndRef}/>
+                <button
+                    onClick={handleGenerarInforme}
+                    disabled={loadingInforme}
+                    className="text-left bg-blue-600 hover:bg-blue-700 disabled:opacity-60 rounded-xl px-4 py-4 transition-all duration-150 text-sm font-semibold text-white"
+                >
+                    {loadingInforme ? '⏳ Generando informe...' : '📊 Generar informe completo'}
+                </button>
             </div>
-            <div className='px-4 pb-4 pt-2'>
-                <div className='bg-white border border-gray-200 rounded-2xl flex items-center gap-2 px-4 py-2 focus-within:border-indigo-400 transition-all'>
-                    <input type='text' value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();sendMessage(input);}}} placeholder='Pregunta sobre tu inventario...' disabled={loading} className='flex-1 outline-none text-sm text-gray-700 bg-transparent placeholder-gray-400'/>
-                    <button onClick={()=>sendMessage(input)} disabled={!input.trim()||loading} className='w-8 h-8 rounded-xl bg-indigo-500 text-white flex items-center justify-center hover:bg-indigo-600 disabled:opacity-40 transition-all'><SendIcon /></button>
+
+            {result && (
+                <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+                    <div className="flex justify-between items-center mb-3">
+                        <h2 className="text-base font-bold text-gray-800">{result.title}</h2>
+                        <button onClick={() => setResult(null)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
+                    </div>
+                    {result.content}
                 </div>
-            </div>
+            )}
+
+            {informe && (
+                <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+                    <div className="flex justify-between items-center mb-3">
+                        <h2 className="text-base font-bold text-gray-800">Informe completo</h2>
+                        <button onClick={() => setInforme('')} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
+                    </div>
+                    <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono leading-relaxed overflow-auto max-h-[60vh]">{informe}</pre>
+                </div>
+            )}
         </div>
     );
 };
