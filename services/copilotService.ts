@@ -17,6 +17,7 @@ export const initModel = async (onProgress?: (msg: string) => void): Promise<boo
     modelLoading = true;
     try {
         onProgress?.('Cargando motor IA open-source...');
+        // @ts-ignore — CDN import, no types available
         const { pipeline, env } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
         env.allowLocalModels = false;
         env.useBrowserCache = true;
