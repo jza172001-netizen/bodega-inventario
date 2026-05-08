@@ -107,7 +107,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements }) => 
             <div className="bg-white p-6 rounded-3xl shadow-md border border-gray-100">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
                     <div>
-                        <h2 className="text-xl font-black text-gray-800 uppercase tracking-tighter">Análisis de Rotación IA</h2>
+                        <h2 className="text-xl font-black text-gray-800 uppercase tracking-tighter">Análisis de Rotación</h2>
                         <p className="text-xs text-gray-400 font-bold">Últimos 30 días de operación</p>
                     </div>
                     <button
@@ -115,7 +115,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements }) => 
                         disabled={loadingRecommendations || subCategoryRotation.length === 0}
                         className="flex items-center bg-indigo-600 hover:bg-indigo-700 text-white font-black py-2.5 px-6 rounded-xl text-xs uppercase tracking-widest shadow-lg disabled:opacity-50"
                     >
-                         {loadingRecommendations ? 'Analizando Datos...' : 'Consultar Asistente IA'}
+                         {loadingRecommendations ? 'Analizando Datos...' : 'Generar Recomendaciones'}
                     </button>
                 </div>
                  <div className="overflow-x-auto">

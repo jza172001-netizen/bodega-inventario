@@ -75,7 +75,7 @@ export const ReportView: React.FC<ReportViewProps> = ({ items, movements }) => {
         <div className="space-y-6">
             <div className="bg-white p-6 rounded-xl shadow-md">
                 <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-xl font-semibold text-gray-800">Asistente de IA para Reportes</h2>
+                    <h2 className="text-xl font-semibold text-gray-800">Análisis de Inventario</h2>
                     <button
                         onClick={handleGenerateReport}
                         disabled={isLoading}
@@ -87,12 +87,11 @@ export const ReportView: React.FC<ReportViewProps> = ({ items, movements }) => {
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
                         ) : null}
-                        {isLoading ? 'Generando...' : 'Generar Análisis de Inventario'}
+                        {isLoading ? 'Generando...' : 'Generar Reporte Completo'}
                     </button>
                 </div>
                 <p className="text-gray-600">
-                    Utilice el poder de la IA para obtener un análisis detallado de su inventario, identificar tendencias,
-                    alertas de stock y recibir recomendaciones inteligentes para optimizar su gestión.
+                    Análisis automático de su inventario: tendencias de consumo, alertas de stock, herramientas en préstamo y recomendaciones de reabastecimiento.
                 </p>
             </div>
             

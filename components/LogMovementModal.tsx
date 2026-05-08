@@ -29,13 +29,20 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
 
     if (!isOpen) return null;
 
+    const selectedItem = items.find(i => i.id === itemId);
+    const isWithdrawal = type === MovementType.CHECK_OUT || type === MovementType.WASTE;
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!itemId || quantity <= 0) {
             alert('Por favor, seleccione un artículo y una cantidad válida.');
             return;
         }
-        onLogMovement({ 
+        if (isWithdrawal && selectedItem && quantity > selectedItem.quantity) {
+            alert(`Stock insuficiente. Disponible: ${selectedItem.quantity} ${selectedItem.unit}`);
+            return;
+        }
+        onLogMovement({
             itemId, 
             type, 
             quantity, 
@@ -74,6 +81,11 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
                                 <option value="" disabled>Seleccionar artículo...</option>
                                 {filteredItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
                             </select>
+                            {selectedItem && isWithdrawal && (
+                                <p className={`text-xs mt-1 font-medium ${selectedItem.quantity === 0 ? 'text-red-600' : 'text-gray-500'}`}>
+                                    Disponible: {selectedItem.quantity} {selectedItem.unit}
+                                </p>
+                            )}
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Movimiento</label>
