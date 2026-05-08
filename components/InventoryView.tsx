@@ -1,5 +1,5 @@
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Item, InventoryType, UserRole } from '../types';
 import { PlusIcon } from './icons/PlusIcon';
 import { EditIcon } from './icons/EditIcon';
@@ -19,6 +19,17 @@ interface InventoryViewProps {
 }
 
 export const InventoryView: React.FC<InventoryViewProps> = ({ items, openAddItemModal, onEditItem, onDeleteItem, onItemHistory, userRole, category, onGoBack }) => {
+    const [search, setSearch] = useState('');
+
+    const displayItems = useMemo(() => {
+        if (!search.trim()) return items;
+        const q = search.toLowerCase();
+        return items.filter(i =>
+            i.name.toLowerCase().includes(q) ||
+            i.subCategory.toLowerCase().includes(q) ||
+            i.category.toLowerCase().includes(q)
+        );
+    }, [items, search]);
 
     const getStockStatusColor = (item: Item) => {
         if (item.minStock <= 0) return 'bg-gray-200 text-gray-800';
@@ -33,26 +44,43 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, openAddItem
         if (item.quantity <= 0) return 'Agotado';
         if (item.quantity <= item.minStock) return 'Bajo Stock';
         return 'OK';
-    }
-    
+    };
+
     return (
         <div className="bg-white p-4 md:p-6 rounded-xl shadow-md">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-3">
                 <div className="flex items-center">
                     <button onClick={onGoBack} className="mr-4 p-2 rounded-full hover:bg-gray-100">
                       <ArrowLeftIcon className="w-6 h-6 text-gray-600" />
                     </button>
                     <h2 className="text-2xl font-semibold text-gray-800">
-                        Inventario: {category || 'Todos los Artículos'}
+                        {category || 'Todos los Artículos'}
                     </h2>
                 </div>
-                {userRole === UserRole.OWNER && (
-                    <button onClick={openAddItemModal} className="flex items-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
-                        <PlusIcon className="w-5 h-5 mr-2" />
-                        Añadir Artículo
-                    </button>
-                )}
+                <div className="flex items-center gap-3 w-full md:w-auto">
+                    <div className="relative flex-1 md:w-56">
+                        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                        <input
+                            type="text"
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            placeholder="Buscar artículo..."
+                            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                    </div>
+                    {userRole === UserRole.OWNER && (
+                        <button onClick={openAddItemModal} className="flex items-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm whitespace-nowrap">
+                            <PlusIcon className="w-5 h-5 mr-2" />
+                            Añadir
+                        </button>
+                    )}
+                </div>
             </div>
+            {search && (
+                <p className="text-xs text-gray-400 mb-3">{displayItems.length} resultado{displayItems.length !== 1 ? 's' : ''} para "{search}"</p>
+            )}
             <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
@@ -66,7 +94,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, openAddItem
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                        {items.map(item => (
+                        {displayItems.map(item => (
                             <tr key={item.id} className="hover:bg-gray-50">
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 cursor-pointer" onClick={() => onItemHistory(item)}>
                                     {item.name}
@@ -98,9 +126,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, openAddItem
                         ))}
                     </tbody>
                 </table>
-                 {items.length === 0 && (
+                 {displayItems.length === 0 && (
                     <div className="text-center py-10 text-gray-500">
-                        <p>No hay artículos en esta categoría.</p>
+                        <p>{search ? `No se encontraron artículos para "${search}".` : 'No hay artículos en esta categoría.'}</p>
                     </div>
                 )}
             </div>

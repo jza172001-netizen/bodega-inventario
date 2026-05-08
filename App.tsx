@@ -63,6 +63,19 @@ const App: React.FC = () => {
         db.fetchProjects().then(data => { if (data.length > 0) setProjects(data); }).catch(() => {});
     }, []);
 
+    const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle');
+    const syncTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+    const withSync = (promise: Promise<unknown>) => {
+        setSyncStatus('syncing');
+        if (syncTimer.current) clearTimeout(syncTimer.current);
+        promise
+            .then(() => {
+                setSyncStatus('idle');
+                syncTimer.current = setTimeout(() => setSyncStatus('idle'), 2000);
+            })
+            .catch(() => setSyncStatus('error'));
+    };
+
     const [currentView, setCurrentView] = useState<View>('dashboard');
     const [selectedInventoryType, setSelectedInventoryType] = useState<InventoryType | null>(null);
     const [isSidebarOpen, setSidebarOpen] = useState(true);
@@ -92,6 +105,24 @@ const App: React.FC = () => {
         setIsAuthenticated(true);
     };
 
+    // Valida credenciales via Supabase RPC (server-side, sin exponer contraseñas al cliente)
+    // Fallback: comparación local si Supabase no está disponible
+    const handleLoginAttempt = async (username: string, password: string): Promise<boolean> => {
+        try {
+            const result = await db.authenticateUser(username, password);
+            if (result) {
+                handleLogin(result.role);
+                return true;
+            }
+            return false;
+        } catch {
+            // Fallback offline: comparar contra usuarios en estado local (sin contraseña desde DB)
+            const localUser = users.find(u => u.username === username && u.password === password);
+            if (localUser) { handleLogin(localUser.role); return true; }
+            return false;
+        }
+    };
+
     const handleResetAllData = () => {
         if (window.confirm("¿ESTÁS SEGURO? Se borrarán todos los productos, trabajadores y movimientos. Esta acción no se puede deshacer.")) {
             setItems([]);
@@ -114,17 +145,19 @@ const App: React.FC = () => {
     const handleAddItem = (i: Omit<Item, 'id'>) => {
         const newItem = { ...i, id: `i-${Date.now()}` };
         setItems(prev => [...prev, newItem]);
-        db.addItem(i).then(created => setItems(prev => prev.map(x => x.id === newItem.id ? created : x))).catch(() => {});
+        withSync(db.addItem(i).then(created => setItems(prev => prev.map(x => x.id === newItem.id ? created : x))));
     };
 
     const handleEditItem = (updated: Item) => {
         setItems(prev => prev.map(i => i.id === updated.id ? updated : i));
-        db.updateItem(updated).catch(() => {});
+        withSync(db.updateItem(updated));
     };
 
     const handleDeleteItem = (id: string) => {
+        const hasMovements = movements.some(m => m.itemId === id);
+        if (hasMovements && !window.confirm('Este artículo tiene movimientos registrados. ¿Eliminar de todas formas? Los registros históricos quedarán sin referencia.')) return;
         setItems(prev => prev.filter(i => i.id !== id));
-        db.deleteItem(id).catch(() => {});
+        withSync(db.deleteItem(id));
     };
 
     const handleLogMovement = (m: Omit<Movement, 'id'>) => {
@@ -140,52 +173,53 @@ const App: React.FC = () => {
             }
             return item;
         }));
-        db.addMovement({ ...m, timestamp: new Date() })
-            .then(created => setMovements(prev => prev.map(x => x.id === newMov.id ? created : x)))
-            .catch(() => {});
+        withSync(db.addMovement({ ...m, timestamp: new Date() })
+            .then(created => setMovements(prev => prev.map(x => x.id === newMov.id ? created : x))));
     };
 
     const handleDeleteMovement = (id: string) => {
         setMovements(prev => prev.filter(m => m.id !== id));
-        db.deleteMovement(id).catch(() => {});
+        withSync(db.deleteMovement(id));
     };
 
     const handleReturnItem = (id: string) => {
         setMovements(prev => prev.map(m => m.id === id ? { ...m, isReturned: true } : m));
-        db.markMovementReturned(id).catch(() => {});
+        withSync(db.markMovementReturned(id));
     };
 
     const handleAddPersonnel = (p: Omit<Personnel, 'id'>) => {
         const newP = { ...p, id: `per-${Date.now()}` };
         setPersonnel(prev => [...prev, newP]);
-        db.addPersonnel(p).then(created => setPersonnel(prev => prev.map(x => x.id === newP.id ? created : x))).catch(() => {});
+        withSync(db.addPersonnel(p).then(created => setPersonnel(prev => prev.map(x => x.id === newP.id ? created : x))));
     };
 
     const handleEditPersonnel = (p: Personnel) => {
         setPersonnel(prev => prev.map(pers => pers.id === p.id ? p : pers));
-        db.updatePersonnel(p).catch(() => {});
+        withSync(db.updatePersonnel(p));
     };
 
     const handleDeletePersonnel = (id: string) => {
+        const hasMovements = movements.some(m => m.personnelId === id);
+        if (hasMovements && !window.confirm('Este personal tiene movimientos registrados. ¿Eliminar de todas formas?')) return;
         setPersonnel(prev => prev.filter(p => p.id !== id));
-        db.deletePersonnel(id).catch(() => {});
+        withSync(db.deletePersonnel(id));
     };
 
     const handleAddProject = (p: Omit<Project, 'id'>) => {
         const newP = { ...p, id: `p-${Date.now()}` };
         setProjects(prev => [...prev, newP]);
-        db.addProject(p).then(created => setProjects(prev => prev.map(x => x.id === newP.id ? created : x))).catch(() => {});
+        withSync(db.addProject(p).then(created => setProjects(prev => prev.map(x => x.id === newP.id ? created : x))));
     };
 
     const handleDeleteProject = (id: string) => {
         setProjects(prev => prev.filter(p => p.id !== id));
-        db.deleteProject(id).catch(() => {});
+        withSync(db.deleteProject(id));
     };
 
     const handleAddPurchaseOrder = (o: Omit<PurchaseOrder, 'id'>) => {
         const newO = { ...o, id: `po-${Date.now()}` };
         setPurchaseOrders(prev => [newO, ...prev]);
-        db.addPurchaseOrder(o).then(created => setPurchaseOrders(prev => prev.map(x => x.id === newO.id ? created : x))).catch(() => {});
+        withSync(db.addPurchaseOrder(o).then(created => setPurchaseOrders(prev => prev.map(x => x.id === newO.id ? created : x))));
     };
 
     const handleUpdatePOStatus = (id: string, status: PurchaseOrderStatus) => {
@@ -193,22 +227,22 @@ const App: React.FC = () => {
             ? { ...o, status, ...(status === PurchaseOrderStatus.RECEIVED ? { receivedDate: new Date() } : {}) }
             : o
         ));
-        db.updatePurchaseOrderStatus(id, status).catch(() => {});
+        withSync(db.updatePurchaseOrderStatus(id, status));
     };
 
     const handleDeletePO = (id: string) => {
         setPurchaseOrders(prev => prev.filter(o => o.id !== id));
-        db.deletePurchaseOrder(id).catch(() => {});
+        withSync(db.deletePurchaseOrder(id));
     };
 
     const handleAddUser = (u: AppUser) => {
         setUsers(prev => [...prev, u]);
-        db.addUser(u).catch(() => {});
+        withSync(db.addUser(u));
     };
 
     const handleEditUser = (u: AppUser) => {
         setUsers(prev => prev.map(user => user.id === u.id ? u : user));
-        db.updateUser(u).catch(() => {});
+        withSync(db.updateUser(u));
     };
 
     const handleDeleteUser = (id: string) => {
@@ -216,7 +250,7 @@ const App: React.FC = () => {
         db.deleteUser(id).catch(() => {});
     };
 
-    if (!isAuthenticated) return <LoginView onLoginSuccess={handleLogin} users={users} />;
+    if (!isAuthenticated) return <LoginView onLoginSuccess={handleLogin} onLoginAttempt={handleLoginAttempt} />;
 
     return (
         <div className="flex h-screen bg-gray-50 overflow-hidden font-sans">
@@ -266,10 +300,11 @@ const App: React.FC = () => {
                     onImportData={handleImportData}
                     onResetData={handleResetAllData}
                     setUserRole={() => {}}
+                    syncStatus={syncStatus}
                 />
                 <main className="flex-1 p-4 md:p-6 overflow-y-auto bg-gray-50">
                     <div className="max-w-7xl mx-auto">
-                        {currentView === 'dashboard' && <Dashboard items={items} movements={movements} />}
+                        {currentView === 'dashboard' && <Dashboard items={items} movements={movements} purchaseOrders={purchaseOrders} />}
                         {currentView === 'inventory' && (
                             <InventoryView
                                 items={selectedInventoryType ? items.filter(i => i.inventoryType === selectedInventoryType) : items}
