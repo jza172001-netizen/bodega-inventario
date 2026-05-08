@@ -331,11 +331,36 @@ export async function deletePurchaseOrder(id: string): Promise<void> {
 }
 
 // ─── USERS ───────────────────────────────────────────────────────────────────
+// fetchUsers usa RPC server-side que NO devuelve contraseñas al cliente
 
 export async function fetchUsers(): Promise<AppUser[]> {
-    const { data, error } = await supabase.from('app_users').select('*');
+    const { data, error } = await supabase.rpc('get_users_safe');
     if (error) throw error;
-    return (data ?? []).map(r => dbToUser(r as Record<string, unknown>));
+    return (data ?? []).map((r: Record<string, unknown>) => ({
+        id: r.user_id as string,
+        username: r.user_username as string,
+        password: '', // contraseña nunca viaja al cliente
+        role: r.user_role as UserRole,
+        name: r.user_name as string,
+    }));
+}
+
+// Autentica credenciales en el servidor — devuelve rol/nombre sin contraseña
+export async function authenticateUser(
+    username: string,
+    password: string
+): Promise<{ id: string; role: UserRole; name: string } | null> {
+    const { data, error } = await supabase.rpc('authenticate_user', {
+        p_username: username,
+        p_password: password,
+    });
+    if (error || !data || data.length === 0) return null;
+    const row = data[0] as Record<string, unknown>;
+    return {
+        id: row.user_id as string,
+        role: row.user_role as UserRole,
+        name: row.user_name as string,
+    };
 }
 
 export async function addUser(u: AppUser): Promise<AppUser> {
@@ -360,3 +385,4 @@ export async function deleteUser(id: string): Promise<void> {
     const { error } = await supabase.from('app_users').delete().eq('id', id);
     if (error) throw error;
 }
+

@@ -9,7 +9,7 @@ import { PurchaseOrdersIcon } from './icons/PurchaseOrdersIcon';
 
 interface LoginViewProps {
     onLoginSuccess: (role: UserRole) => void;
-    users: AppUser[];
+    onLoginAttempt: (username: string, password: string) => Promise<boolean>;
 }
 
 const Benefit: React.FC<{ icon: React.ElementType; title: string; children: React.ReactNode }> = ({ icon: Icon, title, children }) => (
@@ -25,20 +25,19 @@ const Benefit: React.FC<{ icon: React.ElementType; title: string; children: Reac
 );
 
 
-export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, users }) => {
+export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onLoginAttempt }) => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        
-        // Validación estricta (case-sensitive por defecto en JS)
-        const user = users.find(u => u.username === username && u.password === password);
-
-        if (user) {
-            onLoginSuccess(user.role);
-        } else {
+        setLoading(true);
+        setError('');
+        const ok = await onLoginAttempt(username, password);
+        setLoading(false);
+        if (!ok) {
             setError('Usuario o contraseña incorrectos. Verifique mayúsculas.');
         }
     };
@@ -121,9 +120,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, users }) =
                         <div>
                             <button
                                 type="submit"
-                                className="relative flex justify-center w-full px-4 py-3 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg group hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                                disabled={loading}
+                                className="relative flex justify-center w-full px-4 py-3 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg group hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-60"
                             >
-                                Acceder
+                                {loading ? 'Verificando...' : 'Acceder'}
                             </button>
                         </div>
                          <p className="text-xs text-center text-gray-500 pt-2">

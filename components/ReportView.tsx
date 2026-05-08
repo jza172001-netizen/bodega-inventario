@@ -1,6 +1,7 @@
 
 
 import React, { useState, useCallback } from 'react';
+import DOMPurify from 'dompurify';
 import { Item, Movement } from '../types';
 import { generateInventoryAnalysis } from '../services/geminiService';
 
@@ -111,7 +112,7 @@ export const ReportView: React.FC<ReportViewProps> = ({ items, movements }) => {
             {report && (
                  <div className="bg-white p-6 rounded-xl shadow-md prose max-w-none">
                     <h2 className="text-2xl font-bold mb-4 text-gray-800">Reporte de Análisis de Inventario</h2>
-                    <div dangerouslySetInnerHTML={{ __html: formattedReport }} />
+                    <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(formattedReport) }} />
                 </div>
             )}
         </div>
