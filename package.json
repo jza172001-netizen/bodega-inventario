@@ -17,8 +17,11 @@
     "@supabase/supabase-js": "^2.105.3",
     "@types/dompurify": "^3.0.5",
     "dompurify": "^3.4.2",
+    "pdfjs-dist": "^5.7.284",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "tesseract.js": "^7.0.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
