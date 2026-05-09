@@ -43,30 +43,34 @@ export const Header: React.FC<HeaderProps> = ({ toggleSidebar, userRole, onExpor
             </div>
             <div className="flex items-center space-x-2 md:space-x-4 flex-shrink-0">
                 {userRole === UserRole.OWNER && (
-                    <div className="hidden md:flex items-center space-x-2 border-r pr-4 border-gray-200">
-                        <button onClick={onExportData}
-                            className="flex items-center px-3 py-2 bg-green-50 text-green-700 rounded-xl hover:bg-green-100 transition-all"
-                            title="Exportar datos a JSON">
-                            <DownloadIcon className="w-4 h-4 md:mr-1.5" />
-                            <span className="hidden md:inline text-[10px] font-black uppercase tracking-widest">Exportar</span>
-                        </button>
-                        <button onClick={() => fileInputRef.current?.click()}
-                            className="flex items-center px-3 py-2 bg-blue-50 text-blue-700 rounded-xl hover:bg-blue-100 transition-all"
-                            title="Importar datos desde JSON">
-                            <UploadIcon className="w-4 h-4 md:mr-1.5" />
-                            <span className="hidden md:inline text-[10px] font-black uppercase tracking-widest">Importar</span>
-                        </button>
-                        <input ref={fileInputRef} type="file" accept=".json" onChange={onImportData} className="hidden" />
-                        <button onClick={onResetData}
-                            className="flex items-center px-3 py-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-all"
-                            title="Vaciar bodega">
-                            <TrashIcon className="w-4 h-4 md:mr-1.5" />
-                            <span className="hidden md:inline text-[10px] font-black uppercase tracking-widest">Vaciar</span>
-                        </button>
-                        <button onClick={onOpenUserManagement} className="p-2 text-gray-400 hover:text-indigo-600 rounded-full">
+                    <>
+                        {/* Exportar / Importar / Vaciar — solo desktop */}
+                        <div className="hidden md:flex items-center space-x-2 border-r pr-4 border-gray-200">
+                            <button onClick={onExportData}
+                                className="flex items-center px-3 py-2 bg-green-50 text-green-700 rounded-xl hover:bg-green-100 transition-all"
+                                title="Exportar datos a JSON">
+                                <DownloadIcon className="w-4 h-4 md:mr-1.5" />
+                                <span className="hidden md:inline text-[10px] font-black uppercase tracking-widest">Exportar</span>
+                            </button>
+                            <button onClick={() => fileInputRef.current?.click()}
+                                className="flex items-center px-3 py-2 bg-blue-50 text-blue-700 rounded-xl hover:bg-blue-100 transition-all"
+                                title="Importar datos desde JSON">
+                                <UploadIcon className="w-4 h-4 md:mr-1.5" />
+                                <span className="hidden md:inline text-[10px] font-black uppercase tracking-widest">Importar</span>
+                            </button>
+                            <input ref={fileInputRef} type="file" accept=".json" onChange={onImportData} className="hidden" />
+                            <button onClick={onResetData}
+                                className="flex items-center px-3 py-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-all"
+                                title="Vaciar bodega">
+                                <TrashIcon className="w-4 h-4 md:mr-1.5" />
+                                <span className="hidden md:inline text-[10px] font-black uppercase tracking-widest">Vaciar</span>
+                            </button>
+                        </div>
+                        {/* Usuarios — siempre visible */}
+                        <button onClick={onOpenUserManagement} className="p-2 text-gray-400 hover:text-indigo-600 rounded-full" title="Gestionar usuarios">
                             <UsersIcon className="w-5 h-5" />
                         </button>
-                    </div>
+                    </>
                 )}
                 <div className="flex items-center space-x-3">
                     {onOpenInvoiceReader && (
