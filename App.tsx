@@ -20,6 +20,8 @@ import CopilotView from './components/CopilotView';
 import { mockItems, mockMovements, mockPersonnel, mockPurchaseOrders, mockProjects, mockUsers } from './mockData';
 import { Item, Movement, MovementType, Personnel, PurchaseOrder, UserRole, InventoryType, Project, AppUser, PurchaseOrderStatus } from './types';
 import { LoginView } from './components/LoginView';
+import { LandingPage } from './components/LandingPage';
+import { InvoiceReaderModal } from './components/InvoiceReaderModal';
 import { saveToLocalStorage, loadFromLocalStorage, exportToFile, importFromFile } from './storage';
 import * as db from './services/supabaseService';
 
@@ -38,9 +40,19 @@ import { BrainIcon } from './components/icons/BrainIcon';
 
 type View = 'dashboard' | 'inventory' | 'movements' | 'purchaseOrders' | 'personnel' | 'projects' | 'loans' | 'copilot';
 
+const SESSION_KEY = 'bodega_session';
+
 const App: React.FC = () => {
-    const [isAuthenticated, setIsAuthenticated] = useState(false);
-    const [userRole, setUserRole] = useState<UserRole>(UserRole.OWNER);
+    const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+        try { return !!JSON.parse(localStorage.getItem(SESSION_KEY) ?? 'null'); } catch { return false; }
+    });
+    const [showLogin, setShowLogin] = useState(false);
+    const [userRole, setUserRole] = useState<UserRole>(() => {
+        try {
+            const s = JSON.parse(localStorage.getItem(SESSION_KEY) ?? 'null');
+            return s?.role ?? UserRole.OWNER;
+        } catch { return UserRole.OWNER; }
+    });
 
     // Carga inicial síncrona desde localStorage (igual que antes), con fallback a mockData
     const [users, setUsers] = useState<AppUser[]>(() => { const s = loadFromLocalStorage(); return s?.users ?? mockUsers; });
@@ -80,6 +92,7 @@ const App: React.FC = () => {
     const [selectedInventoryType, setSelectedInventoryType] = useState<InventoryType | null>(null);
     const [isSidebarOpen, setSidebarOpen] = useState(true);
 
+    const [isInvoiceReaderOpen, setInvoiceReaderOpen] = useState(false);
     const [isAddItemModalOpen, setAddItemModalOpen] = useState(false);
     const [isEditModalOpen, setEditModalOpen] = useState(false);
     const [itemToEdit, setItemToEdit] = useState<Item | null>(null);
@@ -103,6 +116,8 @@ const App: React.FC = () => {
     const handleLogin = (role: UserRole) => {
         setUserRole(role);
         setIsAuthenticated(true);
+        setShowLogin(false);
+        localStorage.setItem(SESSION_KEY, JSON.stringify({ role }));
     };
 
     // Valida credenciales via Supabase RPC (server-side, sin exponer contraseñas al cliente)
@@ -141,6 +156,12 @@ const App: React.FC = () => {
     };
 
     // ── Handlers síncronos (igual que original) + sync Supabase en background ──
+
+    const handleImportItems = (newItems: Array<Omit<Item, 'id'>>) => {
+        const created = newItems.map(i => ({ ...i, id: `i-${Date.now()}-${Math.random().toString(36).slice(2)}` }));
+        setItems(prev => [...prev, ...created]);
+        newItems.forEach(i => withSync(db.addItem(i)));
+    };
 
     const handleAddItem = (i: Omit<Item, 'id'>) => {
         const newItem = { ...i, id: `i-${Date.now()}` };
@@ -250,7 +271,12 @@ const App: React.FC = () => {
         db.deleteUser(id).catch(() => {});
     };
 
-    if (!isAuthenticated) return <LoginView onLoginSuccess={handleLogin} onLoginAttempt={handleLoginAttempt} />;
+    if (!isAuthenticated) {
+        if (showLogin) {
+            return <LoginView onLoginSuccess={handleLogin} onLoginAttempt={handleLoginAttempt} />;
+        }
+        return <LandingPage onGetStarted={() => setShowLogin(true)} />;
+    }
 
     return (
         <div className="flex h-screen bg-gray-50 overflow-hidden font-sans">
@@ -295,7 +321,7 @@ const App: React.FC = () => {
                     userRole={userRole}
                     onStartNewBusiness={handleResetAllData}
                     onOpenUserManagement={() => setUserManagementOpen(true)}
-                    onLogout={() => setIsAuthenticated(false)}
+                    onLogout={() => { setIsAuthenticated(false); setShowLogin(false); localStorage.removeItem(SESSION_KEY); }}
                     onExportData={handleExportData}
                     onImportData={handleImportData}
                     onResetData={handleResetAllData}
@@ -304,7 +330,7 @@ const App: React.FC = () => {
                 />
                 <main className="flex-1 p-4 md:p-6 overflow-y-auto bg-gray-50">
                     <div className="max-w-7xl mx-auto">
-                        {currentView === 'dashboard' && <Dashboard items={items} movements={movements} purchaseOrders={purchaseOrders} />}
+                        {currentView === 'dashboard' && <Dashboard items={items} movements={movements} purchaseOrders={purchaseOrders} personnel={personnel} />}
                         {currentView === 'inventory' && (
                             <InventoryView
                                 items={selectedInventoryType ? items.filter(i => i.inventoryType === selectedInventoryType) : items}
@@ -312,6 +338,7 @@ const App: React.FC = () => {
                                 onEditItem={(i) => { setItemToEdit(i); setEditModalOpen(true); }}
                                 onDeleteItem={handleDeleteItem}
                                 onItemHistory={(i) => { setItemForHistory(i); setHistoryModalOpen(true); }}
+                                onOpenInvoiceReader={() => setInvoiceReaderOpen(true)}
                                 userRole={userRole}
                                 category={selectedInventoryType || 'Todos'}
                                 onGoBack={() => selectView('dashboard')}
@@ -388,6 +415,7 @@ const App: React.FC = () => {
             <AddPurchaseOrderModal isOpen={isAddPOModalOpen} onClose={() => setAddPOModalOpen(false)} onAddPurchaseOrder={handleAddPurchaseOrder} items={items} />
             <ItemHistoryModal isOpen={isHistoryModalOpen} onClose={() => setHistoryModalOpen(false)} item={itemForHistory} movements={movements} personnel={personnel} />
             <UserManagementModal isOpen={isUserManagementOpen} onClose={() => setUserManagementOpen(false)} users={users} onAddUser={handleAddUser} onDeleteUser={handleDeleteUser} onEditUser={handleEditUser} />
+            <InvoiceReaderModal isOpen={isInvoiceReaderOpen} onClose={() => setInvoiceReaderOpen(false)} onImport={handleImportItems} />
         </div>
     );
 };
