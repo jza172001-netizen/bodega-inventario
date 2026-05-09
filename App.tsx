@@ -339,7 +339,6 @@ const App: React.FC = () => {
                                 onEditItem={(i) => { setItemToEdit(i); setEditModalOpen(true); }}
                                 onDeleteItem={handleDeleteItem}
                                 onItemHistory={(i) => { setItemForHistory(i); setHistoryModalOpen(true); }}
-                                onOpenInvoiceReader={() => setInvoiceReaderOpen(true)}
                                 userRole={userRole}
                                 category={selectedInventoryType || 'Todos'}
                                 onGoBack={() => selectView('dashboard')}
