@@ -1,11 +1,13 @@
 
-import React, { useMemo, useEffect, useState } from 'react';
-import { Item, Movement, MovementType, InventoryType } from '../types';
+import React, { useMemo, useEffect, useState, useRef, useCallback } from 'react';
+import { Item, Movement, MovementType, InventoryType, Personnel } from '../types';
 import { generateRotationAnalysis } from '../services/geminiService';
+import { PrintReportView } from './PrintReportView';
 
 interface StatisticsViewProps {
     items: Item[];
     movements: Movement[];
+    personnel?: Personnel[];
 }
 
 const formatCOP = (val: number) =>
@@ -32,8 +34,29 @@ const TYPE_CONFIG: Record<string, { label: string; color: string; dot: string }>
 const getTypeConfig = (type: string) =>
     TYPE_CONFIG[type] ?? { label: type, color: 'bg-gray-100 text-gray-700', dot: 'bg-gray-400' };
 
-const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements }) => {
+type PrintPeriod = 'week' | 'month' | 'quarter' | null;
+
+const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, personnel = [] }) => {
     const [rotationRecs, setRotationRecs] = useState<Record<string, { recommendation: string; severity: string }>>({});
+    const [printPeriod, setPrintPeriod] = useState<PrintPeriod>(null);
+    const [showPeriodModal, setShowPeriodModal] = useState(false);
+    const printRef = useRef<HTMLDivElement>(null);
+
+    const getPeriodRange = useCallback((period: NonNullable<PrintPeriod>): { fromDate: Date; toDate: Date; label: string } => {
+        const now = new Date();
+        const days = period === 'week' ? 7 : period === 'month' ? 30 : 90;
+        const from = new Date(now);
+        from.setDate(from.getDate() - days);
+        const labels: Record<NonNullable<PrintPeriod>, string> = { week: 'Últimos 7 días', month: 'Último mes', quarter: 'Último trimestre' };
+        return { fromDate: from, toDate: now, label: labels[period] };
+    }, []);
+
+    const handlePrint = useCallback((period: NonNullable<PrintPeriod>) => {
+        setPrintPeriod(period);
+        setShowPeriodModal(false);
+        // Dar tiempo al DOM para renderizar el componente antes de imprimir
+        setTimeout(() => window.print(), 200);
+    }, []);
 
     const thirtyDaysAgo = useMemo(() => {
         const d = new Date();
@@ -121,8 +144,61 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements }) => 
 
     const maxConsumed = topConsumed[0]?.qty ?? 1;
 
+    const periodRange = printPeriod ? getPeriodRange(printPeriod) : null;
+
     return (
         <div className="space-y-6">
+            {/* Modal selector de período */}
+            {showPeriodModal && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+                        <h3 className="text-lg font-bold text-gray-900 mb-1">Exportar informe PDF</h3>
+                        <p className="text-sm text-gray-500 mb-5">Selecciona el período del informe</p>
+                        <div className="space-y-2">
+                            {([
+                                { key: 'week', label: 'Esta semana', sub: 'Últimos 7 días' },
+                                { key: 'month', label: 'Este mes', sub: 'Últimos 30 días' },
+                                { key: 'quarter', label: 'Este trimestre', sub: 'Últimos 90 días' },
+                            ] as const).map(opt => (
+                                <button
+                                    key={opt.key}
+                                    onClick={() => handlePrint(opt.key)}
+                                    className="w-full text-left px-4 py-3 rounded-xl border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-all"
+                                >
+                                    <p className="font-semibold text-gray-800 text-sm">{opt.label}</p>
+                                    <p className="text-xs text-gray-400">{opt.sub}</p>
+                                </button>
+                            ))}
+                        </div>
+                        <button onClick={() => setShowPeriodModal(false)} className="mt-4 w-full text-sm text-gray-400 hover:text-gray-600 py-2">Cancelar</button>
+                    </div>
+                </div>
+            )}
+
+            {/* Componente de impresión — oculto en pantalla, visible al imprimir */}
+            {periodRange && (
+                <PrintReportView
+                    ref={printRef}
+                    items={items}
+                    movements={movements}
+                    personnel={personnel}
+                    periodLabel={periodRange.label}
+                    fromDate={periodRange.fromDate}
+                    toDate={periodRange.toDate}
+                />
+            )}
+
+            {/* Botón exportar PDF */}
+            <div className="flex justify-end">
+                <button
+                    onClick={() => setShowPeriodModal(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 hover:border-blue-400 hover:bg-blue-50 text-gray-700 font-semibold rounded-xl text-sm transition-all shadow-sm"
+                >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                    Exportar informe PDF
+                </button>
+            </div>
+
             {/* ── KPI CARDS ── */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-1">

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Item, Movement, PurchaseOrder, PurchaseOrderStatus } from '../types';
+import { Item, Movement, Personnel, PurchaseOrder, PurchaseOrderStatus } from '../types';
 import StatisticsView from './StatisticsView';
 import { ReportView } from './ReportView';
 import { StatisticsIcon } from './icons/StatisticsIcon';
@@ -9,11 +9,12 @@ interface DashboardProps {
     items: Item[];
     movements: Movement[];
     purchaseOrders: PurchaseOrder[];
+    personnel?: Personnel[];
 }
 
 type DashboardTab = 'statistics' | 'reports';
 
-export const Dashboard: React.FC<DashboardProps> = ({ items, movements, purchaseOrders }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ items, movements, purchaseOrders, personnel = [] }) => {
     const [activeTab, setActiveTab] = useState<DashboardTab>('statistics');
 
     const alerts = useMemo(() => {
@@ -103,7 +104,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ items, movements, purchase
             </div>
 
             <div>
-                {activeTab === 'statistics' && <StatisticsView items={items} movements={movements} />}
+                {activeTab === 'statistics' && <StatisticsView items={items} movements={movements} personnel={personnel} />}
                 {activeTab === 'reports' && <ReportView items={items} movements={movements} />}
             </div>
         </div>
