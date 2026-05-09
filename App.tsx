@@ -138,24 +138,6 @@ const App: React.FC = () => {
         }
     };
 
-    // Valida credenciales via Supabase RPC (server-side, sin exponer contraseñas al cliente)
-    // Fallback: comparación local si Supabase no está disponible
-    const handleLoginAttempt = async (username: string, password: string): Promise<boolean> => {
-        try {
-            const result = await db.authenticateUser(username, password);
-            if (result) {
-                handleLogin(result.role);
-                return true;
-            }
-            return false;
-        } catch {
-            // Fallback offline: comparar contra usuarios en estado local (sin contraseña desde DB)
-            const localUser = users.find(u => u.username === username && u.password === password);
-            if (localUser) { handleLogin(localUser.role); return true; }
-            return false;
-        }
-    };
-
     const handleResetAllData = () => {
         if (window.confirm("¿ESTÁS SEGURO? Se borrarán todos los productos, trabajadores y movimientos. Esta acción no se puede deshacer.")) {
             setItems([]);
