@@ -13,13 +13,12 @@ interface InventoryViewProps {
     onEditItem: (item: Item) => void;
     onDeleteItem: (itemId: string) => void;
     onItemHistory: (item: Item) => void;
-    onOpenInvoiceReader?: () => void;
     userRole: UserRole;
     category: string | null;
     onGoBack: () => void;
 }
 
-export const InventoryView: React.FC<InventoryViewProps> = ({ items, openAddItemModal, onEditItem, onDeleteItem, onItemHistory, onOpenInvoiceReader, userRole, category, onGoBack }) => {
+export const InventoryView: React.FC<InventoryViewProps> = ({ items, openAddItemModal, onEditItem, onDeleteItem, onItemHistory, userRole, category, onGoBack }) => {
     const [search, setSearch] = useState('');
 
     const displayItems = useMemo(() => {
@@ -72,16 +71,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, openAddItem
                         />
                     </div>
                     {userRole === UserRole.OWNER && (
-                        <>
-                            <button onClick={onOpenInvoiceReader} className="flex items-center bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2 px-3 rounded-lg text-sm whitespace-nowrap" title="Importar desde factura o archivo">
-                                <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/></svg>
-                                Importar
-                            </button>
-                            <button onClick={openAddItemModal} className="flex items-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm whitespace-nowrap">
-                                <PlusIcon className="w-5 h-5 mr-2" />
-                                Añadir
-                            </button>
-                        </>
+                        <button onClick={openAddItemModal} className="flex items-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm whitespace-nowrap">
+                            <PlusIcon className="w-5 h-5 mr-2" />
+                            Añadir
+                        </button>
                     )}
                 </div>
             </div>

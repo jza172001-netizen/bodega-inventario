@@ -322,6 +322,7 @@ const App: React.FC = () => {
                     onStartNewBusiness={handleResetAllData}
                     onOpenUserManagement={() => setUserManagementOpen(true)}
                     onLogout={() => { setIsAuthenticated(false); setShowLogin(false); localStorage.removeItem(SESSION_KEY); }}
+                    onOpenInvoiceReader={() => setInvoiceReaderOpen(true)}
                     onExportData={handleExportData}
                     onImportData={handleImportData}
                     onResetData={handleResetAllData}
@@ -338,7 +339,6 @@ const App: React.FC = () => {
                                 onEditItem={(i) => { setItemToEdit(i); setEditModalOpen(true); }}
                                 onDeleteItem={handleDeleteItem}
                                 onItemHistory={(i) => { setItemForHistory(i); setHistoryModalOpen(true); }}
-                                onOpenInvoiceReader={() => setInvoiceReaderOpen(true)}
                                 userRole={userRole}
                                 category={selectedInventoryType || 'Todos'}
                                 onGoBack={() => selectView('dashboard')}
