@@ -16,10 +16,11 @@ interface HeaderProps {
     onOpenUserManagement: () => void;
     onLogout: () => void;
     onStartNewBusiness: () => void;
+    onOpenInvoiceReader?: () => void;
     syncStatus?: 'idle' | 'syncing' | 'error';
 }
 
-export const Header: React.FC<HeaderProps> = ({ toggleSidebar, userRole, onExportData, onImportData, onResetData, onOpenUserManagement, onLogout, syncStatus }) => {
+export const Header: React.FC<HeaderProps> = ({ toggleSidebar, userRole, onExportData, onImportData, onResetData, onOpenUserManagement, onLogout, onOpenInvoiceReader, syncStatus }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
     return (
         <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 md:px-6">
@@ -68,6 +69,17 @@ export const Header: React.FC<HeaderProps> = ({ toggleSidebar, userRole, onExpor
                     </div>
                 )}
                 <div className="flex items-center space-x-3">
+                    {onOpenInvoiceReader && (
+                        <button
+                            onClick={onOpenInvoiceReader}
+                            title="Importar factura o archivo"
+                            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.586-6.586a4 4 0 00-5.656-5.656l-6.586 6.586a6 6 0 108.486 8.486L20.5 13" />
+                            </svg>
+                        </button>
+                    )}
                     <div className="hidden md:flex flex-col items-end">
                         <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest leading-none mb-1">
                             {userRole === UserRole.OWNER ? 'Admin' : 'Operativo'}
