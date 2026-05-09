@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { parseDocument, ParsedRow } from '../services/documentParserService';
+import { parseDocument, parseTextContent, ParsedRow } from '../services/documentParserService';
 import { Item, InventoryType } from '../types';
 
 interface InvoiceReaderModalProps {
@@ -9,11 +9,14 @@ interface InvoiceReaderModalProps {
 }
 
 type Step = 'upload' | 'review' | 'done';
+type InputMode = 'file' | 'text';
 
-const ACCEPTED = '.pdf,.jpg,.jpeg,.png,.webp,.bmp,.txt,.csv,.xlsx,.xls';
+const ACCEPTED = '.pdf,.docx,.jpg,.jpeg,.png,.webp,.bmp,.txt,.csv,.xlsx,.xls';
 
 export const InvoiceReaderModal: React.FC<InvoiceReaderModalProps> = ({ isOpen, onClose, onImport }) => {
     const [step, setStep] = useState<Step>('upload');
+    const [inputMode, setInputMode] = useState<InputMode>('file');
+    const [pasteText, setPasteText] = useState('');
     const [progress, setProgress] = useState(0);
     const [progressMsg, setProgressMsg] = useState('');
     const [rawText, setRawText] = useState('');
@@ -24,6 +27,7 @@ export const InvoiceReaderModal: React.FC<InvoiceReaderModalProps> = ({ isOpen, 
 
     const reset = () => {
         setStep('upload');
+        setPasteText('');
         setProgress(0);
         setProgressMsg('');
         setRawText('');
@@ -64,6 +68,16 @@ export const InvoiceReaderModal: React.FC<InvoiceReaderModalProps> = ({ isOpen, 
         setIsDragging(false);
         const file = e.dataTransfer.files?.[0];
         if (file) processFile(file);
+    };
+
+    const handlePasteProcess = () => {
+        if (!pasteText.trim()) return;
+        setError('');
+        const result = parseTextContent(pasteText);
+        setRawText(result.rawText);
+        setRows(result.rows.map(r => ({ ...r, selected: true })));
+        setStep('review');
+        setProgress(100);
     };
 
     const updateRow = (idx: number, field: keyof ParsedRow, value: string | number) => {
@@ -111,36 +125,77 @@ export const InvoiceReaderModal: React.FC<InvoiceReaderModalProps> = ({ isOpen, 
                 <div className="flex-1 overflow-auto p-6">
                     {/* STEP: UPLOAD */}
                     {step === 'upload' && (
-                        <div className="flex flex-col items-center justify-center h-full min-h-[300px]">
-                            <div
-                                onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
-                                onDragLeave={() => setIsDragging(false)}
-                                onDrop={handleDrop}
-                                onClick={() => fileInputRef.current?.click()}
-                                className={`w-full max-w-xl border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-blue-400 hover:bg-gray-50'}`}
-                            >
-                                <svg className="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
-                                </svg>
-                                <p className="text-lg font-semibold text-gray-700 mb-1">Arrastra tu archivo aquí</p>
-                                <p className="text-sm text-gray-500 mb-3">o haz clic para seleccionar</p>
-                                <div className="flex flex-wrap gap-1.5 justify-center">
-                                    {['PDF', 'JPG/PNG', 'Excel', 'CSV', 'TXT'].map(fmt => (
-                                        <span key={fmt} className="px-2.5 py-1 bg-gray-100 text-gray-600 text-xs font-bold rounded-full">{fmt}</span>
-                                    ))}
-                                </div>
-                                <input ref={fileInputRef} type="file" accept={ACCEPTED} onChange={handleFileInput} className="hidden" />
+                        <div className="flex flex-col items-center h-full min-h-[300px]">
+                            {/* Tabs */}
+                            <div className="flex gap-1 bg-gray-100 p-1 rounded-xl mb-6 w-full max-w-xl">
+                                <button
+                                    onClick={() => setInputMode('file')}
+                                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold transition-all ${inputMode === 'file' ? 'bg-white shadow text-gray-800' : 'text-gray-500 hover:text-gray-700'}`}
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.586-6.586a4 4 0 00-5.656-5.656l-6.586 6.586a6 6 0 108.486 8.486L20.5 13"/></svg>
+                                    Subir archivo
+                                </button>
+                                <button
+                                    onClick={() => setInputMode('text')}
+                                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold transition-all ${inputMode === 'text' ? 'bg-white shadow text-gray-800' : 'text-gray-500 hover:text-gray-700'}`}
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                    Pegar texto
+                                </button>
                             </div>
+
+                            {inputMode === 'file' ? (
+                                <>
+                                    <div
+                                        onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+                                        onDragLeave={() => setIsDragging(false)}
+                                        onDrop={handleDrop}
+                                        onClick={() => fileInputRef.current?.click()}
+                                        className={`w-full max-w-xl border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-blue-400 hover:bg-gray-50'}`}
+                                    >
+                                        <svg className="w-10 h-10 text-gray-400 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                                        </svg>
+                                        <p className="text-base font-semibold text-gray-700 mb-1">Arrastra tu archivo aquí</p>
+                                        <p className="text-sm text-gray-500 mb-3">o haz clic para seleccionar</p>
+                                        <div className="flex flex-wrap gap-1.5 justify-center">
+                                            {['PDF', 'DOCX', 'JPG/PNG', 'Excel', 'CSV', 'TXT'].map(fmt => (
+                                                <span key={fmt} className="px-2.5 py-1 bg-gray-100 text-gray-600 text-xs font-bold rounded-full">{fmt}</span>
+                                            ))}
+                                        </div>
+                                        <input ref={fileInputRef} type="file" accept={ACCEPTED} onChange={handleFileInput} className="hidden" />
+                                    </div>
+                                    <p className="mt-4 text-xs text-gray-400 max-w-md text-center">
+                                        <strong>Imágenes:</strong> OCR automático. Primera vez descarga ~4 MB (se cachea).
+                                    </p>
+                                </>
+                            ) : (
+                                <div className="w-full max-w-xl flex flex-col gap-3">
+                                    <textarea
+                                        value={pasteText}
+                                        onChange={e => setPasteText(e.target.value)}
+                                        placeholder={"Pega aquí tu lista de productos. Ejemplos:\n\nCemento gris 50 bolsas\nTornillos 3/4 200 und\nGuantes talla M 12 par\n\nO simplemente una lista de nombres, uno por línea."}
+                                        className="w-full h-52 border border-gray-200 rounded-xl p-4 text-sm font-mono text-gray-800 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        autoFocus
+                                    />
+                                    <button
+                                        onClick={handlePasteProcess}
+                                        disabled={!pasteText.trim()}
+                                        className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold rounded-xl transition-all"
+                                    >
+                                        Procesar texto →
+                                    </button>
+                                    <p className="text-xs text-gray-400 text-center">
+                                        El sistema detecta cantidades y unidades automáticamente. Puedes corregir antes de importar.
+                                    </p>
+                                </div>
+                            )}
 
                             {error && (
                                 <div className="mt-4 bg-red-50 border border-red-200 text-red-700 text-sm p-3 rounded-xl max-w-xl w-full">
                                     {error}
                                 </div>
                             )}
-
-                            <div className="mt-6 text-xs text-gray-400 max-w-md text-center">
-                                <strong>Nota sobre imágenes:</strong> El OCR funciona mejor con fotos nítidas y bien iluminadas. La primera vez descarga ~4 MB de datos de idioma (solo una vez).
-                            </div>
                         </div>
                     )}
 

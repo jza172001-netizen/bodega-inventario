@@ -3,7 +3,7 @@
  * Parsea facturas/documentos de inventario localmente en el navegador.
  * Sin API keys. Sin llamadas externas.
  *
- * Soporta: PDF, JPG/PNG (OCR), TXT, CSV, XLSX/XLS
+ * Soporta: PDF, JPG/PNG (OCR), TXT, DOCX, CSV, XLSX/XLS, texto directo
  */
 
 export interface ParsedRow {
@@ -13,6 +13,11 @@ export interface ParsedRow {
 }
 
 export type ParseProgress = (pct: number, message: string) => void;
+
+/** Parsea texto pegado directamente (sin archivo) */
+export function parseTextContent(text: string): { rows: ParsedRow[]; rawText: string } {
+    return { rawText: text.trim(), rows: extractProductLines(text) };
+}
 
 export async function parseDocument(
     file: File,
@@ -29,10 +34,13 @@ export async function parseDocument(
     if (ext === 'txt') {
         return parsePlainText(file);
     }
+    if (ext === 'docx') {
+        return parseDocx(file, onProgress);
+    }
     if (['xlsx', 'xls', 'csv'].includes(ext)) {
         return parseSpreadsheet(file, onProgress);
     }
-    throw new Error(`Formato "${ext}" no soportado. Usa PDF, JPG, PNG, TXT, CSV o XLSX.`);
+    throw new Error(`Formato "${ext}" no soportado. Usa PDF, DOCX, JPG, PNG, TXT, CSV o XLSX.`);
 }
 
 // ─── PDF ─────────────────────────────────────────────────────────────────────
@@ -102,6 +110,18 @@ async function parseImage(file: File, onProgress?: ParseProgress): Promise<{ row
 async function parsePlainText(file: File): Promise<{ rows: ParsedRow[]; rawText: string }> {
     const text = await file.text();
     return { rawText: text.trim(), rows: extractProductLines(text) };
+}
+
+// ─── WORD (.docx) ────────────────────────────────────────────────────────────
+
+async function parseDocx(file: File, onProgress?: ParseProgress): Promise<{ rows: ParsedRow[]; rawText: string }> {
+    onProgress?.(20, 'Leyendo documento Word…');
+    const mammoth = await import('mammoth');
+    const arrayBuffer = await file.arrayBuffer();
+    onProgress?.(60, 'Extrayendo texto…');
+    const result = await mammoth.extractRawText({ arrayBuffer });
+    onProgress?.(90, 'Extrayendo productos…');
+    return { rawText: result.value.trim(), rows: extractProductLines(result.value) };
 }
 
 // ─── EXCEL / CSV ──────────────────────────────────────────────────────────────
