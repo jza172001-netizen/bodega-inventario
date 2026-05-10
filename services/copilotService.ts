@@ -109,8 +109,56 @@ export interface ParsedExit {
     movements: PendingMovement[];
     matchedProject: Project | null;
     projectCandidates: Project[];
+    rawProject: string;
     matchedPersonnel: Personnel | null;
     personnelCandidates: Personnel[];
+    rawPersonnel: string;
+}
+
+// ─── CREATION INTENT ─────────────────────────────────────────────────────────
+
+export type CreationIntent =
+    | { type: 'project'; name: string }
+    | { type: 'personnel'; name: string }
+    | { type: 'item'; name: string; inventoryType?: InventoryType; unit: string };
+
+const CREATION_VERBS = /(?:crea|cre[aá]r?|a[ñn]ade|agrega|registra|nuevo|nueva|a[ñn]adir|agregar)\s+/i;
+
+export function parseCreationIntent(text: string): CreationIntent | null {
+    if (!CREATION_VERBS.test(text)) return null;
+
+    const t = text.replace(CREATION_VERBS, '').trim();
+
+    const projM = t.match(/^(?:el\s+|la\s+)?proyecto\s+(.+)/i);
+    if (projM) return { type: 'project', name: projM[1].trim() };
+
+    const persM = t.match(/^(?:el\s+|al?\s+)?(?:trabajador|operario|empleado|personal)\s+(.+)/i);
+    if (persM) return { type: 'personnel', name: persM[1].trim() };
+
+    const itemM = t.match(/^(?:el\s+|la\s+|un\s+|una\s+)?(?:[íi]tem|material|herramienta|elemento|producto|insumo|equipo)\s+(.+)/i);
+    if (itemM) {
+        const name = itemM[1].trim();
+        return { type: 'item', name, inventoryType: guessInventoryType(name), unit: guessUnit(name) };
+    }
+
+    return null;
+}
+
+function guessInventoryType(name: string): InventoryType | undefined {
+    const n = name.toLowerCase();
+    if (/taladro|esmeril|sierra|amoladora|compresor|vibrador|pulidora/.test(n)) return InventoryType.ELECTRICAL_TOOL;
+    if (/llave|martillo|destornillador|alicate|cincel|pala|serrucho|palustre/.test(n)) return InventoryType.HAND_TOOL;
+    if (/casco|guante|gafa|arnés|chaleco|tapaoido|botas?\s+de\s+seguridad|overol/.test(n)) return InventoryType.PPE;
+    return undefined;
+}
+
+function guessUnit(name: string): string {
+    const n = name.toLowerCase();
+    if (/metro|tuber|cable|manguera/.test(n)) return 'm';
+    if (/bolsa|saco|bulto/.test(n)) return 'bolsa';
+    if (/litro|galón|galon/.test(n)) return 'lt';
+    if (/kg|kilo/.test(n)) return 'kg';
+    return 'und';
 }
 
 const EXIT_VERBS = /\b(saq[uú][eé]|sali[oó]|salio|sacamos|sacaron|llev[oó]|llevamos|retir[eé]|retire|retiramos|gastamos|gast[oó]|us[eé]|usamos|entreg[oó]|entregamos|salida[s]?)\b/i;
@@ -179,7 +227,7 @@ export function parseExitIntent(
     personnel: Personnel[]
 ): ParsedExit {
     if (!EXIT_VERBS.test(text)) {
-        return { isExitIntent: false, movements: [], matchedProject: null, projectCandidates: [], matchedPersonnel: null, personnelCandidates: [] };
+        return { isExitIntent: false, movements: [], matchedProject: null, projectCandidates: [], rawProject: '', matchedPersonnel: null, personnelCandidates: [], rawPersonnel: '' };
     }
 
     let body = text;
@@ -226,7 +274,9 @@ export function parseExitIntent(
         movements,
         matchedProject: projResult.matched,
         projectCandidates: projResult.candidates,
+        rawProject,
         matchedPersonnel: persResult.matched,
         personnelCandidates: persResult.candidates,
+        rawPersonnel: rawPerson,
     };
 }

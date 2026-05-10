@@ -173,6 +173,13 @@ const App: React.FC = () => {
         withSync(db.addItem(i).then(created => setItems(prev => prev.map(x => x.id === newItem.id ? created : x))));
     };
 
+    const handleAddItemSync = (i: Omit<Item, 'id'>): Item => {
+        const newItem = { ...i, id: `i-${Date.now()}` };
+        setItems(prev => [...prev, newItem]);
+        withSync(db.addItem(i).then(created => setItems(prev => prev.map(x => x.id === newItem.id ? created : x))));
+        return newItem;
+    };
+
     const handleEditItem = (updated: Item) => {
         setItems(prev => prev.map(i => i.id === updated.id ? updated : i));
         withSync(db.updateItem(updated));
@@ -218,6 +225,13 @@ const App: React.FC = () => {
         withSync(db.addPersonnel(p).then(created => setPersonnel(prev => prev.map(x => x.id === newP.id ? created : x))));
     };
 
+    const handleAddPersonnelSync = (p: Omit<Personnel, 'id'>): Personnel => {
+        const newP = { ...p, id: `per-${Date.now()}` };
+        setPersonnel(prev => [...prev, newP]);
+        withSync(db.addPersonnel(p).then(created => setPersonnel(prev => prev.map(x => x.id === newP.id ? created : x))));
+        return newP;
+    };
+
     const handleEditPersonnel = (p: Personnel) => {
         setPersonnel(prev => prev.map(pers => pers.id === p.id ? p : pers));
         withSync(db.updatePersonnel(p));
@@ -234,6 +248,13 @@ const App: React.FC = () => {
         const newP = { ...p, id: `p-${Date.now()}` };
         setProjects(prev => [...prev, newP]);
         withSync(db.addProject(p).then(created => setProjects(prev => prev.map(x => x.id === newP.id ? created : x))));
+    };
+
+    const handleAddProjectSync = (p: Omit<Project, 'id'>): Project => {
+        const newP = { ...p, id: `p-${Date.now()}` };
+        setProjects(prev => [...prev, newP]);
+        withSync(db.addProject(p).then(created => setProjects(prev => prev.map(x => x.id === newP.id ? created : x))));
+        return newP;
     };
 
     const handleDeleteProject = (id: string) => {
@@ -411,6 +432,9 @@ const App: React.FC = () => {
                                 purchaseOrders={purchaseOrders}
                                 projects={projects}
                                 onLogMovements={batch => batch.forEach(m => handleLogMovement(m))}
+                                onCreateItem={handleAddItemSync}
+                                onCreateProject={handleAddProjectSync}
+                                onCreatePersonnel={handleAddPersonnelSync}
                             />
                         )}
                     </div>
