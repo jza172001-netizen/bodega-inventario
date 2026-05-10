@@ -1,228 +1,305 @@
-import React, { useState } from 'react';
-import { Item, Movement, Personnel, PurchaseOrder, MovementType, PurchaseOrderStatus } from '../types';
+import React, { useState, useRef, useEffect } from 'react';
+import { Item, Movement, Personnel, PurchaseOrder, MovementType, PurchaseOrderStatus, Project } from '../types';
 import { generateInventoryAnalysis } from '../services/geminiService';
+import { askCopilot, parseExitIntent, ParsedExit, PendingMovement } from '../services/copilotService';
 
 interface CopilotViewProps {
     items: Item[];
     movements: Movement[];
     personnel: Personnel[];
     purchaseOrders: PurchaseOrder[];
+    projects: Project[];
+    onLogMovements: (movements: Array<Omit<Movement, 'id'>>) => void;
 }
 
-type ResultCard = { title: string; content: React.ReactNode };
+type ChatMsg = {
+    id: string;
+    role: 'user' | 'bot';
+    text: string;
+    parsedExit?: ParsedExit;
+    confirmed?: boolean;
+};
 
-const CopilotView: React.FC<CopilotViewProps> = ({ items, movements, personnel, purchaseOrders }) => {
-    const [result, setResult] = useState<ResultCard | null>(null);
-    const [informe, setInforme] = useState<string>('');
-    const [loadingInforme, setLoadingInforme] = useState(false);
+const uid = () => Math.random().toString(36).slice(2);
+const days = (d: Date) => Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
 
-    const days = (d: Date) => Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
+const WELCOME = 'Hola 👋 Puedo ayudarte a registrar salidas de material con lenguaje natural.\n\nEjemplo: "saqué 30 tornillos 2 pulgadas y 2 taladros para proyecto torre 5, trabajador carlos"\n\nTambién puedo responder consultas sobre stock, préstamos, consumo y más.';
 
-    const actions = [
-        {
-            label: '📋 Órdenes de compra pendientes',
-            run: () => {
-                const pending = purchaseOrders.filter(o =>
-                    o.status === PurchaseOrderStatus.ORDERED || o.status === PurchaseOrderStatus.SHIPPED
-                );
-                setResult({
-                    title: 'Órdenes de compra pendientes',
-                    content: pending.length === 0
-                        ? <p className="text-gray-500">No hay órdenes pendientes.</p>
-                        : <ul className="divide-y divide-gray-100">
-                            {pending.map(o => (
-                                <li key={o.id} className="py-2 flex justify-between items-center">
-                                    <div>
-                                        <p className="font-semibold text-gray-800">{o.supplier}</p>
-                                        <p className="text-xs text-gray-500">{o.items.length} ítem(s) · {new Date(o.orderDate).toLocaleDateString('es-CO')}</p>
-                                    </div>
-                                    <span className={`text-xs font-bold px-2 py-1 rounded-full ${o.status === PurchaseOrderStatus.ORDERED ? 'bg-blue-100 text-blue-700' : 'bg-indigo-100 text-indigo-700'}`}>
-                                        {o.status}
-                                    </span>
-                                </li>
-                            ))}
-                        </ul>
-                });
-            }
-        },
-        {
-            label: '🔥 Material más consumido (30 días)',
-            run: () => {
-                const last30 = movements.filter(m => days(m.timestamp) <= 30 && m.type === MovementType.CHECK_OUT);
-                const totals: Record<string, number> = {};
-                last30.forEach(m => { totals[m.itemId] = (totals[m.itemId] || 0) + m.quantity; });
-                const top = Object.entries(totals)
-                    .sort((a, b) => b[1] - a[1])
-                    .slice(0, 8)
-                    .map(([id, qty]) => ({ item: items.find(i => i.id === id), qty }))
-                    .filter(x => x.item);
-                setResult({
-                    title: 'Material más consumido (últimos 30 días)',
-                    content: top.length === 0
-                        ? <p className="text-gray-500">Sin salidas en los últimos 30 días.</p>
-                        : <ul className="divide-y divide-gray-100">
-                            {top.map(({ item, qty }, i) => (
-                                <li key={item!.id} className="py-2 flex justify-between items-center">
-                                    <span className="text-gray-800">
-                                        <span className="font-bold text-blue-600 mr-2">#{i + 1}</span>
-                                        {item!.name}
-                                    </span>
-                                    <span className="font-semibold text-red-600">{qty} {item!.unit}</span>
-                                </li>
-                            ))}
-                        </ul>
-                });
-            }
-        },
-        {
-            label: '🕒 Últimos 10 movimientos',
-            run: () => {
-                const last10 = [...movements]
-                    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-                    .slice(0, 10);
-                setResult({
-                    title: 'Últimos 10 movimientos',
-                    content: last10.length === 0
-                        ? <p className="text-gray-500">No hay movimientos registrados.</p>
-                        : <ul className="divide-y divide-gray-100">
-                            {last10.map(m => {
-                                const item = items.find(i => i.id === m.itemId);
-                                const person = personnel.find(p => p.id === m.personnelId);
-                                return (
-                                    <li key={m.id} className="py-2">
-                                        <div className="flex justify-between items-start">
-                                            <div>
-                                                <p className="font-semibold text-gray-800 text-sm">{item?.name ?? 'Ítem eliminado'}</p>
-                                                <p className="text-xs text-gray-500">{person?.name ?? '—'} · {new Date(m.timestamp).toLocaleDateString('es-CO')}</p>
-                                            </div>
-                                            <span className={`text-xs font-bold px-2 py-1 rounded-full ${m.type === MovementType.CHECK_OUT || m.type === MovementType.WASTE ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-                                                {m.type} {m.quantity} {item?.unit}
-                                            </span>
-                                        </div>
-                                    </li>
-                                );
-                            })}
-                        </ul>
-                });
-            }
-        },
-        {
-            label: '🚨 Stock bajo mínimo',
-            run: () => {
-                const bajo = items.filter(i => i.quantity <= i.minStock);
-                setResult({
-                    title: 'Ítems con stock bajo mínimo',
-                    content: bajo.length === 0
-                        ? <p className="text-green-600 font-semibold">✅ Todo el inventario está por encima del mínimo.</p>
-                        : <ul className="divide-y divide-gray-100">
-                            {bajo.map(i => (
-                                <li key={i.id} className="py-2 flex justify-between items-center">
-                                    <div>
-                                        <p className="font-semibold text-gray-800">{i.name}</p>
-                                        <p className="text-xs text-gray-500">{i.category}</p>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className={`font-bold text-sm ${i.quantity === 0 ? 'text-red-600' : 'text-orange-500'}`}>
-                                            {i.quantity === 0 ? '🔴 AGOTADO' : `🟠 ${i.quantity} ${i.unit}`}
-                                        </p>
-                                        <p className="text-xs text-gray-400">mín: {i.minStock} {i.unit}</p>
-                                    </div>
-                                </li>
-                            ))}
-                        </ul>
-                });
-            }
-        },
-        {
-            label: '🔑 Herramientas en préstamo',
-            run: () => {
-                const prestamos = movements.filter(m => m.isLoan && !m.isReturned);
-                setResult({
-                    title: 'Herramientas actualmente en préstamo',
-                    content: prestamos.length === 0
-                        ? <p className="text-green-600 font-semibold">✅ No hay herramientas en préstamo.</p>
-                        : <ul className="divide-y divide-gray-100">
-                            {prestamos.map(m => {
-                                const item = items.find(i => i.id === m.itemId);
-                                const person = personnel.find(p => p.id === m.personnelId);
-                                const diasFuera = days(m.timestamp);
-                                return (
-                                    <li key={m.id} className="py-2 flex justify-between items-center">
-                                        <div>
-                                            <p className="font-semibold text-gray-800">{item?.name ?? '—'}</p>
-                                            <p className="text-xs text-gray-500">Responsable: {person?.name ?? 'Sin asignar'}</p>
-                                        </div>
-                                        <span className={`text-xs font-bold px-2 py-1 rounded-full ${diasFuera > 7 ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                                            {diasFuera}d fuera
-                                        </span>
-                                    </li>
-                                );
-                            })}
-                        </ul>
-                });
-            }
-        },
-    ];
+const CopilotView: React.FC<CopilotViewProps> = ({ items, movements, personnel, purchaseOrders, projects, onLogMovements }) => {
+    const [messages, setMessages] = useState<ChatMsg[]>([
+        { id: uid(), role: 'bot', text: WELCOME }
+    ]);
+    const [input, setInput] = useState('');
+    const [loading, setLoading] = useState(false);
+    // per-message candidate selections: msgId → movIdx → itemId
+    const [selections, setSelections] = useState<Record<string, Record<number, string>>>({});
+    const bottomRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLTextAreaElement>(null);
 
-    const handleGenerarInforme = async () => {
-        setLoadingInforme(true);
-        setResult(null);
-        setInforme('');
-        try {
-            const texto = await generateInventoryAnalysis(items, movements);
-            setInforme(texto);
-        } catch {
-            setInforme('Error generando el informe.');
-        } finally {
-            setLoadingInforme(false);
-        }
+    useEffect(() => {
+        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [messages]);
+
+    const addBot = (text: string, parsedExit?: ParsedExit) => {
+        setMessages(prev => [...prev, { id: uid(), role: 'bot', text, parsedExit }]);
     };
 
+    const handleSend = async (text: string) => {
+        const trimmed = text.trim();
+        if (!trimmed) return;
+        const msgId = uid();
+        setMessages(prev => [...prev, { id: msgId, role: 'user', text: trimmed }]);
+        setInput('');
+        setLoading(true);
+
+        const parsed = parseExitIntent(trimmed, items, projects, personnel);
+        if (parsed.isExitIntent) {
+            const allUnknown = parsed.movements.every(m => !m.matchedItem && !m.candidates.length);
+            if (parsed.movements.length === 0 || allUnknown) {
+                addBot('No pude identificar ningún material en tu mensaje. Intenta ser más específico con el nombre, por ejemplo: "saqué 5 cascos de seguridad".');
+            } else {
+                addBot('', parsed);
+            }
+        } else {
+            const ctx = { items, movements, personnel, purchaseOrders };
+            if (/informe|reporte|análisis completo/i.test(trimmed)) {
+                try {
+                    const txt = await generateInventoryAnalysis(items, movements);
+                    addBot(txt);
+                } catch {
+                    addBot('Error generando el informe.');
+                }
+            } else {
+                const resp = await askCopilot(trimmed, ctx);
+                addBot(resp);
+            }
+        }
+        setLoading(false);
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(input); }
+    };
+
+    const handleConfirm = (msg: ChatMsg) => {
+        const exit = msg.parsedExit!;
+        const sel = selections[msg.id] ?? {};
+
+        const toLog: Array<Omit<Movement, 'id'>> = exit.movements.map((pm, idx) => {
+            const item = pm.matchedItem ?? (sel[idx] ? items.find(i => i.id === sel[idx]) ?? null : null);
+            if (!item) return null;
+            return {
+                itemId: item.id,
+                type: MovementType.CHECK_OUT,
+                quantity: pm.quantity,
+                timestamp: new Date(),
+                personnelId: exit.matchedPersonnel?.id,
+                projectId: exit.matchedProject?.id,
+                notes: '',
+                isLoan: false,
+                isReturned: false,
+            };
+        }).filter(Boolean) as Array<Omit<Movement, 'id'>>;
+
+        if (toLog.length === 0) { addBot('No hay materiales confirmados para registrar.'); return; }
+
+        onLogMovements(toLog);
+        setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, confirmed: true } : m));
+        addBot(`✅ Registradas ${toLog.length} salida(s) correctamente.`);
+    };
+
+    const handleCancel = (msgId: string) => {
+        setMessages(prev => prev.map(m => m.id === msgId ? { ...m, confirmed: true } : m));
+        addBot('Cancelado. Puedes volver a intentarlo cuando quieras.');
+    };
+
+    const setSelection = (msgId: string, movIdx: number, itemId: string) => {
+        setSelections(prev => ({ ...prev, [msgId]: { ...(prev[msgId] ?? {}), [movIdx]: itemId } }));
+    };
+
+    const QUICK = [
+        { label: '📦 Stock bajo', q: 'Que materiales tienen stock bajo?' },
+        { label: '🔑 Préstamos activos', q: 'Que herramientas estan prestadas?' },
+        { label: '🔥 Más consumidos', q: 'Cuales son los mas consumidos?' },
+        { label: '🕒 Últimos movimientos', q: 'Muestra los ultimos movimientos' },
+        { label: '🛒 Órdenes pendientes', q: 'Ordenes de compra pendientes?' },
+        { label: '📊 Informe completo', q: 'Generar informe completo' },
+    ];
+
     return (
-        <div className="space-y-6">
-            <div>
-                <h1 className="text-2xl font-black text-gray-800">Análisis de Bodega</h1>
-                <p className="text-gray-500 text-sm mt-1">Consultas rápidas sobre tu inventario en tiempo real.</p>
+        <div className="flex flex-col h-full max-h-[calc(100vh-9rem)]">
+            <div className="mb-4">
+                <h1 className="text-2xl font-black text-gray-800">Asistente de Bodega</h1>
+                <p className="text-gray-500 text-sm mt-0.5">Registra salidas en lenguaje natural o consulta el inventario.</p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {actions.map(a => (
-                    <button
-                        key={a.label}
-                        onClick={() => { setInforme(''); a.run(); }}
-                        className="text-left bg-white border border-gray-200 hover:border-blue-400 hover:shadow-md rounded-xl px-4 py-4 transition-all duration-150 text-sm font-semibold text-gray-700 hover:text-blue-700"
-                    >
-                        {a.label}
+            {/* Quick actions */}
+            <div className="flex flex-wrap gap-2 mb-4">
+                {QUICK.map(q => (
+                    <button key={q.q} onClick={() => handleSend(q.q)}
+                        className="px-3 py-1.5 bg-white border border-gray-200 hover:border-blue-400 hover:bg-blue-50 text-gray-600 hover:text-blue-700 rounded-full text-xs font-semibold transition-all">
+                        {q.label}
                     </button>
                 ))}
-                <button
-                    onClick={handleGenerarInforme}
-                    disabled={loadingInforme}
-                    className="text-left bg-blue-600 hover:bg-blue-700 disabled:opacity-60 rounded-xl px-4 py-4 transition-all duration-150 text-sm font-semibold text-white"
-                >
-                    {loadingInforme ? '⏳ Generando informe...' : '📊 Generar informe completo'}
-                </button>
             </div>
 
-            {result && (
-                <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-                    <div className="flex justify-between items-center mb-3">
-                        <h2 className="text-base font-bold text-gray-800">{result.title}</h2>
-                        <button onClick={() => setResult(null)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
+            {/* Chat area */}
+            <div className="flex-1 overflow-y-auto bg-white rounded-2xl border border-gray-200 shadow-sm p-4 space-y-4 min-h-[250px]">
+                {messages.map(msg => (
+                    <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        {msg.parsedExit && !msg.confirmed ? (
+                            <ExitConfirmCard
+                                exit={msg.parsedExit}
+                                items={items}
+                                sel={selections[msg.id] ?? {}}
+                                onSelect={(idx, id) => setSelection(msg.id, idx, id)}
+                                onConfirm={() => handleConfirm(msg)}
+                                onCancel={() => handleCancel(msg.id)}
+                            />
+                        ) : (
+                            <div className={`max-w-[85%] px-4 py-2.5 rounded-2xl text-sm whitespace-pre-wrap leading-relaxed ${
+                                msg.role === 'user'
+                                    ? 'bg-blue-600 text-white rounded-br-sm'
+                                    : 'bg-gray-100 text-gray-800 rounded-bl-sm'
+                            }`}>
+                                {msg.text}
+                            </div>
+                        )}
                     </div>
-                    {result.content}
+                ))}
+                {loading && (
+                    <div className="flex justify-start">
+                        <div className="bg-gray-100 rounded-2xl rounded-bl-sm px-4 py-3 flex gap-1.5 items-center">
+                            {[0,1,2].map(i => <span key={i} className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: `${i*0.15}s` }} />)}
+                        </div>
+                    </div>
+                )}
+                <div ref={bottomRef} />
+            </div>
+
+            {/* Input */}
+            <div className="mt-3 flex gap-2 items-end">
+                <textarea
+                    ref={inputRef}
+                    value={input}
+                    onChange={e => setInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder='Escribe "saqué 5 cascos y 2 taladros para proyecto X, trabajador Y" o cualquier consulta…'
+                    rows={2}
+                    className="flex-1 resize-none border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <button
+                    onClick={() => handleSend(input)}
+                    disabled={!input.trim() || loading}
+                    className="h-[3.5rem] px-5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold rounded-xl transition-all flex-shrink-0"
+                >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                    </svg>
+                </button>
+            </div>
+            <p className="text-[10px] text-gray-400 mt-1.5 text-center">Enter para enviar · Shift+Enter para nueva línea</p>
+        </div>
+    );
+};
+
+// ─── ExitConfirmCard ──────────────────────────────────────────────────────────
+
+interface ExitConfirmCardProps {
+    exit: ParsedExit;
+    items: Item[];
+    sel: Record<number, string>;
+    onSelect: (idx: number, itemId: string) => void;
+    onConfirm: () => void;
+    onCancel: () => void;
+}
+
+const ExitConfirmCard: React.FC<ExitConfirmCardProps> = ({ exit, items, sel, onSelect, onConfirm, onCancel }) => {
+    const canConfirm = exit.movements.some(pm => pm.matchedItem || sel[exit.movements.indexOf(pm)]);
+
+    return (
+        <div className="w-full max-w-[90%] bg-white border border-blue-200 rounded-2xl rounded-bl-sm shadow-md p-4">
+            <p className="text-xs font-black text-blue-500 uppercase tracking-widest mb-3">📋 Confirmar salidas</p>
+
+            <div className="space-y-2 mb-4">
+                {exit.movements.map((pm, idx) => (
+                    <MovementRow key={idx} pm={pm} idx={idx} items={items} sel={sel} onSelect={onSelect} />
+                ))}
+            </div>
+
+            {(exit.matchedProject || exit.matchedPersonnel) && (
+                <div className="flex flex-wrap gap-3 mb-4 text-xs">
+                    {exit.matchedProject && (
+                        <span className="flex items-center gap-1 text-gray-600 bg-gray-50 px-3 py-1 rounded-full border border-gray-200">
+                            📌 <span className="font-semibold">{exit.matchedProject.name}</span>
+                        </span>
+                    )}
+                    {exit.matchedPersonnel && (
+                        <span className="flex items-center gap-1 text-gray-600 bg-gray-50 px-3 py-1 rounded-full border border-gray-200">
+                            👤 <span className="font-semibold">{exit.matchedPersonnel.name}</span>
+                        </span>
+                    )}
                 </div>
             )}
 
-            {informe && (
-                <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-                    <div className="flex justify-between items-center mb-3">
-                        <h2 className="text-base font-bold text-gray-800">Informe completo</h2>
-                        <button onClick={() => setInforme('')} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
-                    </div>
-                    <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono leading-relaxed overflow-auto max-h-[60vh]">{informe}</pre>
-                </div>
+            {exit.projectCandidates.length > 0 && (
+                <p className="text-xs text-amber-600 mb-2">⚠️ Proyecto no encontrado exactamente.</p>
             )}
+
+            <div className="flex gap-2">
+                <button
+                    onClick={onConfirm}
+                    disabled={!canConfirm}
+                    className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold rounded-xl text-sm transition-all"
+                >
+                    ✅ Confirmar y registrar
+                </button>
+                <button onClick={onCancel} className="px-4 py-2 border border-gray-200 text-gray-500 hover:bg-gray-50 rounded-xl text-sm font-semibold">
+                    ✕
+                </button>
+            </div>
+        </div>
+    );
+};
+
+const MovementRow: React.FC<{
+    pm: PendingMovement;
+    idx: number;
+    items: Item[];
+    sel: Record<number, string>;
+    onSelect: (idx: number, id: string) => void;
+}> = ({ pm, idx, items, sel, onSelect }) => {
+    const chosen = pm.matchedItem ?? (sel[idx] ? items.find(i => i.id === sel[idx]) ?? null : null);
+
+    return (
+        <div className="flex items-start gap-3 p-2 rounded-xl bg-gray-50">
+            <span className={`mt-0.5 w-4 h-4 rounded-full flex-shrink-0 ${chosen ? 'bg-green-400' : pm.candidates.length ? 'bg-amber-400' : 'bg-red-300'}`} />
+            <div className="flex-1 min-w-0">
+                <div className="flex items-baseline gap-2">
+                    <span className="text-sm font-black text-gray-700">{pm.quantity}</span>
+                    <span className="text-sm text-gray-500 italic truncate">"{pm.rawName}"</span>
+                </div>
+                {chosen ? (
+                    <p className="text-xs text-green-700 font-semibold mt-0.5">→ {chosen.name}</p>
+                ) : pm.candidates.length > 0 ? (
+                    <div className="mt-1">
+                        <p className="text-xs text-amber-600 mb-1">¿Cuál de estos?</p>
+                        <div className="flex flex-wrap gap-1">
+                            {pm.candidates.map(c => (
+                                <button
+                                    key={c.id}
+                                    onClick={() => onSelect(idx, c.id)}
+                                    className={`text-xs px-2 py-0.5 rounded-full border transition-all ${sel[idx] === c.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'}`}
+                                >
+                                    {c.name}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                ) : (
+                    <p className="text-xs text-red-500 mt-0.5">No encontrado en inventario</p>
+                )}
+            </div>
         </div>
     );
 };
