@@ -18,6 +18,7 @@ import { UserManagementModal } from './components/UserManagementModal';
 import CopilotView from './components/CopilotView';
 import { OnboardingModal } from './components/OnboardingModal';
 import { HelpView } from './components/HelpView';
+import { requestNotificationPermission, checkAndNotifyOverdueLoans } from './services/notificationService';
 
 import { mockItems, mockMovements, mockPersonnel, mockPurchaseOrders, mockProjects, mockUsers } from './mockData';
 import { Item, Movement, MovementType, Personnel, PurchaseOrder, UserRole, InventoryType, Project, AppUser, PurchaseOrderStatus } from './types';
@@ -67,6 +68,13 @@ const App: React.FC = () => {
 
     // Auto-save a localStorage en cada cambio (igual que antes)
     useEffect(() => { saveToLocalStorage({ items, movements, personnel, purchaseOrders, projects, users }); }, [items, movements, personnel, purchaseOrders, projects, users]);
+
+    // Revisar préstamos vencidos y pendientes de recoger cuando los datos estén listos
+    useEffect(() => {
+        if (isAuthenticated && movements.length > 0) {
+            checkAndNotifyOverdueLoans(movements, items, personnel);
+        }
+    }, [isAuthenticated, movements, items, personnel]);
 
     // Sync desde Supabase en background al montar (no bloquea la UI)
     useEffect(() => {
@@ -125,6 +133,7 @@ const App: React.FC = () => {
         if (!localStorage.getItem(ONBOARDING_KEY)) {
             setShowOnboarding(true);
         }
+        requestNotificationPermission();
     };
 
     const handleOnboardingFinish = () => {
@@ -229,6 +238,11 @@ const App: React.FC = () => {
     const handleReturnItem = (id: string) => {
         setMovements(prev => prev.map(m => m.id === id ? { ...m, isReturned: true } : m));
         withSync(db.markMovementReturned(id));
+    };
+
+    const handleMarkPendingPickup = (id: string, pending: boolean) => {
+        setMovements(prev => prev.map(m => m.id === id ? { ...m, pendingPickup: pending } : m));
+        withSync(db.markMovementPendingPickup(id, pending));
     };
 
     const handleAddPersonnel = (p: Omit<Personnel, 'id'>) => {
@@ -445,6 +459,7 @@ const App: React.FC = () => {
                                 items={items}
                                 personnel={personnel}
                                 onReturnItem={handleReturnItem}
+                                onMarkPendingPickup={handleMarkPendingPickup}
                                 onGoBack={() => selectView('dashboard')}
                             />
                         )}

@@ -63,8 +63,9 @@ export interface Movement {
     personnelId?: string;
     notes?: string;
     projectId?: string; // Link movement to a project
-    isLoan?: boolean;   // Track if this is a loan
-    isReturned?: boolean; // Track if the loan has been returned
+    isLoan?: boolean;
+    isReturned?: boolean;
+    pendingPickup?: boolean; // Herramienta quedó en otro lugar, pendiente de ir a buscar
 }
 
 export interface Personnel {

@@ -72,8 +72,9 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
         const totalSalidas = checkouts30d.reduce((s, m) => s + m.quantity, 0);
         const totalItems = items.length;
         const activeLoanCount = movements.filter(m => m.isLoan && !m.isReturned).length;
+        const pendingPickupCount = movements.filter(m => m.isLoan && !m.isReturned && m.pendingPickup).length;
         const lowStockItems = items.filter(i => i.quantity <= i.minStock && i.minStock > 0).length;
-        return { totalSalidas, totalItems, activeLoanCount, lowStockItems };
+        return { totalSalidas, totalItems, activeLoanCount, pendingPickupCount, lowStockItems };
     }, [items, movements, recentMovements]);
 
     // ── TOP 8 CONSUMIDOS ──────────────────────────────────────────────────────
@@ -245,6 +246,19 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                     <div className="mt-2 h-1 rounded-full bg-orange-100"><div className="h-1 rounded-full bg-orange-500" style={{ width: kpis.lowStockItems > 0 ? '70%' : '0%' }} /></div>
                 </div>
             </div>
+
+            {/* ── ALERTA: HERRAMIENTAS PENDIENTES DE RECOGER ── */}
+            {kpis.pendingPickupCount > 0 && (
+                <div className="bg-orange-50 border border-orange-300 rounded-2xl p-4 flex items-center gap-3">
+                    <span className="text-2xl">📍</span>
+                    <div>
+                        <p className="text-sm font-black text-orange-800">
+                            {kpis.pendingPickupCount} herramienta{kpis.pendingPickupCount > 1 ? 's' : ''} pendiente{kpis.pendingPickupCount > 1 ? 's' : ''} de recoger
+                        </p>
+                        <p className="text-xs text-orange-600 mt-0.5">Ir a Préstamos para ver el detalle y coordinar la recolección.</p>
+                    </div>
+                </div>
+            )}
 
             {/* ── FILA: TORTA + TOP CONSUMIDOS ── */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
