@@ -10,9 +10,6 @@ interface StatisticsViewProps {
     personnel?: Personnel[];
 }
 
-const formatCOP = (val: number) =>
-    new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(val);
-
 const timeAgo = (date: Date): string => {
     const mins = Math.floor((Date.now() - new Date(date).getTime()) / 60000);
     if (mins < 1) return 'ahora';
@@ -71,24 +68,15 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
 
     // ── KPIs ──────────────────────────────────────────────────────────────────
     const kpis = useMemo(() => {
-        const assetsValue = items.reduce((s, i) =>
-            (i.inventoryType === InventoryType.HAND_TOOL || i.inventoryType === InventoryType.ELECTRICAL_TOOL)
-                ? s + i.quantity * i.price : s, 0);
-        const inventoryValue = items.reduce((s, i) =>
-            (i.inventoryType === InventoryType.SINGLE_USE || i.inventoryType === InventoryType.PPE)
-                ? s + i.quantity * i.price : s, 0);
+        const checkouts30d = recentMovements.filter(m => m.type === MovementType.CHECK_OUT);
+        const totalSalidas = checkouts30d.reduce((s, m) => s + m.quantity, 0);
+        const totalItems = items.length;
+        const activeLoanCount = movements.filter(m => m.isLoan && !m.isReturned).length;
         const lowStockItems = items.filter(i => i.quantity <= i.minStock && i.minStock > 0).length;
-        const wasteValue = recentMovements
-            .filter(m => m.type === MovementType.WASTE)
-            .reduce((s, m) => {
-                const item = items.find(i => i.id === m.itemId);
-                return s + (item ? item.price * m.quantity : 0);
-            }, 0);
-        const totalMovements = recentMovements.length;
-        return { assetsValue, inventoryValue, lowStockItems, wasteValue, totalMovements };
-    }, [items, recentMovements]);
+        return { totalSalidas, totalItems, activeLoanCount, lowStockItems };
+    }, [items, movements, recentMovements]);
 
-    // ── TOP 5 CONSUMIDOS ──────────────────────────────────────────────────────
+    // ── TOP 8 CONSUMIDOS ──────────────────────────────────────────────────────
     const topConsumed = useMemo(() => {
         const totals: Record<string, number> = {};
         recentMovements
@@ -96,10 +84,41 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
             .forEach(m => { totals[m.itemId] = (totals[m.itemId] || 0) + m.quantity; });
         return Object.entries(totals)
             .sort((a, b) => b[1] - a[1])
-            .slice(0, 5)
+            .slice(0, 8)
             .map(([id, qty]) => ({ item: items.find(i => i.id === id), qty }))
             .filter(x => x.item);
     }, [recentMovements, items]);
+
+    // ── TORTA: salidas por tipo de inventario ─────────────────────────────────
+    const typeBreakdown = useMemo(() => {
+        const counts: Record<string, number> = {
+            [InventoryType.HAND_TOOL]: 0,
+            [InventoryType.ELECTRICAL_TOOL]: 0,
+            [InventoryType.PPE]: 0,
+            [InventoryType.SINGLE_USE]: 0,
+        };
+        recentMovements
+            .filter(m => m.type === MovementType.CHECK_OUT)
+            .forEach(m => {
+                const item = items.find(i => i.id === m.itemId);
+                if (item) counts[item.inventoryType] = (counts[item.inventoryType] || 0) + m.quantity;
+            });
+        const total = Object.values(counts).reduce((s, v) => s + v, 0);
+        const COLORS = [
+            { type: InventoryType.HAND_TOOL, color: '#3b82f6', label: 'H. Manual' },
+            { type: InventoryType.ELECTRICAL_TOOL, color: '#f59e0b', label: 'H. Eléctrica' },
+            { type: InventoryType.PPE, color: '#10b981', label: 'Seguridad' },
+            { type: InventoryType.SINGLE_USE, color: '#ef4444', label: 'Consumibles' },
+        ];
+        let cumPct = 0;
+        return COLORS.map(c => {
+            const qty = counts[c.type] || 0;
+            const pct = total > 0 ? (qty / total) * 100 : 0;
+            const from = cumPct;
+            cumPct += pct;
+            return { ...c, qty, pct, from };
+        }).filter(c => c.qty > 0);
+    }, [items, recentMovements]);
 
     // ── SALUD DEL STOCK ───────────────────────────────────────────────────────
     const stockHealth = useMemo(() => {
@@ -202,16 +221,22 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
             {/* ── KPI CARDS ── */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-1">
-                    <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Activos (Herramientas)</span>
-                    <span className="text-2xl font-black text-gray-800">{formatCOP(kpis.assetsValue)}</span>
-                    <span className="text-xs text-gray-400">{items.filter(i => i.inventoryType === InventoryType.HAND_TOOL || i.inventoryType === InventoryType.ELECTRICAL_TOOL).length} ítems</span>
+                    <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Salidas (30 días)</span>
+                    <span className="text-2xl font-black text-gray-800">{kpis.totalSalidas}</span>
+                    <span className="text-xs text-gray-400">unidades despachadas</span>
                     <div className="mt-2 h-1 rounded-full bg-blue-100"><div className="h-1 rounded-full bg-blue-500" style={{ width: '100%' }} /></div>
                 </div>
                 <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-1">
-                    <span className="text-[10px] font-black text-green-400 uppercase tracking-widest">Materiales en Bodega</span>
-                    <span className="text-2xl font-black text-gray-800">{formatCOP(kpis.inventoryValue)}</span>
-                    <span className="text-xs text-gray-400">{items.filter(i => i.inventoryType === InventoryType.SINGLE_USE || i.inventoryType === InventoryType.PPE).length} ítems</span>
+                    <span className="text-[10px] font-black text-green-400 uppercase tracking-widest">Ítems en inventario</span>
+                    <span className="text-2xl font-black text-gray-800">{kpis.totalItems}</span>
+                    <span className="text-xs text-gray-400">productos registrados</span>
                     <div className="mt-2 h-1 rounded-full bg-green-100"><div className="h-1 rounded-full bg-green-500" style={{ width: '100%' }} /></div>
+                </div>
+                <div className={`p-5 rounded-2xl shadow-sm border flex flex-col gap-1 ${kpis.activeLoanCount > 0 ? 'bg-yellow-50 border-yellow-200' : 'bg-white border-gray-100'}`}>
+                    <span className="text-[10px] font-black text-yellow-500 uppercase tracking-widest">Préstamos activos</span>
+                    <span className={`text-2xl font-black ${kpis.activeLoanCount > 0 ? 'text-yellow-600' : 'text-gray-800'}`}>{kpis.activeLoanCount}</span>
+                    <span className="text-xs text-gray-400">{kpis.activeLoanCount === 0 ? '✅ Todo devuelto' : 'herramientas fuera'}</span>
+                    <div className="mt-2 h-1 rounded-full bg-yellow-100"><div className="h-1 rounded-full bg-yellow-500" style={{ width: kpis.activeLoanCount > 0 ? '70%' : '0%' }} /></div>
                 </div>
                 <div className={`p-5 rounded-2xl shadow-sm border flex flex-col gap-1 ${kpis.lowStockItems > 0 ? 'bg-orange-50 border-orange-200' : 'bg-white border-gray-100'}`}>
                     <span className="text-[10px] font-black text-orange-400 uppercase tracking-widest">Stock Bajo / Agotado</span>
@@ -219,23 +244,45 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                     <span className="text-xs text-gray-400">{kpis.lowStockItems === 0 ? '✅ Todo OK' : '⚠️ Requiere atención'}</span>
                     <div className="mt-2 h-1 rounded-full bg-orange-100"><div className="h-1 rounded-full bg-orange-500" style={{ width: kpis.lowStockItems > 0 ? '70%' : '0%' }} /></div>
                 </div>
-                <div className={`p-5 rounded-2xl shadow-sm border flex flex-col gap-1 ${kpis.wasteValue > 0 ? 'bg-red-50 border-red-200' : 'bg-white border-gray-100'}`}>
-                    <span className="text-[10px] font-black text-red-400 uppercase tracking-widest">Mermas (30 días)</span>
-                    <span className={`text-2xl font-black ${kpis.wasteValue > 0 ? 'text-red-600' : 'text-gray-800'}`}>{formatCOP(kpis.wasteValue)}</span>
-                    <span className="text-xs text-gray-400">{kpis.totalMovements} movimientos este mes</span>
-                    <div className="mt-2 h-1 rounded-full bg-red-100"><div className="h-1 rounded-full bg-red-500" style={{ width: kpis.wasteValue > 0 ? '60%' : '0%' }} /></div>
-                </div>
             </div>
 
-            {/* ── FILA: TOP CONSUMIDOS + ACTIVIDAD RECIENTE ── */}
+            {/* ── FILA: TORTA + TOP CONSUMIDOS ── */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Torta de salidas por tipo */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                    <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4">Salidas por tipo — últimos 30 días</h2>
+                    {typeBreakdown.length === 0 ? (
+                        <p className="text-sm text-gray-400 py-6 text-center">Sin salidas registradas.</p>
+                    ) : (
+                        <div className="flex items-center gap-6">
+                            <div
+                                className="flex-shrink-0 w-32 h-32 rounded-full"
+                                style={{
+                                    background: `conic-gradient(${typeBreakdown.map(c => `${c.color} ${c.from}% ${c.from + c.pct}%`).join(', ')})`
+                                }}
+                            />
+                            <div className="space-y-2 flex-1">
+                                {typeBreakdown.map(c => (
+                                    <div key={c.type} className="flex items-center justify-between gap-2">
+                                        <div className="flex items-center gap-2">
+                                            <span className="w-3 h-3 rounded-sm flex-shrink-0" style={{ background: c.color }} />
+                                            <span className="text-xs font-semibold text-gray-700">{c.label}</span>
+                                        </div>
+                                        <span className="text-xs font-black text-gray-500">{c.qty} <span className="font-normal text-gray-400">({Math.round(c.pct)}%)</span></span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
                 {/* Top consumidos */}
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-                    <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4">Top consumidos — últimos 30 días</h2>
+                    <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4">Top 8 consumidos — últimos 30 días</h2>
                     {topConsumed.length === 0 ? (
                         <p className="text-sm text-gray-400 py-6 text-center">Sin salidas registradas.</p>
                     ) : (
-                        <div className="space-y-3">
+                        <div className="space-y-2.5">
                             {topConsumed.map(({ item, qty }, i) => (
                                 <div key={item!.id}>
                                     <div className="flex justify-between items-center mb-1">
@@ -245,9 +292,9 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                                         </span>
                                         <span className="text-xs font-black text-gray-600">{qty} {item!.unit}</span>
                                     </div>
-                                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
                                         <div
-                                            className="h-2 rounded-full bg-gradient-to-r from-blue-400 to-blue-600 transition-all duration-500"
+                                            className="h-1.5 rounded-full bg-gradient-to-r from-blue-400 to-blue-600 transition-all duration-500"
                                             style={{ width: `${Math.round((qty / maxConsumed) * 100)}%` }}
                                         />
                                     </div>
@@ -256,7 +303,10 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                         </div>
                     )}
                 </div>
+            </div>
 
+            {/* ── ACTIVIDAD RECIENTE ── */}
+            <div className="grid grid-cols-1 gap-6">
                 {/* Actividad reciente */}
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
                     <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4">Actividad reciente</h2>

@@ -1,5 +1,5 @@
 // copilotService.ts
-import { Item, Movement, InventoryType, MovementType, Personnel, PurchaseOrder, PurchaseOrderStatus } from '../types';
+import { Item, Movement, InventoryType, MovementType, Personnel, PurchaseOrder, PurchaseOrderStatus, Project } from '../types';
 
 export interface CopilotMessage { role: 'user' | 'assistant'; content: string; timestamp: Date; }
 export interface WarehouseContext { items: Item[]; movements: Movement[]; personnel: Personnel[]; purchaseOrders: PurchaseOrder[]; }
@@ -93,3 +93,140 @@ export const askCopilot = async (message: string, ctx: WarehouseContext): Promis
 };
 
 export const SUGGESTED_PROMPTS = ['Que materiales tienen stock bajo?','Cuanto hemos gastado?','Que herramientas estan prestadas?','Cuales son los mas consumidos?','Muestra los ultimos movimientos','Hay mermas este mes?','Ordenes de compra pendientes?'];
+
+// ─── EXIT INTENT PARSING ─────────────────────────────────────────────────────
+
+export interface PendingMovement {
+    rawName: string;
+    matchedItem: Item | null;
+    candidates: Item[];
+    quantity: number;
+    unit: string;
+}
+
+export interface ParsedExit {
+    isExitIntent: boolean;
+    movements: PendingMovement[];
+    matchedProject: Project | null;
+    projectCandidates: Project[];
+    matchedPersonnel: Personnel | null;
+    personnelCandidates: Personnel[];
+}
+
+const EXIT_VERBS = /\b(saq[uú][eé]|sali[oó]|salio|sacamos|sacaron|llev[oó]|llevamos|retir[eé]|retire|retiramos|gastamos|gast[oó]|us[eé]|usamos|entreg[oó]|entregamos|salida[s]?)\b/i;
+
+const UNIT_PAT = /^(.+?)\s+(und|kg|m|bolsas?|pares?|cajas?|litros?|lt|gl|rollos?|metros?|baldes?|canecas?|sacos?|paq(?:uetes?)?|uni(?:dades?)?|lb|ton|ml|cm|mm|hojas?)$/i;
+
+function normalize(s: string): string {
+    return s.toLowerCase()
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/[^\w\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function levenshtein(a: string, b: string): number {
+    const dp = Array.from({ length: a.length + 1 }, (_, i) =>
+        Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
+    );
+    for (let i = 1; i <= a.length; i++)
+        for (let j = 1; j <= b.length; j++)
+            dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+    return dp[a.length][b.length];
+}
+
+function fuzzyMatchItems(query: string, items: Item[]): { matched: Item | null; candidates: Item[] } {
+    const q = normalize(query);
+    const qWords = q.split(' ').filter(w => w.length > 2);
+
+    const exact = items.find(i => normalize(i.name) === q);
+    if (exact) return { matched: exact, candidates: [] };
+
+    const scored = items.map(item => {
+        const n = normalize(item.name);
+        const nWords = n.split(' ').filter(w => w.length > 2);
+        let score = 0;
+        if (n.includes(q)) score += 100;
+        if (qWords.length && qWords.every(w => nWords.some(nw => nw.includes(w) || w.includes(nw)))) score += 60;
+        if (nWords.length && nWords.every(w => q.includes(w))) score += 40;
+        const fuzzy = qWords.filter(w => nWords.some(nw => levenshtein(w, nw) <= 2)).length;
+        score += fuzzy * 15;
+        return { item, score };
+    }).filter(x => x.score > 0).sort((a, b) => b.score - a.score);
+
+    if (!scored.length) return { matched: null, candidates: [] };
+    if (scored.length === 1) return { matched: scored[0].item, candidates: [] };
+    if (scored[0].score >= 60 && scored[0].score > scored[1].score * 1.4)
+        return { matched: scored[0].item, candidates: [] };
+    return { matched: null, candidates: scored.slice(0, 3).map(s => s.item) };
+}
+
+function fuzzyMatchList<T extends { name: string }>(query: string, list: T[]): { matched: T | null; candidates: T[] } {
+    if (!query.trim()) return { matched: null, candidates: [] };
+    const q = normalize(query);
+    const exact = list.find(x => normalize(x.name) === q);
+    if (exact) return { matched: exact, candidates: [] };
+    const hits = list.filter(x => normalize(x.name).includes(q) || q.includes(normalize(x.name)));
+    if (hits.length === 1) return { matched: hits[0], candidates: [] };
+    if (hits.length > 1) return { matched: null, candidates: hits.slice(0, 3) };
+    return { matched: null, candidates: [] };
+}
+
+export function parseExitIntent(
+    text: string,
+    items: Item[],
+    projects: Project[],
+    personnel: Personnel[]
+): ParsedExit {
+    if (!EXIT_VERBS.test(text)) {
+        return { isExitIntent: false, movements: [], matchedProject: null, projectCandidates: [], matchedPersonnel: null, personnelCandidates: [] };
+    }
+
+    let body = text;
+    let rawProject = '';
+    let rawPerson = '';
+
+    // Extract "para proyecto X" or "en proyecto X"
+    body = body.replace(/(?:para\s+(?:el\s+)?proyectos?\s+|en\s+(?:el\s+)?proyectos?\s+)([^,\n]+?)(?=\s+(?:trabajador|operario)|,|\s*$)/i,
+        (_, p) => { rawProject = p.trim(); return ''; });
+
+    // Extract "trabajador X" or "operario X"
+    body = body.replace(/(?:(?:al?\s+)?trabajador\s+|(?:al?\s+)?operario\s+)([A-Za-záéíóúÁÉÍÓÚñÑ]+(?:\s+[A-Za-záéíóúÁÉÍÓÚñÑ]+)?)/i,
+        (_, p) => { rawPerson = p.trim(); return ''; });
+
+    // Remove exit verb
+    body = body.replace(EXIT_VERBS, '').replace(/[:;]/g, ' ').trim();
+
+    const parts = body.split(/\s+(?:y|e)\s+|,\s*/).map(p => p.trim()).filter(Boolean);
+
+    const movements: PendingMovement[] = [];
+    for (const part of parts) {
+        const numMatch = part.match(/^(\d+(?:[.,]\d+)?|un[ao]?)\s+(.{2,})/i);
+        let quantity = 1;
+        let namePart = part;
+        if (numMatch) {
+            const qStr = numMatch[1].trim();
+            quantity = /^un[ao]?$/i.test(qStr) ? 1 : parseFloat(qStr.replace(',', '.')) || 1;
+            namePart = numMatch[2].trim();
+        }
+        let unit = 'und';
+        const unitM = namePart.match(UNIT_PAT);
+        if (unitM) { namePart = unitM[1].trim(); unit = unitM[2].toLowerCase(); }
+
+        if (namePart.length < 2) continue;
+        const { matched, candidates } = fuzzyMatchItems(namePart, items);
+        movements.push({ rawName: namePart, matchedItem: matched, candidates, quantity, unit });
+    }
+
+    const projResult = fuzzyMatchList(rawProject, projects);
+    const persResult = fuzzyMatchList(rawPerson, personnel);
+
+    return {
+        isExitIntent: true,
+        movements,
+        matchedProject: projResult.matched,
+        projectCandidates: projResult.candidates,
+        matchedPersonnel: persResult.matched,
+        personnelCandidates: persResult.candidates,
+    };
+}

@@ -157,10 +157,14 @@ const App: React.FC = () => {
 
     // ── Handlers síncronos (igual que original) + sync Supabase en background ──
 
-    const handleImportItems = (newItems: Array<Omit<Item, 'id'>>) => {
-        const created = newItems.map(i => ({ ...i, id: `i-${Date.now()}-${Math.random().toString(36).slice(2)}` }));
+    const handleImportItems = (newItems: Array<Omit<Item, 'id'>>, inventoryType?: InventoryType) => {
+        const created = newItems.map(i => ({
+            ...i,
+            id: `i-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            inventoryType: inventoryType ?? i.inventoryType,
+        }));
         setItems(prev => [...prev, ...created]);
-        newItems.forEach(i => withSync(db.addItem(i)));
+        created.forEach(i => withSync(db.addItem(i)));
     };
 
     const handleAddItem = (i: Omit<Item, 'id'>) => {
@@ -327,6 +331,7 @@ const App: React.FC = () => {
                     onResetData={handleResetAllData}
                     setUserRole={() => {}}
                     syncStatus={syncStatus}
+                    onOpenInvoiceReader={() => setInvoiceReaderOpen(true)}
                 />
                 <main className="flex-1 p-4 md:p-6 overflow-y-auto bg-gray-50">
                     <div className="max-w-7xl mx-auto">
@@ -338,7 +343,6 @@ const App: React.FC = () => {
                                 onEditItem={(i) => { setItemToEdit(i); setEditModalOpen(true); }}
                                 onDeleteItem={handleDeleteItem}
                                 onItemHistory={(i) => { setItemForHistory(i); setHistoryModalOpen(true); }}
-                                onOpenInvoiceReader={() => setInvoiceReaderOpen(true)}
                                 userRole={userRole}
                                 category={selectedInventoryType || 'Todos'}
                                 onGoBack={() => selectView('dashboard')}
@@ -368,6 +372,9 @@ const App: React.FC = () => {
                         {currentView === 'personnel' && (
                             <PersonnelView
                                 personnel={personnel}
+                                movements={movements}
+                                items={items}
+                                projects={projects}
                                 openAddPersonnelModal={() => setAddPersonnelModalOpen(true)}
                                 onGoBack={() => selectView('dashboard')}
                                 onEditPersonnel={handleEditPersonnel}
@@ -402,6 +409,8 @@ const App: React.FC = () => {
                                 movements={movements}
                                 personnel={personnel}
                                 purchaseOrders={purchaseOrders}
+                                projects={projects}
+                                onLogMovements={batch => batch.forEach(m => handleLogMovement(m))}
                             />
                         )}
                     </div>
@@ -415,7 +424,7 @@ const App: React.FC = () => {
             <AddPurchaseOrderModal isOpen={isAddPOModalOpen} onClose={() => setAddPOModalOpen(false)} onAddPurchaseOrder={handleAddPurchaseOrder} items={items} />
             <ItemHistoryModal isOpen={isHistoryModalOpen} onClose={() => setHistoryModalOpen(false)} item={itemForHistory} movements={movements} personnel={personnel} />
             <UserManagementModal isOpen={isUserManagementOpen} onClose={() => setUserManagementOpen(false)} users={users} onAddUser={handleAddUser} onDeleteUser={handleDeleteUser} onEditUser={handleEditUser} />
-            <InvoiceReaderModal isOpen={isInvoiceReaderOpen} onClose={() => setInvoiceReaderOpen(false)} onImport={handleImportItems} />
+            <InvoiceReaderModal isOpen={isInvoiceReaderOpen} onClose={() => setInvoiceReaderOpen(false)} onImport={(rows, invType) => handleImportItems(rows, invType)} />
         </div>
     );
 };
