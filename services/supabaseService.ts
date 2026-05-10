@@ -54,6 +54,7 @@ function dbToMovement(row: Record<string, unknown>): Movement {
         projectId: row.project_id as string | undefined,
         isLoan: row.is_loan as boolean,
         isReturned: row.is_returned as boolean,
+        pendingPickup: row.pending_pickup as boolean | undefined,
     };
 }
 
@@ -68,6 +69,7 @@ function movementToDb(m: Omit<Movement, 'id'>): Record<string, unknown> {
         project_id: m.projectId ?? null,
         is_loan: m.isLoan ?? false,
         is_returned: m.isReturned ?? false,
+        pending_pickup: m.pendingPickup ?? false,
     };
 }
 
@@ -174,6 +176,14 @@ export async function markMovementReturned(id: string): Promise<void> {
     const { error } = await supabase
         .from('movements')
         .update({ is_returned: true })
+        .eq('id', id);
+    if (error) throw error;
+}
+
+export async function markMovementPendingPickup(id: string, pending: boolean): Promise<void> {
+    const { error } = await supabase
+        .from('movements')
+        .update({ pending_pickup: pending })
         .eq('id', id);
     if (error) throw error;
 }
