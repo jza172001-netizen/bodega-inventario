@@ -90,6 +90,16 @@ export const Header: React.FC<HeaderProps> = ({ toggleSidebar, userRole, onExpor
                         </span>
                         <span onClick={onLogout} className="text-[9px] text-gray-400 font-bold uppercase hover:text-red-600 cursor-pointer">Salir</span>
                     </div>
+                    {/* Logout icon — solo mobile */}
+                    <button
+                        onClick={onLogout}
+                        title="Cerrar sesión"
+                        className="flex md:hidden p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all"
+                    >
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                        </svg>
+                    </button>
                     <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center font-black text-lg border-2 border-white shadow-sm">
                         {userRole === UserRole.OWNER ? 'A' : 'O'}
                     </div>
