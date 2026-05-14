@@ -220,6 +220,101 @@ function fuzzyMatchList<T extends { name: string }>(query: string, list: T[]): {
     return { matched: null, candidates: [] };
 }
 
+// ─── BULK ADD INTENT ─────────────────────────────────────────────────────────
+
+export interface BulkAddItem {
+    rawName: string;
+    quantity: number;
+    unit: string;
+    guessedType: InventoryType;
+    matchedItem: Item | null;
+    candidates: Item[];
+}
+
+export interface ParsedBulkAdd {
+    isBulkAdd: boolean;
+    items: BulkAddItem[];
+    matchedPersonnel: Personnel | null;
+    rawPersonnel: string;
+    personnelCandidates: Personnel[];
+    matchedProject: Project | null;
+    rawProject: string;
+    projectCandidates: Project[];
+}
+
+const ADD_VERBS = /\b(recib[ií]|lleg[oó]|entraron|tenemos|hay|subir|ingresa|compr[eé]|compramos)\b/i;
+
+function guessInventoryTypeFull(name: string): InventoryType {
+    const n = name.toLowerCase();
+    if (/taladro|esmeril|sierra|amoladora|compresor|vibrador|pulidora|soldador|generador|cortador|rotomartillo|hidrolavador|bomba|motor eléctrico/.test(n))
+        return InventoryType.ELECTRICAL_TOOL;
+    if (/llave|martillo|destornillador|alicate|cincel|pala|pico|pica|serrucho|palustre|barra|hacha|palín|rastrillo|carretilla|flexómetro|plomada|nivel|tenaza|tijera\s+de\s+corte/.test(n))
+        return InventoryType.HAND_TOOL;
+    if (/casco|guante|gafa|arnés|chaleco|tapaoido|bota.*seguridad|overol|mascarilla|respirador|careta|rodillera|faja/.test(n))
+        return InventoryType.PPE;
+    return InventoryType.SINGLE_USE;
+}
+
+export function parseBulkAddIntent(
+    text: string,
+    items: Item[],
+    projects: Project[],
+    personnel: Personnel[]
+): ParsedBulkAdd {
+    const noResult: ParsedBulkAdd = { isBulkAdd: false, items: [], matchedPersonnel: null, rawPersonnel: '', personnelCandidates: [], matchedProject: null, rawProject: '', projectCandidates: [] };
+
+    if (EXIT_VERBS.test(text)) return noResult;
+
+    const hasList = /\b\d+\s+\w{3,}.*(?:,|\s+y\s+)\s*\d+\s+\w{3,}/i.test(text);
+    const hasAdd = ADD_VERBS.test(text);
+    if (!hasList && !hasAdd) return noResult;
+
+    let body = text;
+    let rawProject = '';
+    let rawPerson = '';
+
+    body = body.replace(/(?:para\s+(?:el\s+)?proyectos?\s+|en\s+(?:el\s+)?proyectos?\s+)([^,\n]+?)(?=\s+(?:trabajador|operario)|,|\s*$)/i,
+        (_, p) => { rawProject = p.trim(); return ''; });
+
+    body = body.replace(/(?:(?:al?\s+)?(?:trabajador|operario)\s+)([A-Za-záéíóúÁÉÍÓÚñÑ]+(?:\s+[A-Za-záéíóúÁÉÍÓÚñÑ]+)?)/i,
+        (_, p) => { rawPerson = p.trim(); return ''; });
+
+    body = body.replace(ADD_VERBS, '').replace(/[:;]/g, ' ').trim();
+
+    const parts = body.split(/\s+(?:y|e)\s+|,\s*/).map(p => p.trim()).filter(Boolean);
+    const bulkItems: BulkAddItem[] = [];
+
+    for (const part of parts) {
+        const numMatch = part.match(/^(\d+(?:[.,]\d+)?|un[ao]?)\s+(.{2,})/i);
+        if (!numMatch) continue;
+        const qStr = numMatch[1].trim();
+        const quantity = /^un[ao]?$/i.test(qStr) ? 1 : parseFloat(qStr.replace(',', '.')) || 1;
+        let namePart = numMatch[2].trim();
+        let unit = 'und';
+        const unitM = namePart.match(UNIT_PAT);
+        if (unitM) { namePart = unitM[1].trim(); unit = unitM[2].toLowerCase(); }
+        if (namePart.length < 2) continue;
+        const { matched, candidates } = fuzzyMatchItems(namePart, items);
+        bulkItems.push({ rawName: namePart, quantity, unit, guessedType: guessInventoryTypeFull(namePart), matchedItem: matched, candidates });
+    }
+
+    if (bulkItems.length === 0) return noResult;
+
+    const projResult = fuzzyMatchList(rawProject, projects);
+    const persResult = fuzzyMatchList(rawPerson, personnel);
+
+    return {
+        isBulkAdd: true,
+        items: bulkItems,
+        matchedPersonnel: persResult.matched,
+        rawPersonnel: rawPerson,
+        personnelCandidates: persResult.candidates,
+        matchedProject: projResult.matched,
+        rawProject,
+        projectCandidates: projResult.candidates,
+    };
+}
+
 export function parseExitIntent(
     text: string,
     items: Item[],

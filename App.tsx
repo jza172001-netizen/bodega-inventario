@@ -511,6 +511,11 @@ const App: React.FC = () => {
                     movements={movements}
                     personnel={personnel}
                     purchaseOrders={purchaseOrders}
+                    projects={projects}
+                    onLogMovements={batch => batch.forEach(m => handleLogMovement(m))}
+                    onCreateItem={handleAddItemSync}
+                    onCreateProject={handleAddProjectSync}
+                    onCreatePersonnel={handleAddPersonnelSync}
                 />
             )}
         </div>
