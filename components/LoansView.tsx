@@ -1,6 +1,6 @@
 
 import React, { useMemo } from 'react';
-import { Movement, Item, Personnel } from '../types';
+import { Movement, Item, Personnel, InventoryType } from '../types';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
 import { ClockIcon } from './icons/ClockIcon';
 
@@ -18,8 +18,10 @@ export const LoansView: React.FC<LoansViewProps> = ({
 }) => {
     const activeLoans = useMemo(() => movements.filter(m => m.isLoan && !m.isReturned), [movements]);
 
-    const getItemName = (itemId: string) => items.find(i => i.id === itemId)?.name ?? 'Desconocido';
-    const getPersonnelName = (id?: string) => personnel.find(p => p.id === id)?.name ?? 'Sin asignar';
+    const getItem = (itemId: string) => items.find(i => i.id === itemId);
+    const getItemName = (itemId: string) => getItem(itemId)?.name ?? 'Desconocido';
+    const getPerson = (id?: string) => personnel.find(p => p.id === id);
+    const getPersonnelName = (id?: string) => getPerson(id)?.name ?? 'Sin asignar';
 
     const getDays = (date: Date) =>
         Math.ceil(Math.abs(Date.now() - new Date(date).getTime()) / 86400000);
@@ -29,9 +31,29 @@ export const LoansView: React.FC<LoansViewProps> = ({
     const warningLoans  = useMemo(() => activeLoans.filter(m => !m.pendingPickup && getDays(new Date(m.timestamp)) > 7 && getDays(new Date(m.timestamp)) <= 14), [activeLoans]);
     const normalLoans   = useMemo(() => activeLoans.filter(m => !m.pendingPickup && getDays(new Date(m.timestamp)) <= 7), [activeLoans]);
 
+    const handleReturn = (id: string) => {
+        if (window.confirm('¿Marcar como devuelta? Esta acción no se puede deshacer.')) {
+            onReturnItem(id);
+        }
+    };
+
+    const buildWhatsAppUrl = (loan: Movement) => {
+        const person = getPerson(loan.personnelId);
+        if (!person?.phone) return null;
+        const item = getItem(loan.itemId);
+        if (item?.inventoryType !== InventoryType.ELECTRICAL_TOOL) return null;
+        const rawPhone = person.phone.replace(/\D/g, '');
+        const phone = rawPhone.startsWith('57') ? rawPhone : `57${rawPhone}`;
+        const text = encodeURIComponent(
+            `Hola ${person.name}, recuerda traer ${item.name} a la bodega hoy. Gracias.`
+        );
+        return `https://wa.me/${phone}?text=${text}`;
+    };
+
     const LoanCard: React.FC<{ loan: Movement }> = ({ loan }) => {
         const days = getDays(new Date(loan.timestamp));
         const isPending = !!loan.pendingPickup;
+        const waUrl = buildWhatsAppUrl(loan);
 
         let cardClass = 'border border-gray-100 bg-white';
         let daysBadge = 'bg-green-100 text-green-800';
@@ -54,7 +76,7 @@ export const LoansView: React.FC<LoansViewProps> = ({
                 </div>
                 <div className="flex gap-2">
                     <button
-                        onClick={() => onReturnItem(loan.id)}
+                        onClick={() => handleReturn(loan.id)}
                         className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all"
                     >
                         ✓ Devuelta
@@ -73,6 +95,17 @@ export const LoansView: React.FC<LoansViewProps> = ({
                         >
                             ✕ Cancelar
                         </button>
+                    )}
+                    {waUrl && (
+                        <a
+                            href={waUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Enviar recordatorio por WhatsApp"
+                            className="flex items-center justify-center px-3 py-1.5 bg-green-100 hover:bg-green-200 text-green-800 text-xs font-bold rounded-xl transition-all"
+                        >
+                            📲
+                        </a>
                     )}
                 </div>
             </div>

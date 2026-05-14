@@ -75,6 +75,9 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
                                         </div>
                                         <div className="min-w-0">
                                             <span className="font-medium text-gray-700 truncate block" title={p.name}>{p.name}</span>
+                                            {p.phone && (
+                                                <span className="text-[10px] text-gray-400 truncate block">{p.phone}</span>
+                                            )}
                                             {active > 0 && (
                                                 <span className="text-[10px] font-black text-yellow-600 bg-yellow-100 px-1.5 py-0.5 rounded-full">{active} préstamo{active > 1 ? 's' : ''}</span>
                                             )}

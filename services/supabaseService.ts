@@ -193,23 +193,28 @@ export async function markMovementPendingPickup(id: string, pending: boolean): P
 export async function fetchPersonnel(): Promise<Personnel[]> {
     const { data, error } = await supabase.from('personnel').select('*').order('name');
     if (error) throw error;
-    return (data ?? []).map(r => ({ id: r.id as string, name: r.name as string }));
+    return (data ?? []).map(r => ({
+        id: r.id as string,
+        name: r.name as string,
+        phone: r.phone as string | undefined,
+    }));
 }
 
 export async function addPersonnel(p: Omit<Personnel, 'id'>): Promise<Personnel> {
     const { data, error } = await supabase
         .from('personnel')
-        .insert({ name: p.name })
+        .insert({ name: p.name, phone: p.phone ?? null })
         .select()
         .single();
     if (error) throw error;
-    return { id: (data as Record<string, unknown>).id as string, name: p.name };
+    const row = data as Record<string, unknown>;
+    return { id: row.id as string, name: p.name, phone: row.phone as string | undefined };
 }
 
 export async function updatePersonnel(p: Personnel): Promise<void> {
     const { error } = await supabase
         .from('personnel')
-        .update({ name: p.name })
+        .update({ name: p.name, phone: p.phone ?? null })
         .eq('id', p.id);
     if (error) throw error;
 }

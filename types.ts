@@ -71,6 +71,7 @@ export interface Movement {
 export interface Personnel {
     id: string;
     name: string;
+    phone?: string;
 }
 
 export interface PurchaseOrderItem {
