@@ -13,8 +13,18 @@ interface PrintReportViewProps {
 const formatCOP = (v: number) =>
     new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(v);
 
-const fmt = (d: Date) =>
-    new Intl.DateTimeFormat('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }).format(d);
+const fmtLong = (d: Date) =>
+    new Intl.DateTimeFormat('es-CO', { day: '2-digit', month: 'long', year: 'numeric' }).format(d);
+
+const fmtShort = (d: Date) =>
+    new Intl.DateTimeFormat('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(d);
+
+const TYPE_META: Record<string, { label: string; bg: string; color: string }> = {
+    PURCHASE:  { label: 'Compra',  bg: '#f0fdf4', color: '#16a34a' },
+    CHECK_IN:  { label: 'Entrada', bg: '#eff6ff', color: '#2563eb' },
+    CHECK_OUT: { label: 'Salida',  bg: '#fff7ed', color: '#ea580c' },
+    WASTE:     { label: 'Merma',   bg: '#fef2f2', color: '#dc2626' },
+};
 
 export const PrintReportView = React.forwardRef<HTMLDivElement, PrintReportViewProps>(
     ({ items, movements, personnel, periodLabel, fromDate, toDate }, ref) => {
@@ -61,94 +71,134 @@ export const PrintReportView = React.forwardRef<HTMLDivElement, PrintReportViewP
                 .sort((a, b) => a.ratio - b.ratio).slice(0, 10),
         [items]);
 
-        const TYPE_LABELS: Record<string, string> = {
-            PURCHASE: 'Compra', CHECK_IN: 'Entrada', CHECK_OUT: 'Salida', WASTE: 'Merma'
+        const s = {
+            page: { fontFamily: "'Georgia', 'Times New Roman', serif", color: '#1a1a2e', background: '#fff', fontSize: '11px' } as React.CSSProperties,
+            sectionTitle: {
+                fontSize: '10px', fontWeight: 700, textTransform: 'uppercase' as const,
+                letterSpacing: '0.12em', color: '#fff', background: '#1e3a8a',
+                padding: '5px 12px', marginBottom: '10px', borderRadius: '2px',
+            } as React.CSSProperties,
+            kpiBox: (color: string) => ({
+                border: `1px solid ${color}`, borderTop: `4px solid ${color}`,
+                borderRadius: '4px', padding: '10px 12px', background: '#fff',
+            } as React.CSSProperties),
+            th: {
+                padding: '5px 8px', textAlign: 'left' as const, fontSize: '9px',
+                fontWeight: 700, color: '#fff', textTransform: 'uppercase' as const,
+                background: '#1e3a8a', letterSpacing: '0.05em',
+            } as React.CSSProperties,
+            td: (idx: number) => ({
+                padding: '5px 8px', fontSize: '10px', color: '#374151',
+                background: idx % 2 === 0 ? '#fff' : '#f8fafc',
+                borderBottom: '1px solid #e5e7eb',
+            } as React.CSSProperties),
         };
 
         return (
-            <div ref={ref} className="print-only hidden bg-white text-gray-900 font-sans" style={{ fontFamily: 'Arial, sans-serif' }}>
+            <div ref={ref} className="print-only hidden" style={s.page}>
                 <style>{`
                     @media print {
                         .print-only { display: block !important; }
                         body > * { visibility: hidden; }
                         .print-only, .print-only * { visibility: visible; }
                         .print-only { position: fixed; top: 0; left: 0; width: 100%; z-index: 9999; }
-                        @page { size: A4; margin: 1.5cm; }
+                        @page { size: A4; margin: 2cm 2.5cm; }
+                        table { page-break-inside: auto; }
+                        tr { page-break-inside: avoid; }
+                        .no-break { page-break-inside: avoid; }
                     }
                 `}</style>
 
-                {/* Encabezado */}
-                <div style={{ borderBottom: '3px solid #1d4ed8', paddingBottom: '16px', marginBottom: '24px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                <div style={{ borderBottom: '4px solid #1e3a8a', paddingBottom: '14px', marginBottom: '18px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <div>
-                            <h1 style={{ fontSize: '24px', fontWeight: 900, color: '#1e3a8a', margin: 0, textTransform: 'uppercase', letterSpacing: '-0.5px' }}>
-                                Bodega Pro
-                            </h1>
-                            <p style={{ fontSize: '14px', color: '#6b7280', margin: '2px 0 0' }}>
-                                Informe de Inventario — {periodLabel}
-                            </p>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
+                                <div style={{ width: '40px', height: '40px', background: '#1e3a8a', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <span style={{ color: '#fff', fontWeight: 900, fontSize: '18px', fontFamily: 'Arial' }}>B</span>
+                                </div>
+                                <div>
+                                    <p style={{ margin: 0, fontSize: '20px', fontWeight: 900, color: '#1e3a8a', letterSpacing: '-0.5px', fontFamily: 'Arial, sans-serif' }}>BODEGA PRO</p>
+                                    <p style={{ margin: 0, fontSize: '10px', color: '#6b7280', fontFamily: 'Arial, sans-serif' }}>Sistema de Gestión de Inventario</p>
+                                </div>
+                            </div>
                         </div>
-                        <div style={{ textAlign: 'right', fontSize: '11px', color: '#6b7280' }}>
-                            <p style={{ margin: 0 }}><strong>Período:</strong> {fmt(fromDate)} — {fmt(toDate)}</p>
-                            <p style={{ margin: '2px 0 0' }}><strong>Generado:</strong> {fmt(new Date())}</p>
+                        <div style={{ textAlign: 'right', fontFamily: 'Arial, sans-serif' }}>
+                            <p style={{ margin: 0, fontSize: '9px', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Informe de Inventario</p>
+                            <p style={{ margin: '2px 0 0', fontSize: '11px', fontWeight: 700, color: '#1e3a8a' }}>{periodLabel.toUpperCase()}</p>
+                            <p style={{ margin: '4px 0 0', fontSize: '9px', color: '#6b7280' }}>Fecha de generación:</p>
+                            <p style={{ margin: '1px 0 0', fontSize: '10px', color: '#374151', fontWeight: 600 }}>{fmtLong(new Date())}</p>
                         </div>
                     </div>
                 </div>
 
-                {/* KPIs */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '24px' }}>
-                    {[
-                        { label: 'Valor Activos', value: formatCOP(kpis.assetsValue), color: '#1d4ed8' },
-                        { label: 'Valor Consumibles', value: formatCOP(kpis.inventoryValue), color: '#059669' },
-                        { label: 'Movimientos', value: String(kpis.total), color: '#7c3aed' },
-                        { label: 'Mermas (período)', value: formatCOP(kpis.waste), color: '#dc2626' },
-                    ].map(k => (
-                        <div key={k.label} style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '12px', borderTop: `3px solid ${k.color}` }}>
-                            <p style={{ fontSize: '10px', color: '#6b7280', margin: '0 0 4px', textTransform: 'uppercase', fontWeight: 700 }}>{k.label}</p>
-                            <p style={{ fontSize: '16px', fontWeight: 900, color: k.color, margin: 0 }}>{k.value}</p>
+                <div style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '4px', padding: '10px 14px', marginBottom: '18px', fontFamily: 'Arial, sans-serif' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                        <div>
+                            <p style={{ margin: 0, fontSize: '8px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Período cubierto</p>
+                            <p style={{ margin: '2px 0 0', fontSize: '10px', fontWeight: 700, color: '#1e3a8a' }}>{fmtShort(fromDate)} — {fmtShort(toDate)}</p>
                         </div>
-                    ))}
+                        <div>
+                            <p style={{ margin: 0, fontSize: '8px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Total ítems en inventario</p>
+                            <p style={{ margin: '2px 0 0', fontSize: '10px', fontWeight: 700, color: '#1e3a8a' }}>{items.length} productos registrados</p>
+                        </div>
+                        <div>
+                            <p style={{ margin: 0, fontSize: '8px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Movimientos del período</p>
+                            <p style={{ margin: '2px 0 0', fontSize: '10px', fontWeight: 700, color: '#1e3a8a' }}>{kpis.total} transacciones</p>
+                        </div>
+                    </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
-                    {/* Top consumidos */}
+                <div className="no-break" style={{ marginBottom: '18px' }}>
+                    <div style={s.sectionTitle}>1. Resumen Ejecutivo</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', fontFamily: 'Arial, sans-serif' }}>
+                        {[
+                            { label: 'Valor en Activos', sub: 'Herramientas', value: formatCOP(kpis.assetsValue), color: '#1d4ed8' },
+                            { label: 'Valor Consumibles', sub: 'EPP y materiales', value: formatCOP(kpis.inventoryValue), color: '#059669' },
+                            { label: 'Salidas del período', sub: `${kpis.checkOuts} despachos`, value: String(kpis.checkIns + kpis.checkOuts), color: '#7c3aed' },
+                            { label: 'Costo en Mermas', sub: 'Materiales dados de baja', value: formatCOP(kpis.waste), color: '#dc2626' },
+                        ].map(k => (
+                            <div key={k.label} style={s.kpiBox(k.color)}>
+                                <p style={{ margin: 0, fontSize: '8px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{k.label}</p>
+                                <p style={{ margin: '3px 0 1px', fontSize: '14px', fontWeight: 900, color: k.color }}>{k.value}</p>
+                                <p style={{ margin: 0, fontSize: '8px', color: '#9ca3af' }}>{k.sub}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="no-break" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '18px' }}>
                     <div>
-                        <h2 style={{ fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', color: '#374151', borderBottom: '1px solid #e5e7eb', paddingBottom: '6px', marginBottom: '10px' }}>
-                            Top {topConsumed.length} consumidos en el período
-                        </h2>
+                        <div style={s.sectionTitle}>2. Materiales más Consumidos</div>
                         {topConsumed.length === 0
-                            ? <p style={{ fontSize: '11px', color: '#9ca3af' }}>Sin salidas en este período</p>
-                            : topConsumed.map(({ item, qty, pct }) => (
-                            <div key={item!.id} style={{ marginBottom: '7px' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '3px' }}>
-                                    <span style={{ fontWeight: 600, color: '#111827' }}>{item!.name}</span>
-                                    <span style={{ color: '#6b7280' }}>{qty} {item!.unit}</span>
+                            ? <p style={{ fontSize: '10px', color: '#9ca3af', fontFamily: 'Arial, sans-serif' }}>Sin salidas registradas en este período.</p>
+                            : topConsumed.map(({ item, qty, pct }, i) => (
+                            <div key={item!.id} style={{ marginBottom: '8px', fontFamily: 'Arial, sans-serif' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', marginBottom: '3px' }}>
+                                    <span style={{ fontWeight: 600, color: '#111827' }}>{i + 1}. {item!.name}</span>
+                                    <span style={{ color: '#6b7280', fontWeight: 700 }}>{qty} {item!.unit}</span>
                                 </div>
-                                <div style={{ background: '#e5e7eb', borderRadius: '4px', height: '6px' }}>
-                                    <div style={{ background: '#2563eb', height: '6px', borderRadius: '4px', width: `${pct}%` }} />
+                                <div style={{ background: '#e2e8f0', borderRadius: '2px', height: '5px' }}>
+                                    <div style={{ background: '#1d4ed8', height: '5px', borderRadius: '2px', width: `${pct}%` }} />
                                 </div>
                             </div>
                         ))}
                     </div>
-
-                    {/* Stock crítico */}
                     <div>
-                        <h2 style={{ fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', color: '#374151', borderBottom: '1px solid #e5e7eb', paddingBottom: '6px', marginBottom: '10px' }}>
-                            Stock crítico (bajo mínimo)
-                        </h2>
+                        <div style={s.sectionTitle}>3. Alertas de Stock Crítico</div>
                         {lowStockItems.length === 0
-                            ? <p style={{ fontSize: '11px', color: '#9ca3af' }}>Todos los ítems están sobre el mínimo</p>
+                            ? <p style={{ fontSize: '10px', color: '#9ca3af', fontFamily: 'Arial, sans-serif' }}>Todos los ítems están sobre el stock mínimo.</p>
                             : lowStockItems.map(item => {
                                 const pct = Math.min(item.ratio * 100, 100);
                                 const color = item.quantity <= 0 ? '#dc2626' : pct < 50 ? '#f59e0b' : '#10b981';
+                                const estado = item.quantity <= 0 ? 'AGOTADO' : pct < 50 ? 'CRÍTICO' : 'BAJO';
                                 return (
-                                    <div key={item.id} style={{ marginBottom: '7px' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '3px' }}>
+                                    <div key={item.id} style={{ marginBottom: '8px', fontFamily: 'Arial, sans-serif' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: '10px', marginBottom: '3px' }}>
                                             <span style={{ fontWeight: 600, color: '#111827' }}>{item.name}</span>
-                                            <span style={{ color }}>{item.quantity}/{item.minStock} {item.unit}</span>
+                                            <span style={{ color, fontWeight: 700, fontSize: '9px' }}>{item.quantity}/{item.minStock} {item.unit} · {estado}</span>
                                         </div>
-                                        <div style={{ background: '#e5e7eb', borderRadius: '4px', height: '6px' }}>
-                                            <div style={{ background: color, height: '6px', borderRadius: '4px', width: `${Math.max(pct, 2)}%` }} />
+                                        <div style={{ background: '#e2e8f0', borderRadius: '2px', height: '5px' }}>
+                                            <div style={{ background: color, height: '5px', borderRadius: '2px', width: `${Math.max(pct, 2)}%` }} />
                                         </div>
                                     </div>
                                 );
@@ -156,46 +206,63 @@ export const PrintReportView = React.forwardRef<HTMLDivElement, PrintReportViewP
                     </div>
                 </div>
 
-                {/* Tabla de movimientos */}
                 <div>
-                    <h2 style={{ fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', color: '#374151', borderBottom: '1px solid #e5e7eb', paddingBottom: '6px', marginBottom: '10px' }}>
-                        Movimientos del período ({filtered.length} registros)
-                    </h2>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px' }}>
+                    <div style={s.sectionTitle}>4. Registro de Movimientos del Período ({filtered.length} registros)</div>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Arial, sans-serif' }}>
                         <thead>
-                            <tr style={{ background: '#f9fafb' }}>
-                                {['Fecha', 'Artículo', 'Tipo', 'Cantidad', 'Responsable', 'Notas'].map(h => (
-                                    <th key={h} style={{ padding: '6px 8px', textAlign: 'left', fontWeight: 700, color: '#6b7280', borderBottom: '1px solid #e5e7eb', textTransform: 'uppercase', fontSize: '9px' }}>{h}</th>
+                            <tr>
+                                {['#', 'Fecha', 'Artículo', 'Tipo', 'Cantidad', 'Responsable', 'Notas'].map(h => (
+                                    <th key={h} style={s.th}>{h}</th>
                                 ))}
                             </tr>
                         </thead>
                         <tbody>
                             {filtered.slice(0, 150).map((m, idx) => {
                                 const item = items.find(i => i.id === m.itemId);
+                                const meta = TYPE_META[m.type] ?? { label: m.type, bg: '#f9fafb', color: '#374151' };
                                 return (
-                                    <tr key={m.id} style={{ background: idx % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
-                                        <td style={{ padding: '5px 8px', color: '#6b7280', whiteSpace: 'nowrap' }}>
-                                            {new Date(m.timestamp).toLocaleDateString('es-CO')}
+                                    <tr key={m.id}>
+                                        <td style={{ ...s.td(idx), color: '#9ca3af', width: '24px' }}>{idx + 1}</td>
+                                        <td style={{ ...s.td(idx), whiteSpace: 'nowrap' as const }}>{fmtShort(new Date(m.timestamp))}</td>
+                                        <td style={{ ...s.td(idx), fontWeight: 600, color: '#111827' }}>{item?.name ?? '—'}</td>
+                                        <td style={{ ...s.td(idx) }}>
+                                            <span style={{ background: meta.bg, color: meta.color, fontWeight: 700, fontSize: '9px', padding: '1px 6px', borderRadius: '10px', border: `1px solid ${meta.color}30` }}>
+                                                {meta.label}
+                                            </span>
                                         </td>
-                                        <td style={{ padding: '5px 8px', fontWeight: 600, color: '#111827' }}>{item?.name ?? '—'}</td>
-                                        <td style={{ padding: '5px 8px', color: '#374151' }}>{TYPE_LABELS[m.type] ?? m.type}</td>
-                                        <td style={{ padding: '5px 8px', color: '#374151' }}>{m.quantity} {item?.unit ?? ''}</td>
-                                        <td style={{ padding: '5px 8px', color: '#6b7280' }}>{m.personnelId ? personnelMap.get(m.personnelId) ?? '—' : '—'}</td>
-                                        <td style={{ padding: '5px 8px', color: '#9ca3af', maxWidth: '120px', overflow: 'hidden' }}>{m.notes ?? ''}</td>
+                                        <td style={{ ...s.td(idx), fontWeight: 600 }}>{m.quantity} {item?.unit ?? ''}</td>
+                                        <td style={{ ...s.td(idx), color: '#6b7280' }}>{m.personnelId ? (personnelMap.get(m.personnelId) ?? '—') : '—'}</td>
+                                        <td style={{ ...s.td(idx), color: '#9ca3af', maxWidth: '100px' }}>{m.notes ?? ''}</td>
                                     </tr>
                                 );
                             })}
                         </tbody>
                     </table>
                     {filtered.length > 150 && (
-                        <p style={{ fontSize: '10px', color: '#9ca3af', marginTop: '8px', textAlign: 'center' }}>
-                            Mostrando los primeros 150 de {filtered.length} movimientos
+                        <p style={{ fontSize: '9px', color: '#9ca3af', marginTop: '6px', textAlign: 'center', fontFamily: 'Arial, sans-serif' }}>
+                            Mostrando los primeros 150 de {filtered.length} movimientos totales.
                         </p>
                     )}
                 </div>
 
-                <div style={{ marginTop: '24px', paddingTop: '12px', borderTop: '1px solid #e5e7eb', fontSize: '9px', color: '#9ca3af', textAlign: 'center' }}>
-                    Bodega Pro — Informe generado automáticamente el {new Date().toLocaleString('es-CO')}
+                <div style={{ marginTop: '32px', paddingTop: '16px', borderTop: '1px solid #e2e8f0', fontFamily: 'Arial, sans-serif' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px' }}>
+                        <div>
+                            <div style={{ borderBottom: '1px solid #374151', marginBottom: '4px', paddingBottom: '24px' }} />
+                            <p style={{ margin: 0, fontSize: '9px', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Firma del Responsable</p>
+                            <p style={{ margin: '2px 0 0', fontSize: '9px', color: '#94a3b8' }}>Nombre y cargo</p>
+                        </div>
+                        <div>
+                            <div style={{ borderBottom: '1px solid #374151', marginBottom: '4px', paddingBottom: '24px' }} />
+                            <p style={{ margin: 0, fontSize: '9px', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Visto Bueno / Jefe de Bodega</p>
+                            <p style={{ margin: '2px 0 0', fontSize: '9px', color: '#94a3b8' }}>Nombre y cargo</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div style={{ marginTop: '16px', paddingTop: '8px', borderTop: '2px solid #1e3a8a', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontFamily: 'Arial, sans-serif' }}>
+                    <p style={{ margin: 0, fontSize: '8px', color: '#94a3b8' }}>BODEGA PRO — Sistema de Gestión de Inventario</p>
+                    <p style={{ margin: 0, fontSize: '8px', color: '#94a3b8' }}>Generado: {new Date().toLocaleString('es-CO')} · Documento de uso interno</p>
                 </div>
             </div>
         );
