@@ -58,6 +58,12 @@ const App: React.FC = () => {
             return s?.role ?? UserRole.OWNER;
         } catch { return UserRole.OWNER; }
     });
+    const [userName, setUserName] = useState<string>(() => {
+        try {
+            const s = JSON.parse(localStorage.getItem(SESSION_KEY) ?? 'null');
+            return s?.name ?? '';
+        } catch { return ''; }
+    });
 
     // Carga inicial síncrona desde localStorage (igual que antes), con fallback a mockData
     const [users, setUsers] = useState<AppUser[]>(() => { const s = loadFromLocalStorage(); return s?.users ?? mockUsers; });
@@ -126,11 +132,12 @@ const App: React.FC = () => {
         if (data.users) setUsers(data.users);
     }, (msg) => alert(msg));
 
-    const handleLogin = (role: UserRole) => {
+    const handleLogin = (role: UserRole, name: string = '') => {
         setUserRole(role);
+        setUserName(name);
         setIsAuthenticated(true);
         setShowLogin(false);
-        localStorage.setItem(SESSION_KEY, JSON.stringify({ role }));
+        localStorage.setItem(SESSION_KEY, JSON.stringify({ role, name }));
         if (!localStorage.getItem(ONBOARDING_KEY)) {
             setShowOnboarding(true);
         }
@@ -324,12 +331,12 @@ const App: React.FC = () => {
     };
 
     const handleVisitorLogin = () => {
-        handleLogin(UserRole.EMPLOYEE);
+        handleLogin(UserRole.EMPLOYEE, 'Visitante');
     };
 
     if (!isAuthenticated) {
         if (showLogin) {
-            return <LoginView onLoginSuccess={handleLogin} onLoginAttempt={handleLoginAttempt} />;
+            return <LoginView onLoginSuccess={handleLogin} />;
         }
         return <LandingPage onGetStarted={() => setShowLogin(true)} onVisitorLogin={handleVisitorLogin} />;
     }
@@ -389,6 +396,7 @@ const App: React.FC = () => {
                 <Header
                     toggleSidebar={() => setSidebarOpen(!isSidebarOpen)}
                     userRole={userRole}
+                    userName={userName}
                     onStartNewBusiness={handleResetAllData}
                     onOpenUserManagement={() => setUserManagementOpen(true)}
                     onLogout={() => { setIsAuthenticated(false); setShowLogin(false); localStorage.removeItem(SESSION_KEY); }}

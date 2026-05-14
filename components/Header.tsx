@@ -9,6 +9,7 @@ import { UploadIcon } from './icons/UploadIcon';
 interface HeaderProps {
     toggleSidebar: () => void;
     userRole: UserRole;
+    userName?: string;
     setUserRole: (role: UserRole) => void;
     onExportData: () => void;
     onImportData: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -20,7 +21,7 @@ interface HeaderProps {
     syncStatus?: 'idle' | 'syncing' | 'error';
 }
 
-export const Header: React.FC<HeaderProps> = ({ toggleSidebar, userRole, onExportData, onImportData, onResetData, onOpenUserManagement, onLogout, onOpenInvoiceReader, syncStatus }) => {
+export const Header: React.FC<HeaderProps> = ({ toggleSidebar, userRole, userName, onExportData, onImportData, onResetData, onOpenUserManagement, onLogout, onOpenInvoiceReader, syncStatus }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
     return (
         <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 md:px-6">
@@ -86,7 +87,7 @@ export const Header: React.FC<HeaderProps> = ({ toggleSidebar, userRole, onExpor
                     )}
                     <div className="hidden md:flex flex-col items-end">
                         <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest leading-none mb-1">
-                            {userRole === UserRole.OWNER ? 'Bodeguero' : 'Visitante'}
+                            {userName || (userRole === UserRole.OWNER ? 'Bodeguero' : 'Visitante')}
                         </span>
                         <span onClick={onLogout} className="text-[9px] text-gray-400 font-bold uppercase hover:text-red-600 cursor-pointer">Salir</span>
                     </div>
@@ -101,7 +102,7 @@ export const Header: React.FC<HeaderProps> = ({ toggleSidebar, userRole, onExpor
                         </svg>
                     </button>
                     <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center font-black text-lg border-2 border-white shadow-sm">
-                        {userRole === UserRole.OWNER ? 'B' : 'V'}
+                        {userName ? userName[0].toUpperCase() : (userRole === UserRole.OWNER ? 'B' : 'V')}
                     </div>
                 </div>
             </div>
