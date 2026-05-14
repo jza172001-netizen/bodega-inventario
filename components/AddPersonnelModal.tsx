@@ -11,6 +11,7 @@ interface AddPersonnelModalProps {
 
 export const AddPersonnelModal: React.FC<AddPersonnelModalProps> = ({ isOpen, onClose, onAddPersonnel }) => {
     const [name, setName] = useState('');
+    const [phone, setPhone] = useState('');
 
     if (!isOpen) return null;
 
@@ -20,7 +21,9 @@ export const AddPersonnelModal: React.FC<AddPersonnelModalProps> = ({ isOpen, on
             alert('El nombre es requerido.');
             return;
         }
-        onAddPersonnel({ name });
+        onAddPersonnel({ name: name.trim(), phone: phone.trim() || undefined });
+        setName('');
+        setPhone('');
         onClose();
     };
 
@@ -42,6 +45,19 @@ export const AddPersonnelModal: React.FC<AddPersonnelModalProps> = ({ isOpen, on
                             required
                             className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                             placeholder="Ej: Juan Pérez"
+                        />
+                    </div>
+                    <div>
+                        <label htmlFor="personnelPhone" className="block text-sm font-medium text-gray-700 mb-1">
+                            Teléfono <span className="text-gray-400 font-normal">(opcional — para recordatorios WhatsApp)</span>
+                        </label>
+                        <input
+                            id="personnelPhone"
+                            type="tel"
+                            value={phone}
+                            onChange={e => setPhone(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="Ej: 3001234567"
                         />
                     </div>
                     <div className="flex justify-end space-x-3 pt-4">

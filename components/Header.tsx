@@ -73,7 +73,7 @@ export const Header: React.FC<HeaderProps> = ({ toggleSidebar, userRole, onExpor
                     </>
                 )}
                 <div className="flex items-center space-x-3">
-                    {onOpenInvoiceReader && (
+                    {onOpenInvoiceReader && userRole === UserRole.OWNER && (
                         <button
                             onClick={onOpenInvoiceReader}
                             title="Importar factura o archivo"
@@ -86,7 +86,7 @@ export const Header: React.FC<HeaderProps> = ({ toggleSidebar, userRole, onExpor
                     )}
                     <div className="hidden md:flex flex-col items-end">
                         <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest leading-none mb-1">
-                            {userRole === UserRole.OWNER ? 'Admin' : 'Operativo'}
+                            {userRole === UserRole.OWNER ? 'Bodeguero' : 'Visitante'}
                         </span>
                         <span onClick={onLogout} className="text-[9px] text-gray-400 font-bold uppercase hover:text-red-600 cursor-pointer">Salir</span>
                     </div>
@@ -101,7 +101,7 @@ export const Header: React.FC<HeaderProps> = ({ toggleSidebar, userRole, onExpor
                         </svg>
                     </button>
                     <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center font-black text-lg border-2 border-white shadow-sm">
-                        {userRole === UserRole.OWNER ? 'A' : 'O'}
+                        {userRole === UserRole.OWNER ? 'B' : 'V'}
                     </div>
                 </div>
             </div>

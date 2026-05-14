@@ -7,6 +7,7 @@ import { MovementsIcon } from './icons/MovementsIcon';
 
 interface LandingPageProps {
     onGetStarted: () => void;
+    onVisitorLogin: () => void;
 }
 
 const Feature: React.FC<{ icon: React.ElementType; title: string; description: string }> = ({ icon: Icon, title, description }) => (
@@ -19,7 +20,7 @@ const Feature: React.FC<{ icon: React.ElementType; title: string; description: s
     </div>
 );
 
-export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => (
+export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onVisitorLogin }) => (
     <div className="min-h-screen bg-gradient-to-br from-blue-800 via-blue-700 to-indigo-800 flex flex-col">
         <header className="flex items-center justify-between px-8 py-6">
             <div className="flex items-center gap-3">
@@ -51,12 +52,24 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => (
                 Inventario en tiempo real, trazabilidad completa de movimientos, préstamos, órdenes de compra y análisis de consumo.
             </p>
 
-            <button
-                onClick={onGetStarted}
-                className="px-8 py-4 bg-white text-blue-700 font-black text-lg rounded-2xl hover:bg-blue-50 transition-all duration-200 shadow-2xl shadow-blue-900/40 hover:scale-105 active:scale-95"
-            >
-                Ingresar al sistema →
-            </button>
+            <div className="flex flex-col sm:flex-row gap-4 items-center">
+                <button
+                    onClick={onGetStarted}
+                    className="px-8 py-4 bg-white text-blue-700 font-black text-lg rounded-2xl hover:bg-blue-50 transition-all duration-200 shadow-2xl shadow-blue-900/40 hover:scale-105 active:scale-95 min-w-[220px]"
+                >
+                    🔑 Ingresar como Bodeguero
+                </button>
+                <button
+                    onClick={onVisitorLogin}
+                    className="px-8 py-4 bg-white/15 hover:bg-white/25 text-white font-bold text-lg rounded-2xl border border-white/30 transition-all duration-200 hover:scale-105 active:scale-95 min-w-[220px]"
+                >
+                    👁 Ver como Visitante
+                </button>
+            </div>
+
+            <p className="text-blue-200/60 text-xs mt-4">
+                Visitante: solo lectura · sin contraseña
+            </p>
         </main>
 
         <section className="px-6 pb-16">

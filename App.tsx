@@ -322,11 +322,15 @@ const App: React.FC = () => {
         db.deleteUser(id).catch(() => {});
     };
 
+    const handleVisitorLogin = () => {
+        handleLogin(UserRole.EMPLOYEE);
+    };
+
     if (!isAuthenticated) {
         if (showLogin) {
             return <LoginView onLoginSuccess={handleLogin} onLoginAttempt={handleLoginAttempt} />;
         }
-        return <LandingPage onGetStarted={() => setShowLogin(true)} />;
+        return <LandingPage onGetStarted={() => setShowLogin(true)} onVisitorLogin={handleVisitorLogin} />;
     }
 
     return (
@@ -347,7 +351,9 @@ const App: React.FC = () => {
                 <div className="flex-1 overflow-y-auto py-4">
                     <nav className="px-2 space-y-1">
                         <NavItem icon={DashboardIcon} label="Resumen" onClick={() => selectView('dashboard')} isActive={currentView === 'dashboard'} />
-                        <NavItem icon={BrainIcon} label="Análisis" onClick={() => selectView('copilot')} isActive={currentView === 'copilot'} />
+                        {userRole === UserRole.OWNER && (
+                            <NavItem icon={BrainIcon} label="Análisis" onClick={() => selectView('copilot')} isActive={currentView === 'copilot'} />
+                        )}
                         <NavHeader label="Gestión" />
                         <NavItem icon={HardHatIcon} label="Proyectos" onClick={() => selectView('projects')} isActive={currentView === 'projects'} />
                         <NavItem icon={MovementsIcon} label="Kardex" onClick={() => selectView('movements')} isActive={currentView === 'movements'} />
