@@ -16,6 +16,7 @@ import { LoansView } from './components/LoansView';
 import { ItemHistoryModal } from './components/ItemHistoryModal';
 import { UserManagementModal } from './components/UserManagementModal';
 import CopilotView from './components/CopilotView';
+import { FloatingChat } from './components/FloatingChat';
 import { OnboardingModal } from './components/OnboardingModal';
 import { HelpView } from './components/HelpView';
 import { requestNotificationPermission, checkAndNotifyOverdueLoans } from './services/notificationService';
@@ -47,16 +48,8 @@ const SESSION_KEY = 'bodega_session';
 const ONBOARDING_KEY = 'bodega_onboarding_v1';
 
 const App: React.FC = () => {
-    const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-        try { return !!JSON.parse(localStorage.getItem(SESSION_KEY) ?? 'null'); } catch { return false; }
-    });
-    const [showLogin, setShowLogin] = useState(false);
-    const [userRole, setUserRole] = useState<UserRole>(() => {
-        try {
-            const s = JSON.parse(localStorage.getItem(SESSION_KEY) ?? 'null');
-            return s?.role ?? UserRole.OWNER;
-        } catch { return UserRole.OWNER; }
-    });
+    const [userRole] = useState<UserRole>(UserRole.OWNER);
+    const [userName] = useState<string>('');
 
     // Carga inicial síncrona desde localStorage (igual que antes), con fallback a mockData
     const [users, setUsers] = useState<AppUser[]>(() => { const s = loadFromLocalStorage(); return s?.users ?? mockUsers; });
@@ -71,10 +64,10 @@ const App: React.FC = () => {
 
     // Revisar préstamos vencidos y pendientes de recoger cuando los datos estén listos
     useEffect(() => {
-        if (isAuthenticated && movements.length > 0) {
+        if (movements.length > 0) {
             checkAndNotifyOverdueLoans(movements, items, personnel);
         }
-    }, [isAuthenticated, movements, items, personnel]);
+    }, [movements, items, personnel]);
 
     // Sync desde Supabase en background al montar (no bloquea la UI)
     useEffect(() => {
@@ -125,38 +118,9 @@ const App: React.FC = () => {
         if (data.users) setUsers(data.users);
     }, (msg) => alert(msg));
 
-    const handleLogin = (role: UserRole) => {
-        setUserRole(role);
-        setIsAuthenticated(true);
-        setShowLogin(false);
-        localStorage.setItem(SESSION_KEY, JSON.stringify({ role }));
-        if (!localStorage.getItem(ONBOARDING_KEY)) {
-            setShowOnboarding(true);
-        }
-        requestNotificationPermission();
-    };
-
     const handleOnboardingFinish = () => {
         localStorage.setItem(ONBOARDING_KEY, 'done');
         setShowOnboarding(false);
-    };
-
-    // Valida credenciales via Supabase RPC (server-side, sin exponer contraseñas al cliente)
-    // Fallback: comparación local si Supabase no está disponible
-    const handleLoginAttempt = async (username: string, password: string): Promise<boolean> => {
-        try {
-            const result = await db.authenticateUser(username, password);
-            if (result) {
-                handleLogin(result.role);
-                return true;
-            }
-            return false;
-        } catch {
-            // Fallback offline: comparar contra usuarios en estado local (sin contraseña desde DB)
-            const localUser = users.find(u => u.username === username && u.password === password);
-            if (localUser) { handleLogin(localUser.role); return true; }
-            return false;
-        }
     };
 
     const handleResetAllData = () => {
@@ -322,17 +286,6 @@ const App: React.FC = () => {
         db.deleteUser(id).catch(() => {});
     };
 
-    const handleVisitorLogin = () => {
-        handleLogin(UserRole.EMPLOYEE);
-    };
-
-    if (!isAuthenticated) {
-        if (showLogin) {
-            return <LoginView onLoginSuccess={handleLogin} onLoginAttempt={handleLoginAttempt} />;
-        }
-        return <LandingPage onGetStarted={() => setShowLogin(true)} onVisitorLogin={handleVisitorLogin} />;
-    }
-
     return (
         <div className="flex h-screen bg-gray-50 overflow-hidden font-sans">
             {/* Backdrop mobile: cierra el sidebar al tocar fuera */}
@@ -388,9 +341,10 @@ const App: React.FC = () => {
                 <Header
                     toggleSidebar={() => setSidebarOpen(!isSidebarOpen)}
                     userRole={userRole}
+                    userName={userName}
                     onStartNewBusiness={handleResetAllData}
                     onOpenUserManagement={() => setUserManagementOpen(true)}
-                    onLogout={() => { setIsAuthenticated(false); setShowLogin(false); localStorage.removeItem(SESSION_KEY); }}
+                    onLogout={() => { localStorage.clear(); window.location.reload(); }}
                     onExportData={handleExportData}
                     onImportData={handleImportData}
                     onResetData={handleResetAllData}
@@ -496,6 +450,17 @@ const App: React.FC = () => {
             <UserManagementModal isOpen={isUserManagementOpen} onClose={() => setUserManagementOpen(false)} users={users} onAddUser={handleAddUser} onDeleteUser={handleDeleteUser} onEditUser={handleEditUser} />
             <InvoiceReaderModal isOpen={isInvoiceReaderOpen} onClose={() => setInvoiceReaderOpen(false)} onImport={(rows, invType) => handleImportItems(rows, invType)} />
             {showOnboarding && <OnboardingModal onFinish={handleOnboardingFinish} />}
+            <FloatingChat
+                items={items}
+                movements={movements}
+                personnel={personnel}
+                purchaseOrders={purchaseOrders}
+                projects={projects}
+                onLogMovements={batch => batch.forEach(m => handleLogMovement(m))}
+                onCreateItem={handleAddItemSync}
+                onCreateProject={handleAddProjectSync}
+                onCreatePersonnel={handleAddPersonnelSync}
+            />
         </div>
     );
 };

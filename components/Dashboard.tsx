@@ -1,9 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { Item, Movement, Personnel, PurchaseOrder, PurchaseOrderStatus } from '../types';
 import StatisticsView from './StatisticsView';
-import { ReportView } from './ReportView';
-import { StatisticsIcon } from './icons/StatisticsIcon';
-import { ReportsIcon } from './icons/ReportsIcon';
 
 interface DashboardProps {
     items: Item[];
@@ -12,11 +9,7 @@ interface DashboardProps {
     personnel?: Personnel[];
 }
 
-type DashboardTab = 'statistics' | 'reports';
-
 export const Dashboard: React.FC<DashboardProps> = ({ items, movements, purchaseOrders, personnel = [] }) => {
-    const [activeTab, setActiveTab] = useState<DashboardTab>('statistics');
-
     const alerts = useMemo(() => {
         const daysElapsed = (d: Date) => Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
         const depleted = items.filter(i => i.quantity === 0 && i.minStock > 0).length;
@@ -29,25 +22,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ items, movements, purchase
     }, [items, movements, purchaseOrders]);
 
     const hasAlerts = alerts.depleted > 0 || alerts.lowStock > 0 || alerts.overdueLoans > 0 || alerts.pendingOrders > 0;
-
-    const TabButton: React.FC<{
-        label: string;
-        icon: React.ElementType;
-        isActive: boolean;
-        onClick: () => void;
-    }> = ({ label, icon: Icon, isActive, onClick }) => (
-        <button
-            onClick={onClick}
-            className={`flex items-center space-x-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                isActive
-                    ? 'bg-blue-600 text-white shadow'
-                    : 'text-gray-600 hover:bg-gray-100'
-            }`}
-        >
-            <Icon className="w-5 h-5" />
-            <span>{label}</span>
-        </button>
-    );
 
     return (
         <div className="space-y-6">
@@ -83,30 +57,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ items, movements, purchase
                 </div>
             )}
 
-            <div className="bg-white p-4 rounded-xl shadow-md flex flex-col sm:flex-row justify-between items-start sm:items-center">
-                <h1 className="text-2xl font-bold text-gray-800 mb-3 sm:mb-0">
-                    Dashboard de Análisis
-                </h1>
-                <div className="flex space-x-2 bg-gray-200/60 p-1 rounded-lg">
-                    <TabButton
-                        label="Estadísticas y KPIs"
-                        icon={StatisticsIcon}
-                        isActive={activeTab === 'statistics'}
-                        onClick={() => setActiveTab('statistics')}
-                    />
-                    <TabButton
-                        label="Reporte General"
-                        icon={ReportsIcon}
-                        isActive={activeTab === 'reports'}
-                        onClick={() => setActiveTab('reports')}
-                    />
-                </div>
-            </div>
-
-            <div>
-                {activeTab === 'statistics' && <StatisticsView items={items} movements={movements} personnel={personnel} />}
-                {activeTab === 'reports' && <ReportView items={items} movements={movements} />}
-            </div>
+            <StatisticsView items={items} movements={movements} personnel={personnel} />
         </div>
     );
 };
