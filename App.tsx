@@ -16,6 +16,7 @@ import { LoansView } from './components/LoansView';
 import { ItemHistoryModal } from './components/ItemHistoryModal';
 import { UserManagementModal } from './components/UserManagementModal';
 import CopilotView from './components/CopilotView';
+import { FloatingChat } from './components/FloatingChat';
 import { OnboardingModal } from './components/OnboardingModal';
 import { HelpView } from './components/HelpView';
 import { requestNotificationPermission, checkAndNotifyOverdueLoans } from './services/notificationService';
@@ -496,6 +497,14 @@ const App: React.FC = () => {
             <UserManagementModal isOpen={isUserManagementOpen} onClose={() => setUserManagementOpen(false)} users={users} onAddUser={handleAddUser} onDeleteUser={handleDeleteUser} onEditUser={handleEditUser} />
             <InvoiceReaderModal isOpen={isInvoiceReaderOpen} onClose={() => setInvoiceReaderOpen(false)} onImport={(rows, invType) => handleImportItems(rows, invType)} />
             {showOnboarding && <OnboardingModal onFinish={handleOnboardingFinish} />}
+            {isAuthenticated && (
+                <FloatingChat
+                    items={items}
+                    movements={movements}
+                    personnel={personnel}
+                    purchaseOrders={purchaseOrders}
+                />
+            )}
         </div>
     );
 };
