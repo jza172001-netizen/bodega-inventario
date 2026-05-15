@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { Movement, Item, Personnel, InventoryType, MovementType, UserRole } from '../types';
+import { Movement, Item, Personnel, InventoryType, MovementType, UserRole, Project } from '../types';
 import { TruckIcon } from './icons/TruckIcon';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
 import { TrashIcon } from './icons/TrashIcon';
@@ -11,6 +11,7 @@ interface MovementsViewProps {
     movements: Movement[];
     items: Item[];
     personnel: Personnel[];
+    projects?: Project[];
     filterType?: InventoryType;
     openLogMovementModal?: () => void;
     onReturnLoan?: (movementId: string) => void;
@@ -18,8 +19,12 @@ interface MovementsViewProps {
     onGoBack: () => void;
 }
 
-export const MovementsView: React.FC<MovementsViewProps> = ({ movements, items, personnel, filterType, openLogMovementModal, onReturnLoan, onDeleteMovement, onGoBack }) => {
+export const MovementsView: React.FC<MovementsViewProps> = ({ movements, items, personnel, projects, filterType, openLogMovementModal, onReturnLoan, onDeleteMovement, onGoBack }) => {
     const [page, setPage] = useState(0);
+    const [filterPersonnel, setFilterPersonnel] = useState('');
+    const [filterProject, setFilterProject] = useState('');
+    const [filterDays, setFilterDays] = useState<number | null>(null);
+    const [filterMoveType, setFilterMoveType] = useState('');
 
     // Memoized O(1) lookup maps — mejora 4
     const itemMap = useMemo(() => new Map(items.map(i => [i.id, i])), [items]);
@@ -28,13 +33,28 @@ export const MovementsView: React.FC<MovementsViewProps> = ({ movements, items, 
     const getPersonnelName = (id?: string) => id ? (personnelMap.get(id)?.name ?? 'N/A') : 'N/A';
 
     const filteredMovements = useMemo(() => {
-        if (!filterType) return movements;
-        const itemIdsInType = new Set(items.filter(i => i.inventoryType === filterType).map(i => i.id));
-        return movements.filter(m => itemIdsInType.has(m.itemId));
-    }, [movements, items, filterType]);
+        let list = movements;
+        // Existing inventoryType filter
+        if (filterType) {
+            const itemIdsInType = new Set(items.filter(i => i.inventoryType === filterType).map(i => i.id));
+            list = list.filter(m => itemIdsInType.has(m.itemId));
+        }
+        // Personnel filter
+        if (filterPersonnel) list = list.filter(m => m.personnelId === filterPersonnel);
+        // Project filter
+        if (filterProject) list = list.filter(m => m.projectId === filterProject);
+        // Days filter
+        if (filterDays !== null) {
+            const cutoff = Date.now() - filterDays * 86400000;
+            list = list.filter(m => new Date(m.timestamp).getTime() >= cutoff);
+        }
+        // Type filter
+        if (filterMoveType) list = list.filter(m => m.type === filterMoveType);
+        return list;
+    }, [movements, items, filterType, filterPersonnel, filterProject, filterDays, filterMoveType]);
 
-    // Reset page when filter changes — mejora 8
-    useEffect(() => { setPage(0); }, [filterType]);
+    // Reset page when any filter changes — mejora 8
+    useEffect(() => { setPage(0); }, [filterType, filterPersonnel, filterProject, filterDays, filterMoveType]);
 
     const totalPages = Math.ceil(filteredMovements.length / PAGE_SIZE);
     const pagedMovements = useMemo(
@@ -69,6 +89,62 @@ export const MovementsView: React.FC<MovementsViewProps> = ({ movements, items, 
                         Registrar Movimiento
                     </button>
                 )}
+            </div>
+
+            {/* Filtros */}
+            <div className="flex flex-wrap gap-2 mb-4 p-3 bg-gray-50 rounded-xl border border-gray-100">
+                <select
+                    value={filterPersonnel}
+                    onChange={e => setFilterPersonnel(e.target.value)}
+                    className="text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
+                >
+                    <option value="">👤 Todo el personal</option>
+                    {personnel.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+
+                {projects && projects.length > 0 && (
+                    <select
+                        value={filterProject}
+                        onChange={e => setFilterProject(e.target.value)}
+                        className="text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    >
+                        <option value="">🏗️ Todos los proyectos</option>
+                        {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                )}
+
+                <select
+                    value={filterDays === null ? '' : String(filterDays)}
+                    onChange={e => setFilterDays(e.target.value === '' ? null : Number(e.target.value))}
+                    className="text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
+                >
+                    <option value="">📅 Todo el período</option>
+                    <option value="7">Últimos 7 días</option>
+                    <option value="30">Últimos 30 días</option>
+                    <option value="90">Últimos 3 meses</option>
+                </select>
+
+                <select
+                    value={filterMoveType}
+                    onChange={e => setFilterMoveType(e.target.value)}
+                    className="text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
+                >
+                    <option value="">📋 Todos los tipos</option>
+                    <option value="Salida">Salidas</option>
+                    <option value="Entrada">Entradas</option>
+                    <option value="Compra">Compras</option>
+                    <option value="Merma">Mermas</option>
+                </select>
+
+                {(filterPersonnel || filterProject || filterDays !== null || filterMoveType) && (
+                    <button
+                        onClick={() => { setFilterPersonnel(''); setFilterProject(''); setFilterDays(null); setFilterMoveType(''); }}
+                        className="text-xs text-red-500 hover:text-red-700 font-bold px-3 py-2 hover:bg-red-50 rounded-lg"
+                    >
+                        ✕ Limpiar
+                    </button>
+                )}
+                <span className="text-xs text-gray-400 self-center ml-auto">{filteredMovements.length} registro{filteredMovements.length !== 1 ? 's' : ''}</span>
             </div>
 
             {/* Desktop table — mejora 6 */}

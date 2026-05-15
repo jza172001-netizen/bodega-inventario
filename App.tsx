@@ -382,6 +382,7 @@ const App: React.FC = () => {
                                 movements={movements}
                                 items={items}
                                 personnel={personnel}
+                                projects={projects}
                                 openLogMovementModal={() => setLogMovementModalOpen(true)}
                                 onGoBack={() => selectView('dashboard')}
                                 onDeleteMovement={handleDeleteMovement}

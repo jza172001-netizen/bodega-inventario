@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Personnel, Movement, Item, Project, MovementType } from '../types';
+import { Personnel, Movement, Item, Project, MovementType, InventoryType } from '../types';
 
 interface Props {
     person: Personnel;
@@ -23,10 +23,27 @@ export const PersonnelDetailModal: React.FC<Props> = ({ person, movements, items
         [movements, person.id]
     );
 
-    const activeLoans = useMemo(
-        () => myMovements.filter(m => m.isLoan && !m.isReturned),
-        [myMovements]
-    );
+    const activeLoans = useMemo(() => {
+        // Explicit loans (isLoan=true) that are not returned
+        const explicitLoans = myMovements.filter(m => m.isLoan && !m.isReturned);
+        const explicitItemIds = new Set(explicitLoans.map(m => m.itemId));
+
+        // Also include CHECK_OUT of HAND_TOOL items not already covered by explicit loans
+        // (manual tools are often distributed without isLoan flag)
+        const latestManualByItem = new Map<string, Movement>();
+        myMovements
+            .filter(m => m.type === MovementType.CHECK_OUT && !m.isLoan && !explicitItemIds.has(m.itemId))
+            .filter(m => items.find(i => i.id === m.itemId)?.inventoryType === InventoryType.HAND_TOOL)
+            .forEach(m => {
+                const existing = latestManualByItem.get(m.itemId);
+                if (!existing || new Date(m.timestamp) > new Date(existing.timestamp)) {
+                    latestManualByItem.set(m.itemId, m);
+                }
+            });
+
+        return [...explicitLoans, ...latestManualByItem.values()]
+            .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    }, [myMovements, items]);
 
     const yearLoans = useMemo(
         () => myMovements.filter(m => m.isLoan && new Date(m.timestamp).getFullYear() === currentYear)
