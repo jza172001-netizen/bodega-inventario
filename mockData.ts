@@ -27,14 +27,14 @@ export const mockProjects: Project[] = [
 ];
 
 export const mockItems: Item[] = [
-    { id: 'item-1', name: 'Taladro Percutor 1/2"', category: 'Herramientas', subCategory: 'Herramientas Eléctricas de Rotación', inventoryType: InventoryType.ELECTRICAL_TOOL, quantity: 15, minStock: 5, price: 120.50, unit: 'unidades', color: 'Azul' },
-    { id: 'item-2', name: 'Martillo de uña', category: 'Herramientas', subCategory: 'Herramientas de Golpe', inventoryType: InventoryType.HAND_TOOL, quantity: 40, minStock: 20, price: 15.00, unit: 'unidades' },
-    { id: 'item-3', name: 'Guantes de seguridad', category: 'Seguridad', subCategory: 'Protección Manual', inventoryType: InventoryType.PPE, quantity: 80, minStock: 100, price: 5.25, unit: 'pares' },
-    { id: 'item-4', name: 'Tornillos para madera #8', category: 'Fijaciones', subCategory: 'Tornillería', inventoryType: InventoryType.SINGLE_USE, quantity: 500, minStock: 200, price: 0.10, unit: 'unidades' },
-    { id: 'item-5', name: 'Cinta aislante', category: 'Material Eléctrico', subCategory: 'Adhesivos y Cintas', inventoryType: InventoryType.SINGLE_USE, quantity: 30, minStock: 50, price: 2.50, unit: 'rollos', color: 'Negro' },
-    { id: 'item-6', name: 'Pulidora Angular 4-1/2"', category: 'Herramientas', subCategory: 'Herramientas Eléctricas de Corte', inventoryType: InventoryType.ELECTRICAL_TOOL, quantity: 8, minStock: 4, price: 85.00, unit: 'unidades' },
-    { id: 'item-7', name: 'Casco de seguridad blanco', category: 'Seguridad', subCategory: 'Protección Craneal', inventoryType: InventoryType.PPE, quantity: 25, minStock: 20, price: 12.00, unit: 'unidades', color: 'Blanco' },
-    { id: 'item-8', name: 'Tubo PVC 1/2 pulgada', category: 'Fontanería', subCategory: 'Tuberías', inventoryType: InventoryType.SINGLE_USE, quantity: 120, minStock: 50, price: 2.15, unit: 'metros' },
+    { id: 'item-1', name: 'Taladro Percutor 1/2"', category: 'Herramientas', subCategory: 'Herramientas Eléctricas de Rotación', inventoryType: InventoryType.ELECTRICAL_TOOL, quantity: 15, minStock: 5, unit: 'unidades', color: 'Azul' },
+    { id: 'item-2', name: 'Martillo de uña', category: 'Herramientas', subCategory: 'Herramientas de Golpe', inventoryType: InventoryType.HAND_TOOL, quantity: 40, minStock: 20, unit: 'unidades' },
+    { id: 'item-3', name: 'Guantes de seguridad', category: 'Seguridad', subCategory: 'Protección Manual', inventoryType: InventoryType.PPE, quantity: 80, minStock: 100, unit: 'pares' },
+    { id: 'item-4', name: 'Tornillos para madera #8', category: 'Fijaciones', subCategory: 'Tornillería', inventoryType: InventoryType.SINGLE_USE, quantity: 500, minStock: 200, unit: 'unidades' },
+    { id: 'item-5', name: 'Cinta aislante', category: 'Material Eléctrico', subCategory: 'Adhesivos y Cintas', inventoryType: InventoryType.SINGLE_USE, quantity: 30, minStock: 50, unit: 'rollos', color: 'Negro' },
+    { id: 'item-6', name: 'Pulidora Angular 4-1/2"', category: 'Herramientas', subCategory: 'Herramientas Eléctricas de Corte', inventoryType: InventoryType.ELECTRICAL_TOOL, quantity: 8, minStock: 4, unit: 'unidades' },
+    { id: 'item-7', name: 'Casco de seguridad blanco', category: 'Seguridad', subCategory: 'Protección Craneal', inventoryType: InventoryType.PPE, quantity: 25, minStock: 20, unit: 'unidades', color: 'Blanco' },
+    { id: 'item-8', name: 'Tubo PVC 1/2 pulgada', category: 'Fontanería', subCategory: 'Tuberías', inventoryType: InventoryType.SINGLE_USE, quantity: 120, minStock: 50, unit: 'metros' },
 ];
 
 export const mockPersonnel: Personnel[] = [

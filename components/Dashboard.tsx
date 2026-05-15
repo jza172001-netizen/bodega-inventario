@@ -1,27 +1,23 @@
 import React, { useMemo } from 'react';
-import { Item, Movement, Personnel, PurchaseOrder, PurchaseOrderStatus } from '../types';
+import { Item, Movement, Personnel } from '../types';
 import StatisticsView from './StatisticsView';
 
 interface DashboardProps {
     items: Item[];
     movements: Movement[];
-    purchaseOrders: PurchaseOrder[];
     personnel?: Personnel[];
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ items, movements, purchaseOrders, personnel = [] }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ items, movements, personnel = [] }) => {
     const alerts = useMemo(() => {
         const daysElapsed = (d: Date) => Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
         const depleted = items.filter(i => i.quantity === 0 && i.minStock > 0).length;
         const lowStock = items.filter(i => i.quantity > 0 && i.quantity <= i.minStock && i.minStock > 0).length;
         const overdueLoans = movements.filter(m => m.isLoan && !m.isReturned && daysElapsed(m.timestamp) > 7).length;
-        const pendingOrders = purchaseOrders.filter(o =>
-            o.status === PurchaseOrderStatus.ORDERED || o.status === PurchaseOrderStatus.SHIPPED
-        ).length;
-        return { depleted, lowStock, overdueLoans, pendingOrders };
-    }, [items, movements, purchaseOrders]);
+        return { depleted, lowStock, overdueLoans };
+    }, [items, movements]);
 
-    const hasAlerts = alerts.depleted > 0 || alerts.lowStock > 0 || alerts.overdueLoans > 0 || alerts.pendingOrders > 0;
+    const hasAlerts = alerts.depleted > 0 || alerts.lowStock > 0 || alerts.overdueLoans > 0;
 
     return (
         <div className="space-y-6">
@@ -45,12 +41,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ items, movements, purchase
                             <span className="flex items-center gap-1.5 bg-yellow-50 border border-yellow-200 text-yellow-700 text-xs font-bold px-3 py-1.5 rounded-full">
                                 <span className="w-2 h-2 rounded-full bg-yellow-400 inline-block"></span>
                                 {alerts.overdueLoans} préstamo{alerts.overdueLoans > 1 ? 's' : ''} vencido{alerts.overdueLoans > 1 ? 's' : ''} (+7d)
-                            </span>
-                        )}
-                        {alerts.pendingOrders > 0 && (
-                            <span className="flex items-center gap-1.5 bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold px-3 py-1.5 rounded-full">
-                                <span className="w-2 h-2 rounded-full bg-blue-400 inline-block"></span>
-                                {alerts.pendingOrders} orden{alerts.pendingOrders > 1 ? 'es' : ''} de compra pendiente{alerts.pendingOrders > 1 ? 's' : ''}
                             </span>
                         )}
                     </div>

@@ -48,8 +48,20 @@ const SESSION_KEY = 'bodega_session';
 const ONBOARDING_KEY = 'bodega_onboarding_v1';
 
 const App: React.FC = () => {
-    const [userRole] = useState<UserRole>(UserRole.OWNER);
-    const [userName] = useState<string>('');
+    const [loggedIn, setLoggedIn] = useState(() => !!localStorage.getItem(SESSION_KEY));
+    const [userRole, setUserRole] = useState<UserRole>(() => {
+        try { return JSON.parse(localStorage.getItem(SESSION_KEY) || '{}').role ?? UserRole.OWNER; } catch { return UserRole.OWNER; }
+    });
+    const [userName, setUserName] = useState<string>(() => {
+        try { return JSON.parse(localStorage.getItem(SESSION_KEY) || '{}').name ?? ''; } catch { return ''; }
+    });
+
+    const handleLoginSuccess = (role: UserRole, name: string) => {
+        setUserRole(role);
+        setUserName(name);
+        setLoggedIn(true);
+        localStorage.setItem(SESSION_KEY, JSON.stringify({ role, name }));
+    };
 
     // Carga inicial síncrona desde localStorage (igual que antes), con fallback a mockData
     const [users, setUsers] = useState<AppUser[]>(() => { const s = loadFromLocalStorage(); return s?.users ?? mockUsers; });
@@ -286,6 +298,8 @@ const App: React.FC = () => {
         db.deleteUser(id).catch(() => {});
     };
 
+    if (!loggedIn) return <LoginView onLoginSuccess={handleLoginSuccess} />;
+
     return (
         <div className="flex h-screen bg-gray-50 overflow-hidden font-sans">
             {/* Backdrop mobile: cierra el sidebar al tocar fuera */}
@@ -304,9 +318,6 @@ const App: React.FC = () => {
                 <div className="flex-1 overflow-y-auto py-4">
                     <nav className="px-2 space-y-1">
                         <NavItem icon={DashboardIcon} label="Resumen" onClick={() => selectView('dashboard')} isActive={currentView === 'dashboard'} />
-                        {userRole === UserRole.OWNER && (
-                            <NavItem icon={BrainIcon} label="Análisis" onClick={() => selectView('copilot')} isActive={currentView === 'copilot'} />
-                        )}
                         <NavHeader label="Gestión" />
                         <NavItem icon={HardHatIcon} label="Proyectos" onClick={() => selectView('projects')} isActive={currentView === 'projects'} />
                         <NavItem icon={MovementsIcon} label="Kardex" onClick={() => selectView('movements')} isActive={currentView === 'movements'} />
@@ -320,7 +331,6 @@ const App: React.FC = () => {
 
                         <NavHeader label="Admin" />
                         <NavItem icon={PersonnelIcon} label="Personal" onClick={() => selectView('personnel')} isActive={currentView === 'personnel'} />
-                        <NavItem icon={PurchaseOrdersIcon} label="Compras" onClick={() => selectView('purchaseOrders')} isActive={currentView === 'purchaseOrders'} />
                     </nav>
                 </div>
 
@@ -344,7 +354,7 @@ const App: React.FC = () => {
                     userName={userName}
                     onStartNewBusiness={handleResetAllData}
                     onOpenUserManagement={() => setUserManagementOpen(true)}
-                    onLogout={() => { localStorage.clear(); window.location.reload(); }}
+                    onLogout={() => { localStorage.removeItem(SESSION_KEY); setLoggedIn(false); }}
                     onExportData={handleExportData}
                     onImportData={handleImportData}
                     onResetData={handleResetAllData}
@@ -354,7 +364,7 @@ const App: React.FC = () => {
                 />
                 <main className="flex-1 p-4 md:p-6 overflow-y-auto bg-gray-50">
                     <div className="max-w-7xl mx-auto">
-                        {currentView === 'dashboard' && <Dashboard items={items} movements={movements} purchaseOrders={purchaseOrders} personnel={personnel} />}
+                        {currentView === 'dashboard' && <Dashboard items={items} movements={movements} personnel={personnel} />}
                         {currentView === 'inventory' && (
                             <InventoryView
                                 items={selectedInventoryType ? items.filter(i => i.inventoryType === selectedInventoryType) : items}
@@ -460,6 +470,7 @@ const App: React.FC = () => {
                 onCreateItem={handleAddItemSync}
                 onCreateProject={handleAddProjectSync}
                 onCreatePersonnel={handleAddPersonnelSync}
+                onReturnItem={handleReturnItem}
             />
         </div>
     );

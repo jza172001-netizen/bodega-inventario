@@ -17,9 +17,10 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onA
     const [inventoryType, setInventoryType] = useState<InventoryType>(InventoryType.HAND_TOOL);
     const [quantity, setQuantity] = useState(0);
     const [minStock, setMinStock] = useState(10);
-    const [price, setPrice] = useState(0);
     const [unit, setUnit] = useState('unidades');
     const [color, setColor] = useState('');
+
+    const UNIT_OPTIONS = ['unidades', 'pares', 'caja', 'bolsa', 'rollo', 'pliego', 'litro', 'ml', 'galón', 'kg', 'g', 'ton', 'm', 'cm', 'mm', 'km', 'm²', 'm³', 'yarda'];
 
 
     if (!isOpen) return null;
@@ -45,16 +46,15 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onA
             return;
         }
         
-        onAddItem({ 
-            name: name.trim(), 
-            category, 
-            subCategory: subCategory.trim(), 
-            inventoryType, 
-            quantity, 
-            minStock, 
-            price, 
-            unit: unit.trim(), 
-            color: color.trim() || undefined 
+        onAddItem({
+            name: name.trim(),
+            category,
+            subCategory: subCategory.trim(),
+            inventoryType,
+            quantity,
+            minStock,
+            unit: unit.trim(),
+            color: color.trim() || undefined
         });
         
         // The form state will reset automatically when the modal is closed and re-opened.
@@ -91,7 +91,7 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onA
                             {Object.values(InventoryType).map(t => <option key={t} value={t}>{t}</option>)}
                         </select>
                     </div>
-                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                          <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Cantidad Inicial</label>
                             <input type="number" value={quantity} onChange={e => setQuantity(Math.max(0, parseInt(e.target.value) || 0))} min="0" required className="w-full input-style"/>
@@ -100,15 +100,17 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onA
                             <label className="block text-sm font-medium text-gray-700 mb-1">Stock Mínimo</label>
                             <input type="number" value={minStock} onChange={e => setMinStock(Math.max(0, parseInt(e.target.value) || 0))} min="0" required className="w-full input-style"/>
                         </div>
-                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Precio Unitario</label>
-                            <input type="number" value={price} onChange={e => setPrice(Math.max(0, parseFloat(e.target.value) || 0))} min="0" step="0.01" required className="w-full input-style"/>
-                        </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Unidad de Medida</label>
-                            <input type="text" value={unit} onChange={e => setUnit(e.target.value)} required className="w-full input-style" placeholder="Ej: unidades, metros, cajas" />
+                            {inventoryType === InventoryType.SINGLE_USE ? (
+                                <select value={unit} onChange={e => setUnit(e.target.value)} className="w-full input-style">
+                                    {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
+                                </select>
+                            ) : (
+                                <input type="text" value={unit} onChange={e => setUnit(e.target.value)} required className="w-full input-style" placeholder="Ej: unidades" />
+                            )}
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Color (Opcional)</label>

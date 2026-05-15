@@ -23,15 +23,13 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({ projects, movements,
     const [newProjectDesc, setNewProjectDesc] = useState('');
     const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
-    const formatCOP = (val: number) => `$${val.toLocaleString('es-CO')}`;
-
     const projectStats = useMemo(() => {
         return projects.map(project => {
             const projectMovements = movements.filter(m => m.projectId === project.id && (m.type === MovementType.CHECK_OUT || m.type === MovementType.WASTE));
-            const totalExpense = projectMovements.reduce((acc, m) => {
+            const consumableCount = projectMovements.reduce((acc, m) => {
                 const item = items.find(i => i.id === m.itemId);
                 if (item && (item.inventoryType === InventoryType.SINGLE_USE || item.inventoryType === InventoryType.PPE)) {
-                    return acc + (item.price * m.quantity);
+                    return acc + m.quantity;
                 }
                 return acc;
             }, 0);
@@ -39,7 +37,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({ projects, movements,
                 const item = items.find(i => i.id === m.itemId);
                 return item && (item.inventoryType === InventoryType.HAND_TOOL || item.inventoryType === InventoryType.ELECTRICAL_TOOL);
             }).length;
-            return { ...project, totalExpense, linkedToolsCount };
+            return { ...project, consumableCount, linkedToolsCount };
         });
     }, [projects, movements, items]);
 
@@ -68,8 +66,8 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({ projects, movements,
                             <h2 className="text-2xl font-black text-gray-900 uppercase tracking-tighter">{selectedProject.name}</h2>
                         </div>
                         <div className="text-right bg-blue-50 px-6 py-4 rounded-xl border border-blue-100">
-                            <p className="text-[10px] font-black text-blue-400 uppercase mb-1">Inversión (COP)</p>
-                            <p className="text-2xl font-black text-blue-700">{formatCOP(selectedProject.totalExpense)}</p>
+                            <p className="text-[10px] font-black text-blue-400 uppercase mb-1">Consumibles usados</p>
+                            <p className="text-2xl font-black text-blue-700">{selectedProject.consumableCount} uds.</p>
                         </div>
                     </div>
                 </div>
@@ -129,8 +127,8 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({ projects, movements,
                                     <span className="text-lg font-black text-gray-800">{project.linkedToolsCount}</span>
                                 </div>
                                 <div className="text-right">
-                                    <span className="text-[9px] text-gray-400 font-black uppercase block">Gasto</span>
-                                    <span className="text-lg font-black text-blue-600">{formatCOP(project.totalExpense)}</span>
+                                    <span className="text-[9px] text-gray-400 font-black uppercase block">Consumibles</span>
+                                    <span className="text-lg font-black text-blue-600">{project.consumableCount} uds.</span>
                                 </div>
                             </div>
                         </div>
