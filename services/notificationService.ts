@@ -9,12 +9,27 @@ function saveLog(log: Record<string, number>) {
     localStorage.setItem(NOTIF_LOG_KEY, JSON.stringify(log));
 }
 
+function showNotification(title: string, options: NotificationOptions) {
+    // new Notification() throws on mobile Chrome — must use ServiceWorker instead
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.ready
+            .then(sw => sw.showNotification(title, options))
+            .catch(() => {});
+    } else {
+        try { new Notification(title, options); } catch { /* not supported */ }
+    }
+}
+
 export async function requestNotificationPermission(): Promise<boolean> {
     if (!('Notification' in window)) return false;
     if (Notification.permission === 'granted') return true;
     if (Notification.permission === 'denied') return false;
-    const result = await Notification.requestPermission();
-    return result === 'granted';
+    try {
+        const result = await Notification.requestPermission();
+        return result === 'granted';
+    } catch {
+        return false;
+    }
 }
 
 export function checkAndNotifyOverdueLoans(
@@ -42,8 +57,6 @@ export function checkAndNotifyOverdueLoans(
         const lastNotified = log[loan.id] ?? 0;
         const daysSinceNotified = Math.floor((now - lastNotified) / 86400000);
 
-        // Weekend: remind all electrical loans (once per day)
-        // Regular: remind only after 14 days, then weekly
         const shouldNotify = isWeekend
             ? (lastNotified === 0 || daysSinceNotified >= 1)
             : daysOut >= 14 && (lastNotified === 0 || daysSinceNotified >= 7);
@@ -57,7 +70,7 @@ export function checkAndNotifyOverdueLoans(
             ? '🔄 Devolver herramienta hoy — Bodega Pro'
             : '⚠️ Herramienta sin devolver — Bodega Pro';
 
-        new Notification(title, {
+        showNotification(title, {
             body: `${itemName} lleva ${daysOut} días con ${workerName}. ${isWeekend ? 'Recuerda traerla hoy.' : 'Recordar devolución.'}`,
             icon: '/vite.svg',
             tag: loan.id,
@@ -74,7 +87,7 @@ export function checkAndNotifyOverdueLoans(
             const names = pendingPickup
                 .map(m => items.find(i => i.id === m.itemId)?.name ?? 'Herramienta')
                 .join(', ');
-            new Notification('📍 Herramientas pendientes de recoger — Bodega Pro', {
+            showNotification('📍 Herramientas pendientes de recoger — Bodega Pro', {
                 body: `${pendingPickup.length} herramienta(s) marcadas para recoger: ${names}`,
                 icon: '/vite.svg',
                 tag: '__pickup__',
