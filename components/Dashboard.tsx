@@ -1,14 +1,15 @@
 import React, { useMemo } from 'react';
-import { Item, Movement, Personnel } from '../types';
+import { Item, Movement, Personnel, Project } from '../types';
 import StatisticsView from './StatisticsView';
 
 interface DashboardProps {
     items: Item[];
     movements: Movement[];
     personnel?: Personnel[];
+    projects?: Project[];
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ items, movements, personnel = [] }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ items, movements, personnel = [], projects = [] }) => {
     const alerts = useMemo(() => {
         const daysElapsed = (d: Date) => Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
         const depleted = items.filter(i => i.quantity === 0 && i.minStock > 0).length;
@@ -47,7 +48,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ items, movements, personne
                 </div>
             )}
 
-            <StatisticsView items={items} movements={movements} personnel={personnel} />
+            <StatisticsView items={items} movements={movements} personnel={personnel} projects={projects} />
         </div>
     );
 };

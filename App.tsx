@@ -364,7 +364,7 @@ const App: React.FC = () => {
                 />
                 <main className="flex-1 p-4 md:p-6 overflow-y-auto bg-gray-50">
                     <div className="max-w-7xl mx-auto">
-                        {currentView === 'dashboard' && <Dashboard items={items} movements={movements} personnel={personnel} />}
+                        {currentView === 'dashboard' && <Dashboard items={items} movements={movements} personnel={personnel} projects={projects} />}
                         {currentView === 'inventory' && (
                             <InventoryView
                                 items={selectedInventoryType ? items.filter(i => i.inventoryType === selectedInventoryType) : items}

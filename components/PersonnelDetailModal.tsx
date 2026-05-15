@@ -24,8 +24,15 @@ export const PersonnelDetailModal: React.FC<Props> = ({ person, movements, items
     );
 
     const activeLoans = useMemo(() => {
-        // Explicit loans (isLoan=true) that are not returned
-        const explicitLoans = myMovements.filter(m => m.isLoan && !m.isReturned);
+        // Solo herramientas (manual y eléctrica) son préstamos; consumibles y EPP no aplican
+        const toolTypes = new Set([InventoryType.HAND_TOOL, InventoryType.ELECTRICAL_TOOL]);
+        const isToolItem = (itemId: string) => {
+            const item = items.find(i => i.id === itemId);
+            return item ? toolTypes.has(item.inventoryType) : false;
+        };
+
+        // Préstamos explícitos (isLoan=true) de herramientas que no han sido devueltos
+        const explicitLoans = myMovements.filter(m => m.isLoan && !m.isReturned && isToolItem(m.itemId));
         const explicitItemIds = new Set(explicitLoans.map(m => m.itemId));
 
         // Also include CHECK_OUT of HAND_TOOL items not already covered by explicit loans

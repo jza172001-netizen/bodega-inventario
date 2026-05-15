@@ -1,6 +1,6 @@
 
 import React, { useMemo, useEffect, useState, useRef, useCallback } from 'react';
-import { Item, Movement, MovementType, InventoryType, Personnel } from '../types';
+import { Item, Movement, MovementType, InventoryType, Personnel, Project } from '../types';
 import { generateRotationAnalysis } from '../services/geminiService';
 import { PrintReportView } from './PrintReportView';
 
@@ -8,6 +8,7 @@ interface StatisticsViewProps {
     items: Item[];
     movements: Movement[];
     personnel?: Personnel[];
+    projects?: Project[];
 }
 
 const timeAgo = (date: Date): string => {
@@ -33,7 +34,7 @@ const getTypeConfig = (type: string) =>
 
 type PrintPeriod = 'week' | 'month' | 'quarter' | null;
 
-const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, personnel = [] }) => {
+const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, personnel = [], projects = [] }) => {
     const [rotationRecs, setRotationRecs] = useState<Record<string, { recommendation: string; severity: string }>>({});
     const [printPeriod, setPrintPeriod] = useState<PrintPeriod>(null);
     const [showPeriodModal, setShowPeriodModal] = useState(false);
@@ -202,6 +203,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                     items={items}
                     movements={movements}
                     personnel={personnel}
+                    projects={projects}
                     periodLabel={periodRange.label}
                     fromDate={periodRange.fromDate}
                     toDate={periodRange.toDate}
