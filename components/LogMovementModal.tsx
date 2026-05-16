@@ -6,7 +6,7 @@ import { XIcon } from './icons/XIcon';
 interface LogMovementModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onLogMovement: (movement: Omit<Movement, 'id' | 'timestamp'>) => void;
+    onLogMovement: (movement: Omit<Movement, 'id'>) => void;
     items: Item[];
     personnel: Personnel[];
     projects: Project[];
@@ -22,6 +22,7 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
     const [projectId, setProjectId] = useState('');
     const [isLoan, setIsLoan] = useState(false);
     const [notes, setNotes] = useState('');
+    const [movDate, setMovDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
 
     const filteredItems = useMemo(() => {
         return filterInventoryType ? items.filter(i => i.inventoryType === filterInventoryType) : items;
@@ -43,13 +44,15 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
             return;
         }
         onLogMovement({
-            itemId, 
-            type, 
-            quantity, 
-            personnelId: personnelId || undefined, 
+            itemId,
+            type,
+            quantity,
+            timestamp: new Date(movDate + 'T00:00:00'),
+            personnelId: personnelId || undefined,
             projectId: projectId || undefined,
             isLoan: type === MovementType.CHECK_OUT ? isLoan : false,
-            notes 
+            isReturned: false,
+            notes
         });
         // Reset form
         setItemId('');
@@ -59,6 +62,7 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
         setProjectId('');
         setIsLoan(false);
         setNotes('');
+        setMovDate(new Date().toISOString().slice(0, 10));
         onClose();
     };
     
@@ -74,6 +78,15 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
                     <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><XIcon className="w-6 h-6" /></button>
                 </div>
                 <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Fecha del movimiento</label>
+                        <input
+                            type="date"
+                            value={movDate}
+                            onChange={e => setMovDate(e.target.value)}
+                            className="w-full input-style"
+                        />
+                    </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Artículo</label>

@@ -362,14 +362,15 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     };
 
     // ── CONFIRM: SALIDA (ExitCard) ──────────────────────────────────────────
-    const handleConfirmExit = (msg: ChatMsg) => {
+    const handleConfirmExit = (msg: ChatMsg, dateStr: string) => {
+        const ts = new Date(dateStr + 'T00:00:00');
         const exit = msg.parsedExit!;
         const sel = exitSelections[msg.id] ?? {};
         const toLog = exit.movements.map((pm, idx) => {
             const item = pm.matchedItem ?? (sel[idx] ? items.find(i => i.id === sel[idx]) : undefined);
             if (!item) return null;
             const isLoan = LOAN_TYPES.has(item.inventoryType);
-            return { itemId: item.id, type: MovementType.CHECK_OUT, quantity: pm.quantity, timestamp: new Date(), personnelId: exit.matchedPersonnel?.id, projectId: exit.matchedProject?.id, notes: '', isLoan, isReturned: false };
+            return { itemId: item.id, type: MovementType.CHECK_OUT, quantity: pm.quantity, timestamp: ts, personnelId: exit.matchedPersonnel?.id, projectId: exit.matchedProject?.id, notes: '', isLoan, isReturned: false };
         }).filter(Boolean) as Array<Omit<Movement, 'id'>>;
         if (!toLog.length) { addBot('No hay materiales confirmados.'); return; }
         onLogMovements(toLog);
@@ -379,7 +380,8 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     };
 
     // ── CONFIRM: AGREGAR (BulkAddCard) ──────────────────────────────────────
-    const handleConfirmBulk = (msg: ChatMsg, withDispatch: boolean) => {
+    const handleConfirmBulk = (msg: ChatMsg, withDispatch: boolean, dateStr: string) => {
+        const ts = new Date(dateStr + 'T00:00:00');
         const bulk = msg.parsedBulkAdd!;
         const myTypes = bulkTypes[msg.id] ?? {};
         const createdByIdx: Record<number, Item> = {};
@@ -395,7 +397,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         const checkIns: Array<Omit<Movement, 'id'>> = bulk.items.map((bi, idx) => {
             const item = bi.matchedItem ?? createdByIdx[idx];
             if (!item) return null;
-            return { itemId: item.id, type: MovementType.PURCHASE, quantity: bi.quantity, timestamp: new Date(), notes: 'Entrada desde asistente', isLoan: false, isReturned: false };
+            return { itemId: item.id, type: MovementType.PURCHASE, quantity: bi.quantity, timestamp: ts, notes: 'Entrada desde asistente', isLoan: false, isReturned: false };
         }).filter(Boolean) as Array<Omit<Movement, 'id'>>;
         onLogMovements(checkIns);
 
@@ -409,7 +411,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                 const item = bi.matchedItem ?? createdByIdx[idx];
                 if (!item) return null;
                 const isLoan = LOAN_TYPES.has(myTypes[idx] ?? bi.guessedType ?? item.inventoryType);
-                return { itemId: item.id, type: MovementType.CHECK_OUT, quantity: bi.quantity, timestamp: new Date(), personnelId: worker?.id, projectId: project?.id, notes: '', isLoan, isReturned: false };
+                return { itemId: item.id, type: MovementType.CHECK_OUT, quantity: bi.quantity, timestamp: ts, personnelId: worker?.id, projectId: project?.id, notes: '', isLoan, isReturned: false };
             }).filter(Boolean) as Array<Omit<Movement, 'id'>>;
             onLogMovements(checkOuts);
         }
@@ -481,7 +483,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                 <ExitCard key={msg.id} msg={msg} items={items}
                     sel={exitSelections[msg.id] ?? {}}
                     onSelect={(i, id) => setExitSelections(prev => ({ ...prev, [msg.id]: { ...(prev[msg.id] ?? {}), [i]: id } }))}
-                    onConfirm={() => handleConfirmExit(msg)}
+                    onConfirm={(dateStr) => handleConfirmExit(msg, dateStr)}
                     onCancel={() => {
                         setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, confirmed: true } : m));
                         addBot('Cancelado.');
@@ -496,7 +498,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                 <BulkAddCard key={msg.id} msg={msg}
                     myTypes={bulkTypes[msg.id] ?? {}}
                     onTypeChange={(i, t) => setBulkTypes(prev => ({ ...prev, [msg.id]: { ...(prev[msg.id] ?? {}), [i]: t } }))}
-                    onConfirm={(dispatch) => handleConfirmBulk(msg, dispatch)}
+                    onConfirm={(dispatch, dateStr) => handleConfirmBulk(msg, dispatch, dateStr)}
                     onCancel={() => {
                         setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, confirmed: true } : m));
                         addBot('Cancelado.');
@@ -703,9 +705,10 @@ const BulkAddCard: React.FC<{
     msg: ChatMsg;
     myTypes: Record<number, InventoryType>;
     onTypeChange: (idx: number, t: InventoryType) => void;
-    onConfirm: (withDispatch: boolean) => void;
+    onConfirm: (withDispatch: boolean, dateStr: string) => void;
     onCancel: () => void;
 }> = ({ msg, myTypes, onTypeChange, onConfirm, onCancel }) => {
+    const [dateStr, setDateStr] = useState<string>(() => new Date().toISOString().slice(0, 10));
     const bulk = msg.parsedBulkAdd!;
     const hasWorker = !!(bulk.matchedPersonnel || bulk.rawPersonnel);
 
@@ -744,13 +747,22 @@ const BulkAddCard: React.FC<{
                     )}
                 </div>
             )}
+            <div className="mb-2 flex items-center gap-2">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex-shrink-0">📅 Fecha</span>
+                <input
+                    type="date"
+                    value={dateStr}
+                    onChange={e => setDateStr(e.target.value)}
+                    className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1 text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                />
+            </div>
             <div className="flex gap-2">
-                <button onClick={() => onConfirm(false)}
+                <button onClick={() => onConfirm(false, dateStr)}
                     className="flex-1 py-1.5 border border-blue-500 text-blue-600 hover:bg-blue-50 font-bold rounded-xl text-xs transition-all">
                     📥 Solo inventario
                 </button>
                 {hasWorker && (
-                    <button onClick={() => onConfirm(true)}
+                    <button onClick={() => onConfirm(true, dateStr)}
                         className="flex-1 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition-all">
                         📤 Agregar y despachar
                     </button>
@@ -767,9 +779,10 @@ const ExitCard: React.FC<{
     items: Item[];
     sel: Record<number, string>;
     onSelect: (idx: number, id: string) => void;
-    onConfirm: () => void;
+    onConfirm: (dateStr: string) => void;
     onCancel: () => void;
 }> = ({ msg, items, sel, onSelect, onConfirm, onCancel }) => {
+    const [dateStr, setDateStr] = useState<string>(() => new Date().toISOString().slice(0, 10));
     const exit = msg.parsedExit!;
     const canConfirm = exit.movements.some((pm, idx) => pm.matchedItem || sel[idx]);
 
@@ -810,8 +823,17 @@ const ExitCard: React.FC<{
                     {exit.matchedProject && <><span className="text-gray-400">·</span><span>📌 {exit.matchedProject.name}</span></>}
                 </div>
             )}
+            <div className="mb-2 flex items-center gap-2">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex-shrink-0">📅 Fecha</span>
+                <input
+                    type="date"
+                    value={dateStr}
+                    onChange={e => setDateStr(e.target.value)}
+                    className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1 text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400"
+                />
+            </div>
             <div className="flex gap-2">
-                <button onClick={onConfirm} disabled={!canConfirm}
+                <button onClick={() => onConfirm(dateStr)} disabled={!canConfirm}
                     className="flex-1 py-1.5 bg-orange-500 hover:bg-orange-600 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold rounded-xl text-xs transition-all">
                     ✅ Confirmar y registrar
                 </button>

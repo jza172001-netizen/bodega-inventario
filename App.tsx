@@ -190,7 +190,8 @@ const App: React.FC = () => {
     };
 
     const handleLogMovement = (m: Omit<Movement, 'id'>) => {
-        const newMov = { ...m, id: `mov-${Date.now()}`, timestamp: new Date() };
+        const ts = m.timestamp instanceof Date ? m.timestamp : new Date(m.timestamp ?? Date.now());
+        const newMov = { ...m, id: `mov-${Date.now()}`, timestamp: ts };
         setMovements(prev => [newMov, ...prev]);
         setItems(prev => prev.map(item => {
             if (item.id === m.itemId) {
@@ -202,7 +203,7 @@ const App: React.FC = () => {
             }
             return item;
         }));
-        withSync(db.addMovement({ ...m, timestamp: new Date() })
+        withSync(db.addMovement({ ...m, timestamp: ts })
             .then(created => setMovements(prev => prev.map(x => x.id === newMov.id ? created : x))));
     };
 
