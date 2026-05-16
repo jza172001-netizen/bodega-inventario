@@ -25,20 +25,21 @@ export const PersonnelDetailModal: React.FC<Props> = ({ person, movements, items
 
     const itemByType = (type: InventoryType) => new Set(items.filter(i => i.inventoryType === type).map(i => i.id));
 
-    type LoanGroup = { itemId: string; totalQty: number; movementIds: string[]; date: Date };
+    type LoanGroup = { itemId: string; totalQty: number; movementIds: string[]; date: Date; workers: string[] };
 
-    // Agrupa por ítem + día exacto: misma herramienta, mismo día → 1 tarjeta. Días distintos → tarjetas distintas.
+    // Agrupa por ítem + día exacto. Mismo ítem mismo día → 1 tarjeta sumando cantidades y uniendo nombres de trabajadores.
     const groupLoans = (loanMovements: Movement[]): LoanGroup[] => {
         const map = new Map<string, LoanGroup>();
         for (const m of loanMovements) {
             const ts = new Date(m.timestamp);
             const dayKey = `${m.itemId}__${ts.getFullYear()}-${ts.getMonth()}-${ts.getDate()}`;
             if (!map.has(dayKey)) {
-                map.set(dayKey, { itemId: m.itemId, totalQty: 0, movementIds: [], date: ts });
+                map.set(dayKey, { itemId: m.itemId, totalQty: 0, movementIds: [], date: ts, workers: [] });
             }
             const g = map.get(dayKey)!;
             g.totalQty += m.quantity;
             g.movementIds.push(m.id);
+            if (m.notes && !g.workers.includes(m.notes)) g.workers.push(m.notes);
         }
         return [...map.values()].sort((a, b) => b.date.getTime() - a.date.getTime());
     };
@@ -112,15 +113,18 @@ export const PersonnelDetailModal: React.FC<Props> = ({ person, movements, items
         }
     };
 
-    const ToolCard = ({ g }: { g: { itemId: string; totalQty: number; movementIds: string[]; date: Date } }) => {
+    const ToolCard = ({ g }: { g: LoanGroup }) => {
         const d = daysSince(g.date);
         const colorClass = d > 14 ? 'border-red-200 bg-red-50' : d > 7 ? 'border-yellow-200 bg-yellow-50' : 'border-blue-100 bg-blue-50';
         const badgeClass = d > 14 ? 'bg-red-100 text-red-700' : d > 7 ? 'bg-yellow-100 text-yellow-700' : 'bg-blue-100 text-blue-700';
         return (
             <div className={`flex items-center justify-between p-4 rounded-xl border ${colorClass}`}>
-                <div>
+                <div className="min-w-0 flex-1">
                     <p className="font-semibold text-gray-800 text-sm">{itemName(g.itemId)}</p>
                     <p className="text-xs text-gray-400 mt-0.5">{g.totalQty} {itemUnit(g.itemId)} · {g.date.toLocaleDateString('es-CO')}</p>
+                    {g.workers.length > 0 && (
+                        <p className="text-xs font-semibold text-indigo-600 mt-1">👷 {g.workers.join(', ')}</p>
+                    )}
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
                     <span className={`text-xs font-black px-2.5 py-1 rounded-full ${badgeClass}`}>
