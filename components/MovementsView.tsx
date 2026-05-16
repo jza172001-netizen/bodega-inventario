@@ -24,7 +24,7 @@ export const MovementsView: React.FC<MovementsViewProps> = ({ movements, items, 
     const [filterPersonnel, setFilterPersonnel] = useState('');
     const [filterProject, setFilterProject] = useState('');
     const [filterDays, setFilterDays] = useState<number | null>(null);
-    const [filterMoveType, setFilterMoveType] = useState('');
+    const [filterCategory, setFilterCategory] = useState<InventoryType | null>(null);
 
     // Memoized O(1) lookup maps — mejora 4
     const itemMap = useMemo(() => new Map(items.map(i => [i.id, i])), [items]);
@@ -48,13 +48,16 @@ export const MovementsView: React.FC<MovementsViewProps> = ({ movements, items, 
             const cutoff = Date.now() - filterDays * 86400000;
             list = list.filter(m => new Date(m.timestamp).getTime() >= cutoff);
         }
-        // Type filter
-        if (filterMoveType) list = list.filter(m => m.type === filterMoveType);
+        // Category filter
+        if (filterCategory) {
+            const catIds = new Set(items.filter(i => i.inventoryType === filterCategory).map(i => i.id));
+            list = list.filter(m => catIds.has(m.itemId));
+        }
         return list;
-    }, [movements, items, filterType, filterPersonnel, filterProject, filterDays, filterMoveType]);
+    }, [movements, items, filterType, filterPersonnel, filterProject, filterDays, filterCategory]);
 
     // Reset page when any filter changes — mejora 8
-    useEffect(() => { setPage(0); }, [filterType, filterPersonnel, filterProject, filterDays, filterMoveType]);
+    useEffect(() => { setPage(0); }, [filterType, filterPersonnel, filterProject, filterDays, filterCategory]);
 
     const totalPages = Math.ceil(filteredMovements.length / PAGE_SIZE);
     const pagedMovements = useMemo(
@@ -91,6 +94,29 @@ export const MovementsView: React.FC<MovementsViewProps> = ({ movements, items, 
                 )}
             </div>
 
+            {/* Pills de categoría */}
+            <div className="flex flex-wrap gap-2 mb-3">
+                {([null, InventoryType.HAND_TOOL, InventoryType.ELECTRICAL_TOOL, InventoryType.SINGLE_USE, InventoryType.PPE] as (InventoryType | null)[]).map(cat => {
+                    const labels: Record<string, string> = {
+                        [InventoryType.HAND_TOOL]: 'H. Manual',
+                        [InventoryType.ELECTRICAL_TOOL]: 'H. Eléctrica',
+                        [InventoryType.SINGLE_USE]: 'Consumibles',
+                        [InventoryType.PPE]: 'EPP',
+                    };
+                    const label = cat === null ? 'Todas' : labels[cat];
+                    const active = filterCategory === cat;
+                    return (
+                        <button
+                            key={cat ?? 'all'}
+                            onClick={() => setFilterCategory(cat)}
+                            className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-all ${active ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-400'}`}
+                        >
+                            {label}
+                        </button>
+                    );
+                })}
+            </div>
+
             {/* Filtros */}
             <div className="flex flex-wrap gap-2 mb-4 p-3 bg-gray-50 rounded-xl border border-gray-100">
                 <select
@@ -124,21 +150,9 @@ export const MovementsView: React.FC<MovementsViewProps> = ({ movements, items, 
                     <option value="90">Últimos 3 meses</option>
                 </select>
 
-                <select
-                    value={filterMoveType}
-                    onChange={e => setFilterMoveType(e.target.value)}
-                    className="text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
-                >
-                    <option value="">📋 Todos los tipos</option>
-                    <option value="Salida">Salidas</option>
-                    <option value="Entrada">Entradas</option>
-                    <option value="Compra">Compras</option>
-                    <option value="Merma">Mermas</option>
-                </select>
-
-                {(filterPersonnel || filterProject || filterDays !== null || filterMoveType) && (
+                {(filterPersonnel || filterProject || filterDays !== null) && (
                     <button
-                        onClick={() => { setFilterPersonnel(''); setFilterProject(''); setFilterDays(null); setFilterMoveType(''); }}
+                        onClick={() => { setFilterPersonnel(''); setFilterProject(''); setFilterDays(null); }}
                         className="text-xs text-red-500 hover:text-red-700 font-bold px-3 py-2 hover:bg-red-50 rounded-lg"
                     >
                         ✕ Limpiar
