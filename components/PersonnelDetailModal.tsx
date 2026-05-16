@@ -6,6 +6,7 @@ interface Props {
     movements: Movement[];
     items: Item[];
     projects: Project[];
+    onReturnLoan?: (movementId: string) => void;
     onClose: () => void;
 }
 
@@ -14,7 +15,7 @@ type Tab = 'manual' | 'electric' | 'consumo' | 'epp';
 const currentYear = new Date().getFullYear();
 const daysSince = (d: Date) => Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
 
-export const PersonnelDetailModal: React.FC<Props> = ({ person, movements, items, projects, onClose }) => {
+export const PersonnelDetailModal: React.FC<Props> = ({ person, movements, items, projects, onReturnLoan, onClose }) => {
     const [tab, setTab] = useState<Tab>('manual');
 
     const myMovements = useMemo(
@@ -96,6 +97,12 @@ export const PersonnelDetailModal: React.FC<Props> = ({ person, movements, items
         { key: 'epp', label: 'EPP', count: eppYear.length },
     ];
 
+    const handleReturn = (m: Movement) => {
+        if (window.confirm(`¿Confirmar devolución de "${itemName(m.itemId)}"?`)) {
+            onReturnLoan?.(m.id);
+        }
+    };
+
     const ToolCard = ({ m }: { m: Movement }) => {
         const d = daysSince(m.timestamp);
         const colorClass = d > 14 ? 'border-red-200 bg-red-50' : d > 7 ? 'border-yellow-200 bg-yellow-50' : 'border-blue-100 bg-blue-50';
@@ -104,11 +111,21 @@ export const PersonnelDetailModal: React.FC<Props> = ({ person, movements, items
             <div className={`flex items-center justify-between p-4 rounded-xl border ${colorClass}`}>
                 <div>
                     <p className="font-semibold text-gray-800 text-sm">{itemName(m.itemId)}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">{m.quantity} {itemUnit(m.itemId)}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{m.quantity} {itemUnit(m.itemId)} · {new Date(m.timestamp).toLocaleDateString('es-CO')}</p>
                 </div>
-                <span className={`text-xs font-black px-2.5 py-1 rounded-full ${badgeClass}`}>
-                    {d === 0 ? 'hoy' : `${d}d fuera`}
-                </span>
+                <div className="flex items-center gap-2">
+                    <span className={`text-xs font-black px-2.5 py-1 rounded-full ${badgeClass}`}>
+                        {d === 0 ? 'hoy' : `${d}d fuera`}
+                    </span>
+                    {onReturnLoan && (
+                        <button
+                            onClick={() => handleReturn(m)}
+                            className="text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded-lg font-bold"
+                        >
+                            Devolver
+                        </button>
+                    )}
+                </div>
             </div>
         );
     };
