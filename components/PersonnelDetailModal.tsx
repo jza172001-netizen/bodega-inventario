@@ -25,21 +25,22 @@ export const PersonnelDetailModal: React.FC<Props> = ({ person, movements, items
 
     const itemByType = (type: InventoryType) => new Set(items.filter(i => i.inventoryType === type).map(i => i.id));
 
-    type LoanGroup = { itemId: string; totalQty: number; movementIds: string[]; latestDate: Date };
+    type LoanGroup = { itemId: string; totalQty: number; movementIds: string[]; date: Date };
 
+    // Agrupa por ítem + día exacto: misma herramienta, mismo día → 1 tarjeta. Días distintos → tarjetas distintas.
     const groupLoans = (loanMovements: Movement[]): LoanGroup[] => {
         const map = new Map<string, LoanGroup>();
         for (const m of loanMovements) {
             const ts = new Date(m.timestamp);
-            if (!map.has(m.itemId)) {
-                map.set(m.itemId, { itemId: m.itemId, totalQty: 0, movementIds: [], latestDate: ts });
+            const dayKey = `${m.itemId}__${ts.getFullYear()}-${ts.getMonth()}-${ts.getDate()}`;
+            if (!map.has(dayKey)) {
+                map.set(dayKey, { itemId: m.itemId, totalQty: 0, movementIds: [], date: ts });
             }
-            const g = map.get(m.itemId)!;
+            const g = map.get(dayKey)!;
             g.totalQty += m.quantity;
             g.movementIds.push(m.id);
-            if (ts > g.latestDate) g.latestDate = ts;
         }
-        return [...map.values()].sort((a, b) => b.latestDate.getTime() - a.latestDate.getTime());
+        return [...map.values()].sort((a, b) => b.date.getTime() - a.date.getTime());
     };
 
     // H. Manual: préstamos activos agrupados por ítem
@@ -104,21 +105,22 @@ export const PersonnelDetailModal: React.FC<Props> = ({ person, movements, items
         { key: 'epp', label: 'EPP', count: eppYear.length },
     ];
 
-    const handleReturn = (g: { itemId: string; movementIds: string[] }) => {
-        if (window.confirm(`¿Confirmar devolución de "${itemName(g.itemId)}"?`)) {
+    const handleReturn = (g: { itemId: string; movementIds: string[]; date: Date }) => {
+        const fecha = g.date.toLocaleDateString('es-CO');
+        if (window.confirm(`¿Confirmar devolución de "${itemName(g.itemId)}" (${fecha})?`)) {
             g.movementIds.forEach(id => onReturnLoan?.(id));
         }
     };
 
-    const ToolCard = ({ g }: { g: { itemId: string; totalQty: number; movementIds: string[]; latestDate: Date } }) => {
-        const d = daysSince(g.latestDate);
+    const ToolCard = ({ g }: { g: { itemId: string; totalQty: number; movementIds: string[]; date: Date } }) => {
+        const d = daysSince(g.date);
         const colorClass = d > 14 ? 'border-red-200 bg-red-50' : d > 7 ? 'border-yellow-200 bg-yellow-50' : 'border-blue-100 bg-blue-50';
         const badgeClass = d > 14 ? 'bg-red-100 text-red-700' : d > 7 ? 'bg-yellow-100 text-yellow-700' : 'bg-blue-100 text-blue-700';
         return (
             <div className={`flex items-center justify-between p-4 rounded-xl border ${colorClass}`}>
                 <div>
                     <p className="font-semibold text-gray-800 text-sm">{itemName(g.itemId)}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">{g.totalQty} {itemUnit(g.itemId)} · {g.latestDate.toLocaleDateString('es-CO')}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{g.totalQty} {itemUnit(g.itemId)} · {g.date.toLocaleDateString('es-CO')}</p>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
                     <span className={`text-xs font-black px-2.5 py-1 rounded-full ${badgeClass}`}>
