@@ -29,7 +29,7 @@ export const Header: React.FC<HeaderProps> = ({ toggleSidebar, userRole, userNam
                 <button onClick={toggleSidebar} className="flex-shrink-0 p-1 rounded-full text-gray-500 hover:bg-gray-100">
                     <MenuIcon className="w-6 h-6"/>
                 </button>
-                <h1 className="hidden sm:block text-xl font-black text-gray-800 uppercase tracking-tighter truncate">Gestion Bodega</h1>
+                <h1 className="hidden sm:block text-xl font-black uppercase tracking-tighter truncate" style={{ color: '#1B4332' }}>Montecielo</h1>
                 {syncStatus === 'syncing' && (
                     <span className="flex-shrink-0 flex items-center gap-1 text-[10px] font-bold text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">
                         <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>

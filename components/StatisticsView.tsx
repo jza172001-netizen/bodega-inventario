@@ -377,50 +377,80 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                 </div>
             )}
 
-            {/* ── ANÁLISIS DE ROTACIÓN ── */}
-            {subCategoryRotation.length > 0 && (
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-                    <div className="mb-4">
-                        <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest">Análisis de Rotación</h2>
-                        <p className="text-[10px] text-gray-400 mt-0.5">Últimos 30 días · recomendaciones automáticas</p>
+            {/* ── INVENTARIO COMPLETO ── */}
+            {items.length > 0 && (() => {
+                const TYPE_ORDER = [
+                    { type: InventoryType.HAND_TOOL,       label: '🔨 Herramienta Manual',   dot: '#3b82f6' },
+                    { type: InventoryType.ELECTRICAL_TOOL, label: '⚡ Herramienta Eléctrica', dot: '#f59e0b' },
+                    { type: InventoryType.PPE,             label: '🦺 Seguridad / EPP',       dot: '#10b981' },
+                    { type: InventoryType.SINGLE_USE,      label: '📦 Consumibles',           dot: '#ef4444' },
+                ];
+                return (
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                        <div className="mb-4">
+                            <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest">Inventario completo</h2>
+                            <p className="text-[10px] text-gray-400 mt-0.5">{items.length} ítems registrados</p>
+                        </div>
+                        <div className="space-y-6">
+                            {TYPE_ORDER.map(({ type, label, dot }) => {
+                                const group = items
+                                    .filter(i => i.inventoryType === type)
+                                    .sort((a, b) => a.name.localeCompare(b.name));
+                                if (group.length === 0) return null;
+                                return (
+                                    <div key={type}>
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: dot }} />
+                                            <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{label}</span>
+                                            <span className="text-[10px] text-gray-400">({group.length})</span>
+                                        </div>
+                                        <div className="overflow-x-auto">
+                                            <table className="min-w-full divide-y divide-gray-50">
+                                                <thead>
+                                                    <tr>
+                                                        <th className="pb-1.5 text-left text-[9px] font-black text-gray-300 uppercase tracking-wider">Ítem</th>
+                                                        <th className="pb-1.5 text-center text-[9px] font-black text-gray-300 uppercase tracking-wider w-16">Stock</th>
+                                                        <th className="pb-1.5 text-center text-[9px] font-black text-gray-300 uppercase tracking-wider w-14">Mín.</th>
+                                                        <th className="pb-1.5 text-right text-[9px] font-black text-gray-300 uppercase tracking-wider w-20">Estado</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-50">
+                                                    {group.map(item => {
+                                                        const ok = item.minStock === 0 || item.quantity > item.minStock;
+                                                        const low = item.minStock > 0 && item.quantity > 0 && item.quantity <= item.minStock;
+                                                        const empty = item.quantity === 0;
+                                                        const badge = empty
+                                                            ? 'bg-red-100 text-red-600'
+                                                            : low
+                                                            ? 'bg-orange-100 text-orange-600'
+                                                            : 'bg-green-100 text-green-700';
+                                                        const badgeLabel = empty ? 'AGOTADO' : low ? 'BAJO' : 'OK';
+                                                        return (
+                                                            <tr key={item.id} className="hover:bg-gray-50">
+                                                                <td className="py-2 text-sm font-medium text-gray-800">{item.name}</td>
+                                                                <td className="py-2 text-center text-sm font-black text-gray-700">
+                                                                    {item.quantity}
+                                                                    <span className="text-[10px] font-normal text-gray-400 ml-0.5">{item.unit}</span>
+                                                                </td>
+                                                                <td className="py-2 text-center text-xs text-gray-400">{item.minStock > 0 ? item.minStock : '—'}</td>
+                                                                <td className="py-2 text-right">
+                                                                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${badge}`}>
+                                                                        {badgeLabel}
+                                                                    </span>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-100">
-                            <thead>
-                                <tr>
-                                    <th className="px-3 py-2 text-left text-[10px] font-black text-gray-400 uppercase">Sub-Clasificación</th>
-                                    <th className="px-3 py-2 text-center text-[10px] font-black text-gray-400 uppercase">Salidas</th>
-                                    <th className="px-3 py-2 text-left text-[10px] font-black text-gray-400 uppercase">Recomendación</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-50">
-                                {subCategoryRotation.map(row => {
-                                    const rec = rotationRecs[row.subCategory];
-                                    const severityColor = rec?.severity === 'CRITICAL' ? 'bg-red-100 text-red-700'
-                                        : rec?.severity === 'HIGH' ? 'bg-orange-100 text-orange-700'
-                                        : rec?.severity === 'MEDIUM' ? 'bg-blue-100 text-blue-700'
-                                        : 'bg-gray-100 text-gray-400';
-                                    return (
-                                        <tr key={row.subCategory} className="hover:bg-gray-50">
-                                            <td className="px-3 py-2.5 text-sm font-bold text-gray-800">{row.subCategory}</td>
-                                            <td className="px-3 py-2.5 text-center text-sm font-black text-gray-600">{row.totalOut}</td>
-                                            <td className="px-3 py-2.5">
-                                                {rec ? (
-                                                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase ${severityColor}`}>
-                                                        {rec.recommendation}
-                                                    </span>
-                                                ) : (
-                                                    <span className="inline-block h-3 w-36 bg-gray-100 rounded-full animate-pulse" />
-                                                )}
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            )}
+                );
+            })()}
         </div>
     );
 };
