@@ -122,9 +122,9 @@ export const PersonnelDetailModal: React.FC<Props> = ({ person, movements, items
                 <div className="min-w-0 flex-1">
                     <p className="font-semibold text-gray-800 text-sm">{itemName(g.itemId)}</p>
                     <p className="text-xs text-gray-400 mt-0.5">{g.totalQty} {itemUnit(g.itemId)} · {g.date.toLocaleDateString('es-CO')}</p>
-                    {g.workers.length > 0 && (
-                        <p className="text-xs font-semibold text-indigo-600 mt-1">👷 {g.workers.join(', ')}</p>
-                    )}
+                    <p className="text-xs font-semibold text-indigo-600 mt-1">
+                        👷 {g.workers.length > 0 ? g.workers.join(', ') : person.name}
+                    </p>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
                     <span className={`text-xs font-black px-2.5 py-1 rounded-full ${badgeClass}`}>
@@ -190,16 +190,16 @@ export const PersonnelDetailModal: React.FC<Props> = ({ person, movements, items
                 </div>
 
                 {/* Tabs */}
-                <div className="flex border-b border-gray-100 px-4 overflow-x-auto">
+                <div className="flex gap-1.5 px-4 py-3 bg-gray-50 border-b border-gray-100 overflow-x-auto">
                     {TABS.map(t => (
                         <button
                             key={t.key}
                             onClick={() => setTab(t.key)}
-                            className={`flex-shrink-0 px-4 py-3 text-sm font-semibold border-b-2 transition-all ${tab === t.key ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+                            className={`flex-shrink-0 flex items-center gap-1 px-3 py-2 text-xs font-black rounded-xl transition-all ${tab === t.key ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-gray-500 border border-gray-200 hover:border-blue-300 hover:text-blue-600'}`}
                         >
                             {t.label}
                             {t.count > 0 && (
-                                <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-black ${tab === t.key ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'}`}>
+                                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${tab === t.key ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-500'}`}>
                                     {t.count}
                                 </span>
                             )}
