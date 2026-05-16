@@ -25,28 +25,35 @@ export const PersonnelDetailModal: React.FC<Props> = ({ person, movements, items
 
     const itemByType = (type: InventoryType) => new Set(items.filter(i => i.inventoryType === type).map(i => i.id));
 
-    // H. Manual: préstamos explícitos activos + últimos CHECK_OUT sin isLoan (por ítem)
+    type LoanGroup = { itemId: string; totalQty: number; movementIds: string[]; latestDate: Date };
+
+    const groupLoans = (loanMovements: Movement[]): LoanGroup[] => {
+        const map = new Map<string, LoanGroup>();
+        for (const m of loanMovements) {
+            const ts = new Date(m.timestamp);
+            if (!map.has(m.itemId)) {
+                map.set(m.itemId, { itemId: m.itemId, totalQty: 0, movementIds: [], latestDate: ts });
+            }
+            const g = map.get(m.itemId)!;
+            g.totalQty += m.quantity;
+            g.movementIds.push(m.id);
+            if (ts > g.latestDate) g.latestDate = ts;
+        }
+        return [...map.values()].sort((a, b) => b.latestDate.getTime() - a.latestDate.getTime());
+    };
+
+    // H. Manual: préstamos activos agrupados por ítem
     const activeManual = useMemo(() => {
         const manualIds = itemByType(InventoryType.HAND_TOOL);
-        const explicitLoans = myMovements.filter(m => m.isLoan && !m.isReturned && manualIds.has(m.itemId));
-        const explicitItemIds = new Set(explicitLoans.map(m => m.itemId));
-        const latestByItem = new Map<string, Movement>();
-        myMovements
-            .filter(m => m.type === MovementType.CHECK_OUT && !m.isLoan && manualIds.has(m.itemId) && !explicitItemIds.has(m.itemId))
-            .forEach(m => {
-                const cur = latestByItem.get(m.itemId);
-                if (!cur || new Date(m.timestamp) > new Date(cur.timestamp)) latestByItem.set(m.itemId, m);
-            });
-        return [...explicitLoans, ...latestByItem.values()]
-            .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        const loans = myMovements.filter(m => m.isLoan && !m.isReturned && manualIds.has(m.itemId));
+        return groupLoans(loans);
     }, [myMovements, items]);
 
-    // H. Eléctrica: solo préstamos explícitos activos
+    // H. Eléctrica: préstamos activos agrupados por ítem
     const activeElectric = useMemo(() => {
         const electricIds = itemByType(InventoryType.ELECTRICAL_TOOL);
-        return myMovements
-            .filter(m => m.isLoan && !m.isReturned && electricIds.has(m.itemId))
-            .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        const loans = myMovements.filter(m => m.isLoan && !m.isReturned && electricIds.has(m.itemId));
+        return groupLoans(loans);
     }, [myMovements, items]);
 
     // Consumibles: salidas sin préstamo del año, agrupadas por ítem
@@ -97,29 +104,29 @@ export const PersonnelDetailModal: React.FC<Props> = ({ person, movements, items
         { key: 'epp', label: 'EPP', count: eppYear.length },
     ];
 
-    const handleReturn = (m: Movement) => {
-        if (window.confirm(`¿Confirmar devolución de "${itemName(m.itemId)}"?`)) {
-            onReturnLoan?.(m.id);
+    const handleReturn = (g: { itemId: string; movementIds: string[] }) => {
+        if (window.confirm(`¿Confirmar devolución de "${itemName(g.itemId)}"?`)) {
+            g.movementIds.forEach(id => onReturnLoan?.(id));
         }
     };
 
-    const ToolCard = ({ m }: { m: Movement }) => {
-        const d = daysSince(m.timestamp);
+    const ToolCard = ({ g }: { g: { itemId: string; totalQty: number; movementIds: string[]; latestDate: Date } }) => {
+        const d = daysSince(g.latestDate);
         const colorClass = d > 14 ? 'border-red-200 bg-red-50' : d > 7 ? 'border-yellow-200 bg-yellow-50' : 'border-blue-100 bg-blue-50';
         const badgeClass = d > 14 ? 'bg-red-100 text-red-700' : d > 7 ? 'bg-yellow-100 text-yellow-700' : 'bg-blue-100 text-blue-700';
         return (
             <div className={`flex items-center justify-between p-4 rounded-xl border ${colorClass}`}>
                 <div>
-                    <p className="font-semibold text-gray-800 text-sm">{itemName(m.itemId)}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">{m.quantity} {itemUnit(m.itemId)} · {new Date(m.timestamp).toLocaleDateString('es-CO')}</p>
+                    <p className="font-semibold text-gray-800 text-sm">{itemName(g.itemId)}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{g.totalQty} {itemUnit(g.itemId)} · {g.latestDate.toLocaleDateString('es-CO')}</p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-shrink-0">
                     <span className={`text-xs font-black px-2.5 py-1 rounded-full ${badgeClass}`}>
                         {d === 0 ? 'hoy' : `${d}d fuera`}
                     </span>
                     {onReturnLoan && (
                         <button
-                            onClick={() => handleReturn(m)}
+                            onClick={() => handleReturn(g)}
                             className="text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded-lg font-bold"
                         >
                             Devolver
@@ -204,7 +211,7 @@ export const PersonnelDetailModal: React.FC<Props> = ({ person, movements, items
                             </div>
                         ) : (
                             <div className="space-y-3">
-                                {activeManual.map(m => <ToolCard key={m.id} m={m} />)}
+                                {activeManual.map(g => <ToolCard key={g.itemId} g={g} />)}
                             </div>
                         )
                     )}
@@ -217,7 +224,7 @@ export const PersonnelDetailModal: React.FC<Props> = ({ person, movements, items
                             </div>
                         ) : (
                             <div className="space-y-3">
-                                {activeElectric.map(m => <ToolCard key={m.id} m={m} />)}
+                                {activeElectric.map(g => <ToolCard key={g.itemId} g={g} />)}
                             </div>
                         )
                     )}
