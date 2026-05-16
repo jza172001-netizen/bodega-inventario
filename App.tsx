@@ -316,8 +316,10 @@ const App: React.FC = () => {
                     <div className="flex items-center gap-3">
                         {/* Mini marca Montecielo */}
                         <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'rgba(201,151,58,0.15)' }}>
-                            <svg viewBox="0 0 32 24" fill="none" className="w-6 h-5">
-                                <polyline points="1,20 6,7 12,15 16,4 20,12 26,3 31,20" stroke="#C9973A" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+                            <svg viewBox="0 0 56 40" fill="none" className="w-6 h-5">
+                                <polyline points="2,34 10,8 18,22 26,4" stroke="#C9973A" strokeWidth="3.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+                                <polyline points="26,4 34,18 42,8 50,34" stroke="#C9973A" strokeWidth="3.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+                                <line x1="2" y1="34" x2="50" y2="34" stroke="#C9973A" strokeWidth="2" strokeLinecap="round" opacity="0.4"/>
                             </svg>
                         </div>
                         <div>

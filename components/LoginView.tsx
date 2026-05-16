@@ -12,15 +12,21 @@ const USERS: Array<{ name: string; role: UserRole; avatar: string; desc: string 
 ];
 
 const MontecieloMark = () => (
-    <svg viewBox="0 0 48 36" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-        {/* Zigzag mountain mark */}
+    <svg viewBox="0 0 56 40" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+        {/* M shape — dos picos izquierda */}
         <polyline
-            points="2,30 10,10 18,22 24,6 30,18 38,4 46,30"
-            stroke="#C9973A" strokeWidth="4" fill="none"
+            points="2,34 10,8 18,22 26,4"
+            stroke="#C9973A" strokeWidth="3.5" fill="none"
             strokeLinecap="round" strokeLinejoin="round"
         />
-        {/* Vertical accent */}
-        <line x1="24" y1="6" x2="24" y2="30" stroke="#C9973A" strokeWidth="2.5" strokeLinecap="round" opacity="0.5"/>
+        {/* C / flecha derecha — continuación ascendente */}
+        <polyline
+            points="26,4 34,18 42,8 50,34"
+            stroke="#C9973A" strokeWidth="3.5" fill="none"
+            strokeLinecap="round" strokeLinejoin="round"
+        />
+        {/* Línea base */}
+        <line x1="2" y1="34" x2="50" y2="34" stroke="#C9973A" strokeWidth="2" strokeLinecap="round" opacity="0.4"/>
     </svg>
 );
 
