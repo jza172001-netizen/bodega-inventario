@@ -42,7 +42,7 @@ export interface Item {
     inventoryType: InventoryType;
     quantity: number;
     minStock: number;
-    price: number;
+    price?: number;
     unit: string;
     color?: string;
 }

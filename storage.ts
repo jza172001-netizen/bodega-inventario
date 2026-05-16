@@ -9,7 +9,7 @@
 import { Item, Movement, Personnel, PurchaseOrder, Project, AppUser } from './types';
 
 const STORAGE_KEY = 'warehouse_inventory_pro_data';
-const STORAGE_VERSION = '2.0';
+const STORAGE_VERSION = '3.0';
 
 export interface AppData {
     version: string;
@@ -42,6 +42,7 @@ export function loadFromLocalStorage(): Partial<AppData> | null {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) return null;
         const data = JSON.parse(raw) as AppData;
+        if (data.version !== STORAGE_VERSION) return null;
         // Restaurar fechas (JSON serializa Date como string)
         data.movements = data.movements.map(m => ({
             ...m,
