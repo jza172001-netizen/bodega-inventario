@@ -316,7 +316,8 @@ const App: React.FC = () => {
                     <img
                         src="/montecielo-logo.png"
                         alt="Grupo Montecielo"
-                        className="h-8 w-auto object-contain bg-white rounded-lg px-2 py-0.5"
+                        className="h-8 w-auto object-contain"
+                        style={{ filter: 'brightness(0) invert(1)' }}
                     />
                 </div>
 
