@@ -312,21 +312,12 @@ const App: React.FC = () => {
             )}
 
             <aside className={`bg-white border-r border-gray-200 shadow-xl transition-all duration-300 ease-in-out fixed md:relative inset-y-0 left-0 z-30 transform md:transform-none ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:${isSidebarOpen ? 'w-64' : 'w-0 overflow-hidden'} flex flex-col`}>
-                <div className="h-16 flex-shrink-0 flex items-center px-5 border-b" style={{ backgroundColor: '#1B4332' }}>
-                    <div className="flex items-center gap-3">
-                        {/* Mini marca Montecielo */}
-                        <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'rgba(201,151,58,0.15)' }}>
-                            <svg viewBox="0 0 56 40" fill="none" className="w-6 h-5">
-                                <polyline points="2,34 10,8 18,22 26,4" stroke="#C9973A" strokeWidth="3.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
-                                <polyline points="26,4 34,18 42,8 50,34" stroke="#C9973A" strokeWidth="3.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
-                                <line x1="2" y1="34" x2="50" y2="34" stroke="#C9973A" strokeWidth="2" strokeLinecap="round" opacity="0.4"/>
-                            </svg>
-                        </div>
-                        <div>
-                            <p className="text-[9px] font-black uppercase tracking-[0.2em] leading-none" style={{ color: '#C9973A' }}>Grupo</p>
-                            <p className="text-base font-black text-white leading-tight tracking-tight">Montecielo</p>
-                        </div>
-                    </div>
+                <div className="h-16 flex-shrink-0 flex items-center px-5 border-b bg-blue-700">
+                    <img
+                        src="/montecielo-logo.png"
+                        alt="Grupo Montecielo"
+                        className="h-8 w-auto object-contain bg-white rounded-lg px-2 py-0.5"
+                    />
                 </div>
 
                 <div className="flex-1 overflow-y-auto py-4">
@@ -499,9 +490,7 @@ const QuestionMarkIcon: React.FC<{ className?: string }> = ({ className }) => (
 );
 
 const NavItem: React.FC<{ icon: React.ElementType, label: string, onClick: () => void, isActive: boolean }> = ({ icon: Icon, label, onClick, isActive }) => (
-    <button onClick={onClick}
-        className={`w-full flex items-center text-left px-4 py-3 text-sm font-semibold rounded-xl transition-all duration-200 ${isActive ? 'text-white shadow-lg' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'}`}
-        style={isActive ? { backgroundColor: '#1B4332' } : undefined}>
+    <button onClick={onClick} className={`w-full flex items-center text-left px-4 py-3 text-sm font-semibold rounded-xl transition-all duration-200 ${isActive ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'}`}>
         <Icon className={`w-5 h-5 mr-3 ${isActive ? 'text-white' : 'text-gray-400'}`} />
         {label}
     </button>

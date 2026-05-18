@@ -5,71 +5,43 @@ interface LoginViewProps {
     onLoginSuccess: (role: UserRole, name: string) => void;
 }
 
-const USERS: Array<{ name: string; role: UserRole; avatar: string; desc: string }> = [
-    { name: 'Juli',      role: UserRole.OWNER,    avatar: 'J', desc: 'Bodeguero — acceso completo' },
-    { name: 'Kate',      role: UserRole.OWNER,    avatar: 'K', desc: 'Bodeguero — acceso completo' },
-    { name: 'Visitante', role: UserRole.EMPLOYEE, avatar: 'V', desc: 'Solo lectura — sin edición'  },
+const USERS: Array<{ name: string; role: UserRole; avatar: string; desc: string; color: string }> = [
+    { name: 'Juli',      role: UserRole.OWNER,    avatar: 'J', desc: 'Bodeguero — acceso completo',  color: 'bg-blue-600' },
+    { name: 'Kate',      role: UserRole.OWNER,    avatar: 'K', desc: 'Bodeguero — acceso completo',  color: 'bg-indigo-600' },
+    { name: 'Visitante', role: UserRole.EMPLOYEE, avatar: 'V', desc: 'Solo lectura — sin edición',   color: 'bg-gray-500' },
 ];
 
-const MontecieloMark = () => (
-    <svg viewBox="0 0 56 40" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-        {/* M shape — dos picos izquierda */}
-        <polyline
-            points="2,34 10,8 18,22 26,4"
-            stroke="#C9973A" strokeWidth="3.5" fill="none"
-            strokeLinecap="round" strokeLinejoin="round"
-        />
-        {/* C / flecha derecha — continuación ascendente */}
-        <polyline
-            points="26,4 34,18 42,8 50,34"
-            stroke="#C9973A" strokeWidth="3.5" fill="none"
-            strokeLinecap="round" strokeLinejoin="round"
-        />
-        {/* Línea base */}
-        <line x1="2" y1="34" x2="50" y2="34" stroke="#C9973A" strokeWidth="2" strokeLinecap="round" opacity="0.4"/>
-    </svg>
-);
-
 export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => (
-    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'linear-gradient(135deg, #f0f7f4 0%, #ffffff 50%, #f5f0e8 100%)' }}>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex items-center justify-center p-4">
         <div className="w-full max-w-md">
-            {/* Logo Montecielo */}
+            {/* Logo Montecielo real */}
             <div className="text-center mb-10">
-                <div
-                    className="inline-flex items-center justify-center w-20 h-20 rounded-2xl shadow-xl mb-5"
-                    style={{ backgroundColor: '#1B4332' }}
-                >
-                    <div className="w-12 h-9">
-                        <MontecieloMark />
-                    </div>
+                <div className="inline-block mb-2">
+                    <img
+                        src="/montecielo-logo.png"
+                        alt="Grupo Montecielo"
+                        className="h-16 w-auto object-contain mx-auto drop-shadow-sm"
+                    />
                 </div>
-                <p className="text-xs font-black uppercase tracking-[0.2em] mb-1" style={{ color: '#C9973A' }}>Grupo</p>
-                <h1 className="text-3xl font-black text-gray-900 tracking-tight">Montecielo</h1>
-                <p className="text-gray-400 text-sm mt-2">Sistema de inventario de bodega</p>
+                <p className="text-gray-400 text-sm mt-3">Sistema de inventario de bodega</p>
             </div>
 
             {/* Tarjetas de usuario */}
             <div className="space-y-3">
-                {USERS.map((u, i) => (
+                {USERS.map(u => (
                     <button
                         key={u.name}
                         onClick={() => onLoginSuccess(u.role, u.name)}
-                        className="w-full flex items-center gap-4 p-4 bg-white border border-gray-200 rounded-2xl text-left transition-all group shadow-sm hover:shadow-md"
-                        style={{ borderColor: undefined }}
-                        onMouseEnter={e => (e.currentTarget.style.borderColor = '#1B4332')}
-                        onMouseLeave={e => (e.currentTarget.style.borderColor = '')}
+                        className="w-full flex items-center gap-4 p-4 bg-white border border-gray-200 hover:border-blue-400 hover:shadow-md rounded-2xl text-left transition-all group shadow-sm"
                     >
-                        <div
-                            className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-black text-xl flex-shrink-0 group-hover:scale-105 transition-transform"
-                            style={{ backgroundColor: i === 2 ? '#6b7280' : '#1B4332' }}
-                        >
+                        <div className={`w-12 h-12 rounded-xl ${u.color} flex items-center justify-center text-white font-black text-xl flex-shrink-0 group-hover:scale-105 transition-transform`}>
                             {u.avatar}
                         </div>
                         <div>
                             <p className="font-bold text-gray-900 text-base">{u.name}</p>
                             <p className="text-xs text-gray-500">{u.desc}</p>
                         </div>
-                        <svg className="w-5 h-5 text-gray-300 ml-auto transition-colors group-hover:text-green-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-5 h-5 text-gray-300 group-hover:text-blue-500 ml-auto transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                         </svg>
                     </button>
@@ -77,7 +49,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => (
             </div>
 
             <p className="text-center text-xs text-gray-400 mt-8">
-                Grupo Montecielo · Gestión de inventario de construcción
+                Grupo Montecielo · Sistema de gestión de inventario
             </p>
         </div>
     </div>
