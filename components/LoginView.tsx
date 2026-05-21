@@ -7,9 +7,8 @@ interface LoginViewProps {
 }
 
 const USERS: Array<{ name: string; role: UserRole; avatar: string; desc: string; color: string }> = [
-    { name: 'Juli',     role: UserRole.OWNER,    avatar: 'J', desc: 'Bodeguero — acceso completo',  color: 'bg-blue-600' },
-    { name: 'Kate',     role: UserRole.OWNER,    avatar: 'K', desc: 'Bodeguero — acceso completo',  color: 'bg-indigo-600' },
-    { name: 'Visitante',role: UserRole.EMPLOYEE, avatar: 'V', desc: 'Solo lectura — sin edición',   color: 'bg-gray-500' },
+    { name: 'Bodeguero', role: UserRole.OWNER,    avatar: 'B', desc: 'Acceso completo',           color: 'bg-blue-600' },
+    { name: 'Visitante', role: UserRole.EMPLOYEE, avatar: 'V', desc: 'Solo lectura — sin edición', color: 'bg-gray-500' },
 ];
 
 export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => (
