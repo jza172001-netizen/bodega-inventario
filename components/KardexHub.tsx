@@ -34,6 +34,7 @@ interface KardexHubProps {
     // project handlers
     onAddProject: (p: Omit<Project, 'id'>) => void;
     onDeleteProject?: (id: string) => void;
+    showEconomicValues?: boolean;
 }
 
 const TABS: Array<{ id: KardexTab; label: string; icon: string }> = [
@@ -58,7 +59,7 @@ export const KardexHub: React.FC<KardexHubProps> = ({
     openLogMovementModal, onDeleteMovement, onReturnLoan,
     onReturnItem, onMarkPendingPickup,
     openAddItemModal, onEditItem, onDeleteItem, onItemHistory, onOpenInvoiceReader,
-    onAddProject, onDeleteProject,
+    onAddProject, onDeleteProject, showEconomicValues = false,
 }) => {
     const [activeTab, setActiveTab] = useState<KardexTab>(initialTab);
     const [invType, setInvType] = useState<InventoryType | null>(initialInventoryType);
@@ -155,6 +156,7 @@ export const KardexHub: React.FC<KardexHubProps> = ({
                     onDeleteProject={onDeleteProject}
                     onGoBack={onGoBack}
                     userRole={userRole}
+                    showEconomicValues={showEconomicValues}
                 />
             )}
         </div>

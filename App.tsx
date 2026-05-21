@@ -15,6 +15,7 @@ import { FloatingChat } from './components/FloatingChat';
 import { OnboardingModal } from './components/OnboardingModal';
 import { HelpView } from './components/HelpView';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
+import { SettingsModal, AppConfig, DEFAULT_CONFIG } from './components/SettingsModal';
 import { requestNotificationPermission, checkAndNotifyOverdueLoans } from './services/notificationService';
 
 import { mockItems, mockMovements, mockPersonnel, mockPurchaseOrders, mockProjects, mockUsers } from './mockData';
@@ -99,8 +100,18 @@ const App: React.FC = () => {
     const effectiveView: View = (userRole === UserRole.EMPLOYEE && !EMPLOYEE_VIEWS.includes(currentView)) ? 'dashboard' : currentView;
     const [isSidebarOpen, setSidebarOpen] = useState(true);
 
+    const CONFIG_KEY = 'bodega_config';
+    const [appConfig, setAppConfig] = useState<AppConfig>(() => {
+        try { return { ...DEFAULT_CONFIG, ...JSON.parse(localStorage.getItem(CONFIG_KEY) || '{}') }; } catch { return DEFAULT_CONFIG; }
+    });
+    const handleConfigChange = (cfg: AppConfig) => {
+        setAppConfig(cfg);
+        localStorage.setItem(CONFIG_KEY, JSON.stringify(cfg));
+    };
+
     const [isInvoiceReaderOpen, setInvoiceReaderOpen] = useState(false);
     const [isSearchOpen, setSearchOpen] = useState(false);
+    const [isSettingsOpen, setSettingsOpen] = useState(false);
     const [isAddItemModalOpen, setAddItemModalOpen] = useState(false);
     const [isEditModalOpen, setEditModalOpen] = useState(false);
     const [itemToEdit, setItemToEdit] = useState<Item | null>(null);
@@ -324,6 +335,13 @@ const App: React.FC = () => {
                 <div className="flex-shrink-0 px-2 py-3 border-t border-gray-100 space-y-1">
                     <NavItem icon={QuestionMarkIcon} label="Ayuda ❓" onClick={() => selectView('help')} isActive={currentView === 'help'} />
                     <button
+                        onClick={() => setSettingsOpen(true)}
+                        className="w-full flex items-center text-left px-4 py-2.5 text-xs font-semibold rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-all"
+                    >
+                        <span className="mr-3 text-base">⚙️</span>
+                        Configuración
+                    </button>
+                    <button
                         onClick={() => setShowOnboarding(true)}
                         className="w-full flex items-center text-left px-4 py-2.5 text-xs font-semibold rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-all"
                     >
@@ -382,6 +400,7 @@ const App: React.FC = () => {
                                 onOpenInvoiceReader={() => setInvoiceReaderOpen(true)}
                                 onAddProject={handleAddProject}
                                 onDeleteProject={handleDeleteProject}
+                                showEconomicValues={appConfig.showEconomicValues}
                             />
                         )}
                         {effectiveView === 'personnel' && (
@@ -422,6 +441,13 @@ const App: React.FC = () => {
             <ItemHistoryModal isOpen={isHistoryModalOpen} onClose={() => setHistoryModalOpen(false)} item={itemForHistory} movements={movements} personnel={personnel} />
             <UserManagementModal isOpen={isUserManagementOpen} onClose={() => setUserManagementOpen(false)} users={users} onAddUser={handleAddUser} onDeleteUser={handleDeleteUser} onEditUser={handleEditUser} />
             <InvoiceReaderModal isOpen={isInvoiceReaderOpen} onClose={() => setInvoiceReaderOpen(false)} onImport={(rows, invType) => handleImportItems(rows, invType)} />
+            {isSettingsOpen && (
+                <SettingsModal
+                    config={appConfig}
+                    onChange={handleConfigChange}
+                    onClose={() => setSettingsOpen(false)}
+                />
+            )}
             {isSearchOpen && (
                 <GlobalSearchModal
                     items={items}
