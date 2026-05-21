@@ -7,9 +7,10 @@ interface DashboardProps {
     movements: Movement[];
     purchaseOrders: PurchaseOrder[];
     personnel?: Personnel[];
+    onNavigate?: (view: string) => void;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ items, movements, purchaseOrders, personnel = [] }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ items, movements, purchaseOrders, personnel = [], onNavigate }) => {
     const alerts = useMemo(() => {
         const daysElapsed = (d: Date) => Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
         const depleted = items.filter(i => i.quantity === 0 && i.minStock > 0).length;
@@ -30,28 +31,28 @@ export const Dashboard: React.FC<DashboardProps> = ({ items, movements, purchase
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Alertas activas</p>
                     <div className="flex flex-wrap gap-2">
                         {alerts.depleted > 0 && (
-                            <span className="flex items-center gap-1.5 bg-red-50 border border-red-200 text-red-700 text-xs font-bold px-3 py-1.5 rounded-full">
+                            <button onClick={() => onNavigate?.('inventory')} className="flex items-center gap-1.5 bg-red-50 border border-red-200 text-red-700 text-xs font-bold px-3 py-1.5 rounded-full hover:bg-red-100 transition-colors cursor-pointer">
                                 <span className="w-2 h-2 rounded-full bg-red-500 inline-block"></span>
-                                {alerts.depleted} ítem{alerts.depleted > 1 ? 's' : ''} agotado{alerts.depleted > 1 ? 's' : ''}
-                            </span>
+                                {alerts.depleted} ítem{alerts.depleted > 1 ? 's' : ''} agotado{alerts.depleted > 1 ? 's' : ''} →
+                            </button>
                         )}
                         {alerts.lowStock > 0 && (
-                            <span className="flex items-center gap-1.5 bg-orange-50 border border-orange-200 text-orange-700 text-xs font-bold px-3 py-1.5 rounded-full">
+                            <button onClick={() => onNavigate?.('inventory')} className="flex items-center gap-1.5 bg-orange-50 border border-orange-200 text-orange-700 text-xs font-bold px-3 py-1.5 rounded-full hover:bg-orange-100 transition-colors cursor-pointer">
                                 <span className="w-2 h-2 rounded-full bg-orange-400 inline-block"></span>
-                                {alerts.lowStock} bajo stock mínimo
-                            </span>
+                                {alerts.lowStock} bajo stock mínimo →
+                            </button>
                         )}
                         {alerts.overdueLoans > 0 && (
-                            <span className="flex items-center gap-1.5 bg-yellow-50 border border-yellow-200 text-yellow-700 text-xs font-bold px-3 py-1.5 rounded-full">
+                            <button onClick={() => onNavigate?.('loans')} className="flex items-center gap-1.5 bg-yellow-50 border border-yellow-200 text-yellow-700 text-xs font-bold px-3 py-1.5 rounded-full hover:bg-yellow-100 transition-colors cursor-pointer">
                                 <span className="w-2 h-2 rounded-full bg-yellow-400 inline-block"></span>
-                                {alerts.overdueLoans} préstamo{alerts.overdueLoans > 1 ? 's' : ''} vencido{alerts.overdueLoans > 1 ? 's' : ''} (+7d)
-                            </span>
+                                {alerts.overdueLoans} préstamo{alerts.overdueLoans > 1 ? 's' : ''} vencido{alerts.overdueLoans > 1 ? 's' : ''} (+7d) →
+                            </button>
                         )}
                         {alerts.pendingOrders > 0 && (
-                            <span className="flex items-center gap-1.5 bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold px-3 py-1.5 rounded-full">
+                            <button onClick={() => onNavigate?.('purchaseOrders')} className="flex items-center gap-1.5 bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold px-3 py-1.5 rounded-full hover:bg-blue-100 transition-colors cursor-pointer">
                                 <span className="w-2 h-2 rounded-full bg-blue-400 inline-block"></span>
-                                {alerts.pendingOrders} orden{alerts.pendingOrders > 1 ? 'es' : ''} de compra pendiente{alerts.pendingOrders > 1 ? 's' : ''}
-                            </span>
+                                {alerts.pendingOrders} orden{alerts.pendingOrders > 1 ? 'es' : ''} de compra pendiente{alerts.pendingOrders > 1 ? 's' : ''} →
+                            </button>
                         )}
                     </div>
                 </div>
