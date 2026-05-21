@@ -94,6 +94,8 @@ const App: React.FC = () => {
 
     const [currentView, setCurrentView] = useState<View>('dashboard');
     const [selectedInventoryType, setSelectedInventoryType] = useState<InventoryType | null>(null);
+    const EMPLOYEE_VIEWS: View[] = ['dashboard', 'movements', 'personnel', 'help'];
+    const effectiveView: View = (userRole === UserRole.EMPLOYEE && !EMPLOYEE_VIEWS.includes(currentView)) ? 'dashboard' : currentView;
     const [isSidebarOpen, setSidebarOpen] = useState(true);
 
     const [isInvoiceReaderOpen, setInvoiceReaderOpen] = useState(false);
@@ -303,24 +305,30 @@ const App: React.FC = () => {
 
                 <div className="flex-1 overflow-y-auto py-4">
                     <nav className="px-2 space-y-1">
-                        <NavItem icon={DashboardIcon} label="Resumen" onClick={() => selectView('dashboard')} isActive={currentView === 'dashboard'} />
+                        <NavItem icon={DashboardIcon} label="Resumen" onClick={() => selectView('dashboard')} isActive={effectiveView === 'dashboard'} />
                         {userRole === UserRole.OWNER && (
-                            <NavItem icon={BrainIcon} label="Análisis" onClick={() => selectView('copilot')} isActive={currentView === 'copilot'} />
+                            <>
+                                <NavItem icon={BrainIcon} label="Análisis" onClick={() => selectView('copilot')} isActive={effectiveView === 'copilot'} />
+                                <NavHeader label="Gestión" />
+                                <NavItem icon={HardHatIcon} label="Proyectos" onClick={() => selectView('projects')} isActive={effectiveView === 'projects'} />
+                            </>
                         )}
-                        <NavHeader label="Gestión" />
-                        <NavItem icon={HardHatIcon} label="Proyectos" onClick={() => selectView('projects')} isActive={currentView === 'projects'} />
-                        <NavItem icon={MovementsIcon} label="Kardex" onClick={() => selectView('movements')} isActive={currentView === 'movements'} />
-                        <NavItem icon={ClockIcon} label="Préstamos" onClick={() => selectView('loans')} isActive={currentView === 'loans'} />
-
-                        <NavHeader label="Inventarios" />
-                        <NavItem icon={HandToolIcon} label="H. Manual" onClick={() => { setCurrentView('inventory'); setSelectedInventoryType(InventoryType.HAND_TOOL); }} isActive={currentView === 'inventory' && selectedInventoryType === InventoryType.HAND_TOOL} />
-                        <NavItem icon={ElectricalToolIcon} label="H. Eléctrica" onClick={() => { setCurrentView('inventory'); setSelectedInventoryType(InventoryType.ELECTRICAL_TOOL); }} isActive={currentView === 'inventory' && selectedInventoryType === InventoryType.ELECTRICAL_TOOL} />
-                        <NavItem icon={PpeIcon} label="Seguridad" onClick={() => { setCurrentView('inventory'); setSelectedInventoryType(InventoryType.PPE); }} isActive={currentView === 'inventory' && selectedInventoryType === InventoryType.PPE} />
-                        <NavItem icon={SingleUseIcon} label="Consumibles" onClick={() => { setCurrentView('inventory'); setSelectedInventoryType(InventoryType.SINGLE_USE); }} isActive={currentView === 'inventory' && selectedInventoryType === InventoryType.SINGLE_USE} />
-
-                        <NavHeader label="Admin" />
-                        <NavItem icon={PersonnelIcon} label="Personal" onClick={() => selectView('personnel')} isActive={currentView === 'personnel'} />
-                        <NavItem icon={PurchaseOrdersIcon} label="Compras" onClick={() => selectView('purchaseOrders')} isActive={currentView === 'purchaseOrders'} />
+                        <NavItem icon={MovementsIcon} label="Kardex" onClick={() => selectView('movements')} isActive={effectiveView === 'movements'} />
+                        {userRole === UserRole.OWNER && (
+                            <>
+                                <NavItem icon={ClockIcon} label="Préstamos" onClick={() => selectView('loans')} isActive={effectiveView === 'loans'} />
+                                <NavHeader label="Inventarios" />
+                                <NavItem icon={HandToolIcon} label="H. Manual" onClick={() => { setCurrentView('inventory'); setSelectedInventoryType(InventoryType.HAND_TOOL); }} isActive={effectiveView === 'inventory' && selectedInventoryType === InventoryType.HAND_TOOL} />
+                                <NavItem icon={ElectricalToolIcon} label="H. Eléctrica" onClick={() => { setCurrentView('inventory'); setSelectedInventoryType(InventoryType.ELECTRICAL_TOOL); }} isActive={effectiveView === 'inventory' && selectedInventoryType === InventoryType.ELECTRICAL_TOOL} />
+                                <NavItem icon={PpeIcon} label="Seguridad" onClick={() => { setCurrentView('inventory'); setSelectedInventoryType(InventoryType.PPE); }} isActive={effectiveView === 'inventory' && selectedInventoryType === InventoryType.PPE} />
+                                <NavItem icon={SingleUseIcon} label="Consumibles" onClick={() => { setCurrentView('inventory'); setSelectedInventoryType(InventoryType.SINGLE_USE); }} isActive={effectiveView === 'inventory' && selectedInventoryType === InventoryType.SINGLE_USE} />
+                                <NavHeader label="Admin" />
+                            </>
+                        )}
+                        <NavItem icon={PersonnelIcon} label="Personal" onClick={() => selectView('personnel')} isActive={effectiveView === 'personnel'} />
+                        {userRole === UserRole.OWNER && (
+                            <NavItem icon={PurchaseOrdersIcon} label="Compras" onClick={() => selectView('purchaseOrders')} isActive={effectiveView === 'purchaseOrders'} />
+                        )}
                     </nav>
                 </div>
 
@@ -354,8 +362,8 @@ const App: React.FC = () => {
                 />
                 <main className="flex-1 p-4 md:p-6 overflow-y-auto bg-gray-50">
                     <div className="max-w-7xl mx-auto">
-                        {currentView === 'dashboard' && <Dashboard items={items} movements={movements} purchaseOrders={purchaseOrders} personnel={personnel} />}
-                        {currentView === 'inventory' && (
+                        {effectiveView === 'dashboard' && <Dashboard items={items} movements={movements} purchaseOrders={purchaseOrders} personnel={personnel} />}
+                        {effectiveView === 'inventory' && (
                             <InventoryView
                                 items={selectedInventoryType ? items.filter(i => i.inventoryType === selectedInventoryType) : items}
                                 openAddItemModal={() => setAddItemModalOpen(true)}
@@ -367,17 +375,17 @@ const App: React.FC = () => {
                                 onGoBack={() => selectView('dashboard')}
                             />
                         )}
-                        {currentView === 'movements' && (
+                        {effectiveView === 'movements' && (
                             <MovementsView
                                 movements={movements}
                                 items={items}
                                 personnel={personnel}
-                                openLogMovementModal={() => setLogMovementModalOpen(true)}
+                                openLogMovementModal={userRole === UserRole.OWNER ? () => setLogMovementModalOpen(true) : undefined}
                                 onGoBack={() => selectView('dashboard')}
-                                onDeleteMovement={handleDeleteMovement}
+                                onDeleteMovement={userRole === UserRole.OWNER ? handleDeleteMovement : undefined}
                             />
                         )}
-                        {currentView === 'purchaseOrders' && (
+                        {effectiveView === 'purchaseOrders' && (
                             <PurchaseOrdersView
                                 purchaseOrders={purchaseOrders}
                                 items={items}
@@ -388,20 +396,20 @@ const App: React.FC = () => {
                                 onDeleteOrder={handleDeletePO}
                             />
                         )}
-                        {currentView === 'personnel' && (
+                        {effectiveView === 'personnel' && (
                             <PersonnelView
                                 personnel={personnel}
                                 movements={movements}
                                 items={items}
                                 projects={projects}
-                                openAddPersonnelModal={() => setAddPersonnelModalOpen(true)}
+                                openAddPersonnelModal={userRole === UserRole.OWNER ? () => setAddPersonnelModalOpen(true) : undefined}
                                 onGoBack={() => selectView('dashboard')}
                                 onEditPersonnel={handleEditPersonnel}
                                 onDeletePersonnel={handleDeletePersonnel}
                                 userRole={userRole}
                             />
                         )}
-                        {currentView === 'projects' && (
+                        {effectiveView === 'projects' && (
                             <ProjectsView
                                 projects={projects}
                                 movements={movements}
@@ -413,7 +421,7 @@ const App: React.FC = () => {
                                 userRole={userRole}
                             />
                         )}
-                        {currentView === 'loans' && (
+                        {effectiveView === 'loans' && (
                             <LoansView
                                 movements={movements}
                                 items={items}
@@ -423,7 +431,7 @@ const App: React.FC = () => {
                                 onGoBack={() => selectView('dashboard')}
                             />
                         )}
-                        {currentView === 'copilot' && (
+                        {effectiveView === 'copilot' && (
                             <CopilotView
                                 items={items}
                                 movements={movements}
@@ -436,7 +444,7 @@ const App: React.FC = () => {
                                 onCreatePersonnel={handleAddPersonnelSync}
                             />
                         )}
-                        {currentView === 'help' && <HelpView />}
+                        {effectiveView === 'help' && <HelpView />}
                     </div>
                 </main>
             </div>
@@ -450,17 +458,19 @@ const App: React.FC = () => {
             <UserManagementModal isOpen={isUserManagementOpen} onClose={() => setUserManagementOpen(false)} users={users} onAddUser={handleAddUser} onDeleteUser={handleDeleteUser} onEditUser={handleEditUser} />
             <InvoiceReaderModal isOpen={isInvoiceReaderOpen} onClose={() => setInvoiceReaderOpen(false)} onImport={(rows, invType) => handleImportItems(rows, invType)} />
             {showOnboarding && <OnboardingModal onFinish={handleOnboardingFinish} />}
-            <FloatingChat
-                items={items}
-                movements={movements}
-                personnel={personnel}
-                purchaseOrders={purchaseOrders}
-                projects={projects}
-                onLogMovements={batch => batch.forEach(m => handleLogMovement(m))}
-                onCreateItem={handleAddItemSync}
-                onCreateProject={handleAddProjectSync}
-                onCreatePersonnel={handleAddPersonnelSync}
-            />
+            {userRole === UserRole.OWNER && (
+                <FloatingChat
+                    items={items}
+                    movements={movements}
+                    personnel={personnel}
+                    purchaseOrders={purchaseOrders}
+                    projects={projects}
+                    onLogMovements={batch => batch.forEach(m => handleLogMovement(m))}
+                    onCreateItem={handleAddItemSync}
+                    onCreateProject={handleAddProjectSync}
+                    onCreatePersonnel={handleAddPersonnelSync}
+                />
+            )}
         </div>
     );
 };
