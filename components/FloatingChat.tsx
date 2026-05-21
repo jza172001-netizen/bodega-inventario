@@ -401,11 +401,18 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                 <p className="text-blue-200 text-[10px]">{wizardStep ? 'Registrando salida…' : 'Consultar · Registrar'}</p>
                             </div>
                         </div>
-                        <button onClick={() => setOpen(false)} className="text-blue-200 hover:text-white p-1 rounded-lg hover:bg-blue-700 transition-colors">
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
-                            </svg>
-                        </button>
+                        <div className="flex items-center gap-2">
+                            {wizardStep && (
+                                <button onClick={cancelWizard} className="text-blue-200 hover:text-white text-xs font-semibold px-2 py-1 rounded-lg hover:bg-blue-700 transition-colors">
+                                    ✕ Cancelar
+                                </button>
+                            )}
+                            <button onClick={() => setOpen(false)} className="text-blue-200 hover:text-white p-1 rounded-lg hover:bg-blue-700 transition-colors">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
+                                </svg>
+                            </button>
+                        </div>
                     </div>
 
                     {/* Quick buttons — only in chat mode */}
