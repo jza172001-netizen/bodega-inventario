@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState } from 'react';
-import { Movement, Item, Personnel, InventoryType } from '../types';
+import { Movement, Item, Personnel, UserRole } from '../types';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
 import { ClockIcon } from './icons/ClockIcon';
 
@@ -11,11 +11,13 @@ interface LoansViewProps {
     onReturnItem: (movementId: string) => void;
     onMarkPendingPickup: (movementId: string, pending: boolean) => void;
     onGoBack: () => void;
+    userRole?: UserRole;
 }
 
 export const LoansView: React.FC<LoansViewProps> = ({
-    movements, items, personnel, onReturnItem, onMarkPendingPickup, onGoBack,
+    movements, items, personnel, onReturnItem, onMarkPendingPickup, onGoBack, userRole = UserRole.EMPLOYEE,
 }) => {
+    const isOwner = userRole === UserRole.OWNER;
     const [search, setSearch] = useState('');
     const activeLoans = useMemo(() => movements.filter(m => m.isLoan && !m.isReturned), [movements]);
 
@@ -51,11 +53,12 @@ export const LoansView: React.FC<LoansViewProps> = ({
         const person = getPerson(loan.personnelId);
         if (!person?.phone) return null;
         const item = getItem(loan.itemId);
-        if (item?.inventoryType !== InventoryType.ELECTRICAL_TOOL) return null;
+        if (!item) return null;
         const rawPhone = person.phone.replace(/\D/g, '');
         const phone = rawPhone.startsWith('57') ? rawPhone : `57${rawPhone}`;
+        const days = getDays(new Date(loan.timestamp));
         const text = encodeURIComponent(
-            `Hola ${person.name}, recuerda traer ${item.name} a la bodega hoy. Gracias.`
+            `Hola ${person.name}, recuerda devolver ${item.name} a la bodega. Llevas ${days} día${days !== 1 ? 's' : ''} con eso. Gracias 🙏`
         );
         return `https://wa.me/${phone}?text=${text}`;
     };
@@ -85,13 +88,15 @@ export const LoansView: React.FC<LoansViewProps> = ({
                     </div>
                 </div>
                 <div className="flex gap-2">
-                    <button
-                        onClick={() => handleReturn(loan.id)}
-                        className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all"
-                    >
-                        ✓ Devuelta
-                    </button>
-                    {!isPending ? (
+                    {isOwner && (
+                        <button
+                            onClick={() => handleReturn(loan.id)}
+                            className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all"
+                        >
+                            ✓ Devuelta
+                        </button>
+                    )}
+                    {isOwner && (!isPending ? (
                         <button
                             onClick={() => onMarkPendingPickup(loan.id, true)}
                             className="flex-1 py-1.5 bg-orange-100 hover:bg-orange-200 text-orange-800 text-xs font-bold rounded-xl transition-all"
@@ -105,16 +110,16 @@ export const LoansView: React.FC<LoansViewProps> = ({
                         >
                             ✕ Cancelar
                         </button>
-                    )}
+                    ))}
                     {waUrl && (
                         <a
                             href={waUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            title="Enviar recordatorio por WhatsApp"
-                            className="flex items-center justify-center px-3 py-1.5 bg-green-100 hover:bg-green-200 text-green-800 text-xs font-bold rounded-xl transition-all"
+                            title="Recordar por WhatsApp"
+                            className="flex items-center justify-center gap-1 px-3 py-1.5 bg-green-100 hover:bg-green-200 text-green-800 text-xs font-bold rounded-xl transition-all"
                         >
-                            📲
+                            📲 <span className="hidden sm:inline">Recordar</span>
                         </a>
                     )}
                 </div>

@@ -16,9 +16,11 @@ interface MovementsViewProps {
     onReturnLoan?: (movementId: string) => void;
     onDeleteMovement?: (id: string) => void;
     onGoBack: () => void;
+    userRole?: UserRole;
 }
 
-export const MovementsView: React.FC<MovementsViewProps> = ({ movements, items, personnel, filterType, openLogMovementModal, onReturnLoan, onDeleteMovement, onGoBack }) => {
+export const MovementsView: React.FC<MovementsViewProps> = ({ movements, items, personnel, filterType, openLogMovementModal, onReturnLoan, onDeleteMovement, onGoBack, userRole = UserRole.EMPLOYEE }) => {
+    const isOwner = userRole === UserRole.OWNER;
     const [page, setPage] = useState(0);
     const [typeFilter, setTypeFilter] = useState<MovementType | ''>('');
 
@@ -75,7 +77,7 @@ export const MovementsView: React.FC<MovementsViewProps> = ({ movements, items, 
                         <option value="">Todos los tipos</option>
                         {Object.values(MovementType).map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
-                {openLogMovementModal && (
+                {openLogMovementModal && isOwner && (
                     <button onClick={openLogMovementModal} className="flex items-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
                         <TruckIcon className="w-5 h-5 mr-2" />
                         Registrar Movimiento
@@ -110,7 +112,7 @@ export const MovementsView: React.FC<MovementsViewProps> = ({ movements, items, 
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 font-bold">{m.quantity}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{getPersonnelName(m.personnelId)}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium flex space-x-2">
-                                    {m.isLoan && !m.isReturned && onReturnLoan && (
+                                    {isOwner && m.isLoan && !m.isReturned && onReturnLoan && (
                                         <button
                                             onClick={() => onReturnLoan(m.id)}
                                             className="text-xs bg-indigo-600 text-white px-3 py-1 rounded hover:bg-indigo-700"
@@ -118,7 +120,7 @@ export const MovementsView: React.FC<MovementsViewProps> = ({ movements, items, 
                                             Devolver
                                         </button>
                                     )}
-                                    {onDeleteMovement && (!m.isLoan || m.isReturned) && (
+                                    {isOwner && onDeleteMovement && (!m.isLoan || m.isReturned) && (
                                         <button
                                             onClick={() => { if(window.confirm('¿Borrar este registro?')) onDeleteMovement(m.id)}}
                                             className="text-red-400 hover:text-red-600 p-1"
@@ -126,7 +128,7 @@ export const MovementsView: React.FC<MovementsViewProps> = ({ movements, items, 
                                             <TrashIcon className="w-4 h-4" />
                                         </button>
                                     )}
-                                    {m.isLoan && !m.isReturned && (
+                                    {isOwner && m.isLoan && !m.isReturned && (
                                         <span title="Préstamo activo — devolver antes de borrar" className="text-gray-300 p-1">
                                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
                                         </span>
@@ -155,12 +157,12 @@ export const MovementsView: React.FC<MovementsViewProps> = ({ movements, items, 
                         <div className="flex justify-between items-center mt-2">
                             <span className="text-xs text-gray-400">{new Date(m.timestamp).toLocaleString()}</span>
                             <div className="flex gap-2">
-                                {m.isLoan && !m.isReturned && onReturnLoan && (
+                                {isOwner && m.isLoan && !m.isReturned && onReturnLoan && (
                                     <button onClick={() => onReturnLoan(m.id)} className="text-xs bg-indigo-600 text-white px-2 py-0.5 rounded">
                                         Devolver
                                     </button>
                                 )}
-                                {onDeleteMovement && (!m.isLoan || m.isReturned) && (
+                                {isOwner && onDeleteMovement && (!m.isLoan || m.isReturned) && (
                                     <button onClick={() => { if(window.confirm('¿Borrar?')) onDeleteMovement(m.id)}} className="text-red-400">
                                         <TrashIcon className="w-4 h-4" />
                                     </button>

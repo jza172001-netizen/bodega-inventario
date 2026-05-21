@@ -118,6 +118,7 @@ export const KardexHub: React.FC<KardexHubProps> = ({
                     onDeleteMovement={onDeleteMovement}
                     onReturnLoan={onReturnLoan}
                     onGoBack={onGoBack}
+                    userRole={userRole}
                 />
             )}
 
@@ -129,6 +130,7 @@ export const KardexHub: React.FC<KardexHubProps> = ({
                     onReturnItem={onReturnItem}
                     onMarkPendingPickup={onMarkPendingPickup}
                     onGoBack={onGoBack}
+                    userRole={userRole}
                 />
             )}
 
