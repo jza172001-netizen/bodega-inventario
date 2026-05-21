@@ -14,6 +14,7 @@ import CopilotView from './components/CopilotView';
 import { FloatingChat } from './components/FloatingChat';
 import { OnboardingModal } from './components/OnboardingModal';
 import { HelpView } from './components/HelpView';
+import { GlobalSearchModal } from './components/GlobalSearchModal';
 import { requestNotificationPermission, checkAndNotifyOverdueLoans } from './services/notificationService';
 
 import { mockItems, mockMovements, mockPersonnel, mockPurchaseOrders, mockProjects, mockUsers } from './mockData';
@@ -99,6 +100,7 @@ const App: React.FC = () => {
     const [isSidebarOpen, setSidebarOpen] = useState(true);
 
     const [isInvoiceReaderOpen, setInvoiceReaderOpen] = useState(false);
+    const [isSearchOpen, setSearchOpen] = useState(false);
     const [isAddItemModalOpen, setAddItemModalOpen] = useState(false);
     const [isEditModalOpen, setEditModalOpen] = useState(false);
     const [itemToEdit, setItemToEdit] = useState<Item | null>(null);
@@ -344,6 +346,7 @@ const App: React.FC = () => {
                     onResetData={handleResetAllData}
                     setUserRole={() => {}}
                     syncStatus={syncStatus}
+                    onOpenSearch={() => setSearchOpen(true)}
                     onOpenInvoiceReader={() => setInvoiceReaderOpen(true)}
                 />
                 <main className="flex-1 p-4 md:p-6 overflow-y-auto bg-gray-50">
@@ -359,6 +362,7 @@ const App: React.FC = () => {
                         )}
                         {effectiveView === 'kardex' && (
                             <KardexHub
+                                key={kardexTab}
                                 items={items}
                                 movements={movements}
                                 personnel={personnel}
@@ -418,6 +422,15 @@ const App: React.FC = () => {
             <ItemHistoryModal isOpen={isHistoryModalOpen} onClose={() => setHistoryModalOpen(false)} item={itemForHistory} movements={movements} personnel={personnel} />
             <UserManagementModal isOpen={isUserManagementOpen} onClose={() => setUserManagementOpen(false)} users={users} onAddUser={handleAddUser} onDeleteUser={handleDeleteUser} onEditUser={handleEditUser} />
             <InvoiceReaderModal isOpen={isInvoiceReaderOpen} onClose={() => setInvoiceReaderOpen(false)} onImport={(rows, invType) => handleImportItems(rows, invType)} />
+            {isSearchOpen && (
+                <GlobalSearchModal
+                    items={items}
+                    movements={movements}
+                    personnel={personnel}
+                    onClose={() => setSearchOpen(false)}
+                    onNavigate={(v, tab) => { selectView(v as View, tab as KardexTab | undefined); setSearchOpen(false); }}
+                />
+            )}
             {showOnboarding && <OnboardingModal onFinish={handleOnboardingFinish} />}
             {userRole === UserRole.OWNER && (
                 <FloatingChat
