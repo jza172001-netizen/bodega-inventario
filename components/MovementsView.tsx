@@ -20,21 +20,24 @@ interface MovementsViewProps {
 
 export const MovementsView: React.FC<MovementsViewProps> = ({ movements, items, personnel, filterType, openLogMovementModal, onReturnLoan, onDeleteMovement, onGoBack }) => {
     const [page, setPage] = useState(0);
+    const [typeFilter, setTypeFilter] = useState<MovementType | ''>('');
 
-    // Memoized O(1) lookup maps — mejora 4
     const itemMap = useMemo(() => new Map(items.map(i => [i.id, i])), [items]);
     const personnelMap = useMemo(() => new Map(personnel.map(p => [p.id, p])), [personnel]);
     const getItemName = (id: string) => itemMap.get(id)?.name ?? 'N/A';
     const getPersonnelName = (id?: string) => id ? (personnelMap.get(id)?.name ?? 'N/A') : 'N/A';
 
     const filteredMovements = useMemo(() => {
-        if (!filterType) return movements;
-        const itemIdsInType = new Set(items.filter(i => i.inventoryType === filterType).map(i => i.id));
-        return movements.filter(m => itemIdsInType.has(m.itemId));
-    }, [movements, items, filterType]);
+        let result = movements;
+        if (filterType) {
+            const itemIdsInType = new Set(items.filter(i => i.inventoryType === filterType).map(i => i.id));
+            result = result.filter(m => itemIdsInType.has(m.itemId));
+        }
+        if (typeFilter) result = result.filter(m => m.type === typeFilter);
+        return result;
+    }, [movements, items, filterType, typeFilter]);
 
-    // Reset page when filter changes — mejora 8
-    useEffect(() => { setPage(0); }, [filterType]);
+    useEffect(() => { setPage(0); }, [filterType, typeFilter]);
 
     const totalPages = Math.ceil(filteredMovements.length / PAGE_SIZE);
     const pagedMovements = useMemo(
@@ -63,12 +66,22 @@ export const MovementsView: React.FC<MovementsViewProps> = ({ movements, items, 
                         Historial (Kardex)
                     </h2>
                 </div>
+                <div className="flex items-center gap-2">
+                    <select
+                        value={typeFilter}
+                        onChange={e => setTypeFilter(e.target.value as MovementType | '')}
+                        className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-600"
+                    >
+                        <option value="">Todos los tipos</option>
+                        {Object.values(MovementType).map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
                 {openLogMovementModal && (
                     <button onClick={openLogMovementModal} className="flex items-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
                         <TruckIcon className="w-5 h-5 mr-2" />
                         Registrar Movimiento
                     </button>
                 )}
+                </div>
             </div>
 
             {/* Desktop table — mejora 6 */}
