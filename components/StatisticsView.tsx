@@ -54,7 +54,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
     const [rotationRecs, setRotationRecs] = useState<Record<string, { recommendation: string; severity: string }>>({});
     const [printPeriod, setPrintPeriod] = useState<PrintPeriod>(null);
     const [showPeriodModal, setShowPeriodModal] = useState(false);
-    const [activeDetail, setActiveDetail] = useState<{ title: string; rows: DetailRow[] } | null>(null);
+    const [activeDetail, setActiveDetail] = useState<{ title: string; rows: DetailRow[]; navigateTo?: { view: string; tab?: string } } | null>(null);
     const printRef = useRef<HTMLDivElement>(null);
 
     const getPeriodRange = useCallback((period: NonNullable<PrintPeriod>): { fromDate: Date; toDate: Date; label: string } => {
@@ -194,7 +194,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                 badge: m.isLoan ? 'Préstamo' : undefined,
                 badgeColor: 'bg-yellow-100 text-yellow-700',
             }));
-        setActiveDetail({ title: 'Salidas últimos 30 días', rows });
+        setActiveDetail({ title: 'Salidas últimos 30 días', rows, navigateTo: { view: 'kardex', tab: 'movements' } });
     };
 
     const showPrestamosDetail = () => {
@@ -208,7 +208,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                 badgeColor: days > 14 ? 'bg-red-100 text-red-600' : days > 7 ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700',
             };
         });
-        setActiveDetail({ title: 'Préstamos activos', rows });
+        setActiveDetail({ title: 'Préstamos activos', rows, navigateTo: { view: 'kardex', tab: 'loans' } });
     };
 
     const showStockDetail = () => {
@@ -222,7 +222,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                 badge: i.quantity === 0 ? 'Agotado' : 'Bajo',
                 badgeColor: i.quantity === 0 ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600',
             }));
-        setActiveDetail({ title: 'Stock bajo / agotado', rows });
+        setActiveDetail({ title: 'Stock bajo / agotado', rows, navigateTo: { view: 'kardex', tab: 'inventory' } });
     };
 
     const showTipoDetail = (type: string, label: string) => {
@@ -234,7 +234,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                 sub: personnelMap.get(m.personnelId ?? '')?.name ?? 'Sin asignar',
                 value: `${m.quantity} ${itemMap.get(m.itemId)?.unit ?? ''}`,
             }));
-        setActiveDetail({ title: `Salidas — ${label} (30 días)`, rows });
+        setActiveDetail({ title: `Salidas — ${label} (30 días)`, rows, navigateTo: { view: 'kardex', tab: 'inventory' } });
     };
 
     const showItemConsumoDetail = (itemId: string, itemName: string) => {
@@ -246,7 +246,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                 sub: new Date(m.timestamp).toLocaleDateString('es-CO'),
                 value: `${m.quantity} ${itemMap.get(itemId)?.unit ?? ''}`,
             }));
-        setActiveDetail({ title: `¿Quién usó ${itemName}?`, rows });
+        setActiveDetail({ title: `¿Quién usó ${itemName}?`, rows, navigateTo: { view: 'kardex', tab: 'movements' } });
     };
 
     const showActividadDetail = (movId: string, itemId: string, itemName: string) => {
@@ -259,7 +259,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                 sub: `${personnelMap.get(m.personnelId ?? '')?.name ?? '—'} · ${new Date(m.timestamp).toLocaleDateString('es-CO')}`,
                 value: `${m.quantity} ${itemMap.get(itemId)?.unit ?? ''}`,
             }));
-        setActiveDetail({ title: `Historial: ${itemName}`, rows });
+        setActiveDetail({ title: `Historial: ${itemName}`, rows, navigateTo: { view: 'kardex', tab: 'movements' } });
     };
 
     const showInventarioDetail = (item: Item) => {
@@ -284,7 +284,8 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                 value: `${m.quantity} ${item.unit}`,
             });
         });
-        setActiveDetail({ title: item.name, rows });
+        const hasLoans = loans.length > 0;
+        setActiveDetail({ title: item.name, rows, navigateTo: { view: 'kardex', tab: hasLoans ? 'loans' : 'inventory' } });
     };
 
     return (
@@ -303,7 +304,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
                             </button>
                         </div>
-                        <div className="overflow-y-auto">
+                        <div className="overflow-y-auto flex-1">
                             {activeDetail.rows.length === 0 ? (
                                 <p className="text-center py-10 text-gray-400 text-sm">Sin datos para mostrar.</p>
                             ) : activeDetail.rows.map((row, i) => (
@@ -319,6 +320,16 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                                 </div>
                             ))}
                         </div>
+                        {activeDetail.navigateTo && onNavigate && (
+                            <div className="flex-shrink-0 px-5 py-3 border-t border-gray-100">
+                                <button
+                                    onClick={() => { onNavigate(activeDetail.navigateTo!.view, activeDetail.navigateTo!.tab); setActiveDetail(null); }}
+                                    className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-black rounded-xl transition-colors"
+                                >
+                                    Ir al Kardex →
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

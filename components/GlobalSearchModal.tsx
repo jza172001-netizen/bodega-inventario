@@ -25,30 +25,39 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
 
     useEffect(() => { inputRef.current?.focus(); }, []);
 
+    const itemMap      = useMemo(() => new Map(items.map(i => [i.id, i])), [items]);
     const personnelMap = useMemo(() => new Map(personnel.map(p => [p.id, p])), [personnel]);
 
-    const results = useMemo(() => {
+    const itemResults = useMemo(() => {
         const q = query.trim().toLowerCase();
         if (q.length < 2) return [];
-
         return items
             .filter(i => i.name.toLowerCase().includes(q) || i.subCategory.toLowerCase().includes(q))
-            .slice(0, 12)
+            .slice(0, 8)
             .map(item => {
                 const activeLoan = movements.find(m => m.itemId === item.id && m.isLoan && !m.isReturned);
                 const holder = activeLoan ? personnelMap.get(activeLoan.personnelId ?? '') : null;
                 const recent = movements
                     .filter(m => m.itemId === item.id)
-                    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-                    .slice(0, 3);
-                return { item, activeLoan, holder, recent };
+                    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+                return { item, holder, recent };
             });
     }, [query, items, movements, personnelMap]);
 
-    const handleSelect = (item: Item) => {
-        onNavigate('kardex', 'inventory');
-        onClose();
-    };
+    const personnelResults = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        if (q.length < 2) return [];
+        return personnel
+            .filter(p => p.name.toLowerCase().includes(q))
+            .slice(0, 4)
+            .map(person => {
+                const activeLoans = movements.filter(m => m.personnelId === person.id && m.isLoan && !m.isReturned);
+                const loanItems = activeLoans.map(m => itemMap.get(m.itemId)).filter(Boolean) as Item[];
+                return { person, activeLoans, loanItems };
+            });
+    }, [query, personnel, movements, itemMap]);
+
+    const hasResults = itemResults.length > 0 || personnelResults.length > 0;
 
     return (
         <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 px-4" onClick={onClose}>
@@ -76,45 +85,86 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
 
                 {/* Results */}
                 <div className="max-h-[60vh] overflow-y-auto">
-                    {query.length >= 2 && results.length === 0 && (
-                        <p className="text-center py-10 text-gray-400 text-sm">Sin resultados para "{query}"</p>
-                    )}
                     {query.length < 2 && (
                         <p className="text-center py-10 text-gray-400 text-sm">Escribe al menos 2 caracteres…</p>
                     )}
-                    {results.map(({ item, holder, recent }) => (
-                        <button
-                            key={item.id}
-                            onClick={() => handleSelect(item)}
-                            className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-50 transition-colors"
-                        >
-                            <div className="flex items-start justify-between gap-2">
-                                <div className="min-w-0">
-                                    <div className="flex items-center gap-1.5">
-                                        <span className="text-sm">{TYPE_LABEL[item.inventoryType]}</span>
-                                        <span className="font-semibold text-gray-900 text-sm truncate">{item.name}</span>
+                    {query.length >= 2 && !hasResults && (
+                        <p className="text-center py-10 text-gray-400 text-sm">Sin resultados para "{query}"</p>
+                    )}
+
+                    {/* Personnel results */}
+                    {personnelResults.length > 0 && (
+                        <>
+                            <p className="px-4 pt-3 pb-1 text-[10px] font-black text-gray-400 uppercase tracking-widest">Personal</p>
+                            {personnelResults.map(({ person, loanItems }) => (
+                                <button
+                                    key={person.id}
+                                    onClick={() => { onNavigate('kardex', 'loans'); onClose(); }}
+                                    className="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-gray-50 transition-colors"
+                                >
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div className="min-w-0">
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="text-sm">👷</span>
+                                                <span className="font-semibold text-gray-900 text-sm">{person.name}</span>
+                                            </div>
+                                            {person.phone && (
+                                                <p className="text-xs text-gray-400 mt-0.5">{person.phone}</p>
+                                            )}
+                                            {loanItems.length > 0 ? (
+                                                <p className="text-xs text-yellow-700 font-semibold mt-1">
+                                                    🔑 Tiene: {loanItems.map(i => i.name).join(', ')}
+                                                </p>
+                                            ) : (
+                                                <p className="text-xs text-green-600 mt-1">✅ Sin préstamos activos</p>
+                                            )}
+                                        </div>
+                                        <span className="text-[10px] text-blue-400 font-semibold flex-shrink-0 mt-0.5">Ver préstamos →</span>
                                     </div>
-                                    <p className="text-xs text-gray-500 mt-0.5">{item.subCategory}</p>
-                                    {holder && (
-                                        <p className="text-xs text-yellow-700 font-semibold mt-1">
-                                            🔑 Con {holder.name}
-                                        </p>
-                                    )}
-                                    {recent.length > 0 && (
-                                        <p className="text-[10px] text-gray-400 mt-1">
-                                            Último mov: {new Date(recent[0].timestamp).toLocaleDateString('es-CO')} · {recent[0].type}
-                                        </p>
-                                    )}
-                                </div>
-                                <div className="flex-shrink-0 text-right">
-                                    <span className={`text-lg font-black ${item.quantity === 0 ? 'text-red-500' : item.quantity <= item.minStock && item.minStock > 0 ? 'text-orange-500' : 'text-green-600'}`}>
-                                        {item.quantity}
-                                    </span>
-                                    <p className="text-[10px] text-gray-400">{item.unit}</p>
-                                </div>
-                            </div>
-                        </button>
-                    ))}
+                                </button>
+                            ))}
+                        </>
+                    )}
+
+                    {/* Item results */}
+                    {itemResults.length > 0 && (
+                        <>
+                            <p className="px-4 pt-3 pb-1 text-[10px] font-black text-gray-400 uppercase tracking-widest">Ítems</p>
+                            {itemResults.map(({ item, holder, recent }) => (
+                                <button
+                                    key={item.id}
+                                    onClick={() => { onNavigate('kardex', 'inventory'); onClose(); }}
+                                    className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-50 transition-colors"
+                                >
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div className="min-w-0">
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="text-sm">{TYPE_LABEL[item.inventoryType]}</span>
+                                                <span className="font-semibold text-gray-900 text-sm truncate">{item.name}</span>
+                                            </div>
+                                            <p className="text-xs text-gray-500 mt-0.5">{item.subCategory}</p>
+                                            {holder && (
+                                                <p className="text-xs text-yellow-700 font-semibold mt-1">
+                                                    🔑 Con {holder.name}
+                                                </p>
+                                            )}
+                                            {recent.length > 0 && (
+                                                <p className="text-[10px] text-gray-400 mt-1">
+                                                    Último mov: {new Date(recent[0].timestamp).toLocaleDateString('es-CO')} · {recent[0].type}
+                                                </p>
+                                            )}
+                                        </div>
+                                        <div className="flex-shrink-0 text-right">
+                                            <span className={`text-lg font-black ${item.quantity === 0 ? 'text-red-500' : item.quantity <= item.minStock && item.minStock > 0 ? 'text-orange-500' : 'text-green-600'}`}>
+                                                {item.quantity}
+                                            </span>
+                                            <p className="text-[10px] text-gray-400">{item.unit}</p>
+                                        </div>
+                                    </div>
+                                </button>
+                            ))}
+                        </>
+                    )}
                 </div>
             </div>
         </div>

@@ -52,7 +52,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ items, movements, purchase
                 </div>
             )}
 
-            <StatisticsView items={items} movements={movements} personnel={personnel} />
+            <StatisticsView items={items} movements={movements} personnel={personnel} onNavigate={onNavigate} />
         </div>
     );
 };
