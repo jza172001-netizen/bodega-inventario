@@ -308,7 +308,6 @@ const App: React.FC = () => {
                         <NavItem icon={DashboardIcon} label="Resumen" onClick={() => selectView('dashboard')} isActive={effectiveView === 'dashboard'} />
                         {userRole === UserRole.OWNER && (
                             <>
-                                <NavItem icon={BrainIcon} label="Análisis" onClick={() => selectView('copilot')} isActive={effectiveView === 'copilot'} />
                                 <NavHeader label="Gestión" />
                                 <NavItem icon={HardHatIcon} label="Proyectos" onClick={() => selectView('projects')} isActive={effectiveView === 'projects'} />
                             </>
