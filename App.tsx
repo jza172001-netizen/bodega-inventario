@@ -14,6 +14,7 @@ import CopilotView from './components/CopilotView';
 import { FloatingChat } from './components/FloatingChat';
 import { OnboardingModal } from './components/OnboardingModal';
 import { HelpView } from './components/HelpView';
+import { WhatsAppView } from './components/WhatsAppView';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
 import { SettingsModal, AppConfig, DEFAULT_CONFIG } from './components/SettingsModal';
 import { requestNotificationPermission, checkAndNotifyOverdueLoans } from './services/notificationService';
@@ -30,8 +31,9 @@ import * as db from './services/supabaseService';
 import { DashboardIcon } from './components/icons/DashboardIcon';
 import { MovementsIcon } from './components/icons/MovementsIcon';
 import { PersonnelIcon } from './components/icons/PersonnelIcon';
+import { WhatsAppIcon } from './components/icons/WhatsAppIcon';
 
-type View = 'dashboard' | 'kardex' | 'personnel' | 'copilot' | 'help';
+type View = 'dashboard' | 'kardex' | 'personnel' | 'copilot' | 'help' | 'whatsapp';
 type KardexTab = 'movements' | 'loans' | 'inventory' | 'projects';
 
 const SESSION_KEY = 'bodega_session';
@@ -96,7 +98,7 @@ const App: React.FC = () => {
 
     const [currentView, setCurrentView] = useState<View>('dashboard');
     const [kardexTab, setKardexTab] = useState<KardexTab>('movements');
-    const EMPLOYEE_VIEWS: View[] = ['dashboard', 'kardex', 'personnel', 'help'];
+    const EMPLOYEE_VIEWS: View[] = ['dashboard', 'kardex', 'personnel', 'help', 'whatsapp'];
     const effectiveView: View = (userRole === UserRole.EMPLOYEE && !EMPLOYEE_VIEWS.includes(currentView)) ? 'dashboard' : currentView;
     const [isSidebarOpen, setSidebarOpen] = useState(true);
 
@@ -328,6 +330,7 @@ const App: React.FC = () => {
                         <NavItem icon={DashboardIcon} label="Resumen" onClick={() => selectView('dashboard')} isActive={effectiveView === 'dashboard'} />
                         <NavItem icon={PersonnelIcon} label="Personal" onClick={() => selectView('personnel')} isActive={effectiveView === 'personnel'} />
                         <NavItem icon={MovementsIcon} label="Kardex" onClick={() => selectView('kardex')} isActive={effectiveView === 'kardex'} />
+                        <NavItem icon={WhatsAppIcon} label="WhatsApp" onClick={() => selectView('whatsapp')} isActive={effectiveView === 'whatsapp'} />
                     </nav>
                 </div>
 
@@ -365,7 +368,6 @@ const App: React.FC = () => {
                     setUserRole={() => {}}
                     syncStatus={syncStatus}
                     onOpenSearch={() => setSearchOpen(true)}
-                    onOpenInvoiceReader={() => setInvoiceReaderOpen(true)}
                 />
                 <main className="flex-1 p-4 md:p-6 overflow-y-auto bg-gray-50">
                     <div className="max-w-7xl mx-auto">
@@ -397,7 +399,6 @@ const App: React.FC = () => {
                                 onEditItem={(i) => { setItemToEdit(i); setEditModalOpen(true); }}
                                 onDeleteItem={handleDeleteItem}
                                 onItemHistory={(i) => { setItemForHistory(i); setHistoryModalOpen(true); }}
-                                onOpenInvoiceReader={() => setInvoiceReaderOpen(true)}
                                 onAddProject={handleAddProject}
                                 onDeleteProject={handleDeleteProject}
                                 showEconomicValues={appConfig.showEconomicValues}
@@ -430,6 +431,9 @@ const App: React.FC = () => {
                             />
                         )}
                         {effectiveView === 'help' && <HelpView />}
+                        {effectiveView === 'whatsapp' && (
+                            <WhatsAppView movements={movements} items={items} personnel={personnel} />
+                        )}
                     </div>
                 </main>
             </div>
