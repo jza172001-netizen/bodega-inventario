@@ -15,7 +15,7 @@ export const realUsers: AppUser[] = [
 // ── PERSONAL ─────────────────────────────────────────────────────────────────
 export const realPersonnel: Personnel[] = [
     { id: 'rp-abel', name: 'Abel' },
-    { id: 'rp-alex', name: 'Alex' },
+    { id: 'rp-alex', name: 'Alex', phone: '3113866341' },
     { id: 'rp-anderson', name: 'Anderson' },
     { id: 'rp-adrian', name: 'Adrián Echeverry' },
     { id: 'rp-albeiro', name: 'Albeiro' },
