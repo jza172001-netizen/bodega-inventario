@@ -3,6 +3,14 @@ import React, { useMemo, useState } from 'react';
 import { Movement, Item, Personnel, UserRole } from '../types';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
 import { ClockIcon } from './icons/ClockIcon';
+import {
+    ReminderLog,
+    loadReminderLog,
+    recordReminders,
+    isDueForReminder,
+    buildLoanReminderUrl,
+    REMINDER_INTERVAL_DAYS,
+} from '../services/whatsappService';
 
 interface LoansViewProps {
     movements: Movement[];
@@ -19,6 +27,9 @@ export const LoansView: React.FC<LoansViewProps> = ({
 }) => {
     const isOwner = userRole === UserRole.OWNER;
     const [search, setSearch] = useState('');
+    const [reminderLog, setReminderLog] = useState<ReminderLog>(loadReminderLog);
+    const [remindStep, setRemindStep] = useState<number | null>(null);
+
     const activeLoans = useMemo(() => movements.filter(m => m.isLoan && !m.isReturned), [movements]);
 
     const getItem = (itemId: string) => items.find(i => i.id === itemId);
@@ -43,30 +54,51 @@ export const LoansView: React.FC<LoansViewProps> = ({
     const warningLoans  = useMemo(() => filteredLoans.filter(m => !m.pendingPickup && getDays(new Date(m.timestamp)) > 7 && getDays(new Date(m.timestamp)) <= 14), [filteredLoans]);
     const normalLoans   = useMemo(() => filteredLoans.filter(m => !m.pendingPickup && getDays(new Date(m.timestamp)) <= 7), [filteredLoans]);
 
+    const loansWithPhone = useMemo(
+        () => activeLoans.filter(m => !!getPerson(m.personnelId)?.phone),
+        [activeLoans, personnel]
+    );
+
     const handleReturn = (id: string) => {
         if (window.confirm('¿Marcar como devuelta? Esta acción no se puede deshacer.')) {
             onReturnItem(id);
         }
     };
 
-    const buildWhatsAppUrl = (loan: Movement) => {
+    const handleRemind = (loan: Movement) => {
         const person = getPerson(loan.personnelId);
-        if (!person?.phone) return null;
         const item = getItem(loan.itemId);
-        if (!item) return null;
-        const rawPhone = person.phone.replace(/\D/g, '');
-        const phone = rawPhone.startsWith('57') ? rawPhone : `57${rawPhone}`;
+        if (!person?.phone || !item) return;
         const days = getDays(new Date(loan.timestamp));
-        const text = encodeURIComponent(
-            `Hola ${person.name}, recuerda devolver ${item.name} a la bodega. Llevas ${days} día${days !== 1 ? 's' : ''} con eso. Gracias 🙏`
-        );
-        return `https://wa.me/${phone}?text=${text}`;
+        const url = buildLoanReminderUrl(person.phone, person.name, item.name, days);
+        window.open(url, '_blank');
+        const newLog = recordReminders([loan.id]);
+        setReminderLog({ ...newLog });
+    };
+
+    const remindAllList = loansWithPhone;
+
+    const startRemindAll = () => {
+        if (remindAllList.length === 0) return;
+        setRemindStep(0);
+        handleRemind(remindAllList[0]);
+    };
+
+    const nextRemindStep = () => {
+        if (remindStep === null) return;
+        const next = remindStep + 1;
+        if (next >= remindAllList.length) { setRemindStep(null); return; }
+        setRemindStep(next);
+        handleRemind(remindAllList[next]);
     };
 
     const LoanCard: React.FC<{ loan: Movement }> = ({ loan }) => {
         const days = getDays(new Date(loan.timestamp));
         const isPending = !!loan.pendingPickup;
-        const waUrl = buildWhatsAppUrl(loan);
+        const person = getPerson(loan.personnelId);
+        const hasPhone = !!person?.phone;
+        const dueReminder = isDueForReminder(loan.id, new Date(loan.timestamp), reminderLog);
+        const lastReminded = reminderLog[loan.id];
 
         let cardClass = 'border border-gray-100 bg-white';
         let daysBadge = 'bg-green-100 text-green-800';
@@ -81,10 +113,20 @@ export const LoansView: React.FC<LoansViewProps> = ({
                         <p className="font-bold text-gray-900 text-sm leading-snug">{getItemName(loan.itemId)}</p>
                         <p className="text-xs text-gray-500 mt-0.5">x{loan.quantity} · {getPersonnelName(loan.personnelId)}</p>
                         <p className="text-xs text-gray-400 mt-0.5">{new Date(loan.timestamp).toLocaleDateString('es-CO')}</p>
+                        {lastReminded && (
+                            <p className="text-[10px] text-green-600 mt-0.5">
+                                📲 Recordado el {new Date(lastReminded).toLocaleDateString('es-CO')}
+                            </p>
+                        )}
                     </div>
                     <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
                         <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${daysBadge}`}>{days} días</span>
                         {isPending && <span className="text-[10px] font-black bg-orange-500 text-white px-2 py-0.5 rounded-full uppercase tracking-wide">Recoger</span>}
+                        {dueReminder && hasPhone && (
+                            <span className="text-[10px] font-black bg-green-500 text-white px-2 py-0.5 rounded-full uppercase tracking-wide animate-pulse">
+                                +{REMINDER_INTERVAL_DAYS}d sin recordar
+                            </span>
+                        )}
                     </div>
                 </div>
                 <div className="flex gap-2">
@@ -111,16 +153,18 @@ export const LoansView: React.FC<LoansViewProps> = ({
                             ✕ Cancelar
                         </button>
                     ))}
-                    {waUrl && (
-                        <a
-                            href={waUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            title="Recordar por WhatsApp"
-                            className="flex items-center justify-center gap-1 px-3 py-1.5 bg-green-100 hover:bg-green-200 text-green-800 text-xs font-bold rounded-xl transition-all"
+                    {hasPhone && (
+                        <button
+                            onClick={() => handleRemind(loan)}
+                            title="Recordar por WhatsApp (pide foto de la herramienta)"
+                            className={`flex items-center justify-center gap-1 px-3 py-1.5 text-xs font-bold rounded-xl transition-all ${
+                                dueReminder
+                                    ? 'bg-green-500 hover:bg-green-600 text-white'
+                                    : 'bg-green-100 hover:bg-green-200 text-green-800'
+                            }`}
                         >
                             📲 <span className="hidden sm:inline">Recordar</span>
-                        </a>
+                        </button>
                     )}
                 </div>
             </div>
@@ -141,18 +185,45 @@ export const LoansView: React.FC<LoansViewProps> = ({
 
     return (
         <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm">
-            <div className="flex items-center mb-6">
+            <div className="flex items-center mb-4">
                 <button onClick={onGoBack} className="mr-4 p-2 rounded-full hover:bg-gray-100">
                     <ArrowLeftIcon className="w-5 h-5 text-gray-600" />
                 </button>
-                <div>
+                <div className="flex-1 min-w-0">
                     <h2 className="text-xl font-black text-gray-900 flex items-center gap-2">
                         <ClockIcon className="w-6 h-6 text-indigo-600" />
                         Préstamos Activos
                     </h2>
                     <p className="text-xs text-gray-500">{activeLoans.length} herramienta(s) fuera de bodega</p>
                 </div>
+                {loansWithPhone.length > 0 && remindStep === null && (
+                    <button
+                        onClick={startRemindAll}
+                        className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-xs font-black rounded-xl transition-colors"
+                    >
+                        📲 <span className="hidden sm:inline">Recordar a todos</span>
+                        <span className="sm:hidden">All</span>
+                    </button>
+                )}
             </div>
+
+            {/* Banner paso a paso recordar todos */}
+            {remindStep !== null && (
+                <div className="mb-4 bg-green-50 border border-green-200 rounded-xl p-3 flex items-center justify-between gap-3">
+                    <div>
+                        <p className="text-xs font-black text-green-800">
+                            Paso {remindStep + 1} de {remindAllList.length} — {getPersonnelName(remindAllList[remindStep].personnelId)}
+                        </p>
+                        <p className="text-[10px] text-green-600">WhatsApp abierto. Mensaje incluye solicitud de foto 📸</p>
+                    </div>
+                    <button
+                        onClick={nextRemindStep}
+                        className="flex-shrink-0 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-black rounded-xl"
+                    >
+                        {remindStep < remindAllList.length - 1 ? 'Siguiente →' : '✓ Listo'}
+                    </button>
+                </div>
+            )}
 
             {activeLoans.length > 0 && (
                 <div className="relative mb-4">

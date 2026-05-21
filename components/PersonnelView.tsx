@@ -5,6 +5,7 @@ import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
 import { TrashIcon } from './icons/TrashIcon';
 import { EditIcon } from './icons/EditIcon';
 import { PersonnelDetailModal } from './PersonnelDetailModal';
+import { buildPersonReminderUrl, daysSince } from '../services/whatsappService';
 
 interface PersonnelViewProps {
     personnel: Personnel[];
@@ -62,9 +63,22 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                     {personnel.map(p => {
                         const activeLoans = movements.filter(m => m.personnelId === p.id && m.isLoan && !m.isReturned);
-                        const activeItems = activeLoans.map(m => items.find(i => i.id === m.itemId)?.name).filter(Boolean) as string[];
+                        const activeItems = activeLoans.map(m => items.find(i => i.id === m.itemId)).filter(Boolean) as Item[];
                         const visibleChips = activeItems.slice(0, 3);
                         const extra = activeItems.length - visibleChips.length;
+
+                        const waUrl = p.phone && activeLoans.length > 0
+                            ? buildPersonReminderUrl(
+                                p.phone,
+                                p.name,
+                                activeLoans.map(m => {
+                                    const item = items.find(i => i.id === m.itemId);
+                                    const d = daysSince(new Date(m.timestamp));
+                                    return `• ${item?.name ?? 'Herramienta'} — ${d} día${d !== 1 ? 's' : ''}`;
+                                })
+                            )
+                            : null;
+
                         return (
                             <div
                                 key={p.id}
@@ -83,21 +97,35 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
                                             )}
                                         </div>
                                     </div>
-                                    {userRole === UserRole.OWNER && (
-                                        <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 ml-1">
-                                            <button onClick={e => handleEdit(e, p)} className="p-1 text-gray-400 hover:text-indigo-600 rounded" title="Editar nombre">
-                                                <EditIcon className="w-4 h-4"/>
-                                            </button>
-                                            <button onClick={e => handleDelete(e, p.id)} className="p-1 text-gray-400 hover:text-red-600 rounded" title="Eliminar">
-                                                <TrashIcon className="w-4 h-4"/>
-                                            </button>
-                                        </div>
-                                    )}
+                                    <div className="flex items-center space-x-1 flex-shrink-0 ml-1">
+                                        {waUrl && (
+                                            <a
+                                                href={waUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                onClick={e => e.stopPropagation()}
+                                                title="Recordar por WhatsApp (pide foto de la herramienta)"
+                                                className="p-1.5 text-green-600 hover:text-green-700 hover:bg-green-100 rounded-lg transition-colors"
+                                            >
+                                                📲
+                                            </a>
+                                        )}
+                                        {userRole === UserRole.OWNER && (
+                                            <>
+                                                <button onClick={e => handleEdit(e, p)} className="p-1 text-gray-400 hover:text-indigo-600 rounded opacity-0 group-hover:opacity-100 transition-opacity" title="Editar nombre">
+                                                    <EditIcon className="w-4 h-4"/>
+                                                </button>
+                                                <button onClick={e => handleDelete(e, p.id)} className="p-1 text-gray-400 hover:text-red-600 rounded opacity-0 group-hover:opacity-100 transition-opacity" title="Eliminar">
+                                                    <TrashIcon className="w-4 h-4"/>
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
                                 {activeItems.length > 0 && (
                                     <div className="flex flex-wrap gap-1 mt-2">
-                                        {visibleChips.map((name, i) => (
-                                            <span key={i} className="text-[10px] font-semibold bg-yellow-100 text-yellow-800 border border-yellow-200 px-1.5 py-0.5 rounded-full truncate max-w-[120px]" title={name}>{name}</span>
+                                        {visibleChips.map((item, i) => (
+                                            <span key={i} className="text-[10px] font-semibold bg-yellow-100 text-yellow-800 border border-yellow-200 px-1.5 py-0.5 rounded-full truncate max-w-[120px]" title={item.name}>{item.name}</span>
                                         ))}
                                         {extra > 0 && (
                                             <span className="text-[10px] font-semibold bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded-full">+{extra} más</span>
