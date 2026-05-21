@@ -8,13 +8,14 @@ interface LogMovementModalProps {
     onClose: () => void;
     onLogMovement: (movement: Omit<Movement, 'id'>) => void;
     items: Item[];
+    movements?: Movement[];
     personnel: Personnel[];
     projects: Project[];
     userRole: UserRole;
     filterInventoryType?: InventoryType;
 }
 
-export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onClose, onLogMovement, items, personnel, projects, userRole, filterInventoryType }) => {
+export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onClose, onLogMovement, items, movements, personnel, projects, userRole, filterInventoryType }) => {
     const [itemId, setItemId] = useState('');
     const [type, setType] = useState<MovementType>(MovementType.CHECK_OUT);
     const [quantity, setQuantity] = useState(1);
@@ -42,6 +43,17 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
         if (isWithdrawal && selectedItem && quantity > selectedItem.quantity) {
             alert(`Stock insuficiente. Disponible: ${selectedItem.quantity} ${selectedItem.unit}`);
             return;
+        }
+        if (type === MovementType.CHECK_OUT && isLoan && movements) {
+            const activeLoan = movements.find(m => m.itemId === itemId && m.isLoan && !m.isReturned);
+            if (activeLoan) {
+                const owner = personnel.find(p => p.id === activeLoan.personnelId)?.name ?? 'alguien';
+                const date = new Date(activeLoan.timestamp).toLocaleDateString('es-CO');
+                const ok = window.confirm(
+                    `⚠️ Esta herramienta ya está con ${owner} desde el ${date}.\n\nRegistrar un nuevo préstamo NO cancela el anterior — la herramienta quedará asignada a dos personas a la vez.\n\n¿Continuar de todas formas?`
+                );
+                if (!ok) return;
+            }
         }
         onLogMovement({
             itemId,

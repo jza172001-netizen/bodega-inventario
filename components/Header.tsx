@@ -37,8 +37,9 @@ export const Header: React.FC<HeaderProps> = ({ toggleSidebar, userRole, userNam
                     </span>
                 )}
                 {syncStatus === 'error' && (
-                    <span className="flex-shrink-0 flex items-center gap-1 text-[10px] font-bold text-red-500 bg-red-50 px-2 py-0.5 rounded-full">
-                        !<span className="hidden sm:inline"> Sin conexión</span>
+                    <span className="flex-shrink-0 flex items-center gap-1.5 text-[11px] font-black text-white bg-red-500 px-2.5 py-1 rounded-full shadow-sm animate-pulse">
+                        <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+                        <span>⚠ Sin guardar</span>
                     </span>
                 )}
             </div>

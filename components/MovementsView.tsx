@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { Movement, Item, Personnel, InventoryType, MovementType, UserRole, Project } from '../types';
+import { Movement, Item, Personnel, InventoryType, MovementType, UserRole } from '../types';
 import { TruckIcon } from './icons/TruckIcon';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
 import { TrashIcon } from './icons/TrashIcon';
@@ -11,7 +11,6 @@ interface MovementsViewProps {
     movements: Movement[];
     items: Item[];
     personnel: Personnel[];
-    projects?: Project[];
     filterType?: InventoryType;
     openLogMovementModal?: () => void;
     onReturnLoan?: (movementId: string) => void;
@@ -19,45 +18,26 @@ interface MovementsViewProps {
     onGoBack: () => void;
 }
 
-export const MovementsView: React.FC<MovementsViewProps> = ({ movements, items, personnel, projects, filterType, openLogMovementModal, onReturnLoan, onDeleteMovement, onGoBack }) => {
+export const MovementsView: React.FC<MovementsViewProps> = ({ movements, items, personnel, filterType, openLogMovementModal, onReturnLoan, onDeleteMovement, onGoBack }) => {
     const [page, setPage] = useState(0);
-    const [filterPersonnel, setFilterPersonnel] = useState('');
-    const [filterProject, setFilterProject] = useState('');
-    const [filterDays, setFilterDays] = useState<number | null>(null);
-    const [filterCategory, setFilterCategory] = useState<InventoryType | null>(null);
+    const [typeFilter, setTypeFilter] = useState<MovementType | ''>('');
 
-    // Memoized O(1) lookup maps — mejora 4
     const itemMap = useMemo(() => new Map(items.map(i => [i.id, i])), [items]);
     const personnelMap = useMemo(() => new Map(personnel.map(p => [p.id, p])), [personnel]);
     const getItemName = (id: string) => itemMap.get(id)?.name ?? 'N/A';
     const getPersonnelName = (id?: string) => id ? (personnelMap.get(id)?.name ?? 'N/A') : 'N/A';
 
     const filteredMovements = useMemo(() => {
-        let list = movements;
-        // Existing inventoryType filter
+        let result = movements;
         if (filterType) {
             const itemIdsInType = new Set(items.filter(i => i.inventoryType === filterType).map(i => i.id));
-            list = list.filter(m => itemIdsInType.has(m.itemId));
+            result = result.filter(m => itemIdsInType.has(m.itemId));
         }
-        // Personnel filter
-        if (filterPersonnel) list = list.filter(m => m.personnelId === filterPersonnel);
-        // Project filter
-        if (filterProject) list = list.filter(m => m.projectId === filterProject);
-        // Days filter
-        if (filterDays !== null) {
-            const cutoff = Date.now() - filterDays * 86400000;
-            list = list.filter(m => new Date(m.timestamp).getTime() >= cutoff);
-        }
-        // Category filter
-        if (filterCategory) {
-            const catIds = new Set(items.filter(i => i.inventoryType === filterCategory).map(i => i.id));
-            list = list.filter(m => catIds.has(m.itemId));
-        }
-        return list;
-    }, [movements, items, filterType, filterPersonnel, filterProject, filterDays, filterCategory]);
+        if (typeFilter) result = result.filter(m => m.type === typeFilter);
+        return result;
+    }, [movements, items, filterType, typeFilter]);
 
-    // Reset page when any filter changes — mejora 8
-    useEffect(() => { setPage(0); }, [filterType, filterPersonnel, filterProject, filterDays, filterCategory]);
+    useEffect(() => { setPage(0); }, [filterType, typeFilter]);
 
     const totalPages = Math.ceil(filteredMovements.length / PAGE_SIZE);
     const pagedMovements = useMemo(
@@ -86,79 +66,22 @@ export const MovementsView: React.FC<MovementsViewProps> = ({ movements, items, 
                         Historial (Kardex)
                     </h2>
                 </div>
+                <div className="flex items-center gap-2">
+                    <select
+                        value={typeFilter}
+                        onChange={e => setTypeFilter(e.target.value as MovementType | '')}
+                        className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-600"
+                    >
+                        <option value="">Todos los tipos</option>
+                        {Object.values(MovementType).map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
                 {openLogMovementModal && (
                     <button onClick={openLogMovementModal} className="flex items-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
                         <TruckIcon className="w-5 h-5 mr-2" />
                         Registrar Movimiento
                     </button>
                 )}
-            </div>
-
-            {/* Pills de categoría */}
-            <div className="flex flex-wrap gap-2 mb-3">
-                {([null, InventoryType.HAND_TOOL, InventoryType.ELECTRICAL_TOOL, InventoryType.SINGLE_USE, InventoryType.PPE] as (InventoryType | null)[]).map(cat => {
-                    const labels: Record<string, string> = {
-                        [InventoryType.HAND_TOOL]: 'H. Manual',
-                        [InventoryType.ELECTRICAL_TOOL]: 'H. Eléctrica',
-                        [InventoryType.SINGLE_USE]: 'Consumibles',
-                        [InventoryType.PPE]: 'EPP',
-                    };
-                    const label = cat === null ? 'Todas' : labels[cat];
-                    const active = filterCategory === cat;
-                    return (
-                        <button
-                            key={cat ?? 'all'}
-                            onClick={() => setFilterCategory(cat)}
-                            className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-all ${active ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-400'}`}
-                        >
-                            {label}
-                        </button>
-                    );
-                })}
-            </div>
-
-            {/* Filtros */}
-            <div className="flex flex-wrap gap-2 mb-4 p-3 bg-gray-50 rounded-xl border border-gray-100">
-                <select
-                    value={filterPersonnel}
-                    onChange={e => setFilterPersonnel(e.target.value)}
-                    className="text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
-                >
-                    <option value="">👤 Todo el personal</option>
-                    {personnel.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-
-                {projects && projects.length > 0 && (
-                    <select
-                        value={filterProject}
-                        onChange={e => setFilterProject(e.target.value)}
-                        className="text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
-                    >
-                        <option value="">🏗️ Todos los proyectos</option>
-                        {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                    </select>
-                )}
-
-                <select
-                    value={filterDays === null ? '' : String(filterDays)}
-                    onChange={e => setFilterDays(e.target.value === '' ? null : Number(e.target.value))}
-                    className="text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
-                >
-                    <option value="">📅 Todo el período</option>
-                    <option value="7">Últimos 7 días</option>
-                    <option value="30">Últimos 30 días</option>
-                    <option value="90">Últimos 3 meses</option>
-                </select>
-
-                {(filterPersonnel || filterProject || filterDays !== null) && (
-                    <button
-                        onClick={() => { setFilterPersonnel(''); setFilterProject(''); setFilterDays(null); }}
-                        className="text-xs text-red-500 hover:text-red-700 font-bold px-3 py-2 hover:bg-red-50 rounded-lg"
-                    >
-                        ✕ Limpiar
-                    </button>
-                )}
-                <span className="text-xs text-gray-400 self-center ml-auto">{filteredMovements.length} registro{filteredMovements.length !== 1 ? 's' : ''}</span>
+                </div>
             </div>
 
             {/* Desktop table — mejora 6 */}
@@ -195,13 +118,18 @@ export const MovementsView: React.FC<MovementsViewProps> = ({ movements, items, 
                                             Devolver
                                         </button>
                                     )}
-                                    {onDeleteMovement && (
+                                    {onDeleteMovement && (!m.isLoan || m.isReturned) && (
                                         <button
                                             onClick={() => { if(window.confirm('¿Borrar este registro?')) onDeleteMovement(m.id)}}
                                             className="text-red-400 hover:text-red-600 p-1"
                                         >
                                             <TrashIcon className="w-4 h-4" />
                                         </button>
+                                    )}
+                                    {m.isLoan && !m.isReturned && (
+                                        <span title="Préstamo activo — devolver antes de borrar" className="text-gray-300 p-1">
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                                        </span>
                                     )}
                                 </td>
                             </tr>
@@ -232,7 +160,7 @@ export const MovementsView: React.FC<MovementsViewProps> = ({ movements, items, 
                                         Devolver
                                     </button>
                                 )}
-                                {onDeleteMovement && (
+                                {onDeleteMovement && (!m.isLoan || m.isReturned) && (
                                     <button onClick={() => { if(window.confirm('¿Borrar?')) onDeleteMovement(m.id)}} className="text-red-400">
                                         <TrashIcon className="w-4 h-4" />
                                     </button>

@@ -1,5 +1,5 @@
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Movement, Item, Personnel, InventoryType } from '../types';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
 import { ClockIcon } from './icons/ClockIcon';
@@ -16,6 +16,7 @@ interface LoansViewProps {
 export const LoansView: React.FC<LoansViewProps> = ({
     movements, items, personnel, onReturnItem, onMarkPendingPickup, onGoBack,
 }) => {
+    const [search, setSearch] = useState('');
     const activeLoans = useMemo(() => movements.filter(m => m.isLoan && !m.isReturned), [movements]);
 
     const getItem = (itemId: string) => items.find(i => i.id === itemId);
@@ -26,10 +27,19 @@ export const LoansView: React.FC<LoansViewProps> = ({
     const getDays = (date: Date) =>
         Math.ceil(Math.abs(Date.now() - new Date(date).getTime()) / 86400000);
 
-    const pendingPickup = useMemo(() => activeLoans.filter(m => m.pendingPickup), [activeLoans]);
-    const overdueLoans  = useMemo(() => activeLoans.filter(m => !m.pendingPickup && getDays(new Date(m.timestamp)) > 14), [activeLoans]);
-    const warningLoans  = useMemo(() => activeLoans.filter(m => !m.pendingPickup && getDays(new Date(m.timestamp)) > 7 && getDays(new Date(m.timestamp)) <= 14), [activeLoans]);
-    const normalLoans   = useMemo(() => activeLoans.filter(m => !m.pendingPickup && getDays(new Date(m.timestamp)) <= 7), [activeLoans]);
+    const filteredLoans = useMemo(() => {
+        if (!search.trim()) return activeLoans;
+        const q = search.toLowerCase();
+        return activeLoans.filter(m =>
+            getItemName(m.itemId).toLowerCase().includes(q) ||
+            getPersonnelName(m.personnelId).toLowerCase().includes(q)
+        );
+    }, [activeLoans, search]);
+
+    const pendingPickup = useMemo(() => filteredLoans.filter(m => m.pendingPickup), [filteredLoans]);
+    const overdueLoans  = useMemo(() => filteredLoans.filter(m => !m.pendingPickup && getDays(new Date(m.timestamp)) > 14), [filteredLoans]);
+    const warningLoans  = useMemo(() => filteredLoans.filter(m => !m.pendingPickup && getDays(new Date(m.timestamp)) > 7 && getDays(new Date(m.timestamp)) <= 14), [filteredLoans]);
+    const normalLoans   = useMemo(() => filteredLoans.filter(m => !m.pendingPickup && getDays(new Date(m.timestamp)) <= 7), [filteredLoans]);
 
     const handleReturn = (id: string) => {
         if (window.confirm('¿Marcar como devuelta? Esta acción no se puede deshacer.')) {
@@ -139,11 +149,28 @@ export const LoansView: React.FC<LoansViewProps> = ({
                 </div>
             </div>
 
+            {activeLoans.length > 0 && (
+                <div className="relative mb-4">
+                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    <input
+                        type="text"
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        placeholder="Buscar por herramienta o persona..."
+                        className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    />
+                </div>
+            )}
+
             {activeLoans.length === 0 ? (
                 <div className="text-center py-16 text-gray-400">
                     <p className="text-4xl mb-3">🎉</p>
                     <p className="font-semibold">¡Todo está en bodega!</p>
                 </div>
+            ) : filteredLoans.length === 0 ? (
+                <p className="text-center py-10 text-gray-400 text-sm">Sin resultados para "{search}".</p>
             ) : (
                 <>
                     <Section title="📍 Pendientes de recoger" color="text-orange-600" loans={pendingPickup} />

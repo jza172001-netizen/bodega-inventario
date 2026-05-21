@@ -88,7 +88,36 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, openAddItem
             {search && (
                 <p className="text-xs text-gray-400 mb-3">{displayItems.length} resultado{displayItems.length !== 1 ? 's' : ''} para "{search}"</p>
             )}
-            <div className="overflow-x-auto">
+            {/* Mobile cards */}
+            <div className="md:hidden space-y-2 mb-2">
+                {displayItems.map(item => (
+                    <div key={item.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50 flex items-center justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                            <p className="font-semibold text-gray-900 text-sm truncate cursor-pointer" onClick={() => onItemHistory(item)}>{item.name}</p>
+                            <p className="text-xs text-gray-500 truncate">{item.subCategory}</p>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                            <span className="text-sm font-bold text-gray-800">{item.quantity} <span className="text-xs font-normal text-gray-500">{item.unit}</span></span>
+                            <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStockStatusColor(item)}`}>{getStockStatusText(item)}</span>
+                            <div className="flex gap-1">
+                                <button onClick={() => onItemHistory(item)} className="text-blue-500 p-1" title="Historial"><HistoryIcon className="w-4 h-4"/></button>
+                                {userRole === UserRole.OWNER && (
+                                    <>
+                                        <button onClick={() => onEditItem(item)} className="text-indigo-500 p-1"><EditIcon className="w-4 h-4"/></button>
+                                        <button onClick={() => onDeleteItem(item.id)} className="text-red-400 p-1"><TrashIcon className="w-4 h-4"/></button>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                ))}
+                {displayItems.length === 0 && (
+                    <p className="text-center py-8 text-gray-500 text-sm">{search ? `Sin resultados para "${search}".` : 'No hay artículos en esta categoría.'}</p>
+                )}
+            </div>
+
+            {/* Desktop table */}
+            <div className="hidden md:block overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                         <tr>
@@ -138,7 +167,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, openAddItem
                         <p>{search ? `No se encontraron artículos para "${search}".` : 'No hay artículos en esta categoría.'}</p>
                     </div>
                 )}
-            </div>
+            </div>{/* end desktop table */}
         </div>
     );
 };

@@ -15,7 +15,6 @@ interface PersonnelViewProps {
     onGoBack: () => void;
     onEditPersonnel?: (person: Personnel) => void;
     onDeletePersonnel?: (id: string) => void;
-    onReturnLoan?: (movementId: string) => void;
     userRole?: UserRole;
 }
 
@@ -28,36 +27,20 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
     onGoBack,
     onEditPersonnel,
     onDeletePersonnel,
-    onReturnLoan,
     userRole,
 }) => {
-    // Guardamos el ID del detalle, no el objeto, para que siempre refleje el array actualizado
-    const [detailPersonId, setDetailPersonId] = useState<string | null>(null);
-    const [editingId, setEditingId] = useState<string | null>(null);
-    const [editingName, setEditingName] = useState('');
+    const [detailPerson, setDetailPerson] = useState<Personnel | null>(null);
 
-    const detailPerson = detailPersonId ? personnel.find(p => p.id === detailPersonId) : null;
-
-    const startEdit = (e: React.MouseEvent, p: Personnel) => {
+    const handleEdit = (e: React.MouseEvent, p: Personnel) => {
         e.stopPropagation();
-        setEditingId(p.id);
-        setEditingName(p.name);
+        if (!onEditPersonnel) return;
+        const newName = prompt('Nuevo nombre para ' + p.name + ':', p.name);
+        if (newName && newName.trim()) onEditPersonnel({ ...p, name: newName.trim() });
     };
-
-    const confirmEdit = (p: Personnel) => {
-        if (editingName.trim() && onEditPersonnel) {
-            onEditPersonnel({ ...p, name: editingName.trim() });
-        }
-        setEditingId(null);
-    };
-
-    const cancelEdit = () => setEditingId(null);
 
     const handleDelete = (e: React.MouseEvent, id: string) => {
         e.stopPropagation();
-        if (window.confirm('¿Eliminar este trabajador?')) {
-            onDeletePersonnel?.(id);
-        }
+        onDeletePersonnel?.(id);
     };
 
     return (
@@ -78,54 +61,46 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                     {personnel.map(p => {
-                        const active = movements.filter(m => m.personnelId === p.id && m.isLoan && !m.isReturned).length;
-                        const isEditing = editingId === p.id;
-
+                        const activeLoans = movements.filter(m => m.personnelId === p.id && m.isLoan && !m.isReturned);
+                        const activeItems = activeLoans.map(m => items.find(i => i.id === m.itemId)?.name).filter(Boolean) as string[];
+                        const visibleChips = activeItems.slice(0, 3);
+                        const extra = activeItems.length - visibleChips.length;
                         return (
                             <div
                                 key={p.id}
-                                onClick={() => !isEditing && setDetailPersonId(p.id)}
-                                className={`p-4 border rounded-xl bg-gray-50 transition-all group ${isEditing ? 'border-blue-400 bg-blue-50' : 'hover:bg-blue-50 hover:border-blue-200 cursor-pointer'}`}
+                                onClick={() => setDetailPerson(p)}
+                                className="p-4 border rounded-xl bg-gray-50 hover:bg-blue-50 hover:border-blue-200 cursor-pointer transition-all group"
                             >
-                                {isEditing ? (
-                                    <div onClick={e => e.stopPropagation()} className="space-y-2">
-                                        <input
-                                            autoFocus
-                                            value={editingName}
-                                            onChange={e => setEditingName(e.target.value)}
-                                            onKeyDown={e => { if (e.key === 'Enter') confirmEdit(p); if (e.key === 'Escape') cancelEdit(); }}
-                                            className="w-full text-sm border border-blue-300 rounded-lg px-2 py-1 outline-none focus:ring-2 focus:ring-blue-400"
-                                        />
-                                        <div className="flex gap-2">
-                                            <button onClick={() => confirmEdit(p)} className="flex-1 text-xs bg-blue-600 text-white rounded-lg py-1 font-bold">Guardar</button>
-                                            <button onClick={cancelEdit} className="flex-1 text-xs bg-gray-100 text-gray-600 rounded-lg py-1 font-bold">Cancelar</button>
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center space-x-3 min-w-0">
+                                        <div className="w-10 h-10 rounded-full bg-blue-200 text-blue-600 flex items-center justify-center font-bold text-lg flex-shrink-0">
+                                            {p.name.charAt(0)}
+                                        </div>
+                                        <div className="min-w-0">
+                                            <span className="font-medium text-gray-700 truncate block" title={p.name}>{p.name}</span>
+                                            {p.phone && (
+                                                <span className="text-[10px] text-gray-400 truncate block">{p.phone}</span>
+                                            )}
                                         </div>
                                     </div>
-                                ) : (
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center space-x-3 min-w-0">
-                                            <div className="w-10 h-10 rounded-full bg-blue-200 text-blue-600 flex items-center justify-center font-bold text-lg flex-shrink-0">
-                                                {p.name.charAt(0)}
-                                            </div>
-                                            <div className="min-w-0">
-                                                <span className="font-medium text-gray-700 truncate block" title={p.name}>{p.name}</span>
-                                                {p.phone && (
-                                                    <span className="text-[10px] text-gray-400 truncate block">{p.phone}</span>
-                                                )}
-                                                {active > 0 && (
-                                                    <span className="text-[10px] font-black text-yellow-600 bg-yellow-100 px-1.5 py-0.5 rounded-full">{active} préstamo{active > 1 ? 's' : ''}</span>
-                                                )}
-                                            </div>
+                                    {userRole === UserRole.OWNER && (
+                                        <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 ml-1">
+                                            <button onClick={e => handleEdit(e, p)} className="p-1 text-gray-400 hover:text-indigo-600 rounded" title="Editar nombre">
+                                                <EditIcon className="w-4 h-4"/>
+                                            </button>
+                                            <button onClick={e => handleDelete(e, p.id)} className="p-1 text-gray-400 hover:text-red-600 rounded" title="Eliminar">
+                                                <TrashIcon className="w-4 h-4"/>
+                                            </button>
                                         </div>
-                                        {userRole === UserRole.OWNER && (
-                                            <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 ml-1">
-                                                <button onClick={e => startEdit(e, p)} className="p-1 text-gray-400 hover:text-indigo-600 rounded" title="Editar nombre">
-                                                    <EditIcon className="w-4 h-4"/>
-                                                </button>
-                                                <button onClick={e => handleDelete(e, p.id)} className="p-1 text-gray-400 hover:text-red-600 rounded" title="Eliminar">
-                                                    <TrashIcon className="w-4 h-4"/>
-                                                </button>
-                                            </div>
+                                    )}
+                                </div>
+                                {activeItems.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 mt-2">
+                                        {visibleChips.map((name, i) => (
+                                            <span key={i} className="text-[10px] font-semibold bg-yellow-100 text-yellow-800 border border-yellow-200 px-1.5 py-0.5 rounded-full truncate max-w-[120px]" title={name}>{name}</span>
+                                        ))}
+                                        {extra > 0 && (
+                                            <span className="text-[10px] font-semibold bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded-full">+{extra} más</span>
                                         )}
                                     </div>
                                 )}
@@ -147,8 +122,7 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
                     movements={movements}
                     items={items}
                     projects={projects}
-                    onReturnLoan={onReturnLoan}
-                    onClose={() => setDetailPersonId(null)}
+                    onClose={() => setDetailPerson(null)}
                 />
             )}
         </>

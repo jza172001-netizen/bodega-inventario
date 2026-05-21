@@ -8,9 +8,8 @@ const mid = () => `rm-${String(_mid++).padStart(4, '0')}`;
 
 // ── USERS ────────────────────────────────────────────────────────────────────
 export const realUsers: AppUser[] = [
-    { id: 'user-master', username: 'juli', password: '00', role: UserRole.OWNER, name: 'Administrador' },
-    { id: 'user-kate', username: 'kate', password: '00', role: UserRole.OWNER, name: 'Kate' },
-    { id: 'user-visit', username: 'visita', password: '00', role: UserRole.EMPLOYEE, name: 'Visitante' },
+    { id: 'user-master', username: 'bodeguero', password: '00', role: UserRole.OWNER, name: 'Bodeguero' },
+    { id: 'user-visit', username: 'visitante', password: '00', role: UserRole.EMPLOYEE, name: 'Visitante' },
 ];
 
 // ── PERSONAL ─────────────────────────────────────────────────────────────────
