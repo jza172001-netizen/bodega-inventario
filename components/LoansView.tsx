@@ -236,6 +236,10 @@ export const LoansView: React.FC<LoansViewProps> = ({
                         onChange={e => setSearch(e.target.value)}
                         placeholder="Buscar por herramienta o persona..."
                         className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                        autoComplete="off"
+                        autoCorrect="off"
+                        autoCapitalize="off"
+                        spellCheck={false}
                     />
                 </div>
             )}

@@ -69,6 +69,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, openAddItem
                             onChange={e => setSearch(e.target.value)}
                             placeholder="Buscar artículo..."
                             className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            autoComplete="off"
+                            autoCorrect="off"
+                            autoCapitalize="off"
+                            spellCheck={false}
                         />
                     </div>
                     {userRole === UserRole.OWNER && (

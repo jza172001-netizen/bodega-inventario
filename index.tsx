@@ -23,10 +23,10 @@ class ErrorBoundary extends React.Component<
                         {(this.state.error as Error).message}
                     </p>
                     <button
-                        onClick={() => { localStorage.clear(); window.location.reload(); }}
+                        onClick={() => window.location.reload()}
                         style={{ marginTop: 16, padding: '10px 24px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 'bold', fontSize: 14 }}
                     >
-                        Limpiar cache y recargar
+                        Recargar
                     </button>
                 </div>
             );

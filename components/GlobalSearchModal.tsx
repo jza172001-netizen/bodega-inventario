@@ -77,6 +77,10 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                         onChange={e => setQuery(e.target.value)}
                         placeholder="Buscar herramienta, material o persona..."
                         className="flex-1 text-sm text-gray-800 placeholder-gray-400 outline-none"
+                        autoComplete="off"
+                        autoCorrect="off"
+                        autoCapitalize="off"
+                        spellCheck={false}
                     />
                     <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xs font-semibold px-2 py-1 rounded-lg hover:bg-gray-100">
                         ESC

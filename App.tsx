@@ -382,7 +382,6 @@ const App: React.FC = () => {
                         )}
                         {effectiveView === 'kardex' && (
                             <KardexHub
-                                key={kardexTab}
                                 items={items}
                                 movements={movements}
                                 personnel={personnel}

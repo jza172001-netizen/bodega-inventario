@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Item, Movement, Personnel, Project, InventoryType, UserRole } from '../types';
 import { MovementsView } from './MovementsView';
 import { LoansView } from './LoansView';
@@ -63,6 +63,8 @@ export const KardexHub: React.FC<KardexHubProps> = ({
 }) => {
     const [activeTab, setActiveTab] = useState<KardexTab>(initialTab);
     const [invType, setInvType] = useState<InventoryType | null>(initialInventoryType);
+
+    useEffect(() => { setActiveTab(initialTab); }, [initialTab]);
 
     const filteredItems = invType ? items.filter(i => i.inventoryType === invType) : items;
     const categoryLabel = INV_TYPES.find(t => t.type === invType)?.label ?? 'Todos';
