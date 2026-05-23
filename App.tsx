@@ -233,8 +233,27 @@ const App: React.FC = () => {
     };
 
     const handleTransferLoan = (movementId: string, newPersonnelId: string) => {
-        setMovements(prev => prev.map(m => m.id === movementId ? { ...m, personnelId: newPersonnelId } : m));
-        withSync(db.updateMovementPersonnel(movementId, newPersonnelId));
+        const original = movements.find(m => m.id === movementId);
+        if (!original) return;
+
+        const fromName = personnel.find(p => p.id === original.personnelId)?.name ?? 'trabajador anterior';
+
+        // Cierra el préstamo original sin tocar el stock (la herramienta no regresó a bodega)
+        setMovements(prev => prev.map(m => m.id === movementId ? { ...m, isReturned: true, pendingPickup: false } : m));
+        withSync(db.markMovementReturned(movementId));
+
+        // Crea nuevo préstamo al trabajador destino, sin ajustar cantidad de inventario
+        const newMov: Movement = {
+            ...original,
+            id: `mov-${Date.now()}`,
+            timestamp: new Date(),
+            personnelId: newPersonnelId,
+            isReturned: false,
+            pendingPickup: false,
+            notes: `Traspaso desde ${fromName}`,
+        };
+        setMovements(prev => [newMov, ...prev]);
+        withSync(db.addMovement(newMov));
     };
 
     const handleAddPersonnel = (p: Omit<Personnel, 'id'>) => {
