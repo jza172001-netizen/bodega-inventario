@@ -6,6 +6,7 @@ import {
     loadReminderLog,
     recordReminders,
     isDueForReminder,
+    buildPersonGroups,
     buildPersonReminderUrl,
     buildTestReminderUrl,
     daysSince,
@@ -51,12 +52,8 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel }) =
 
     const remind = (g: PersonGroup) => {
         if (!g.person.phone) return;
-        const lines = g.loans.map(m => {
-            const item = itemMap.get(m.itemId);
-            const days = daysSince(m.timestamp);
-            return `• ${item?.name ?? 'Herramienta'} — ${days} día${days !== 1 ? 's' : ''}`;
-        });
-        window.open(buildPersonReminderUrl(g.person.phone, g.person.name, lines), '_blank');
+        const groups = buildPersonGroups(g.person, movements, items);
+        window.open(buildPersonReminderUrl(g.person.phone, g.person.name, groups), '_blank');
         const newLog = recordReminders(g.loans.map(m => m.id));
         setLog({ ...newLog });
     };

@@ -8,7 +8,8 @@ import {
     loadReminderLog,
     recordReminders,
     isDueForReminder,
-    buildLoanReminderUrl,
+    buildPersonGroups,
+    buildPersonReminderUrl,
     REMINDER_INTERVAL_DAYS,
 } from '../services/whatsappService';
 
@@ -67,12 +68,11 @@ export const LoansView: React.FC<LoansViewProps> = ({
 
     const handleRemind = (loan: Movement) => {
         const person = getPerson(loan.personnelId);
-        const item = getItem(loan.itemId);
-        if (!person?.phone || !item) return;
-        const days = getDays(new Date(loan.timestamp));
-        const url = buildLoanReminderUrl(person.phone, person.name, item.name, days);
-        window.open(url, '_blank');
-        const newLog = recordReminders([loan.id]);
+        if (!person?.phone) return;
+        const personLoans = activeLoans.filter(m => m.personnelId === person.id);
+        const groups = buildPersonGroups(person, movements, items);
+        window.open(buildPersonReminderUrl(person.phone, person.name, groups), '_blank');
+        const newLog = recordReminders(personLoans.map(m => m.id));
         setReminderLog({ ...newLog });
     };
 

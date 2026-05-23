@@ -6,7 +6,7 @@ import { TrashIcon } from './icons/TrashIcon';
 import { EditIcon } from './icons/EditIcon';
 import { PersonnelDetailModal } from './PersonnelDetailModal';
 import { EditPersonnelModal } from './EditPersonnelModal';
-import { buildPersonReminderUrl, daysSince } from '../services/whatsappService';
+import { buildPersonGroups, buildPersonReminderUrl } from '../services/whatsappService';
 
 interface PersonnelViewProps {
     personnel: Personnel[];
@@ -79,15 +79,7 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
                         const extra = activeItems.length - visibleChips.length;
 
                         const waUrl = p.phone && activeLoans.length > 0
-                            ? buildPersonReminderUrl(
-                                p.phone,
-                                p.name,
-                                activeLoans.map(m => {
-                                    const item = items.find(i => i.id === m.itemId);
-                                    const d = daysSince(new Date(m.timestamp));
-                                    return `• ${item?.name ?? 'Herramienta'} — ${d} día${d !== 1 ? 's' : ''}`;
-                                })
-                            )
+                            ? buildPersonReminderUrl(p.phone, p.name, buildPersonGroups(p, movements, items))
                             : null;
 
                         return (
