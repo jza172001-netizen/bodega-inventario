@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Item, Movement, Personnel, PurchaseOrder, MovementType, PurchaseOrderStatus, Project, InventoryType } from '../types';
 import { generateInventoryAnalysis } from '../services/geminiService';
 import { askCopilot, parseExitIntent, parseCreationIntent, ParsedExit, PendingMovement } from '../services/copilotService';
@@ -24,11 +24,20 @@ type ChatMsg = {
     confirmed?: boolean;
 };
 
+type ActivePanel = 'loan' | 'create' | null;
+
 const TYPE_LABELS: Record<InventoryType, string> = {
     [InventoryType.ELECTRICAL_TOOL]: '⚡ H. Eléctrica',
     [InventoryType.HAND_TOOL]: '🔨 H. Manual',
     [InventoryType.PPE]: '🦺 Seguridad (EPP)',
     [InventoryType.SINGLE_USE]: '📦 Consumible',
+};
+
+const CATEGORY_BY_TYPE: Record<InventoryType, string> = {
+    [InventoryType.HAND_TOOL]: 'Herramientas',
+    [InventoryType.ELECTRICAL_TOOL]: 'Herramientas',
+    [InventoryType.PPE]: 'Seguridad',
+    [InventoryType.SINGLE_USE]: 'Materiales',
 };
 
 const uid = () => Math.random().toString(36).slice(2);
@@ -47,6 +56,92 @@ const CopilotView: React.FC<CopilotViewProps> = ({
     const [selections, setSelections] = useState<Record<string, Record<number, string>>>({});
     const bottomRef = useRef<HTMLDivElement>(null);
 
+    // ── Panels ──────────────────────────────────────────────────────────────
+    const [activePanel, setActivePanel] = useState<ActivePanel>(null);
+
+    // Loan panel state
+    const [loanPersonnelId, setLoanPersonnelId] = useState('');
+    const [loanInvType, setLoanInvType] = useState<InventoryType | null>(null);
+    const [loanSelected, setLoanSelected] = useState<Map<string, number>>(new Map());
+    const [loanProjectId, setLoanProjectId] = useState('');
+
+    // Create item panel state
+    const [createInvType, setCreateInvType] = useState<InventoryType | null>(null);
+    const [createName, setCreateName] = useState('');
+    const [createQty, setCreateQty] = useState(1);
+    const [createUnit, setCreateUnit] = useState('unidades');
+
+    const availableForLoan = useMemo(() => {
+        if (!loanInvType) return [];
+        return items.filter(i => i.inventoryType === loanInvType && i.quantity > 0)
+            .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+    }, [items, loanInvType]);
+
+    const sortedPersonnel = useMemo(() =>
+        [...personnel].sort((a, b) => a.name.localeCompare(b.name, 'es')),
+        [personnel]
+    );
+
+    const activeProjects = useMemo(() =>
+        [...projects].filter(p => p.status === 'active').sort((a, b) => a.name.localeCompare(b.name, 'es')),
+        [projects]
+    );
+
+    const openPanel = (p: ActivePanel) => {
+        setActivePanel(p);
+        // Reset loan state
+        setLoanPersonnelId(''); setLoanInvType(null); setLoanSelected(new Map()); setLoanProjectId('');
+        // Reset create state
+        setCreateInvType(null); setCreateName(''); setCreateQty(1); setCreateUnit('unidades');
+    };
+
+    const closePanel = () => setActivePanel(null);
+
+    const toggleLoanItem = (itemId: string, qty: number) => {
+        setLoanSelected(prev => {
+            const next = new Map(prev);
+            if (next.has(itemId)) next.delete(itemId);
+            else next.set(itemId, qty);
+            return next;
+        });
+    };
+
+    const setLoanQty = (itemId: string, qty: number) => {
+        setLoanSelected(prev => {
+            const next = new Map(prev);
+            if (next.has(itemId)) next.set(itemId, Math.max(1, qty));
+            return next;
+        });
+    };
+
+    const confirmLoan = () => {
+        if (!loanPersonnelId || loanSelected.size === 0) return;
+        const movs: Array<Omit<Movement, 'id'>> = [...loanSelected.entries()].map(([itemId, qty]) => ({
+            itemId, type: MovementType.CHECK_OUT, quantity: qty,
+            timestamp: new Date(), personnelId: loanPersonnelId,
+            projectId: loanProjectId || undefined, notes: '', isLoan: true, isReturned: false,
+        }));
+        onLogMovements(movs);
+        const workerName = sortedPersonnel.find(p => p.id === loanPersonnelId)?.name ?? 'trabajador';
+        const itemNames = [...loanSelected.keys()].map(id => items.find(i => i.id === id)?.name ?? id);
+        addBot(`✅ Préstamo registrado para **${workerName}**: ${itemNames.join(', ')}.`);
+        closePanel();
+    };
+
+    const confirmCreate = () => {
+        if (!createInvType || !createName.trim()) return;
+        const it = onCreateItem({
+            name: createName.trim(), inventoryType: createInvType,
+            quantity: createQty, unit: createUnit.trim() || 'unidades',
+            category: CATEGORY_BY_TYPE[createInvType], subCategory: 'General',
+            minStock: 0, price: 0,
+        });
+        addBot(`✅ **${it.name}** agregado al inventario (${createQty} ${createUnit}).`);
+        closePanel();
+    };
+
+    // ── Chat ────────────────────────────────────────────────────────────────
+
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
@@ -62,33 +157,26 @@ const CopilotView: React.FC<CopilotViewProps> = ({
         setInput('');
         setLoading(true);
 
-        // 1. Creation intents
         const creation = parseCreationIntent(trimmed);
         if (creation) {
             if (creation.type === 'project') {
                 const p = onCreateProject({ name: creation.name, status: 'active' });
-                addBot(`✅ Proyecto **${p.name}** creado. Ya puedes usarlo cuando registres salidas.`);
+                addBot(`✅ Proyecto **${p.name}** creado.`);
             } else if (creation.type === 'personnel') {
                 const p = onCreatePersonnel({ name: creation.name });
                 addBot(`✅ Trabajador **${p.name}** registrado.`);
             } else if (creation.type === 'item') {
                 if (creation.inventoryType) {
-                    const it = onCreateItem({
-                        name: creation.name, inventoryType: creation.inventoryType,
-                        quantity: 0, unit: creation.unit, category: 'Sin clasificar',
-                        subCategory: 'General', minStock: 0, price: 0,
-                    });
+                    const it = onCreateItem({ name: creation.name, inventoryType: creation.inventoryType, quantity: 0, unit: creation.unit, category: 'Sin clasificar', subCategory: 'General', minStock: 0, price: 0 });
                     addBot(`✅ Ítem **${it.name}** agregado como ${TYPE_LABELS[creation.inventoryType]}.`);
                 } else {
-                    addBot(`¿Qué tipo de ítem es **"${creation.name}"**? Selecciona una categoría:`,
-                        { pendingItemCreate: { name: creation.name, unit: creation.unit } });
+                    addBot(`¿Qué tipo de ítem es **"${creation.name}"**?`, { pendingItemCreate: { name: creation.name, unit: creation.unit } });
                 }
             }
             setLoading(false);
             return;
         }
 
-        // 2. Exit intents
         const parsed = parseExitIntent(trimmed, items, projects, personnel);
         if (parsed.isExitIntent) {
             const allUnknown = parsed.movements.every(m => !m.matchedItem && !m.candidates.length);
@@ -98,12 +186,9 @@ const CopilotView: React.FC<CopilotViewProps> = ({
                 addBot('', { parsedExit: parsed });
             }
         } else {
-            // 3. General queries
             if (/informe|reporte|análisis completo/i.test(trimmed)) {
-                try {
-                    const txt = await generateInventoryAnalysis(items, movements);
-                    addBot(txt);
-                } catch { addBot('Error generando el informe.'); }
+                try { const txt = await generateInventoryAnalysis(items, movements); addBot(txt); }
+                catch { addBot('Error generando el informe.'); }
             } else {
                 const resp = await askCopilot(trimmed, { items, movements, personnel, purchaseOrders });
                 addBot(resp);
@@ -122,9 +207,7 @@ const CopilotView: React.FC<CopilotViewProps> = ({
         const toLog: Array<Omit<Movement, 'id'>> = exit.movements.map((pm, idx) => {
             const item = pm.matchedItem ?? (sel[idx] ? items.find(i => i.id === sel[idx]) ?? null : null);
             if (!item) return null;
-            return { itemId: item.id, type: MovementType.CHECK_OUT, quantity: pm.quantity,
-                timestamp: new Date(), personnelId: exit.matchedPersonnel?.id,
-                projectId: exit.matchedProject?.id, notes: '', isLoan: false, isReturned: false };
+            return { itemId: item.id, type: MovementType.CHECK_OUT, quantity: pm.quantity, timestamp: new Date(), personnelId: exit.matchedPersonnel?.id, projectId: exit.matchedProject?.id, notes: '', isLoan: false, isReturned: false };
         }).filter(Boolean) as Array<Omit<Movement, 'id'>>;
         if (!toLog.length) { addBot('No hay materiales confirmados para registrar.'); return; }
         onLogMovements(toLog);
@@ -147,16 +230,12 @@ const CopilotView: React.FC<CopilotViewProps> = ({
 
     const handleInlineProjectCreate = (msgId: string, name: string) => {
         const p = onCreateProject({ name, status: 'active' });
-        setMessages(prev => prev.map(m => m.id === msgId && m.parsedExit
-            ? { ...m, parsedExit: { ...m.parsedExit!, matchedProject: p } }
-            : m));
+        setMessages(prev => prev.map(m => m.id === msgId && m.parsedExit ? { ...m, parsedExit: { ...m.parsedExit!, matchedProject: p } } : m));
     };
 
     const handleInlinePersonnelCreate = (msgId: string, name: string) => {
         const p = onCreatePersonnel({ name });
-        setMessages(prev => prev.map(m => m.id === msgId && m.parsedExit
-            ? { ...m, parsedExit: { ...m.parsedExit!, matchedPersonnel: p } }
-            : m));
+        setMessages(prev => prev.map(m => m.id === msgId && m.parsedExit ? { ...m, parsedExit: { ...m.parsedExit!, matchedPersonnel: p } } : m));
     };
 
     const handlePendingItemType = (msgId: string, name: string, unit: string, type: InventoryType) => {
@@ -193,24 +272,15 @@ const CopilotView: React.FC<CopilotViewProps> = ({
                 {messages.map(msg => (
                     <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                         {msg.parsedExit && !msg.confirmed ? (
-                            <ExitConfirmCard
-                                msgId={msg.id}
-                                exit={msg.parsedExit}
-                                items={items}
-                                sel={selections[msg.id] ?? {}}
+                            <ExitConfirmCard msgId={msg.id} exit={msg.parsedExit} items={items} sel={selections[msg.id] ?? {}}
                                 onSelect={(idx, id) => setSelection(msg.id, idx, id)}
                                 onCreateItem={(idx, name, unit, type) => handleInlineItemCreate(msg.id, idx, name, unit, type)}
                                 onCreateProject={(name) => handleInlineProjectCreate(msg.id, name)}
                                 onCreatePersonnel={(name) => handleInlinePersonnelCreate(msg.id, name)}
-                                onConfirm={() => handleConfirmExit(msg)}
-                                onCancel={() => handleCancelExit(msg.id)}
-                            />
+                                onConfirm={() => handleConfirmExit(msg)} onCancel={() => handleCancelExit(msg.id)} />
                         ) : msg.pendingItemCreate && !msg.confirmed ? (
-                            <PendingItemTypeCard
-                                name={msg.pendingItemCreate.name}
-                                unit={msg.pendingItemCreate.unit}
-                                onSelect={(type) => handlePendingItemType(msg.id, msg.pendingItemCreate!.name, msg.pendingItemCreate!.unit, type)}
-                            />
+                            <PendingItemTypeCard name={msg.pendingItemCreate.name} unit={msg.pendingItemCreate.unit}
+                                onSelect={(type) => handlePendingItemType(msg.id, msg.pendingItemCreate!.name, msg.pendingItemCreate!.unit, type)} />
                         ) : (
                             <div className={`max-w-[85%] px-4 py-2.5 rounded-2xl text-sm whitespace-pre-wrap leading-relaxed ${
                                 msg.role === 'user' ? 'bg-blue-600 text-white rounded-br-sm' : 'bg-gray-100 text-gray-800 rounded-bl-sm'
@@ -230,23 +300,198 @@ const CopilotView: React.FC<CopilotViewProps> = ({
                 <div ref={bottomRef} />
             </div>
 
-            <div className="mt-3 flex gap-2 items-end">
-                <textarea
-                    value={input}
-                    onChange={e => setInput(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder='Ej: "saqué 5 cascos para proyecto X, trabajador Y" · "crea el proyecto Torre" · "añade ítem Tornillo M8"'
-                    rows={2}
-                    className="flex-1 resize-none border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-                <button onClick={() => handleSend(input)} disabled={!input.trim() || loading}
-                    className="h-[3.5rem] px-5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold rounded-xl transition-all flex-shrink-0">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
-                    </svg>
+            {/* ── Action buttons ── */}
+            <div className="flex gap-2 mt-3">
+                <button
+                    onClick={() => openPanel(activePanel === 'loan' ? null : 'loan')}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-black border transition-all ${
+                        activePanel === 'loan'
+                            ? 'bg-blue-600 text-white border-blue-600'
+                            : 'bg-white text-blue-700 border-blue-200 hover:bg-blue-50'
+                    }`}
+                >
+                    📦 Asignar herramienta
+                </button>
+                <button
+                    onClick={() => openPanel(activePanel === 'create' ? null : 'create')}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-black border transition-all ${
+                        activePanel === 'create'
+                            ? 'bg-green-600 text-white border-green-600'
+                            : 'bg-white text-green-700 border-green-200 hover:bg-green-50'
+                    }`}
+                >
+                    ➕ Agregar al inventario
                 </button>
             </div>
-            <p className="text-[10px] text-gray-400 mt-1.5 text-center">Enter para enviar · Shift+Enter para nueva línea</p>
+
+            {/* ── Panel: Asignar herramienta ── */}
+            {activePanel === 'loan' && (
+                <div className="mt-2 bg-blue-50 border border-blue-200 rounded-2xl p-4 space-y-3 max-h-[60vh] overflow-y-auto">
+                    <div className="flex items-center justify-between">
+                        <p className="text-xs font-black text-blue-700 uppercase tracking-wide">📦 Asignar herramienta a trabajador</p>
+                        <button onClick={closePanel} className="text-blue-400 hover:text-blue-700 text-lg leading-none">✕</button>
+                    </div>
+
+                    {/* Trabajador */}
+                    <div>
+                        <label className="text-[10px] font-black text-blue-600 uppercase tracking-wide block mb-1">Trabajador *</label>
+                        <select value={loanPersonnelId} onChange={e => setLoanPersonnelId(e.target.value)}
+                            className="w-full text-sm border border-blue-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400">
+                            <option value="">— Elegir trabajador —</option>
+                            {sortedPersonnel.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                    </div>
+
+                    {/* Tipo de herramienta */}
+                    <div>
+                        <label className="text-[10px] font-black text-blue-600 uppercase tracking-wide block mb-1">Tipo de herramienta *</label>
+                        <div className="flex gap-2">
+                            {([InventoryType.HAND_TOOL, InventoryType.ELECTRICAL_TOOL] as InventoryType[]).map(t => (
+                                <button key={t} onClick={() => { setLoanInvType(t); setLoanSelected(new Map()); }}
+                                    className={`flex-1 py-2 rounded-xl text-xs font-black border transition-all ${
+                                        loanInvType === t ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-400'
+                                    }`}>
+                                    {t === InventoryType.HAND_TOOL ? '🔨 Manual' : '⚡ Eléctrica'}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Lista de herramientas disponibles */}
+                    {loanInvType && (
+                        <div>
+                            <label className="text-[10px] font-black text-blue-600 uppercase tracking-wide block mb-1">
+                                Herramientas disponibles * {loanSelected.size > 0 && <span className="normal-case font-normal text-blue-500">({loanSelected.size} seleccionada{loanSelected.size !== 1 ? 's' : ''})</span>}
+                            </label>
+                            {availableForLoan.length === 0 ? (
+                                <p className="text-xs text-gray-400 text-center py-4">No hay herramientas de este tipo en stock.</p>
+                            ) : (
+                                <div className="space-y-1 max-h-40 overflow-y-auto">
+                                    {availableForLoan.map(item => {
+                                        const isSelected = loanSelected.has(item.id);
+                                        const qty = loanSelected.get(item.id) ?? 1;
+                                        return (
+                                            <div key={item.id} className={`flex items-center gap-2 px-3 py-2 rounded-xl border transition-all ${isSelected ? 'bg-blue-100 border-blue-300' : 'bg-white border-gray-200 hover:border-blue-300'}`}>
+                                                <input type="checkbox" checked={isSelected}
+                                                    onChange={() => toggleLoanItem(item.id, 1)}
+                                                    className="w-4 h-4 accent-blue-600 flex-shrink-0 cursor-pointer" />
+                                                <span className="flex-1 text-sm text-gray-800 truncate cursor-pointer" onClick={() => toggleLoanItem(item.id, 1)}>
+                                                    {item.name}
+                                                </span>
+                                                <span className="text-[10px] text-gray-400 flex-shrink-0">{item.quantity} en stock</span>
+                                                {isSelected && (
+                                                    <input type="number" value={qty} min={1} max={item.quantity}
+                                                        onChange={e => setLoanQty(item.id, parseInt(e.target.value) || 1)}
+                                                        onClick={e => e.stopPropagation()}
+                                                        className="w-12 text-xs text-center border border-blue-300 rounded-lg px-1 py-0.5 bg-white focus:outline-none" />
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Proyecto (opcional) */}
+                    <div>
+                        <label className="text-[10px] font-black text-blue-600 uppercase tracking-wide block mb-1">Proyecto (opcional)</label>
+                        <select value={loanProjectId} onChange={e => setLoanProjectId(e.target.value)}
+                            className="w-full text-sm border border-blue-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400">
+                            <option value="">— Sin proyecto —</option>
+                            {activeProjects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                    </div>
+
+                    <button onClick={confirmLoan} disabled={!loanPersonnelId || loanSelected.size === 0}
+                        className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-black rounded-xl text-sm transition-all">
+                        ✅ Confirmar préstamo {loanSelected.size > 0 && `(${loanSelected.size} ítem${loanSelected.size !== 1 ? 's' : ''})`}
+                    </button>
+                </div>
+            )}
+
+            {/* ── Panel: Agregar al inventario ── */}
+            {activePanel === 'create' && (
+                <div className="mt-2 bg-green-50 border border-green-200 rounded-2xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                        <p className="text-xs font-black text-green-700 uppercase tracking-wide">➕ Agregar al inventario</p>
+                        <button onClick={closePanel} className="text-green-400 hover:text-green-700 text-lg leading-none">✕</button>
+                    </div>
+
+                    {/* Tipo */}
+                    <div>
+                        <label className="text-[10px] font-black text-green-700 uppercase tracking-wide block mb-1">Tipo *</label>
+                        <div className="grid grid-cols-2 gap-1.5">
+                            {(Object.entries(TYPE_LABELS) as [InventoryType, string][]).map(([type, label]) => (
+                                <button key={type} onClick={() => setCreateInvType(type)}
+                                    className={`py-2 rounded-xl text-xs font-bold border transition-all ${
+                                        createInvType === type ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-200 hover:border-green-400'
+                                    }`}>
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Aviso para herramientas eléctricas */}
+                    {createInvType === InventoryType.ELECTRICAL_TOOL && (
+                        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                            <span className="text-amber-500 text-sm flex-shrink-0">⚠️</span>
+                            <p className="text-[11px] text-amber-800 leading-snug">
+                                Para herramientas eléctricas incluí color, marca y número en el nombre para trazabilidad exacta.<br/>
+                                <span className="font-bold">Ej: "Taladro 3 verde Stanley"</span>
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Nombre */}
+                    <div>
+                        <label className="text-[10px] font-black text-green-700 uppercase tracking-wide block mb-1">Nombre *</label>
+                        <input type="text" value={createName} onChange={e => setCreateName(e.target.value)}
+                            placeholder={createInvType === InventoryType.ELECTRICAL_TOOL ? 'Ej: Taladro 3 verde Stanley' : 'Ej: Palustres, Cascos, Tornillos M8...'}
+                            className="w-full text-sm border border-green-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400" />
+                    </div>
+
+                    {/* Cantidad y unidad */}
+                    <div className="grid grid-cols-2 gap-2">
+                        <div>
+                            <label className="text-[10px] font-black text-green-700 uppercase tracking-wide block mb-1">Cantidad</label>
+                            <input type="number" value={createQty} min={1} onChange={e => setCreateQty(Math.max(1, parseInt(e.target.value) || 1))}
+                                className="w-full text-sm border border-green-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400" />
+                        </div>
+                        <div>
+                            <label className="text-[10px] font-black text-green-700 uppercase tracking-wide block mb-1">Unidad</label>
+                            <input type="text" value={createUnit} onChange={e => setCreateUnit(e.target.value)}
+                                placeholder="unidades"
+                                className="w-full text-sm border border-green-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400" />
+                        </div>
+                    </div>
+
+                    <button onClick={confirmCreate} disabled={!createInvType || !createName.trim()}
+                        className="w-full py-2.5 bg-green-600 hover:bg-green-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-black rounded-xl text-sm transition-all">
+                        ✅ Guardar ítem
+                    </button>
+                </div>
+            )}
+
+            {/* ── Text input (hidden when panel is open) ── */}
+            {!activePanel && (
+                <>
+                    <div className="mt-2 flex gap-2 items-end">
+                        <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown}
+                            placeholder='Ej: "saqué 5 cascos para proyecto X, trabajador Y" · "crea el proyecto Torre"'
+                            rows={2}
+                            className="flex-1 resize-none border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                        <button onClick={() => handleSend(input)} disabled={!input.trim() || loading}
+                            className="h-[3.5rem] px-5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold rounded-xl transition-all flex-shrink-0">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-1.5 text-center">Enter para enviar · Shift+Enter para nueva línea</p>
+                </>
+            )}
         </div>
     );
 };
@@ -270,10 +515,7 @@ const PendingItemTypeCard: React.FC<{ name: string; unit: string; onSelect: (t: 
 // ─── ExitConfirmCard ─────────────────────────────────────────────────────────
 
 interface ExitConfirmCardProps {
-    msgId: string;
-    exit: ParsedExit;
-    items: Item[];
-    sel: Record<number, string>;
+    msgId: string; exit: ParsedExit; items: Item[]; sel: Record<number, string>;
     onSelect: (idx: number, itemId: string) => void;
     onCreateItem: (idx: number, name: string, unit: string, type: InventoryType) => void;
     onCreateProject: (name: string) => void;
@@ -286,19 +528,14 @@ const ExitConfirmCard: React.FC<ExitConfirmCardProps> = ({
     exit, items, sel, onSelect, onCreateItem, onCreateProject, onCreatePersonnel, onConfirm, onCancel
 }) => {
     const canConfirm = exit.movements.some((pm, idx) => pm.matchedItem || sel[idx]);
-
     return (
         <div className="w-full max-w-[92%] bg-white border border-blue-200 rounded-2xl rounded-bl-sm shadow-md p-4">
             <p className="text-xs font-black text-blue-500 uppercase tracking-widest mb-3">📋 Confirmar salidas</p>
-
             <div className="space-y-2 mb-3">
                 {exit.movements.map((pm, idx) => (
-                    <MovementRow key={idx} pm={pm} idx={idx} items={items} sel={sel}
-                        onSelect={onSelect} onCreateItem={onCreateItem} />
+                    <MovementRow key={idx} pm={pm} idx={idx} items={items} sel={sel} onSelect={onSelect} onCreateItem={onCreateItem} />
                 ))}
             </div>
-
-            {/* Proyecto */}
             <div className="mb-2">
                 {exit.matchedProject ? (
                     <span className="inline-flex items-center gap-1 text-xs text-gray-600 bg-gray-50 px-3 py-1 rounded-full border border-gray-200">
@@ -307,13 +544,10 @@ const ExitConfirmCard: React.FC<ExitConfirmCardProps> = ({
                 ) : exit.rawProject ? (
                     <div className="flex items-center gap-2">
                         <span className="text-xs text-amber-600">📌 Proyecto "{exit.rawProject}" no existe.</span>
-                        <button onClick={() => onCreateProject(exit.rawProject)}
-                            className="text-xs font-black text-blue-600 hover:underline">+ Crear</button>
+                        <button onClick={() => onCreateProject(exit.rawProject)} className="text-xs font-black text-blue-600 hover:underline">+ Crear</button>
                     </div>
                 ) : null}
             </div>
-
-            {/* Trabajador */}
             <div className="mb-3">
                 {exit.matchedPersonnel ? (
                     <span className="inline-flex items-center gap-1 text-xs text-gray-600 bg-gray-50 px-3 py-1 rounded-full border border-gray-200">
@@ -322,20 +556,16 @@ const ExitConfirmCard: React.FC<ExitConfirmCardProps> = ({
                 ) : exit.rawPersonnel ? (
                     <div className="flex items-center gap-2">
                         <span className="text-xs text-amber-600">👤 Trabajador "{exit.rawPersonnel}" no existe.</span>
-                        <button onClick={() => onCreatePersonnel(exit.rawPersonnel)}
-                            className="text-xs font-black text-blue-600 hover:underline">+ Crear</button>
+                        <button onClick={() => onCreatePersonnel(exit.rawPersonnel)} className="text-xs font-black text-blue-600 hover:underline">+ Crear</button>
                     </div>
                 ) : null}
             </div>
-
             <div className="flex gap-2">
                 <button onClick={onConfirm} disabled={!canConfirm}
                     className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold rounded-xl text-sm transition-all">
                     ✅ Confirmar y registrar
                 </button>
-                <button onClick={onCancel} className="px-4 py-2 border border-gray-200 text-gray-500 hover:bg-gray-50 rounded-xl text-sm font-semibold">
-                    ✕
-                </button>
+                <button onClick={onCancel} className="px-4 py-2 border border-gray-200 text-gray-500 hover:bg-gray-50 rounded-xl text-sm font-semibold">✕</button>
             </div>
         </div>
     );
@@ -351,7 +581,6 @@ const MovementRow: React.FC<{
 }> = ({ pm, idx, items, sel, onSelect, onCreateItem }) => {
     const [showCreate, setShowCreate] = useState(false);
     const chosen = pm.matchedItem ?? (sel[idx] ? items.find(i => i.id === sel[idx]) ?? null : null);
-
     return (
         <div className="flex items-start gap-3 p-2.5 rounded-xl bg-gray-50">
             <span className={`mt-0.5 w-3 h-3 rounded-full flex-shrink-0 ${chosen ? 'bg-green-400' : pm.candidates.length ? 'bg-amber-400' : 'bg-red-300'}`} />
@@ -384,8 +613,7 @@ const MovementRow: React.FC<{
                 ) : (
                     <div className="flex items-center gap-2 mt-0.5">
                         <p className="text-xs text-red-500">No encontrado</p>
-                        <button onClick={() => setShowCreate(true)}
-                            className="text-xs font-black text-blue-600 hover:underline">+ Crear ítem</button>
+                        <button onClick={() => setShowCreate(true)} className="text-xs font-black text-blue-600 hover:underline">+ Crear ítem</button>
                     </div>
                 )}
             </div>

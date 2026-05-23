@@ -71,7 +71,7 @@ export const LoansView: React.FC<LoansViewProps> = ({
     }, [filteredLoans]);
 
     const jumpToLetter = useCallback((letter: string) => {
-        const el = document.getElementById(`worker-${letter}`);
+        const el = document.querySelector(`[data-worker-letter="${letter}"]`);
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, []);
 
@@ -140,12 +140,16 @@ export const LoansView: React.FC<LoansViewProps> = ({
                 .sort((a, b) => a.name.localeCompare(b.name, 'es'));
         }, [loans]);
 
+        const seenLetters = new Set<string>();
         return (
             <div className="space-y-4">
                 {byWorker.map(({ name, loans: wLoans }) => {
                     const letter = name.charAt(0).toUpperCase();
+                    const isFirst = !seenLetters.has(letter);
+                    if (isFirst) seenLetters.add(letter);
                     return (
-                        <div key={name} id={`worker-${letter}`}>
+                        <div key={name} {...(isFirst ? { 'data-worker-letter': letter } : {})}>
+
                             <p className="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 flex items-center gap-1.5">
                                 <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-black text-xs flex-shrink-0">{letter}</span>
                                 {name} <span className="font-normal text-gray-400">({wLoans.length})</span>

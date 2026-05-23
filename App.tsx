@@ -383,6 +383,13 @@ const App: React.FC = () => {
                         <span className="mr-3 text-base">🎓</span>
                         Ver tutorial
                     </button>
+                    <button
+                        onClick={() => { localStorage.removeItem(SESSION_KEY); setLoggedIn(false); }}
+                        className="w-full flex items-center text-left px-4 py-2.5 text-xs font-semibold rounded-xl text-gray-400 hover:bg-red-50 hover:text-red-600 transition-all"
+                    >
+                        <span className="mr-3 text-base">🚪</span>
+                        Cerrar sesión
+                    </button>
                 </div>
             </aside>
 
