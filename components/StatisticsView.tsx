@@ -197,6 +197,22 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
         setActiveDetail({ title: 'Salidas últimos 30 días', rows, navigateTo: { view: 'kardex', tab: 'movements' } });
     };
 
+    const showInventarioListDetail = () => {
+        const rows: DetailRow[] = [...items]
+            .sort((a, b) => a.name.localeCompare(b.name, 'es'))
+            .map(i => {
+                const onLoan = kpis.activeLoans.filter(m => m.itemId === i.id).reduce((s, m) => s + m.quantity, 0);
+                return {
+                    label: i.name,
+                    sub: INV_TYPE_LABEL[i.inventoryType],
+                    value: `${i.quantity} ${i.unit}`,
+                    badge: onLoan > 0 ? `${onLoan} prestado` : undefined,
+                    badgeColor: 'bg-yellow-100 text-yellow-700',
+                };
+            });
+        setActiveDetail({ title: 'Ítems en inventario', rows, navigateTo: { view: 'kardex', tab: 'inventory' } });
+    };
+
     const showPrestamosDetail = () => {
         const rows: DetailRow[] = kpis.activeLoans.map(m => {
             const days = Math.floor((Date.now() - new Date(m.timestamp).getTime()) / 86400000);
@@ -383,13 +399,13 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                         <span>Ver lista →</span>
                     </div>
                 </button>
-                <button onClick={() => onNavigate?.('kardex', 'inventory')}
+                <button onClick={showInventarioListDetail}
                     className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-1 text-left hover:shadow-md hover:border-green-300 transition-all active:scale-95">
                     <span className="text-[10px] font-black text-green-400 uppercase tracking-widest">Ítems en inventario</span>
                     <span className="text-2xl font-black text-gray-800">{kpis.totalItems}</span>
                     <span className="text-xs text-gray-400">productos registrados</span>
                     <div className="mt-2 flex items-center gap-1 text-[10px] text-green-500 font-semibold">
-                        <span>Ver inventario →</span>
+                        <span>Ver lista →</span>
                     </div>
                 </button>
                 <button onClick={showPrestamosDetail}
