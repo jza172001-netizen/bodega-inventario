@@ -128,7 +128,7 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
                             <label className="block text-sm font-medium text-gray-700 mb-1">Personal (Opcional)</label>
                             <select value={personnelId} onChange={e => setPersonnelId(e.target.value)} className="w-full input-style">
                                 <option value="">N/A</option>
-                                {personnel.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                {[...personnel].sort((a, b) => a.name.localeCompare(b.name, 'es')).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                             </select>
                         </div>
                     </div>

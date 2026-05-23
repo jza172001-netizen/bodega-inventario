@@ -46,6 +46,8 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel }) =
         groups.push({ person, loans: personLoans, hasPhone, isDue });
     }
 
+    groups.sort((a, b) => a.person.name.localeCompare(b.person.name, 'es'));
+
     const dueGroups       = groups.filter(g => g.isDue);
     const onTrackGroups   = groups.filter(g => g.hasPhone && !g.isDue);
     const noPhoneGroups   = groups.filter(g => !g.hasPhone);
