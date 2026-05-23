@@ -15,7 +15,7 @@ interface HeaderProps {
     onImportData: (e: React.ChangeEvent<HTMLInputElement>) => void;
     onResetData: () => void;
     onOpenUserManagement: () => void;
-    onLogout: () => void;
+    onLogout?: () => void;
     onStartNewBusiness: () => void;
     onOpenInvoiceReader?: () => void;
     onOpenSearch?: () => void;
@@ -95,21 +95,10 @@ export const Header: React.FC<HeaderProps> = ({ toggleSidebar, userRole, userNam
                         </button>
                     )}
                     <div className="hidden md:flex flex-col items-end">
-                        <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest leading-none mb-1">
+                        <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest leading-none">
                             {userName || (userRole === UserRole.OWNER ? 'Bodeguero' : 'Visitante')}
                         </span>
-                        <span onClick={onLogout} className="text-[9px] text-gray-400 font-bold uppercase hover:text-red-600 cursor-pointer">Salir</span>
                     </div>
-                    {/* Cerrar sesión — visible en mobile */}
-                    <button
-                        onClick={onLogout}
-                        className="flex md:hidden items-center gap-1 px-3 py-1.5 bg-red-50 text-red-600 rounded-xl text-xs font-black border border-red-100 hover:bg-red-100 transition-all"
-                    >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                        </svg>
-                        Salir
-                    </button>
                     <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center font-black text-lg border-2 border-white shadow-sm">
                         {userName ? userName[0].toUpperCase() : (userRole === UserRole.OWNER ? 'B' : 'V')}
                     </div>
