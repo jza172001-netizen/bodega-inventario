@@ -383,12 +383,15 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                         <span>Ver lista →</span>
                     </div>
                 </button>
-                <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-1">
+                <button onClick={() => onNavigate?.('kardex', 'inventory')}
+                    className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-1 text-left hover:shadow-md hover:border-green-300 transition-all active:scale-95">
                     <span className="text-[10px] font-black text-green-400 uppercase tracking-widest">Ítems en inventario</span>
                     <span className="text-2xl font-black text-gray-800">{kpis.totalItems}</span>
                     <span className="text-xs text-gray-400">productos registrados</span>
-                    <div className="mt-2 h-1 rounded-full bg-green-100"><div className="h-1 rounded-full bg-green-500" style={{ width: '100%' }} /></div>
-                </div>
+                    <div className="mt-2 flex items-center gap-1 text-[10px] text-green-500 font-semibold">
+                        <span>Ver inventario →</span>
+                    </div>
+                </button>
                 <button onClick={showPrestamosDetail}
                     className={`p-5 rounded-2xl shadow-sm border flex flex-col gap-1 text-left hover:shadow-md transition-all active:scale-95 ${kpis.activeLoanCount > 0 ? 'bg-yellow-50 border-yellow-200 hover:border-yellow-400' : 'bg-white border-gray-100 hover:border-blue-300'}`}>
                     <span className="text-[10px] font-black text-yellow-500 uppercase tracking-widest">Préstamos activos</span>
@@ -400,18 +403,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                 </button>
             </div>
 
-            {/* Alerta pendientes de recoger */}
-            {kpis.pendingPickupCount > 0 && (
-                <div className="bg-orange-50 border border-orange-300 rounded-2xl p-4 flex items-center gap-3">
-                    <span className="text-2xl">📍</span>
-                    <div>
-                        <p className="text-sm font-black text-orange-800">
-                            {kpis.pendingPickupCount} herramienta{kpis.pendingPickupCount > 1 ? 's' : ''} pendiente{kpis.pendingPickupCount > 1 ? 's' : ''} de recoger
-                        </p>
-                        <p className="text-xs text-orange-600 mt-0.5">Ir a Préstamos para coordinar la recolección.</p>
-                    </div>
-                </div>
-            )}
+            {/* Alerta pendientes de recoger — eliminada, ya aparece en el Dashboard */}
 
             {/* ── TORTA + TOP CONSUMIDOS ── */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
