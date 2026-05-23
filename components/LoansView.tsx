@@ -10,7 +10,9 @@ import {
     isDueForReminder,
     buildPersonGroups,
     buildPersonReminderUrl,
+    buildPickupUrl,
     REMINDER_INTERVAL_DAYS,
+    MELLO_NAME,
 } from '../services/whatsappService';
 
 interface LoansViewProps {
@@ -138,10 +140,15 @@ export const LoansView: React.FC<LoansViewProps> = ({
                             ✓ Devuelta
                         </button>
                     )}
-                    {isOwner && (!isPending ? (
+                    {!isPending ? (
                         <button
-                            onClick={() => onMarkPendingPickup(loan.id, true)}
+                            onClick={() => {
+                                onMarkPendingPickup(loan.id, true);
+                                const item = getItem(loan.itemId);
+                                window.open(buildPickupUrl(item?.name ?? 'Herramienta', loan.quantity, getPersonnelName(loan.personnelId)), '_blank');
+                            }}
                             className="flex-1 py-1.5 bg-orange-100 hover:bg-orange-200 text-orange-800 text-xs font-bold rounded-xl transition-all"
+                            title={`Avisar a ${MELLO_NAME} por WhatsApp`}
                         >
                             📍 Ir a recoger
                         </button>
@@ -152,7 +159,7 @@ export const LoansView: React.FC<LoansViewProps> = ({
                         >
                             ✕ Cancelar
                         </button>
-                    ))}
+                    )}
                     {hasPhone && (
                         <button
                             onClick={() => handleRemind(loan)}

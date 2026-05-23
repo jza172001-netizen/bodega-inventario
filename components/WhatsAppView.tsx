@@ -50,13 +50,15 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel }) =
     const onTrackGroups   = groups.filter(g => g.hasPhone && !g.isDue);
     const noPhoneGroups   = groups.filter(g => !g.hasPhone);
 
-    const remind = (g: PersonGroup) => {
+    const remind = (g: PersonGroup, windowDays = 7) => {
         if (!g.person.phone) return;
-        const groups = buildPersonGroups(g.person, movements, items);
+        const groups = buildPersonGroups(g.person, movements, items, windowDays);
         window.open(buildPersonReminderUrl(g.person.phone, g.person.name, groups), '_blank');
         const newLog = recordReminders(g.loans.map(m => m.id));
         setLog({ ...newLog });
     };
+
+    const remindMonthly = (g: PersonGroup) => remind(g, 30);
 
     const startRemindAll = () => {
         if (dueGroups.length === 0) return;
@@ -70,6 +72,11 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel }) =
         if (next >= dueGroups.length) { setStep(null); return; }
         setStep(next);
         remind(dueGroups[next]);
+    };
+
+    const startRemindAllMonthly = () => {
+        const withPhone = groups.filter(g => g.hasPhone);
+        withPhone.forEach((g, i) => setTimeout(() => remindMonthly(g), i * 400));
     };
 
     const PersonCard: React.FC<{ g: PersonGroup }> = ({ g }) => {
@@ -106,16 +113,25 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel }) =
                     </div>
                 </div>
                 {g.hasPhone ? (
-                    <button
-                        onClick={() => remind(g)}
-                        className={`flex-shrink-0 flex items-center gap-1 px-3 py-2 text-xs font-black rounded-xl transition-all ${
-                            g.isDue
-                                ? 'bg-green-600 hover:bg-green-700 text-white'
-                                : 'bg-green-100 hover:bg-green-200 text-green-800'
-                        }`}
-                    >
-                        📲 Recordar
-                    </button>
+                    <div className="flex flex-col gap-1 flex-shrink-0">
+                        <button
+                            onClick={() => remind(g)}
+                            className={`flex items-center gap-1 px-3 py-2 text-xs font-black rounded-xl transition-all ${
+                                g.isDue
+                                    ? 'bg-green-600 hover:bg-green-700 text-white'
+                                    : 'bg-green-100 hover:bg-green-200 text-green-800'
+                            }`}
+                        >
+                            📲 Semana
+                        </button>
+                        <button
+                            onClick={() => remindMonthly(g)}
+                            className="flex items-center gap-1 px-3 py-2 text-xs font-black bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-xl transition-all"
+                            title="Resumen del último mes"
+                        >
+                            📅 Mes
+                        </button>
+                    </div>
                 ) : (
                     <span className="flex-shrink-0 text-[10px] text-gray-300 text-right max-w-[72px] leading-tight">
                         Sin número en Personal
@@ -136,15 +152,26 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel }) =
                         {dueGroups.length > 0 && ` · ${dueGroups.length} persona${dueGroups.length > 1 ? 's' : ''} sin recordar`}
                     </p>
                 </div>
-                <a
-                    href={buildTestReminderUrl()}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-green-100 hover:bg-green-200 text-green-800 text-xs font-black rounded-xl transition-colors"
-                    title={`Enviar prueba a ${TEST_PHONE_DISPLAY}`}
-                >
-                    🧪 Probar con mi número
-                </a>
+                <div className="flex flex-col gap-1.5 flex-shrink-0">
+                    {groups.some(g => g.hasPhone) && (
+                        <button
+                            onClick={startRemindAllMonthly}
+                            className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl transition-colors"
+                            title="Enviar resumen del último mes a todos"
+                        >
+                            📅 Resumen mes a todos
+                        </button>
+                    )}
+                    <a
+                        href={buildTestReminderUrl()}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 px-3 py-2 bg-green-100 hover:bg-green-200 text-green-800 text-xs font-black rounded-xl transition-colors"
+                        title={`Enviar prueba a ${TEST_PHONE_DISPLAY}`}
+                    >
+                        🧪 Probar
+                    </a>
+                </div>
             </div>
 
             {activeLoans.length === 0 ? (

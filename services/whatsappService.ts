@@ -5,6 +5,8 @@ export const REMINDER_LOG_KEY = 'bodega_wa_reminders';
 export const REMINDER_INTERVAL_DAYS = 8;
 export const TEST_PHONE = '573113866341';
 export const TEST_PHONE_DISPLAY = '+57 311 386 6341';
+export const MELLO_PHONE = '573113866341'; // número de Mello — actualizar cuando lo tengas
+export const MELLO_NAME = 'Mello';
 
 export type ReminderLog = Record<string, string>; // movementId → ISO timestamp
 
@@ -45,14 +47,15 @@ const formatPhone = (phone: string): string => {
     return raw.startsWith('57') ? raw : `57${raw}`;
 };
 
-/** Builds categorized reminder groups for a person: loans by type + recent consumable usage. */
+/** Builds categorized reminder groups for a person: loans by type + recent consumable/EPP usage. */
 export const buildPersonGroups = (
     person: Personnel,
     movements: Movement[],
-    items: Item[]
+    items: Item[],
+    windowDays = 7
 ): ReminderGroup[] => {
     const itemMap = new Map(items.map(i => [i.id, i]));
-    const sevenDaysAgo = new Date(Date.now() - 7 * 86400000);
+    const sevenDaysAgo = new Date(Date.now() - windowDays * 86400000);
 
     const activeLoans = movements.filter(
         m => m.personnelId === person.id && m.isLoan && !m.isReturned
@@ -90,11 +93,12 @@ export const buildPersonGroups = (
             return `${qty} ${item?.unit ?? 'und'} de ${item?.name ?? 'consumible'}`;
         });
 
+    const consumableLabel = windowDays <= 7 ? 'Consumibles y EPP esta semana' : 'Consumibles y EPP este mes';
+
     return [
         { emoji: '🔨', label: 'Herramientas manuales (devolver)',   items: loanGroup(InventoryType.HAND_TOOL) },
         { emoji: '⚡', label: 'Herramientas eléctricas (devolver)', items: loanGroup(InventoryType.ELECTRICAL_TOOL) },
-        { emoji: '🦺', label: 'Seguridad / EPP (devolver)',         items: loanGroup(InventoryType.PPE) },
-        { emoji: '📦', label: 'Consumibles esta semana',            items: consumableLines },
+        { emoji: '📦', label: consumableLabel,                       items: consumableLines },
     ];
 };
 
@@ -116,6 +120,16 @@ export const buildPersonReminderUrl = (
         `Gracias 🙏`
     );
     return `https://wa.me/${formatPhone(phone)}?text=${text}`;
+};
+
+/** Mensaje a Mello avisando que hay una herramienta lista para recoger. */
+export const buildPickupUrl = (itemName: string, quantity: number, workerName: string): string => {
+    const text = encodeURIComponent(
+        `📍 *A recoger:*\n\n` +
+        `• ${itemName} (x${quantity}) — con ${workerName}\n\n` +
+        `Pásala a buscar cuando puedas. Gracias 🙏`
+    );
+    return `https://wa.me/${MELLO_PHONE}?text=${text}`;
 };
 
 export const buildTestReminderUrl = (): string => {

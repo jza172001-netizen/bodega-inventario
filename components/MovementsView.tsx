@@ -22,7 +22,7 @@ interface MovementsViewProps {
 export const MovementsView: React.FC<MovementsViewProps> = ({ movements, items, personnel, filterType, openLogMovementModal, onReturnLoan, onDeleteMovement, onGoBack, userRole = UserRole.EMPLOYEE }) => {
     const isOwner = userRole === UserRole.OWNER;
     const [page, setPage] = useState(0);
-    const [typeFilter, setTypeFilter] = useState<MovementType | ''>('');
+    const [typeFilter, setTypeFilter] = useState<'salida' | 'prestamo' | ''>('');
 
     const itemMap = useMemo(() => new Map(items.map(i => [i.id, i])), [items]);
     const personnelMap = useMemo(() => new Map(personnel.map(p => [p.id, p])), [personnel]);
@@ -35,7 +35,8 @@ export const MovementsView: React.FC<MovementsViewProps> = ({ movements, items, 
             const itemIdsInType = new Set(items.filter(i => i.inventoryType === filterType).map(i => i.id));
             result = result.filter(m => itemIdsInType.has(m.itemId));
         }
-        if (typeFilter) result = result.filter(m => m.type === typeFilter);
+        if (typeFilter === 'salida') result = result.filter(m => m.type === MovementType.CHECK_OUT && !m.isLoan);
+        if (typeFilter === 'prestamo') result = result.filter(m => !!m.isLoan);
         return result;
     }, [movements, items, filterType, typeFilter]);
 
@@ -71,11 +72,12 @@ export const MovementsView: React.FC<MovementsViewProps> = ({ movements, items, 
                 <div className="flex items-center gap-2">
                     <select
                         value={typeFilter}
-                        onChange={e => setTypeFilter(e.target.value as MovementType | '')}
+                        onChange={e => setTypeFilter(e.target.value as 'salida' | 'prestamo' | '')}
                         className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-600"
                     >
-                        <option value="">Todos los tipos</option>
-                        {Object.values(MovementType).map(t => <option key={t} value={t}>{t}</option>)}
+                        <option value="">Todos</option>
+                        <option value="salida">Salida</option>
+                        <option value="prestamo">Préstamo</option>
                     </select>
                 {openLogMovementModal && isOwner && (
                     <button onClick={openLogMovementModal} className="flex items-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
