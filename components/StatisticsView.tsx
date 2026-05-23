@@ -398,15 +398,6 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                         <span>Ver quién los tiene →</span>
                     </div>
                 </button>
-                <button onClick={showStockDetail}
-                    className={`p-5 rounded-2xl shadow-sm border flex flex-col gap-1 text-left hover:shadow-md transition-all active:scale-95 ${kpis.lowStockItems > 0 ? 'bg-orange-50 border-orange-200 hover:border-orange-400' : 'bg-white border-gray-100 hover:border-blue-300'}`}>
-                    <span className="text-[10px] font-black text-orange-400 uppercase tracking-widest">Stock Bajo / Agotado</span>
-                    <span className={`text-2xl font-black ${kpis.lowStockItems > 0 ? 'text-orange-600' : 'text-gray-800'}`}>{kpis.lowStockItems} ítems</span>
-                    <span className="text-xs text-gray-400">{kpis.lowStockItems === 0 ? '✅ Todo OK' : '⚠️ Requiere atención'}</span>
-                    <div className="mt-2 flex items-center gap-1 text-[10px] text-orange-400 font-semibold">
-                        <span>Ver cuáles →</span>
-                    </div>
-                </button>
             </div>
 
             {/* Alerta pendientes de recoger */}

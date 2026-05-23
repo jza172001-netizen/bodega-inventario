@@ -18,7 +18,7 @@ import { WhatsAppView } from './components/WhatsAppView';
 import { PickupView } from './components/PickupView';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
 import { SettingsModal, AppConfig, DEFAULT_CONFIG } from './components/SettingsModal';
-import { requestNotificationPermission, checkAndNotifyOverdueLoans } from './services/notificationService';
+import { requestNotificationPermission, checkAndNotifyPickup } from './services/notificationService';
 
 import { mockItems, mockMovements, mockPersonnel, mockPurchaseOrders, mockProjects, mockUsers } from './mockData';
 import { Item, Movement, MovementType, Personnel, PurchaseOrder, UserRole, InventoryType, Project, AppUser, PurchaseOrderStatus } from './types';
@@ -67,12 +67,10 @@ const App: React.FC = () => {
     // Auto-save a localStorage en cada cambio (igual que antes)
     useEffect(() => { saveToLocalStorage({ items, movements, personnel, purchaseOrders, projects, users }); }, [items, movements, personnel, purchaseOrders, projects, users]);
 
-    // Revisar préstamos vencidos y pendientes de recoger cuando los datos estén listos
+    // Notificar herramientas pendientes de recoger cada vez que se abre la app
     useEffect(() => {
-        if (movements.length > 0) {
-            checkAndNotifyOverdueLoans(movements, items, personnel);
-        }
-    }, [movements, items, personnel]);
+        checkAndNotifyPickup(movements, items);
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Sync desde Supabase en background al montar (no bloquea la UI)
     useEffect(() => {
