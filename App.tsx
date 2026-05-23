@@ -414,6 +414,7 @@ const App: React.FC = () => {
                                 onGoBack={() => selectView('dashboard')}
                                 onEditPersonnel={handleEditPersonnel}
                                 onDeletePersonnel={handleDeletePersonnel}
+                                onReturnLoan={handleReturnItem}
                                 userRole={userRole}
                             />
                         )}
