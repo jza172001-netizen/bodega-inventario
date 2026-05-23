@@ -192,26 +192,42 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel }) =
                                         Sin contactar hace +{REMINDER_INTERVAL_DAYS} días
                                     </p>
                                 </div>
-                                {step === null ? (
+                                {step === null && (
                                     <button
                                         onClick={startRemindAll}
                                         className="flex-shrink-0 text-xs font-black bg-white text-green-700 hover:bg-green-50 px-3 py-1.5 rounded-xl transition-colors"
                                     >
                                         Recordar a todos ({dueGroups.length}) →
                                     </button>
-                                ) : (
-                                    <button
-                                        onClick={nextStep}
-                                        className="flex-shrink-0 text-xs font-black bg-white text-green-700 hover:bg-green-50 px-3 py-1.5 rounded-xl transition-colors"
-                                    >
-                                        {step < dueGroups.length - 1
-                                            ? `Siguiente ${step + 1}/${dueGroups.length} →`
-                                            : '✓ Finalizar'}
-                                    </button>
                                 )}
                             </div>
+
+                            {/* Banner paso a paso */}
+                            {step !== null && (
+                                <div className="bg-green-50 border-b border-green-200 px-4 py-3 flex items-center justify-between gap-3">
+                                    <div>
+                                        <p className="text-sm font-black text-green-900">
+                                            Paso {step + 1} de {dueGroups.length} — {dueGroups[step].person.name}
+                                        </p>
+                                        <p className="text-xs text-green-700">
+                                            WhatsApp abierto → toca Enviar → vuelve aquí
+                                        </p>
+                                    </div>
+                                    <button
+                                        onClick={nextStep}
+                                        className="flex-shrink-0 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-xs font-black rounded-xl transition-colors"
+                                    >
+                                        {step < dueGroups.length - 1 ? 'Siguiente →' : '✓ Listo'}
+                                    </button>
+                                </div>
+                            )}
+
                             <div className="p-3 space-y-2">
-                                {dueGroups.map(g => <PersonCard key={g.person.id} g={g} />)}
+                                {dueGroups.map((g, i) => (
+                                    <div key={g.person.id} className={step === i ? 'ring-2 ring-green-400 rounded-2xl' : ''}>
+                                        <PersonCard g={g} />
+                                    </div>
+                                ))}
                             </div>
                         </div>
                     )}
