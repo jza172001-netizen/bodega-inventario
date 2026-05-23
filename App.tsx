@@ -15,6 +15,7 @@ import { FloatingChat } from './components/FloatingChat';
 import { OnboardingModal } from './components/OnboardingModal';
 import { HelpView } from './components/HelpView';
 import { WhatsAppView } from './components/WhatsAppView';
+import { PickupView } from './components/PickupView';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
 import { SettingsModal, AppConfig, DEFAULT_CONFIG } from './components/SettingsModal';
 import { requestNotificationPermission, checkAndNotifyOverdueLoans } from './services/notificationService';
@@ -33,7 +34,7 @@ import { MovementsIcon } from './components/icons/MovementsIcon';
 import { PersonnelIcon } from './components/icons/PersonnelIcon';
 import { WhatsAppIcon } from './components/icons/WhatsAppIcon';
 
-type View = 'dashboard' | 'kardex' | 'personnel' | 'copilot' | 'help' | 'whatsapp';
+type View = 'dashboard' | 'kardex' | 'personnel' | 'copilot' | 'help' | 'whatsapp' | 'pickup';
 type KardexTab = 'movements' | 'loans' | 'inventory' | 'projects';
 
 const SESSION_KEY = 'bodega_session';
@@ -98,8 +99,9 @@ const App: React.FC = () => {
 
     const [currentView, setCurrentView] = useState<View>('dashboard');
     const [kardexTab, setKardexTab] = useState<KardexTab>('movements');
-    const EMPLOYEE_VIEWS: View[] = ['dashboard', 'kardex', 'personnel', 'help', 'whatsapp'];
+    const EMPLOYEE_VIEWS: View[] = ['dashboard', 'kardex', 'personnel', 'help', 'whatsapp', 'pickup'];
     const effectiveView: View = (userRole === UserRole.EMPLOYEE && !EMPLOYEE_VIEWS.includes(currentView)) ? 'dashboard' : currentView;
+    const pendingPickupCount = movements.filter(m => m.isLoan && !m.isReturned && m.pendingPickup).length;
     const [isSidebarOpen, setSidebarOpen] = useState(true);
 
     const CONFIG_KEY = 'bodega_config';
@@ -331,6 +333,7 @@ const App: React.FC = () => {
                         <NavItem icon={PersonnelIcon} label="Personal" onClick={() => selectView('personnel')} isActive={effectiveView === 'personnel'} />
                         <NavItem icon={MovementsIcon} label="Kardex" onClick={() => selectView('kardex')} isActive={effectiveView === 'kardex'} />
                         <NavItem icon={WhatsAppIcon} label="WhatsApp" onClick={() => selectView('whatsapp')} isActive={effectiveView === 'whatsapp'} />
+                        <NavItem icon={PickupNavIcon} label="A Recoger" onClick={() => selectView('pickup')} isActive={effectiveView === 'pickup'} badge={pendingPickupCount} />
                     </nav>
                 </div>
 
@@ -433,6 +436,16 @@ const App: React.FC = () => {
                         {effectiveView === 'whatsapp' && (
                             <WhatsAppView movements={movements} items={items} personnel={personnel} />
                         )}
+                        {effectiveView === 'pickup' && (
+                            <PickupView
+                                movements={movements}
+                                items={items}
+                                personnel={personnel}
+                                projects={projects}
+                                onMarkPendingPickup={handleMarkPendingPickup}
+                                onReturnItem={handleReturnItem}
+                            />
+                        )}
                     </div>
                 </main>
             </div>
@@ -484,10 +497,22 @@ const QuestionMarkIcon: React.FC<{ className?: string }> = ({ className }) => (
     </svg>
 );
 
-const NavItem: React.FC<{ icon: React.ElementType, label: string, onClick: () => void, isActive: boolean }> = ({ icon: Icon, label, onClick, isActive }) => (
+const PickupNavIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+    </svg>
+);
+
+const NavItem: React.FC<{ icon: React.ElementType, label: string, onClick: () => void, isActive: boolean, badge?: number }> = ({ icon: Icon, label, onClick, isActive, badge }) => (
     <button onClick={onClick} className={`w-full flex items-center text-left px-4 py-3 text-sm font-semibold rounded-xl transition-all duration-200 ${isActive ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'}`}>
         <Icon className={`w-5 h-5 mr-3 ${isActive ? 'text-white' : 'text-gray-400'}`} />
-        {label}
+        <span className="flex-1">{label}</span>
+        {badge != null && badge > 0 && (
+            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${isActive ? 'bg-white text-blue-600' : 'bg-orange-500 text-white'}`}>
+                {badge}
+            </span>
+        )}
     </button>
 );
 

@@ -122,12 +122,18 @@ export const buildPersonReminderUrl = (
     return `https://wa.me/${formatPhone(phone)}?text=${text}`;
 };
 
-/** Mensaje a Mello avisando que hay una herramienta lista para recoger. */
-export const buildPickupUrl = (itemName: string, quantity: number, workerName: string): string => {
+/** Mensaje consolidado a Mello con todos los ítems pendientes de recoger. */
+export const buildConsolidatedPickupUrl = (
+    loans: { itemName: string; qty: number; workerName: string; projectName?: string }[]
+): string => {
+    const lines = loans.map(l => {
+        const proj = l.projectName ? ` (${l.projectName})` : '';
+        return `• ${l.itemName} x${l.qty} — con ${l.workerName}${proj}`;
+    });
     const text = encodeURIComponent(
-        `📍 *A recoger:*\n\n` +
-        `• ${itemName} (x${quantity}) — con ${workerName}\n\n` +
-        `Pásala a buscar cuando puedas. Gracias 🙏`
+        `📍 *Herramientas a recoger:*\n\n` +
+        `${lines.join('\n')}\n\n` +
+        `Por favor pásalas a buscar cuando puedas. Gracias 🙏`
     );
     return `https://wa.me/${MELLO_PHONE}?text=${text}`;
 };

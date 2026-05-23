@@ -20,10 +20,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ items, movements, purchase
         const pendingOrders = purchaseOrders.filter(o =>
             o.status === PurchaseOrderStatus.ORDERED || o.status === PurchaseOrderStatus.SHIPPED
         ).length;
-        return { depleted, lowStock, overdueLoans, pendingOrders };
+        const pendingPickup = movements.filter(m => m.isLoan && !m.isReturned && m.pendingPickup).length;
+        return { depleted, lowStock, overdueLoans, pendingOrders, pendingPickup };
     }, [items, movements, purchaseOrders]);
 
-    const hasAlerts = alerts.depleted > 0 || alerts.lowStock > 0 || alerts.overdueLoans > 0 || alerts.pendingOrders > 0;
+    const hasAlerts = alerts.depleted > 0 || alerts.lowStock > 0 || alerts.overdueLoans > 0 || alerts.pendingOrders > 0 || alerts.pendingPickup > 0;
 
     return (
         <div className="space-y-6">
@@ -47,6 +48,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ items, movements, purchase
                             <button onClick={() => onNavigate?.('kardex', 'loans')} className="flex items-center gap-1.5 bg-yellow-50 border border-yellow-200 text-yellow-700 text-xs font-bold px-3 py-1.5 rounded-full hover:bg-yellow-100 transition-colors cursor-pointer">
                                 <span className="w-2 h-2 rounded-full bg-yellow-400 inline-block"></span>
                                 {alerts.overdueLoans} préstamo{alerts.overdueLoans > 1 ? 's' : ''} vencido{alerts.overdueLoans > 1 ? 's' : ''} (+7d) →
+                            </button>
+                        )}
+                        {alerts.pendingPickup > 0 && (
+                            <button onClick={() => onNavigate?.('pickup')} className="flex items-center gap-1.5 bg-orange-50 border border-orange-300 text-orange-700 text-xs font-bold px-3 py-1.5 rounded-full hover:bg-orange-100 transition-colors cursor-pointer">
+                                <span className="w-2 h-2 rounded-full bg-orange-500 inline-block animate-pulse"></span>
+                                📍 {alerts.pendingPickup} herramienta{alerts.pendingPickup > 1 ? 's' : ''} a recoger →
                             </button>
                         )}
                     </div>
