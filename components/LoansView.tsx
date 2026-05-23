@@ -60,14 +60,16 @@ export const LoansView: React.FC<LoansViewProps> = ({
     const warningLoans  = useMemo(() => filteredLoans.filter(m => !m.pendingPickup && getDays(m.timestamp) > 7 && getDays(m.timestamp) <= 14), [filteredLoans]);
     const normalLoans   = useMemo(() => filteredLoans.filter(m => !m.pendingPickup && getDays(m.timestamp) <= 7), [filteredLoans]);
 
-    // Letras únicas de los trabajadores presentes en la vista
-    const availableLetters = useMemo(() => {
+    const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+
+    // Letras que realmente tienen préstamos en la vista actual
+    const activeLetters = useMemo(() => {
         const letters = new Set<string>();
         for (const m of filteredLoans) {
             const name = getPersonName(m.personnelId);
             if (name) letters.add(name.charAt(0).toUpperCase());
         }
-        return [...letters].sort();
+        return letters;
     }, [filteredLoans]);
 
     const jumpToLetter = useCallback((letter: string) => {
@@ -234,18 +236,26 @@ export const LoansView: React.FC<LoansViewProps> = ({
                 )}
             </div>
 
-            {/* Índice alfabético lateral derecho */}
-            {availableLetters.length > 0 && (
+            {/* Índice alfabético lateral derecho — siempre A-Z completo */}
+            {filteredLoans.length > 0 && (
                 <div className="fixed right-1 top-1/2 -translate-y-1/2 flex flex-col items-center gap-0.5 z-30">
-                    {availableLetters.map(letter => (
-                        <button
-                            key={letter}
-                            onClick={() => jumpToLetter(letter)}
-                            className="w-5 h-5 flex items-center justify-center text-[10px] font-black text-indigo-600 hover:text-white hover:bg-indigo-500 rounded-full transition-all"
-                        >
-                            {letter}
-                        </button>
-                    ))}
+                    {ALPHABET.map(letter => {
+                        const active = activeLetters.has(letter);
+                        return (
+                            <button
+                                key={letter}
+                                onClick={() => active && jumpToLetter(letter)}
+                                disabled={!active}
+                                className={`w-5 h-5 flex items-center justify-center text-[10px] font-black rounded-full transition-all ${
+                                    active
+                                        ? 'text-indigo-600 hover:text-white hover:bg-indigo-500 cursor-pointer'
+                                        : 'text-gray-300 cursor-default'
+                                }`}
+                            >
+                                {letter}
+                            </button>
+                        );
+                    })}
                 </div>
             )}
 

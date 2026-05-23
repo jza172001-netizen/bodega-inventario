@@ -134,7 +134,7 @@ const CopilotView: React.FC<CopilotViewProps> = ({
             name: createName.trim(), inventoryType: createInvType,
             quantity: createQty, unit: createUnit.trim() || 'unidades',
             category: CATEGORY_BY_TYPE[createInvType], subCategory: 'General',
-            minStock: 0, price: 0,
+            minStock: 0,
         });
         addBot(`✅ **${it.name}** agregado al inventario (${createQty} ${createUnit}).`);
         closePanel();
@@ -167,7 +167,7 @@ const CopilotView: React.FC<CopilotViewProps> = ({
                 addBot(`✅ Trabajador **${p.name}** registrado.`);
             } else if (creation.type === 'item') {
                 if (creation.inventoryType) {
-                    const it = onCreateItem({ name: creation.name, inventoryType: creation.inventoryType, quantity: 0, unit: creation.unit, category: 'Sin clasificar', subCategory: 'General', minStock: 0, price: 0 });
+                    const it = onCreateItem({ name: creation.name, inventoryType: creation.inventoryType, quantity: 0, unit: creation.unit, category: 'Sin clasificar', subCategory: 'General', minStock: 0 });
                     addBot(`✅ Ítem **${it.name}** agregado como ${TYPE_LABELS[creation.inventoryType]}.`);
                 } else {
                     addBot(`¿Qué tipo de ítem es **"${creation.name}"**?`, { pendingItemCreate: { name: creation.name, unit: creation.unit } });
@@ -224,7 +224,7 @@ const CopilotView: React.FC<CopilotViewProps> = ({
         setSelections(prev => ({ ...prev, [msgId]: { ...(prev[msgId] ?? {}), [movIdx]: itemId } }));
 
     const handleInlineItemCreate = (msgId: string, movIdx: number, name: string, unit: string, type: InventoryType) => {
-        const newItem = onCreateItem({ name, inventoryType: type, quantity: 0, unit, category: 'Sin clasificar', subCategory: 'General', minStock: 0, price: 0 });
+        const newItem = onCreateItem({ name, inventoryType: type, quantity: 0, unit, category: 'Sin clasificar', subCategory: 'General', minStock: 0 });
         setSelection(msgId, movIdx, newItem.id);
     };
 
@@ -239,7 +239,7 @@ const CopilotView: React.FC<CopilotViewProps> = ({
     };
 
     const handlePendingItemType = (msgId: string, name: string, unit: string, type: InventoryType) => {
-        const it = onCreateItem({ name, inventoryType: type, quantity: 0, unit, category: 'Sin clasificar', subCategory: 'General', minStock: 0, price: 0 });
+        const it = onCreateItem({ name, inventoryType: type, quantity: 0, unit, category: 'Sin clasificar', subCategory: 'General', minStock: 0 });
         setMessages(prev => prev.map(m => m.id === msgId ? { ...m, confirmed: true } : m));
         addBot(`✅ Ítem **${it.name}** agregado como ${TYPE_LABELS[type]}.`);
     };
