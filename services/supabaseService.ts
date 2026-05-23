@@ -8,7 +8,7 @@ import { supabase } from '../lib/supabase';
 import {
     Item, Movement, Personnel, Project, PurchaseOrder,
     PurchaseOrderItem, AppUser, InventoryType, MovementType,
-    PurchaseOrderStatus, UserRole,
+    PurchaseOrderStatus, UserRole, ReturnCondition,
 } from '../types';
 
 // ─── HELPERS DE MAPEO ────────────────────────────────────────────────────────
@@ -25,6 +25,7 @@ function dbToItem(row: Record<string, unknown>): Item {
         price: Number(row.price),
         unit: row.unit as string,
         color: row.color as string | undefined,
+        requiresReturnNote: row.requires_return_note as boolean | undefined,
     };
 }
 
@@ -39,6 +40,7 @@ function itemToDb(item: Omit<Item, 'id'>): Record<string, unknown> {
         price: item.price,
         unit: item.unit,
         color: item.color ?? null,
+        requires_return_note: item.requiresReturnNote ?? false,
     };
 }
 
@@ -55,6 +57,8 @@ function dbToMovement(row: Record<string, unknown>): Movement {
         isLoan: row.is_loan as boolean,
         isReturned: row.is_returned as boolean,
         pendingPickup: row.pending_pickup as boolean | undefined,
+        returnCondition: row.return_condition as ReturnCondition | undefined,
+        returnNotes: row.return_notes as string | undefined,
     };
 }
 
@@ -70,6 +74,8 @@ function movementToDb(m: Omit<Movement, 'id'>): Record<string, unknown> {
         is_loan: m.isLoan ?? false,
         is_returned: m.isReturned ?? false,
         pending_pickup: m.pendingPickup ?? false,
+        return_condition: m.returnCondition ?? null,
+        return_notes: m.returnNotes ?? null,
     };
 }
 
@@ -172,11 +178,11 @@ export async function deleteMovement(id: string): Promise<void> {
     if (error) throw error;
 }
 
-export async function markMovementReturned(id: string): Promise<void> {
-    const { error } = await supabase
-        .from('movements')
-        .update({ is_returned: true })
-        .eq('id', id);
+export async function markMovementReturned(id: string, condition?: ReturnCondition, notes?: string): Promise<void> {
+    const update: Record<string, unknown> = { is_returned: true };
+    if (condition) update.return_condition = condition;
+    if (notes) update.return_notes = notes;
+    const { error } = await supabase.from('movements').update(update).eq('id', id);
     if (error) throw error;
 }
 

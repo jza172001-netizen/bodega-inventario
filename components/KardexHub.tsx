@@ -5,8 +5,9 @@ import { MovementsView } from './MovementsView';
 import { LoansView } from './LoansView';
 import { InventoryView } from './InventoryView';
 import { ProjectsView } from './ProjectsView';
+import { TraceabilityView } from './TraceabilityView';
 
-type KardexTab = 'movements' | 'loans' | 'inventory' | 'projects';
+type KardexTab = 'movements' | 'loans' | 'inventory' | 'projects' | 'traceability';
 
 interface KardexHubProps {
     // data
@@ -38,10 +39,11 @@ interface KardexHubProps {
 }
 
 const TABS: Array<{ id: KardexTab; label: string; icon: string }> = [
-    { id: 'movements', label: 'Historial', icon: '📋' },
-    { id: 'loans',     label: 'Préstamos', icon: '🔑' },
-    { id: 'inventory', label: 'Inventario', icon: '📦' },
-    { id: 'projects',  label: 'Proyectos',  icon: '🏗' },
+    { id: 'movements',    label: 'Historial',      icon: '📋' },
+    { id: 'loans',        label: 'Préstamos',      icon: '🔑' },
+    { id: 'inventory',    label: 'Inventario',     icon: '📦' },
+    { id: 'projects',     label: 'Proyectos',      icon: '🏗' },
+    { id: 'traceability', label: 'Trazabilidad',   icon: '🔍' },
 ];
 
 const INV_TYPES: Array<{ type: InventoryType | null; label: string }> = [
@@ -161,6 +163,15 @@ export const KardexHub: React.FC<KardexHubProps> = ({
                     onGoBack={onGoBack}
                     userRole={userRole}
                     showEconomicValues={showEconomicValues}
+                />
+            )}
+
+            {activeTab === 'traceability' && (
+                <TraceabilityView
+                    movements={movements}
+                    items={items}
+                    personnel={personnel}
+                    projects={projects}
                 />
             )}
         </div>

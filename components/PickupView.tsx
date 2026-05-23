@@ -1,7 +1,8 @@
 
 import React, { useMemo, useState } from 'react';
-import { Movement, Item, Personnel, Project, InventoryType } from '../types';
+import { Movement, Item, Personnel, Project, InventoryType, ReturnCondition } from '../types';
 import { buildConsolidatedPickupUrl, MELLO_NAME } from '../services/whatsappService';
+import { ReturnToolModal } from './ReturnToolModal';
 
 interface Props {
     movements: Movement[];
@@ -9,7 +10,7 @@ interface Props {
     personnel: Personnel[];
     projects: Project[];
     onMarkPendingPickup: (movementId: string, pending: boolean) => void;
-    onReturnItem: (movementId: string) => void;
+    onReturnItem: (movementId: string, condition?: string, notes?: string) => void;
 }
 
 const INV_FILTERS = [
@@ -24,6 +25,7 @@ export const PickupView: React.FC<Props> = ({
     movements, items, personnel, projects, onMarkPendingPickup, onReturnItem,
 }) => {
     const [typeFilter, setTypeFilter] = useState<string>('');
+    const [returningMovement, setReturningMovement] = useState<Movement | null>(null);
 
     const itemMap    = useMemo(() => new Map(items.map(i => [i.id, i])), [items]);
     const personMap  = useMemo(() => new Map(personnel.map(p => [p.id, p])), [personnel]);
@@ -140,7 +142,7 @@ export const PickupView: React.FC<Props> = ({
                                                 title="Quitar de la lista">
                                                 ✕
                                             </button>
-                                            <button onClick={() => { if (window.confirm('¿Marcar como recogida y devuelta?')) onReturnItem(m.id); }}
+                                            <button onClick={() => setReturningMovement(m)}
                                                 className="text-xs px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-all">
                                                 ✓ Recogida
                                             </button>
@@ -156,6 +158,23 @@ export const PickupView: React.FC<Props> = ({
             <p className="text-[10px] text-gray-400 text-center">
                 Toca "📲 Avisar a {MELLO_NAME}" para enviar la lista completa por WhatsApp.
             </p>
+
+            {returningMovement && (() => {
+                const item = itemMap.get(returningMovement.itemId);
+                if (!item) return null;
+                return (
+                    <ReturnToolModal
+                        item={item}
+                        personName={personMap.get(returningMovement.personnelId ?? '')?.name ?? 'Sin asignar'}
+                        movementIds={[returningMovement.id]}
+                        onConfirm={(ids, condition, notes) => {
+                            ids.forEach(id => onReturnItem(id, condition, notes));
+                            setReturningMovement(null);
+                        }}
+                        onClose={() => setReturningMovement(null)}
+                    />
+                );
+            })()}
         </div>
     );
 };

@@ -34,6 +34,8 @@ export enum PurchaseOrderStatus {
     CANCELLED = 'Cancelado',
 }
 
+export type ReturnCondition = 'good' | 'worn' | 'incomplete' | 'damaged' | 'needs_maintenance';
+
 export interface Item {
     id: string;
     name: string;
@@ -45,6 +47,7 @@ export interface Item {
     price?: number;
     unit: string;
     color?: string;
+    requiresReturnNote?: boolean;
 }
 
 export interface Project {
@@ -65,7 +68,9 @@ export interface Movement {
     projectId?: string; // Link movement to a project
     isLoan?: boolean;
     isReturned?: boolean;
-    pendingPickup?: boolean; // Herramienta quedó en otro lugar, pendiente de ir a buscar
+    pendingPickup?: boolean;
+    returnCondition?: ReturnCondition;
+    returnNotes?: string;
 }
 
 export interface Personnel {

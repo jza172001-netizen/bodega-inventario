@@ -217,9 +217,9 @@ const App: React.FC = () => {
         withSync(db.deleteMovement(id));
     };
 
-    const handleReturnItem = (id: string) => {
-        setMovements(prev => prev.map(m => m.id === id ? { ...m, isReturned: true } : m));
-        withSync(db.markMovementReturned(id));
+    const handleReturnItem = (id: string, condition?: string, notes?: string) => {
+        setMovements(prev => prev.map(m => m.id === id ? { ...m, isReturned: true, returnCondition: condition as import('./types').ReturnCondition | undefined, returnNotes: notes } : m));
+        withSync(db.markMovementReturned(id, condition as import('./types').ReturnCondition | undefined, notes));
     };
 
     const handleMarkPendingPickup = (id: string, pending: boolean) => {

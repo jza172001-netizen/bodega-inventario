@@ -1,14 +1,15 @@
 
 import React, { useMemo, useState, useRef, useCallback } from 'react';
-import { Movement, Item, Personnel, UserRole, InventoryType } from '../types';
+import { Movement, Item, Personnel, UserRole, InventoryType, ReturnCondition } from '../types';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
 import { ClockIcon } from './icons/ClockIcon';
+import { ReturnToolModal } from './ReturnToolModal';
 
 interface LoansViewProps {
     movements: Movement[];
     items: Item[];
     personnel: Personnel[];
-    onReturnItem: (movementId: string) => void;
+    onReturnItem: (movementId: string, condition?: string, notes?: string) => void;
     onMarkPendingPickup: (movementId: string, pending: boolean) => void;
     onGoBack: () => void;
     userRole?: UserRole;
@@ -28,6 +29,7 @@ export const LoansView: React.FC<LoansViewProps> = ({
     const isOwner = userRole === UserRole.OWNER;
     const [search, setSearch]     = useState('');
     const [typeFilter, setTypeFilter] = useState<string>('');
+    const [returningLoan, setReturningLoan] = useState<Movement | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
 
     const itemMap   = useMemo(() => new Map(items.map(i => [i.id, i])), [items]);
@@ -73,8 +75,13 @@ export const LoansView: React.FC<LoansViewProps> = ({
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, []);
 
-    const handleReturn = (id: string) => {
-        if (window.confirm('¿Marcar como devuelta? Esta acción no se puede deshacer.')) onReturnItem(id);
+    const handleReturn = (loan: Movement) => {
+        setReturningLoan(loan);
+    };
+
+    const confirmReturn = (ids: string[], condition: ReturnCondition, notes: string) => {
+        ids.forEach(id => onReturnItem(id, condition, notes));
+        setReturningLoan(null);
     };
 
     const LoanCard: React.FC<{ loan: Movement }> = ({ loan }) => {
@@ -99,7 +106,7 @@ export const LoansView: React.FC<LoansViewProps> = ({
                 </div>
                 <div className="flex gap-2">
                     {isOwner && (
-                        <button onClick={() => handleReturn(loan.id)}
+                        <button onClick={() => handleReturn(loan)}
                             className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all">
                             ✓ Devuelta
                         </button>
@@ -237,6 +244,20 @@ export const LoansView: React.FC<LoansViewProps> = ({
                     ))}
                 </div>
             )}
+
+            {returningLoan && (() => {
+                const item = itemMap.get(returningLoan.itemId);
+                if (!item) return null;
+                return (
+                    <ReturnToolModal
+                        item={item}
+                        personName={getPersonName(returningLoan.personnelId)}
+                        movementIds={[returningLoan.id]}
+                        onConfirm={confirmReturn}
+                        onClose={() => setReturningLoan(null)}
+                    />
+                );
+            })()}
         </div>
     );
 };

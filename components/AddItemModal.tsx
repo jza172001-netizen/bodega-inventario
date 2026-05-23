@@ -19,6 +19,7 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onA
     const [minStock, setMinStock] = useState(10);
     const [unit, setUnit] = useState('unidades');
     const [color, setColor] = useState('');
+    const [requiresReturnNote, setRequiresReturnNote] = useState(false);
 
     const UNIT_OPTIONS = ['unidades', 'pares', 'caja', 'bolsa', 'rollo', 'pliego', 'litro', 'ml', 'galón', 'kg', 'g', 'ton', 'm', 'cm', 'mm', 'km', 'm²', 'm³', 'yarda'];
 
@@ -54,7 +55,8 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onA
             quantity,
             minStock,
             unit: unit.trim(),
-            color: color.trim() || undefined
+            color: color.trim() || undefined,
+            requiresReturnNote: requiresReturnNote || undefined,
         });
         
         // The form state will reset automatically when the modal is closed and re-opened.
@@ -117,6 +119,21 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onA
                             <input type="text" value={color} onChange={e => setColor(e.target.value)} className="w-full input-style" placeholder="Ej: Rojo" />
                         </div>
                     </div>
+                    {(inventoryType === 'Herramienta Manual' || inventoryType === 'Herramienta Eléctrica') && (
+                        <div className="flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                            <input
+                                type="checkbox"
+                                id="requiresReturnNoteAdd"
+                                checked={requiresReturnNote}
+                                onChange={e => setRequiresReturnNote(e.target.checked)}
+                                className="w-4 h-4 accent-amber-600 cursor-pointer"
+                            />
+                            <label htmlFor="requiresReturnNoteAdd" className="text-sm text-amber-800 font-semibold cursor-pointer">
+                                Exigir nota detallada al devolver
+                                <span className="block text-xs font-normal text-amber-600">Para taladros, pulidoras y herramientas con accesorios</span>
+                            </label>
+                        </div>
+                    )}
                     <div className="flex justify-end space-x-3 pt-4">
                         <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Cancelar</button>
                         <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Guardar Artículo</button>

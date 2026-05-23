@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Personnel, Movement, Item, Project, MovementType, InventoryType } from '../types';
+import { Personnel, Movement, Item, Project, MovementType, InventoryType, ReturnCondition } from '../types';
+import { ReturnToolModal } from './ReturnToolModal';
 
 interface Props {
     person: Personnel;
@@ -7,7 +8,7 @@ interface Props {
     items: Item[];
     projects: Project[];
     allPersonnel?: Personnel[];
-    onReturnLoan?: (movementId: string) => void;
+    onReturnLoan?: (movementId: string, condition?: string, notes?: string) => void;
     onMarkPendingPickup?: (movementId: string, pending: boolean) => void;
     onAssignProject?: (movementId: string, projectId: string) => void;
     onCreateProject?: (name: string) => Project;
@@ -17,6 +18,16 @@ interface Props {
 
 type Tab = 'manual' | 'electric' | 'consumo' | 'epp';
 type ActionPanel = 'project' | 'transfer' | null;
+
+type LoanGroup = {
+    itemId: string;
+    totalQty: number;
+    movementIds: string[];
+    date: Date;
+    workers: string[];
+    projectId?: string;
+    pendingPickup: boolean;
+};
 
 const currentYear = new Date().getFullYear();
 const daysSince = (d: Date) => Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
@@ -28,6 +39,7 @@ export const PersonnelDetailModal: React.FC<Props> = ({
 }) => {
     const [tab, setTab] = useState<Tab>('manual');
     const [openPanel, setOpenPanel] = useState<{ key: string; type: ActionPanel }>({ key: '', type: null });
+    const [returningGroup, setReturningGroup] = useState<LoanGroup | null>(null);
     const [newProjectName, setNewProjectName] = useState('');
     const [selectedProject, setSelectedProject] = useState('');
     const [selectedPerson, setSelectedPerson] = useState('');
@@ -38,16 +50,6 @@ export const PersonnelDetailModal: React.FC<Props> = ({
     );
 
     const itemByType = (type: InventoryType) => new Set(items.filter(i => i.inventoryType === type).map(i => i.id));
-
-    type LoanGroup = {
-        itemId: string;
-        totalQty: number;
-        movementIds: string[];
-        date: Date;
-        workers: string[];
-        projectId?: string;
-        pendingPickup: boolean;
-    };
 
     const groupLoans = (loanMovements: Movement[]): LoanGroup[] => {
         const map = new Map<string, LoanGroup>();
@@ -131,10 +133,12 @@ export const PersonnelDetailModal: React.FC<Props> = ({
     ];
 
     const handleReturn = (g: LoanGroup) => {
-        const fecha = g.date.toLocaleDateString('es-CO');
-        if (window.confirm(`¿Confirmar devolución de "${itemName(g.itemId)}" (${fecha})?`)) {
-            g.movementIds.forEach(id => onReturnLoan?.(id));
-        }
+        setReturningGroup(g);
+    };
+
+    const confirmReturn = (ids: string[], condition: ReturnCondition, notes: string) => {
+        ids.forEach(id => onReturnLoan?.(id, condition, notes));
+        setReturningGroup(null);
     };
 
     const handlePickupToggle = (g: LoanGroup) => {
@@ -437,6 +441,16 @@ export const PersonnelDetailModal: React.FC<Props> = ({
                     {tab === 'epp' && <ConsumptionTable rows={eppYear} />}
                 </div>
             </div>
+
+            {returningGroup && (
+                <ReturnToolModal
+                    item={items.find(i => i.id === returningGroup.itemId) ?? { id: '', name: itemName(returningGroup.itemId), requiresReturnNote: false } as Item}
+                    personName={person.name}
+                    movementIds={returningGroup.movementIds}
+                    onConfirm={confirmReturn}
+                    onClose={() => setReturningGroup(null)}
+                />
+            )}
         </div>
     );
 };
