@@ -17,7 +17,7 @@ export const initModel = async (onProgress?: (msg: string) => void): Promise<boo
     modelLoading = true;
     try {
         onProgress?.('Cargando motor IA open-source...');
-        // @ts-ignore — CDN import, no types available
+        // @ts-ignore
         const { pipeline, env } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
         env.allowLocalModels = false;
         env.useBrowserCache = true;
@@ -37,11 +37,11 @@ const ASSETS = [InventoryType.HAND_TOOL, InventoryType.ELECTRICAL_TOOL];
 
 const detectIntent = (msg: string): string => {
     if (/stock\s*bajo|agotad|falta|reponer/i.test(msg)) return 'stock_bajo';
-    if (/pr[eé]stamo|prestado|quién.*tiene/i.test(msg)) return 'prestamos';
+    if (/pr[eé]stamo|prestado|qui[eé]n.*tiene/i.test(msg)) return 'prestamos';
     if (/merma|p[eé]rdida|desperdicio/i.test(msg)) return 'mermas';
-    if (/gasto|inversi[oó]n|costo|cuánto.*vale/i.test(msg)) return 'gastos';
+    if (/gasto|inversi[oó]n|costo|cu[aá]nto.*vale/i.test(msg)) return 'gastos';
     if (/movimiento|historial|[úu]ltimo/i.test(msg)) return 'movimientos';
-    if (/más\s*usado|mayor.*consumo|top/i.test(msg)) return 'mas_usado';
+    if (/m[aá]s\s*usado|mayor.*consumo|top/i.test(msg)) return 'mas_usado';
     if (/compra|orden|proveedor/i.test(msg)) return 'compras';
     return 'general';
 };
@@ -94,8 +94,6 @@ export const askCopilot = async (message: string, ctx: WarehouseContext): Promis
 
 export const SUGGESTED_PROMPTS = ['Que materiales tienen stock bajo?','Cuanto hemos gastado?','Que herramientas estan prestadas?','Cuales son los mas consumidos?','Muestra los ultimos movimientos','Hay mermas este mes?','Ordenes de compra pendientes?'];
 
-// ─── EXIT INTENT PARSING ─────────────────────────────────────────────────────
-
 export interface PendingMovement {
     rawName: string;
     matchedItem: Item | null;
@@ -115,8 +113,6 @@ export interface ParsedExit {
     rawPersonnel: string;
 }
 
-// ─── CREATION INTENT ─────────────────────────────────────────────────────────
-
 export type CreationIntent =
     | { type: 'project'; name: string }
     | { type: 'personnel'; name: string }
@@ -126,21 +122,16 @@ const CREATION_VERBS = /(?:crea|cre[aá]r?|a[ñn]ade|agrega|registra|nuevo|nueva
 
 export function parseCreationIntent(text: string): CreationIntent | null {
     if (!CREATION_VERBS.test(text)) return null;
-
     const t = text.replace(CREATION_VERBS, '').trim();
-
     const projM = t.match(/^(?:el\s+|la\s+)?proyecto\s+(.+)/i);
     if (projM) return { type: 'project', name: projM[1].trim() };
-
     const persM = t.match(/^(?:el\s+|al?\s+)?(?:trabajador|operario|empleado|personal)\s+(.+)/i);
     if (persM) return { type: 'personnel', name: persM[1].trim() };
-
     const itemM = t.match(/^(?:el\s+|la\s+|un\s+|una\s+)?(?:[íi]tem|material|herramienta|elemento|producto|insumo|equipo)\s+(.+)/i);
     if (itemM) {
         const name = itemM[1].trim();
         return { type: 'item', name, inventoryType: guessInventoryType(name), unit: guessUnit(name) };
     }
-
     return null;
 }
 
@@ -148,7 +139,7 @@ function guessInventoryType(name: string): InventoryType | undefined {
     const n = name.toLowerCase();
     if (/taladro|esmeril|sierra|amoladora|compresor|vibrador|pulidora/.test(n)) return InventoryType.ELECTRICAL_TOOL;
     if (/llave|martillo|destornillador|alicate|cincel|pala|serrucho|palustre/.test(n)) return InventoryType.HAND_TOOL;
-    if (/casco|guante|gafa|arnés|chaleco|tapaoido|botas?\s+de\s+seguridad|overol/.test(n)) return InventoryType.PPE;
+    if (/casco|guante|gafa|arn[eé]s|chaleco|tapaoido|botas?\s+de\s+seguridad|overol/.test(n)) return InventoryType.PPE;
     return undefined;
 }
 
@@ -156,21 +147,16 @@ function guessUnit(name: string): string {
     const n = name.toLowerCase();
     if (/metro|tuber|cable|manguera/.test(n)) return 'm';
     if (/bolsa|saco|bulto/.test(n)) return 'bolsa';
-    if (/litro|galón|galon/.test(n)) return 'lt';
+    if (/litro|gal[oó]n/.test(n)) return 'lt';
     if (/kg|kilo/.test(n)) return 'kg';
     return 'und';
 }
 
 const EXIT_VERBS = /\b(saq[uú][eé]|sali[oó]|salio|sacamos|sacaron|llev[oó]|llevamos|retir[eé]|retire|retiramos|gastamos|gast[oó]|us[eé]|usamos|entreg[oó]|entregamos|salida[s]?)\b/i;
-
 const UNIT_PAT = /^(.+?)\s+(und|kg|m|bolsas?|pares?|cajas?|litros?|lt|gl|rollos?|metros?|baldes?|canecas?|sacos?|paq(?:uetes?)?|uni(?:dades?)?|lb|ton|ml|cm|mm|hojas?)$/i;
 
 function normalize(s: string): string {
-    return s.toLowerCase()
-        .normalize('NFD').replace(/[̀-ͯ]/g, '')
-        .replace(/[^\w\s]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
+    return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 function levenshtein(a: string, b: string): number {
@@ -186,10 +172,8 @@ function levenshtein(a: string, b: string): number {
 function fuzzyMatchItems(query: string, items: Item[]): { matched: Item | null; candidates: Item[] } {
     const q = normalize(query);
     const qWords = q.split(' ').filter(w => w.length > 2);
-
     const exact = items.find(i => normalize(i.name) === q);
     if (exact) return { matched: exact, candidates: [] };
-
     const scored = items.map(item => {
         const n = normalize(item.name);
         const nWords = n.split(' ').filter(w => w.length > 2);
@@ -201,11 +185,9 @@ function fuzzyMatchItems(query: string, items: Item[]): { matched: Item | null; 
         score += fuzzy * 15;
         return { item, score };
     }).filter(x => x.score > 0).sort((a, b) => b.score - a.score);
-
     if (!scored.length) return { matched: null, candidates: [] };
     if (scored.length === 1) return { matched: scored[0].item, candidates: [] };
-    if (scored[0].score >= 60 && scored[0].score > scored[1].score * 1.4)
-        return { matched: scored[0].item, candidates: [] };
+    if (scored[0].score >= 60 && scored[0].score > scored[1].score * 1.4) return { matched: scored[0].item, candidates: [] };
     return { matched: null, candidates: scored.slice(0, 3).map(s => s.item) };
 }
 
@@ -219,8 +201,6 @@ function fuzzyMatchList<T extends { name: string }>(query: string, list: T[]): {
     if (hits.length > 1) return { matched: null, candidates: hits.slice(0, 3) };
     return { matched: null, candidates: [] };
 }
-
-// ─── BULK ADD INTENT ─────────────────────────────────────────────────────────
 
 export interface BulkAddItem {
     rawName: string;
@@ -246,25 +226,15 @@ const ADD_VERBS = /\b(recib[ií]|lleg[oó]|entraron|tenemos|hay|subir|ingresa|co
 
 function guessInventoryTypeFull(name: string): InventoryType {
     const n = name.toLowerCase();
-    if (/taladro|esmeril|sierra|amoladora|compresor|vibrador|pulidora|soldador|generador|cortador|rotomartillo|hidrolavador|bomba|motor eléctrico/.test(n))
-        return InventoryType.ELECTRICAL_TOOL;
-    if (/llave|martillo|destornillador|alicate|cincel|pala|pico|pica|serrucho|palustre|barra|hacha|palín|rastrillo|carretilla|flexómetro|plomada|nivel|tenaza|tijera\s+de\s+corte/.test(n))
-        return InventoryType.HAND_TOOL;
-    if (/casco|guante|gafa|arnés|chaleco|tapaoido|bota.*seguridad|overol|mascarilla|respirador|careta|rodillera|faja/.test(n))
-        return InventoryType.PPE;
+    if (/taladro|esmeril|sierra|amoladora|compresor|vibrador|pulidora|soldador|generador|cortador|rotomartillo|hidrolavador/.test(n)) return InventoryType.ELECTRICAL_TOOL;
+    if (/llave|martillo|destornillador|alicate|cincel|pala|pico|pica|serrucho|palustre|barra|hacha|pal[ií]n|rastrillo|carretilla|flex[oó]metro|plomada|nivel|tenaza/.test(n)) return InventoryType.HAND_TOOL;
+    if (/casco|guante|gafa|arn[eé]s|chaleco|tapaoido|bota.*seguridad|overol|mascarilla|respirador|careta|rodillera|faja/.test(n)) return InventoryType.PPE;
     return InventoryType.SINGLE_USE;
 }
 
-export function parseBulkAddIntent(
-    text: string,
-    items: Item[],
-    projects: Project[],
-    personnel: Personnel[]
-): ParsedBulkAdd {
+export function parseBulkAddIntent(text: string, items: Item[], projects: Project[], personnel: Personnel[]): ParsedBulkAdd {
     const noResult: ParsedBulkAdd = { isBulkAdd: false, items: [], matchedPersonnel: null, rawPersonnel: '', personnelCandidates: [], matchedProject: null, rawProject: '', projectCandidates: [] };
-
     if (EXIT_VERBS.test(text)) return noResult;
-
     const hasList = /\b\d+\s+\w{3,}.*(?:,|\s+y\s+)\s*\d+\s+\w{3,}/i.test(text);
     const hasAdd = ADD_VERBS.test(text);
     if (!hasList && !hasAdd) return noResult;
@@ -275,10 +245,8 @@ export function parseBulkAddIntent(
 
     body = body.replace(/(?:para\s+(?:el\s+)?proyectos?\s+|en\s+(?:el\s+)?proyectos?\s+)([^,\n]+?)(?=\s+(?:trabajador|operario)|,|\s*$)/i,
         (_, p) => { rawProject = p.trim(); return ''; });
-
     body = body.replace(/(?:(?:al?\s+)?(?:trabajador|operario)\s+)([A-Za-záéíóúÁÉÍÓÚñÑ]+(?:\s+[A-Za-záéíóúÁÉÍÓÚñÑ]+)?)/i,
         (_, p) => { rawPerson = p.trim(); return ''; });
-
     body = body.replace(ADD_VERBS, '').replace(/[:;]/g, ' ').trim();
 
     const parts = body.split(/\s+(?:y|e)\s+|,\s*/).map(p => p.trim()).filter(Boolean);
@@ -303,24 +271,10 @@ export function parseBulkAddIntent(
     const projResult = fuzzyMatchList(rawProject, projects);
     const persResult = fuzzyMatchList(rawPerson, personnel);
 
-    return {
-        isBulkAdd: true,
-        items: bulkItems,
-        matchedPersonnel: persResult.matched,
-        rawPersonnel: rawPerson,
-        personnelCandidates: persResult.candidates,
-        matchedProject: projResult.matched,
-        rawProject,
-        projectCandidates: projResult.candidates,
-    };
+    return { isBulkAdd: true, items: bulkItems, matchedPersonnel: persResult.matched, rawPersonnel: rawPerson, personnelCandidates: persResult.candidates, matchedProject: projResult.matched, rawProject, projectCandidates: projResult.candidates };
 }
 
-export function parseExitIntent(
-    text: string,
-    items: Item[],
-    projects: Project[],
-    personnel: Personnel[]
-): ParsedExit {
+export function parseExitIntent(text: string, items: Item[], projects: Project[], personnel: Personnel[]): ParsedExit {
     if (!EXIT_VERBS.test(text)) {
         return { isExitIntent: false, movements: [], matchedProject: null, projectCandidates: [], rawProject: '', matchedPersonnel: null, personnelCandidates: [], rawPersonnel: '' };
     }
@@ -329,20 +283,15 @@ export function parseExitIntent(
     let rawProject = '';
     let rawPerson = '';
 
-    // Extract "para proyecto X" or "en proyecto X"
     body = body.replace(/(?:para\s+(?:el\s+)?proyectos?\s+|en\s+(?:el\s+)?proyectos?\s+)([^,\n]+?)(?=\s+(?:trabajador|operario)|,|\s*$)/i,
         (_, p) => { rawProject = p.trim(); return ''; });
-
-    // Extract "trabajador X" or "operario X"
     body = body.replace(/(?:(?:al?\s+)?trabajador\s+|(?:al?\s+)?operario\s+)([A-Za-záéíóúÁÉÍÓÚñÑ]+(?:\s+[A-Za-záéíóúÁÉÍÓÚñÑ]+)?)/i,
         (_, p) => { rawPerson = p.trim(); return ''; });
-
-    // Remove exit verb
     body = body.replace(EXIT_VERBS, '').replace(/[:;]/g, ' ').trim();
 
     const parts = body.split(/\s+(?:y|e)\s+|,\s*/).map(p => p.trim()).filter(Boolean);
-
     const movements: PendingMovement[] = [];
+
     for (const part of parts) {
         const numMatch = part.match(/^(\d+(?:[.,]\d+)?|un[ao]?)\s+(.{2,})/i);
         let quantity = 1;
@@ -355,7 +304,6 @@ export function parseExitIntent(
         let unit = 'und';
         const unitM = namePart.match(UNIT_PAT);
         if (unitM) { namePart = unitM[1].trim(); unit = unitM[2].toLowerCase(); }
-
         if (namePart.length < 2) continue;
         const { matched, candidates } = fuzzyMatchItems(namePart, items);
         movements.push({ rawName: namePart, matchedItem: matched, candidates, quantity, unit });
@@ -364,14 +312,5 @@ export function parseExitIntent(
     const projResult = fuzzyMatchList(rawProject, projects);
     const persResult = fuzzyMatchList(rawPerson, personnel);
 
-    return {
-        isExitIntent: true,
-        movements,
-        matchedProject: projResult.matched,
-        projectCandidates: projResult.candidates,
-        rawProject,
-        matchedPersonnel: persResult.matched,
-        personnelCandidates: persResult.candidates,
-        rawPersonnel: rawPerson,
-    };
+    return { isExitIntent: true, movements, matchedProject: projResult.matched, projectCandidates: projResult.candidates, rawProject, matchedPersonnel: persResult.matched, personnelCandidates: persResult.candidates, rawPersonnel: rawPerson };
 }

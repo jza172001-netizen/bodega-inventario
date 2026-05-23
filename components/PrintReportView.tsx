@@ -4,281 +4,319 @@ import { Item, Movement, MovementType, InventoryType } from '../types';
 interface PrintReportViewProps {
     items: Item[];
     movements: Movement[];
-    personnel: Array<{ id: string; name: string }>;
+    personnel: Array<{ id: string; name: string; phone?: string }>;
+    projects?: Array<{ id: string; name: string }>;
     periodLabel: string;
     fromDate: Date;
     toDate: Date;
 }
 
-const formatCOP = (v: number) =>
-    new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(v);
+const fmtLong  = (d: Date) => new Intl.DateTimeFormat('es-CO', { day: '2-digit', month: 'long', year: 'numeric' }).format(d);
+const fmtShort = (d: Date) => new Intl.DateTimeFormat('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(d);
 
-const fmtLong = (d: Date) =>
-    new Intl.DateTimeFormat('es-CO', { day: '2-digit', month: 'long', year: 'numeric' }).format(d);
+const BLUE = '#1d4ed8';
+const DARK = '#111827';
+const GRAY = '#6b7280';
+const LINE = '#e5e7eb';
 
-const fmtShort = (d: Date) =>
-    new Intl.DateTimeFormat('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(d);
-
-const TYPE_META: Record<string, { label: string; bg: string; color: string }> = {
-    PURCHASE:  { label: 'Compra',  bg: '#f0fdf4', color: '#16a34a' },
-    CHECK_IN:  { label: 'Entrada', bg: '#eff6ff', color: '#2563eb' },
-    CHECK_OUT: { label: 'Salida',  bg: '#fff7ed', color: '#ea580c' },
-    WASTE:     { label: 'Merma',   bg: '#fef2f2', color: '#dc2626' },
+const INV_LABEL: Record<string, string> = {
+    [InventoryType.HAND_TOOL]: 'H. Manual',
+    [InventoryType.ELECTRICAL_TOOL]: 'H. Eléctrica',
+    [InventoryType.PPE]: 'Seguridad',
+    [InventoryType.SINGLE_USE]: 'Consumible',
 };
 
 export const PrintReportView = React.forwardRef<HTMLDivElement, PrintReportViewProps>(
-    ({ items, movements, personnel, periodLabel, fromDate, toDate }, ref) => {
-        const personnelMap = useMemo(() => new Map(personnel.map(p => [p.id, p.name])), [personnel]);
+    ({ items, movements, personnel, projects, periodLabel, fromDate, toDate }, ref) => {
+        const personnelMap = useMemo(() => new Map(personnel.map(p => [p.id, p])), [personnel]);
+        const projectMap   = useMemo(() => new Map((projects ?? []).map(p => [p.id, p.name])), [projects]);
+        const itemMap      = useMemo(() => new Map(items.map(i => [i.id, i])), [items]);
 
         const filtered = useMemo(() =>
-            movements.filter(m => {
-                const t = new Date(m.timestamp);
-                return t >= fromDate && t <= toDate;
-            }),
+            movements.filter(m => { const t = new Date(m.timestamp); return t >= fromDate && t <= toDate; }),
         [movements, fromDate, toDate]);
 
+        // ── KPIs ──
         const kpis = useMemo(() => {
-            const assetsValue = items.reduce((s, i) =>
-                (i.inventoryType === InventoryType.HAND_TOOL || i.inventoryType === InventoryType.ELECTRICAL_TOOL)
-                    ? s + i.quantity * i.price : s, 0);
-            const inventoryValue = items.reduce((s, i) =>
-                (i.inventoryType === InventoryType.SINGLE_USE || i.inventoryType === InventoryType.PPE)
-                    ? s + i.quantity * i.price : s, 0);
-            const lowStock = items.filter(i => i.quantity <= i.minStock && i.minStock > 0).length;
-            const checkOuts = filtered.filter(m => m.type === MovementType.CHECK_OUT).length;
-            const checkIns  = filtered.filter(m => m.type === MovementType.CHECK_IN || m.type === MovementType.PURCHASE).length;
-            const waste = filtered.filter(m => m.type === MovementType.WASTE).reduce((s, m) => {
-                const it = items.find(i => i.id === m.itemId);
-                return s + (it ? it.price * m.quantity : 0);
-            }, 0);
-            return { assetsValue, inventoryValue, lowStock, checkOuts, checkIns, waste, total: filtered.length };
-        }, [items, filtered]);
+            const activeLoans = movements.filter(m => m.isLoan && !m.isReturned);
+            const checkOuts = filtered.filter(m => m.type === MovementType.CHECK_OUT).reduce((s, m) => s + m.quantity, 0);
+            const checkIns  = filtered.filter(m => m.type === MovementType.CHECK_IN || m.type === MovementType.PURCHASE).reduce((s, m) => s + m.quantity, 0);
+            const lowStock  = items.filter(i => i.quantity <= i.minStock && i.minStock > 0).length;
+            return { totalItems: items.length, activeLoanCount: activeLoans.length, activeLoans, checkOuts, checkIns, lowStock, periodMovements: filtered.length };
+        }, [items, movements, filtered]);
 
-        const topConsumed = useMemo(() => {
-            const totals: Record<string, number> = {};
-            filtered.filter(m => m.type === MovementType.CHECK_OUT)
-                .forEach(m => { totals[m.itemId] = (totals[m.itemId] || 0) + m.quantity; });
-            const max = Math.max(...Object.values(totals), 1);
-            return Object.entries(totals)
-                .sort((a, b) => b[1] - a[1])
-                .slice(0, 10)
-                .map(([id, qty]) => ({ item: items.find(i => i.id === id), qty, pct: (qty / max) * 100 }))
-                .filter(x => x.item);
-        }, [filtered, items]);
+        // ── PERSONAL EN PRÉSTAMO ──
+        const personnelLoans = useMemo(() => {
+            const map = new Map<string, { person: { id: string; name: string; phone?: string }; loans: Movement[] }>();
+            kpis.activeLoans.forEach(m => {
+                if (!m.personnelId) return;
+                const person = personnelMap.get(m.personnelId);
+                if (!person) return;
+                if (!map.has(m.personnelId)) map.set(m.personnelId, { person, loans: [] });
+                map.get(m.personnelId)!.loans.push(m);
+            });
+            return [...map.values()].sort((a, b) => b.loans.length - a.loans.length);
+        }, [kpis.activeLoans, personnelMap]);
 
-        const lowStockItems = useMemo(() =>
-            items.filter(i => i.minStock > 0).map(i => ({ ...i, ratio: i.quantity / i.minStock }))
-                .sort((a, b) => a.ratio - b.ratio).slice(0, 10),
-        [items]);
+        // ── HERRAMIENTAS CAPITAL (HAND + ELECTRICAL) con estado ──
+        const capitalItems = useMemo(() =>
+            items
+                .filter(i => i.inventoryType === InventoryType.HAND_TOOL || i.inventoryType === InventoryType.ELECTRICAL_TOOL)
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map(item => {
+                    const loan = kpis.activeLoans.find(m => m.itemId === item.id);
+                    const holder = loan ? personnelMap.get(loan.personnelId ?? '') : null;
+                    const days = loan ? Math.floor((Date.now() - new Date(loan.timestamp).getTime()) / 86400000) : 0;
+                    return { item, holder, days };
+                }),
+        [items, kpis.activeLoans, personnelMap]);
 
-        const s = {
-            page: { fontFamily: "'Georgia', 'Times New Roman', serif", color: '#1a1a2e', background: '#fff', fontSize: '11px' } as React.CSSProperties,
-            sectionTitle: {
-                fontSize: '10px', fontWeight: 700, textTransform: 'uppercase' as const,
-                letterSpacing: '0.12em', color: '#fff', background: '#1e3a8a',
-                padding: '5px 12px', marginBottom: '10px', borderRadius: '2px',
-            } as React.CSSProperties,
-            kpiBox: (color: string) => ({
-                border: `1px solid ${color}`, borderTop: `4px solid ${color}`,
-                borderRadius: '4px', padding: '10px 12px', background: '#fff',
-            } as React.CSSProperties),
-            th: {
-                padding: '5px 8px', textAlign: 'left' as const, fontSize: '9px',
-                fontWeight: 700, color: '#fff', textTransform: 'uppercase' as const,
-                background: '#1e3a8a', letterSpacing: '0.05em',
-            } as React.CSSProperties,
-            td: (idx: number) => ({
-                padding: '5px 8px', fontSize: '10px', color: '#374151',
-                background: idx % 2 === 0 ? '#fff' : '#f8fafc',
-                borderBottom: '1px solid #e5e7eb',
-            } as React.CSSProperties),
-        };
+        // ── CONSUMIBLES USADOS EN EL PERÍODO ──
+        const consumablesUsed = useMemo(() => {
+            const map = new Map<string, number>();
+            filtered.filter(m => m.type === MovementType.CHECK_OUT || m.type === MovementType.WASTE).forEach(m => {
+                const item = itemMap.get(m.itemId);
+                if (item && (item.inventoryType === InventoryType.SINGLE_USE || item.inventoryType === InventoryType.PPE)) {
+                    map.set(m.itemId, (map.get(m.itemId) ?? 0) + m.quantity);
+                }
+            });
+            return [...map.entries()]
+                .map(([id, qty]) => ({ item: itemMap.get(id)!, qty }))
+                .filter(x => x.item)
+                .sort((a, b) => b.qty - a.qty);
+        }, [filtered, itemMap]);
+
+        // ── PROYECTOS ──
+        const projectActivity = useMemo(() => {
+            const map = new Map<string, { checkouts: number; workerIds: Set<string>; itemIds: Set<string> }>();
+            filtered.filter(m => m.projectId).forEach(m => {
+                const pid = m.projectId!;
+                if (!map.has(pid)) map.set(pid, { checkouts: 0, workerIds: new Set(), itemIds: new Set() });
+                const p = map.get(pid)!;
+                if (m.type === MovementType.CHECK_OUT) { p.checkouts++; p.itemIds.add(m.itemId); }
+                if (m.personnelId) p.workerIds.add(m.personnelId);
+            });
+            return [...map.entries()]
+                .sort((a, b) => b[1].checkouts - a[1].checkouts)
+                .map(([id, d]) => ({ name: projectMap.get(id) ?? '—', checkouts: d.checkouts, workers: d.workerIds.size, items: d.itemIds.size }));
+        }, [filtered, projectMap]);
+
+        // ── RESUMEN EN PROSA ──
+        const prose = useMemo(() => {
+            const { periodMovements, checkOuts, checkIns, activeLoanCount, lowStock } = kpis;
+            const topWorker = personnelLoans[0];
+            const topItem = consumablesUsed[0];
+            let t = `Durante ${periodLabel.toLowerCase()}, la bodega Montecielo registró un total de ${periodMovements} movimiento${periodMovements !== 1 ? 's' : ''}, `;
+            t += `de los cuales ${checkOuts} unidade${checkOuts !== 1 ? 's' : ''} fueron despachadas y ${checkIns} ingresaron al inventario. `;
+            if (activeLoanCount > 0) {
+                t += `Al cierre del período, ${activeLoanCount} herramienta${activeLoanCount !== 1 ? 's se encuentran' : ' se encuentra'} en préstamo activo`;
+                if (topWorker) t += `, siendo ${topWorker.person.name} quien cuenta con el mayor número de ítems asignados (${topWorker.loans.length})`;
+                t += '. ';
+            } else {
+                t += 'No hay herramientas en préstamo activo al cierre del período. ';
+            }
+            if (topItem?.item) {
+                t += `El material con mayor consumo fue "${topItem.item.name}" con ${topItem.qty} ${topItem.item.unit} despachados. `;
+            }
+            t += lowStock > 0
+                ? `Se detectaron ${lowStock} ítem${lowStock !== 1 ? 's' : ''} con stock por debajo del mínimo — se recomienda reposición prioritaria.`
+                : 'Los niveles de stock se mantienen dentro de rangos óptimos.';
+            return t;
+        }, [kpis, periodLabel, personnelLoans, consumablesUsed]);
+
+        // ── ESTILOS ──
+        const sH = { fontSize: '8px', fontWeight: 900, textTransform: 'uppercase' as const, letterSpacing: '0.14em', color: BLUE, borderBottom: `1.5px solid ${BLUE}`, paddingBottom: '4px', marginBottom: '12px', marginTop: '20px' } as React.CSSProperties;
+        const tH = { fontSize: '8px', fontWeight: 700, color: GRAY, textTransform: 'uppercase' as const, letterSpacing: '0.06em', padding: '4px 8px', background: '#f9fafb', borderBottom: `1px solid ${LINE}` } as React.CSSProperties;
+        const tR = { fontSize: '10px', color: DARK, padding: '5px 8px', borderBottom: `1px solid ${LINE}` } as React.CSSProperties;
 
         return (
-            <div ref={ref} className="print-only hidden" style={s.page}>
+            <div ref={ref} className="print-only hidden" style={{ fontFamily: "'Arial','Helvetica',sans-serif", color: DARK, background: '#fff', fontSize: '11px' }}>
                 <style>{`
                     @media print {
                         .print-only { display: block !important; }
                         body > * { visibility: hidden; }
                         .print-only, .print-only * { visibility: visible; }
                         .print-only { position: fixed; top: 0; left: 0; width: 100%; z-index: 9999; }
-                        @page { size: A4; margin: 2cm 2.5cm; }
-                        table { page-break-inside: auto; }
+                        @page { size: A4; margin: 1.8cm 2.2cm; }
                         tr { page-break-inside: avoid; }
                         .no-break { page-break-inside: avoid; }
                     }
                 `}</style>
 
-                {/* ── MEMBRETE / ENCABEZADO ── */}
-                <div style={{ borderBottom: '4px solid #1e3a8a', paddingBottom: '14px', marginBottom: '18px' }}>
+                {/* ── ENCABEZADO ── */}
+                <div style={{ paddingBottom: '14px', borderBottom: `3px solid ${BLUE}`, marginBottom: '4px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        {/* Logo / Nombre */}
                         <div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
-                                <div style={{ width: '40px', height: '40px', background: '#1e3a8a', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    <span style={{ color: '#fff', fontWeight: 900, fontSize: '18px', fontFamily: 'Arial' }}>B</span>
-                                </div>
-                                <div>
-                                    <p style={{ margin: 0, fontSize: '20px', fontWeight: 900, color: '#1e3a8a', letterSpacing: '-0.5px', fontFamily: 'Arial, sans-serif' }}>BODEGA PRO</p>
-                                    <p style={{ margin: 0, fontSize: '10px', color: '#6b7280', fontFamily: 'Arial, sans-serif' }}>Sistema de Gestión de Inventario</p>
-                                </div>
-                            </div>
+                            <p style={{ margin: 0, fontSize: '22px', fontWeight: 900, color: BLUE, letterSpacing: '-0.5px', lineHeight: 1 }}>GRUPO MONTECIELO</p>
+                            <p style={{ margin: '2px 0 0', fontSize: '10px', color: GRAY, fontWeight: 600 }}>Informe de Operaciones de Bodega</p>
                         </div>
-                        {/* Info del documento */}
-                        <div style={{ textAlign: 'right', fontFamily: 'Arial, sans-serif' }}>
-                            <p style={{ margin: 0, fontSize: '9px', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Informe de Inventario</p>
-                            <p style={{ margin: '2px 0 0', fontSize: '11px', fontWeight: 700, color: '#1e3a8a' }}>{periodLabel.toUpperCase()}</p>
-                            <p style={{ margin: '4px 0 0', fontSize: '9px', color: '#6b7280' }}>Fecha de generación:</p>
-                            <p style={{ margin: '1px 0 0', fontSize: '10px', color: '#374151', fontWeight: 600 }}>{fmtLong(new Date())}</p>
+                        <div style={{ textAlign: 'right' }}>
+                            <p style={{ margin: 0, fontSize: '12px', fontWeight: 900, color: DARK }}>{periodLabel.toUpperCase()}</p>
+                            <p style={{ margin: '2px 0 0', fontSize: '9px', color: GRAY }}>{fmtLong(fromDate)} al {fmtLong(toDate)}</p>
+                            <p style={{ margin: '2px 0 0', fontSize: '8px', color: '#9ca3af' }}>Generado: {new Date().toLocaleDateString('es-CO')}</p>
                         </div>
                     </div>
                 </div>
 
-                {/* ── IDENTIFICACIÓN DEL DOCUMENTO ── */}
-                <div style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '4px', padding: '10px 14px', marginBottom: '18px', fontFamily: 'Arial, sans-serif' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
-                        <div>
-                            <p style={{ margin: 0, fontSize: '8px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Período cubierto</p>
-                            <p style={{ margin: '2px 0 0', fontSize: '10px', fontWeight: 700, color: '#1e3a8a' }}>{fmtShort(fromDate)} — {fmtShort(toDate)}</p>
+                {/* ── INDICADORES EN UNA FILA ── */}
+                <div className="no-break" style={{ display: 'flex', gap: '0', margin: '12px 0 0', border: `1px solid ${LINE}`, borderRadius: '4px', overflow: 'hidden' }}>
+                    {[
+                        { label: 'Ítems en inventario', value: kpis.totalItems },
+                        { label: 'Despachos (unidades)', value: kpis.checkOuts },
+                        { label: 'Préstamos activos', value: kpis.activeLoanCount },
+                        { label: 'Stock bajo mínimo', value: kpis.lowStock },
+                    ].map((k, i) => (
+                        <div key={i} style={{ flex: 1, padding: '10px 12px', borderRight: i < 3 ? `1px solid ${LINE}` : 'none', textAlign: 'center' }}>
+                            <p style={{ margin: 0, fontSize: '8px', color: GRAY, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{k.label}</p>
+                            <p style={{ margin: '4px 0 0', fontSize: '20px', fontWeight: 900, color: BLUE, lineHeight: 1 }}>{k.value}</p>
                         </div>
-                        <div>
-                            <p style={{ margin: 0, fontSize: '8px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Total ítems en inventario</p>
-                            <p style={{ margin: '2px 0 0', fontSize: '10px', fontWeight: 700, color: '#1e3a8a' }}>{items.length} productos registrados</p>
-                        </div>
-                        <div>
-                            <p style={{ margin: 0, fontSize: '8px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Movimientos del período</p>
-                            <p style={{ margin: '2px 0 0', fontSize: '10px', fontWeight: 700, color: '#1e3a8a' }}>{kpis.total} transacciones</p>
-                        </div>
-                    </div>
+                    ))}
                 </div>
 
-                {/* ── 1. RESUMEN EJECUTIVO (KPIs) ── */}
-                <div className="no-break" style={{ marginBottom: '18px' }}>
-                    <div style={s.sectionTitle}>1. Resumen Ejecutivo</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', fontFamily: 'Arial, sans-serif' }}>
-                        {[
-                            { label: 'Valor en Activos', sub: 'Herramientas', value: formatCOP(kpis.assetsValue), color: '#1d4ed8' },
-                            { label: 'Valor Consumibles', sub: 'EPP y materiales', value: formatCOP(kpis.inventoryValue), color: '#059669' },
-                            { label: 'Salidas del período', sub: `${kpis.checkOuts} despachos`, value: String(kpis.checkIns + kpis.checkOuts), color: '#7c3aed' },
-                            { label: 'Costo en Mermas', sub: 'Materiales dados de baja', value: formatCOP(kpis.waste), color: '#dc2626' },
-                        ].map(k => (
-                            <div key={k.label} style={s.kpiBox(k.color)}>
-                                <p style={{ margin: 0, fontSize: '8px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{k.label}</p>
-                                <p style={{ margin: '3px 0 1px', fontSize: '14px', fontWeight: 900, color: k.color }}>{k.value}</p>
-                                <p style={{ margin: 0, fontSize: '8px', color: '#9ca3af' }}>{k.sub}</p>
-                            </div>
-                        ))}
-                    </div>
+                {/* ── RESUMEN EJECUTIVO ── */}
+                <div className="no-break">
+                    <div style={sH}>Resumen ejecutivo</div>
+                    <p style={{ fontSize: '11px', lineHeight: '1.8', color: '#374151', margin: 0, textAlign: 'justify' }}>{prose}</p>
                 </div>
 
-                {/* ── 2. ANÁLISIS DE CONSUMO + STOCK CRÍTICO ── */}
-                <div className="no-break" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '18px' }}>
-                    {/* Top consumidos */}
-                    <div>
-                        <div style={s.sectionTitle}>2. Materiales más Consumidos</div>
-                        {topConsumed.length === 0
-                            ? <p style={{ fontSize: '10px', color: '#9ca3af', fontFamily: 'Arial, sans-serif' }}>Sin salidas registradas en este período.</p>
-                            : topConsumed.map(({ item, qty, pct }, i) => (
-                            <div key={item!.id} style={{ marginBottom: '8px', fontFamily: 'Arial, sans-serif' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', marginBottom: '3px' }}>
-                                    <span style={{ fontWeight: 600, color: '#111827' }}>{i + 1}. {item!.name}</span>
-                                    <span style={{ color: '#6b7280', fontWeight: 700 }}>{qty} {item!.unit}</span>
-                                </div>
-                                <div style={{ background: '#e2e8f0', borderRadius: '2px', height: '5px' }}>
-                                    <div style={{ background: '#1d4ed8', height: '5px', borderRadius: '2px', width: `${pct}%` }} />
-                                </div>
-                            </div>
-                        ))}
+                {/* ── PERSONAL EN PRÉSTAMO ── */}
+                {personnelLoans.length > 0 && (
+                    <div className="no-break">
+                        <div style={sH}>Personal con herramientas asignadas</div>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px' }}>
+                            <thead>
+                                <tr>
+                                    <th style={{ ...tH, textAlign: 'left' }}>Trabajador</th>
+                                    <th style={{ ...tH, textAlign: 'left' }}>Herramientas en su poder</th>
+                                    <th style={{ ...tH, textAlign: 'center', width: '60px' }}>Días</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {personnelLoans.map(({ person, loans }) =>
+                                    loans.map((loan, li) => {
+                                        const item = itemMap.get(loan.itemId);
+                                        const days = Math.floor((Date.now() - new Date(loan.timestamp).getTime()) / 86400000);
+                                        return (
+                                            <tr key={loan.id}>
+                                                <td style={{ ...tR, fontWeight: li === 0 ? 700 : 400, color: li === 0 ? DARK : GRAY }}>{li === 0 ? person.name : ''}</td>
+                                                <td style={tR}>{item?.name ?? '—'} <span style={{ color: GRAY, fontSize: '9px' }}>({INV_LABEL[item?.inventoryType ?? ''] ?? ''})</span></td>
+                                                <td style={{ ...tR, textAlign: 'center', color: days > 14 ? '#dc2626' : days > 7 ? '#f59e0b' : GRAY }}>{days}d</td>
+                                            </tr>
+                                        );
+                                    })
+                                )}
+                            </tbody>
+                        </table>
                     </div>
+                )}
 
-                    {/* Stock crítico */}
-                    <div>
-                        <div style={s.sectionTitle}>3. Alertas de Stock Crítico</div>
-                        {lowStockItems.length === 0
-                            ? <p style={{ fontSize: '10px', color: '#9ca3af', fontFamily: 'Arial, sans-serif' }}>Todos los ítems están sobre el stock mínimo.</p>
-                            : lowStockItems.map(item => {
-                                const pct = Math.min(item.ratio * 100, 100);
-                                const color = item.quantity <= 0 ? '#dc2626' : pct < 50 ? '#f59e0b' : '#10b981';
-                                const estado = item.quantity <= 0 ? 'AGOTADO' : pct < 50 ? 'CRÍTICO' : 'BAJO';
-                                return (
-                                    <div key={item.id} style={{ marginBottom: '8px', fontFamily: 'Arial, sans-serif' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: '10px', marginBottom: '3px' }}>
-                                            <span style={{ fontWeight: 600, color: '#111827' }}>{item.name}</span>
-                                            <span style={{ color, fontWeight: 700, fontSize: '9px' }}>{item.quantity}/{item.minStock} {item.unit} · {estado}</span>
-                                        </div>
-                                        <div style={{ background: '#e2e8f0', borderRadius: '2px', height: '5px' }}>
-                                            <div style={{ background: color, height: '5px', borderRadius: '2px', width: `${Math.max(pct, 2)}%` }} />
-                                        </div>
-                                    </div>
-                                );
-                            })}
+                {/* ── ESTADO DE HERRAMIENTAS CAPITAL ── */}
+                {capitalItems.length > 0 && (
+                    <div className="no-break">
+                        <div style={sH}>Estado de herramientas y equipos</div>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px' }}>
+                            <thead>
+                                <tr>
+                                    <th style={{ ...tH, textAlign: 'left' }}>Herramienta</th>
+                                    <th style={{ ...tH, textAlign: 'left', width: '80px' }}>Tipo</th>
+                                    <th style={{ ...tH, textAlign: 'center', width: '55px' }}>Stock</th>
+                                    <th style={{ ...tH, textAlign: 'left' }}>En poder de</th>
+                                    <th style={{ ...tH, textAlign: 'center', width: '60px' }}>Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {capitalItems.map(({ item, holder, days }) => {
+                                    const estado = holder ? (days > 14 ? 'VENCIDO' : 'PRESTADO') : item.quantity === 0 ? 'AGOTADO' : 'DISPONIBLE';
+                                    const estadoColor = holder ? (days > 14 ? '#dc2626' : '#f59e0b') : item.quantity === 0 ? '#dc2626' : '#16a34a';
+                                    return (
+                                        <tr key={item.id}>
+                                            <td style={{ ...tR, fontWeight: 600 }}>{item.name}</td>
+                                            <td style={{ ...tR, color: GRAY, fontSize: '9px' }}>{INV_LABEL[item.inventoryType]}</td>
+                                            <td style={{ ...tR, textAlign: 'center' }}>{item.quantity} {item.unit}</td>
+                                            <td style={tR}>{holder ? <span style={{ fontWeight: 600, color: '#92400e' }}>{holder.name} ({days}d)</span> : <span style={{ color: '#9ca3af' }}>—</span>}</td>
+                                            <td style={{ ...tR, textAlign: 'center', fontWeight: 900, fontSize: '8px', color: estadoColor }}>{estado}</td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
                     </div>
-                </div>
+                )}
 
-                {/* ── 4. REGISTRO DE MOVIMIENTOS ── */}
-                <div>
-                    <div style={s.sectionTitle}>4. Registro de Movimientos del Período ({filtered.length} registros)</div>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Arial, sans-serif' }}>
-                        <thead>
-                            <tr>
-                                {['#', 'Fecha', 'Artículo', 'Tipo', 'Cantidad', 'Responsable', 'Notas'].map(h => (
-                                    <th key={h} style={s.th}>{h}</th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filtered.slice(0, 150).map((m, idx) => {
-                                const item = items.find(i => i.id === m.itemId);
-                                const meta = TYPE_META[m.type] ?? { label: m.type, bg: '#f9fafb', color: '#374151' };
-                                return (
-                                    <tr key={m.id}>
-                                        <td style={{ ...s.td(idx), color: '#9ca3af', width: '24px' }}>{idx + 1}</td>
-                                        <td style={{ ...s.td(idx), whiteSpace: 'nowrap' as const }}>{fmtShort(new Date(m.timestamp))}</td>
-                                        <td style={{ ...s.td(idx), fontWeight: 600, color: '#111827' }}>{item?.name ?? '—'}</td>
-                                        <td style={{ ...s.td(idx) }}>
-                                            <span style={{ background: meta.bg, color: meta.color, fontWeight: 700, fontSize: '9px', padding: '1px 6px', borderRadius: '10px', border: `1px solid ${meta.color}30` }}>
-                                                {meta.label}
-                                            </span>
-                                        </td>
-                                        <td style={{ ...s.td(idx), fontWeight: 600 }}>{m.quantity} {item?.unit ?? ''}</td>
-                                        <td style={{ ...s.td(idx), color: '#6b7280' }}>{m.personnelId ? (personnelMap.get(m.personnelId) ?? '—') : '—'}</td>
-                                        <td style={{ ...s.td(idx), color: '#9ca3af', maxWidth: '100px' }}>{m.notes ?? ''}</td>
+                {/* ── CONSUMIBLES DEL PERÍODO ── */}
+                {consumablesUsed.length > 0 && (
+                    <div className="no-break">
+                        <div style={sH}>Materiales y consumibles despachados en el período</div>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px' }}>
+                            <thead>
+                                <tr>
+                                    <th style={{ ...tH, textAlign: 'left' }}>Material</th>
+                                    <th style={{ ...tH, textAlign: 'left', width: '80px' }}>Categoría</th>
+                                    <th style={{ ...tH, textAlign: 'center', width: '80px' }}>Cantidad usada</th>
+                                    <th style={{ ...tH, textAlign: 'center', width: '60px' }}>Stock actual</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {consumablesUsed.map(({ item, qty }) => (
+                                    <tr key={item.id}>
+                                        <td style={{ ...tR, fontWeight: 600 }}>{item.name}</td>
+                                        <td style={{ ...tR, color: GRAY, fontSize: '9px' }}>{INV_LABEL[item.inventoryType]}</td>
+                                        <td style={{ ...tR, textAlign: 'center', fontWeight: 700 }}>{qty} {item.unit}</td>
+                                        <td style={{ ...tR, textAlign: 'center', color: item.quantity === 0 ? '#dc2626' : GRAY }}>{item.quantity} {item.unit}</td>
                                     </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                    {filtered.length > 150 && (
-                        <p style={{ fontSize: '9px', color: '#9ca3af', marginTop: '6px', textAlign: 'center', fontFamily: 'Arial, sans-serif' }}>
-                            Mostrando los primeros 150 de {filtered.length} movimientos totales.
-                        </p>
-                    )}
-                </div>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
 
-                {/* ── SECCIÓN DE FIRMA ── */}
-                <div style={{ marginTop: '32px', paddingTop: '16px', borderTop: '1px solid #e2e8f0', fontFamily: 'Arial, sans-serif' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px' }}>
-                        <div>
-                            <div style={{ borderBottom: '1px solid #374151', marginBottom: '4px', paddingBottom: '24px' }} />
-                            <p style={{ margin: 0, fontSize: '9px', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Firma del Responsable</p>
-                            <p style={{ margin: '2px 0 0', fontSize: '9px', color: '#94a3b8' }}>Nombre y cargo</p>
+                {/* ── PROYECTOS ── */}
+                {projectActivity.length > 0 && (
+                    <div className="no-break">
+                        <div style={sH}>Actividad por proyecto / obra</div>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px' }}>
+                            <thead>
+                                <tr>
+                                    <th style={{ ...tH, textAlign: 'left' }}>Proyecto / Obra</th>
+                                    <th style={{ ...tH, textAlign: 'center', width: '90px' }}>Despachos</th>
+                                    <th style={{ ...tH, textAlign: 'center', width: '90px' }}>Trabajadores</th>
+                                    <th style={{ ...tH, textAlign: 'center', width: '80px' }}>Tipos ítem</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {projectActivity.map((proj, i) => (
+                                    <tr key={i}>
+                                        <td style={{ ...tR, fontWeight: 600 }}>{proj.name}</td>
+                                        <td style={{ ...tR, textAlign: 'center' }}>{proj.checkouts}</td>
+                                        <td style={{ ...tR, textAlign: 'center' }}>{proj.workers}</td>
+                                        <td style={{ ...tR, textAlign: 'center' }}>{proj.items}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+
+                {/* ── FIRMAS ── */}
+                <div style={{ marginTop: '32px', paddingTop: '12px', borderTop: `1px solid ${LINE}` }}>
+                    <div style={{ display: 'flex', gap: '60px' }}>
+                        <div style={{ flex: 1 }}>
+                            <div style={{ borderBottom: `1px solid ${DARK}`, paddingBottom: '30px', marginBottom: '5px' }} />
+                            <p style={{ margin: 0, fontSize: '9px', color: GRAY, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Bodeguero responsable</p>
+                            <p style={{ margin: '2px 0 0', fontSize: '9px', color: '#9ca3af' }}>Nombre, cédula y firma</p>
                         </div>
-                        <div>
-                            <div style={{ borderBottom: '1px solid #374151', marginBottom: '4px', paddingBottom: '24px' }} />
-                            <p style={{ margin: 0, fontSize: '9px', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Visto Bueno / Jefe de Bodega</p>
-                            <p style={{ margin: '2px 0 0', fontSize: '9px', color: '#94a3b8' }}>Nombre y cargo</p>
+                        <div style={{ flex: 1 }}>
+                            <div style={{ borderBottom: `1px solid ${DARK}`, paddingBottom: '30px', marginBottom: '5px' }} />
+                            <p style={{ margin: 0, fontSize: '9px', color: GRAY, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Visto bueno — Dirección</p>
+                            <p style={{ margin: '2px 0 0', fontSize: '9px', color: '#9ca3af' }}>Nombre, cargo y firma</p>
                         </div>
                     </div>
                 </div>
 
-                {/* ── PIE DE PÁGINA ── */}
-                <div style={{ marginTop: '16px', paddingTop: '8px', borderTop: '2px solid #1e3a8a', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontFamily: 'Arial, sans-serif' }}>
-                    <p style={{ margin: 0, fontSize: '8px', color: '#94a3b8' }}>
-                        BODEGA PRO — Sistema de Gestión de Inventario
-                    </p>
-                    <p style={{ margin: 0, fontSize: '8px', color: '#94a3b8' }}>
-                        Generado: {new Date().toLocaleString('es-CO')} · Documento de uso interno
-                    </p>
+                {/* ── PIE ── */}
+                <div style={{ marginTop: '12px', paddingTop: '6px', borderTop: `2px solid ${BLUE}`, display: 'flex', justifyContent: 'space-between' }}>
+                    <p style={{ margin: 0, fontSize: '8px', color: '#9ca3af' }}>Grupo Montecielo — Control de Inventario de Bodega</p>
+                    <p style={{ margin: 0, fontSize: '8px', color: '#9ca3af' }}>Documento de uso interno · {new Date().toLocaleDateString('es-CO')}</p>
                 </div>
             </div>
         );

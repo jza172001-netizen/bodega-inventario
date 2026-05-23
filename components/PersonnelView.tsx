@@ -5,7 +5,7 @@ import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
 import { TrashIcon } from './icons/TrashIcon';
 import { EditIcon } from './icons/EditIcon';
 import { PersonnelDetailModal } from './PersonnelDetailModal';
-
+import { EditPersonnelModal } from './EditPersonnelModal';
 interface PersonnelViewProps {
     personnel: Personnel[];
     movements: Movement[];
@@ -30,17 +30,25 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
     userRole,
 }) => {
     const [detailPerson, setDetailPerson] = useState<Personnel | null>(null);
+    const [editPerson, setEditPerson] = useState<Personnel | null>(null);
 
-    const handleEdit = (e: React.MouseEvent, p: Personnel) => {
+    const isOwner = userRole === UserRole.OWNER;
+
+    const handleDelete = (e: React.MouseEvent, p: Personnel) => {
         e.stopPropagation();
-        if (!onEditPersonnel) return;
-        const newName = prompt('Nuevo nombre para ' + p.name + ':', p.name);
-        if (newName && newName.trim()) onEditPersonnel({ ...p, name: newName.trim() });
+        const hasLoans = movements.some(m => m.personnelId === p.id && m.isLoan && !m.isReturned);
+        if (hasLoans) {
+            alert(`${p.name} tiene herramientas activas en préstamo. Márcalas como devueltas antes de eliminar.`);
+            return;
+        }
+        if (window.confirm(`¿Eliminar a ${p.name}? Su historial de movimientos se conserva.`)) {
+            onDeletePersonnel?.(p.id);
+        }
     };
 
-    const handleDelete = (e: React.MouseEvent, id: string) => {
+    const openEdit = (e: React.MouseEvent, p: Personnel) => {
         e.stopPropagation();
-        onDeletePersonnel?.(id);
+        setEditPerson(p);
     };
 
     return (
@@ -53,51 +61,69 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
                         </button>
                         <h2 className="text-xl font-semibold text-gray-800">Personal</h2>
                     </div>
-                    <button onClick={openAddPersonnelModal} className="flex items-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">
-                        <PlusIcon className="w-5 h-5 mr-2" />
-                        Añadir Personal
-                    </button>
+                    {isOwner && (
+                        <button onClick={openAddPersonnelModal} className="flex items-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">
+                            <PlusIcon className="w-5 h-5 mr-2" />
+                            Añadir
+                        </button>
+                    )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                     {personnel.map(p => {
                         const activeLoans = movements.filter(m => m.personnelId === p.id && m.isLoan && !m.isReturned);
-                        const activeItems = activeLoans.map(m => items.find(i => i.id === m.itemId)?.name).filter(Boolean) as string[];
+                        const activeItems = activeLoans.map(m => items.find(i => i.id === m.itemId)).filter(Boolean) as Item[];
                         const visibleChips = activeItems.slice(0, 3);
                         const extra = activeItems.length - visibleChips.length;
+
                         return (
                             <div
                                 key={p.id}
                                 onClick={() => setDetailPerson(p)}
-                                className="p-4 border rounded-xl bg-gray-50 hover:bg-blue-50 hover:border-blue-200 cursor-pointer transition-all group"
+                                className="p-4 border rounded-xl bg-gray-50 hover:bg-blue-50 hover:border-blue-200 cursor-pointer transition-all"
                             >
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center space-x-3 min-w-0">
+                                <div className="flex items-start justify-between gap-2">
+                                    <div className="flex items-center space-x-3 min-w-0 flex-1">
                                         <div className="w-10 h-10 rounded-full bg-blue-200 text-blue-600 flex items-center justify-center font-bold text-lg flex-shrink-0">
                                             {p.name.charAt(0)}
                                         </div>
                                         <div className="min-w-0">
                                             <span className="font-medium text-gray-700 truncate block" title={p.name}>{p.name}</span>
-                                            {p.phone && (
+                                            {p.phone ? (
                                                 <span className="text-[10px] text-gray-400 truncate block">{p.phone}</span>
+                                            ) : (
+                                                <span className="text-[10px] text-gray-300 block">Sin teléfono</span>
                                             )}
                                         </div>
                                     </div>
-                                    {userRole === UserRole.OWNER && (
-                                        <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 ml-1">
-                                            <button onClick={e => handleEdit(e, p)} className="p-1 text-gray-400 hover:text-indigo-600 rounded" title="Editar nombre">
-                                                <EditIcon className="w-4 h-4"/>
-                                            </button>
-                                            <button onClick={e => handleDelete(e, p.id)} className="p-1 text-gray-400 hover:text-red-600 rounded" title="Eliminar">
-                                                <TrashIcon className="w-4 h-4"/>
-                                            </button>
-                                        </div>
-                                    )}
+
+                                    {/* Action buttons — always visible for owner */}
+                                    <div className="flex items-center gap-1 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                                        {isOwner && (
+                                            <>
+                                                <button
+                                                    onClick={e => openEdit(e, p)}
+                                                    className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                                    title="Editar"
+                                                >
+                                                    <EditIcon className="w-4 h-4" />
+                                                </button>
+                                                <button
+                                                    onClick={e => handleDelete(e, p)}
+                                                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                    title="Eliminar"
+                                                >
+                                                    <TrashIcon className="w-4 h-4" />
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
+
                                 {activeItems.length > 0 && (
                                     <div className="flex flex-wrap gap-1 mt-2">
-                                        {visibleChips.map((name, i) => (
-                                            <span key={i} className="text-[10px] font-semibold bg-yellow-100 text-yellow-800 border border-yellow-200 px-1.5 py-0.5 rounded-full truncate max-w-[120px]" title={name}>{name}</span>
+                                        {visibleChips.map((item, i) => (
+                                            <span key={i} className="text-[10px] font-semibold bg-yellow-100 text-yellow-800 border border-yellow-200 px-1.5 py-0.5 rounded-full truncate max-w-[120px]" title={item.name}>{item.name}</span>
                                         ))}
                                         {extra > 0 && (
                                             <span className="text-[10px] font-semibold bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded-full">+{extra} más</span>
@@ -125,6 +151,13 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
                     onClose={() => setDetailPerson(null)}
                 />
             )}
+
+            <EditPersonnelModal
+                isOpen={!!editPerson}
+                person={editPerson}
+                onClose={() => setEditPerson(null)}
+                onSave={p => { onEditPersonnel?.(p); setEditPerson(null); }}
+            />
         </>
     );
 };

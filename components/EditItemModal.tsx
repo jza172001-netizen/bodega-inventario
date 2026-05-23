@@ -17,9 +17,10 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, o
     const [inventoryType, setInventoryType] = useState<InventoryType>(InventoryType.HAND_TOOL);
     const [quantity, setQuantity] = useState(0);
     const [minStock, setMinStock] = useState(0);
-    const [price, setPrice] = useState(0);
     const [unit, setUnit] = useState('');
     const [color, setColor] = useState('');
+
+    const UNIT_OPTIONS = ['unidades', 'pares', 'caja', 'bolsa', 'rollo', 'pliego', 'litro', 'ml', 'galón', 'kg', 'g', 'ton', 'm', 'cm', 'mm', 'km', 'm²', 'm³', 'yarda'];
 
     useEffect(() => {
         if (itemToEdit) {
@@ -29,7 +30,6 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, o
             setInventoryType(itemToEdit.inventoryType);
             setQuantity(itemToEdit.quantity);
             setMinStock(itemToEdit.minStock);
-            setPrice(itemToEdit.price);
             setUnit(itemToEdit.unit);
             setColor(itemToEdit.color || '');
         }
@@ -47,7 +47,6 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, o
             inventoryType,
             quantity,
             minStock,
-            price,
             unit,
             color: color || undefined
         };
@@ -85,7 +84,7 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, o
                             {Object.values(InventoryType).map(t => <option key={t} value={t}>{t}</option>)}
                         </select>
                     </div>
-                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                          <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Cantidad</label>
                             <input type="number" value={quantity} onChange={e => setQuantity(Math.max(0, parseInt(e.target.value) || 0))} min="0" required className="w-full input-style"/>
@@ -94,15 +93,17 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, o
                             <label className="block text-sm font-medium text-gray-700 mb-1">Stock Mínimo</label>
                             <input type="number" value={minStock} onChange={e => setMinStock(Math.max(0, parseInt(e.target.value) || 0))} min="0" required className="w-full input-style"/>
                         </div>
-                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Precio Unitario</label>
-                            <input type="number" value={price} onChange={e => setPrice(Math.max(0, parseFloat(e.target.value) || 0))} min="0" step="0.01" required className="w-full input-style"/>
-                        </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Unidad de Medida</label>
-                            <input type="text" value={unit} onChange={e => setUnit(e.target.value)} required className="w-full input-style"/>
+                            {inventoryType === InventoryType.SINGLE_USE ? (
+                                <select value={unit} onChange={e => setUnit(e.target.value)} className="w-full input-style">
+                                    {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
+                                </select>
+                            ) : (
+                                <input type="text" value={unit} onChange={e => setUnit(e.target.value)} required className="w-full input-style"/>
+                            )}
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Color (Opcional)</label>

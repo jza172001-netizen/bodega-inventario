@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState } from 'react';
-import { Movement, Item, Personnel, InventoryType } from '../types';
+import { Movement, Item, Personnel, UserRole } from '../types';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
 import { ClockIcon } from './icons/ClockIcon';
 
@@ -11,18 +11,19 @@ interface LoansViewProps {
     onReturnItem: (movementId: string) => void;
     onMarkPendingPickup: (movementId: string, pending: boolean) => void;
     onGoBack: () => void;
+    userRole?: UserRole;
 }
 
 export const LoansView: React.FC<LoansViewProps> = ({
-    movements, items, personnel, onReturnItem, onMarkPendingPickup, onGoBack,
+    movements, items, personnel, onReturnItem, onMarkPendingPickup, onGoBack, userRole = UserRole.EMPLOYEE,
 }) => {
+    const isOwner = userRole === UserRole.OWNER;
     const [search, setSearch] = useState('');
+
     const activeLoans = useMemo(() => movements.filter(m => m.isLoan && !m.isReturned), [movements]);
 
-    const getItem = (itemId: string) => items.find(i => i.id === itemId);
-    const getItemName = (itemId: string) => getItem(itemId)?.name ?? 'Desconocido';
-    const getPerson = (id?: string) => personnel.find(p => p.id === id);
-    const getPersonnelName = (id?: string) => getPerson(id)?.name ?? 'Sin asignar';
+    const getItemName  = (id: string)  => items.find(i => i.id === id)?.name ?? 'Desconocido';
+    const getPersonnelName = (id?: string) => personnel.find(p => p.id === id)?.name ?? 'Sin asignar';
 
     const getDays = (date: Date) =>
         Math.ceil(Math.abs(Date.now() - new Date(date).getTime()) / 86400000);
@@ -47,29 +48,15 @@ export const LoansView: React.FC<LoansViewProps> = ({
         }
     };
 
-    const buildWhatsAppUrl = (loan: Movement) => {
-        const person = getPerson(loan.personnelId);
-        if (!person?.phone) return null;
-        const item = getItem(loan.itemId);
-        if (item?.inventoryType !== InventoryType.ELECTRICAL_TOOL) return null;
-        const rawPhone = person.phone.replace(/\D/g, '');
-        const phone = rawPhone.startsWith('57') ? rawPhone : `57${rawPhone}`;
-        const text = encodeURIComponent(
-            `Hola ${person.name}, recuerda traer ${item.name} a la bodega hoy. Gracias.`
-        );
-        return `https://wa.me/${phone}?text=${text}`;
-    };
-
     const LoanCard: React.FC<{ loan: Movement }> = ({ loan }) => {
         const days = getDays(new Date(loan.timestamp));
         const isPending = !!loan.pendingPickup;
-        const waUrl = buildWhatsAppUrl(loan);
 
         let cardClass = 'border border-gray-100 bg-white';
         let daysBadge = 'bg-green-100 text-green-800';
-        if (isPending) { cardClass = 'border border-orange-200 bg-orange-50'; daysBadge = 'bg-orange-100 text-orange-800'; }
-        else if (days > 14) { cardClass = 'border border-red-200 bg-red-50'; daysBadge = 'bg-red-100 text-red-800'; }
-        else if (days > 7) { cardClass = 'border border-yellow-200 bg-yellow-50'; daysBadge = 'bg-yellow-100 text-yellow-800'; }
+        if (isPending)    { cardClass = 'border border-orange-200 bg-orange-50'; daysBadge = 'bg-orange-100 text-orange-800'; }
+        else if (days > 14) { cardClass = 'border border-red-200 bg-red-50';     daysBadge = 'bg-red-100 text-red-800'; }
+        else if (days > 7)  { cardClass = 'border border-yellow-200 bg-yellow-50'; daysBadge = 'bg-yellow-100 text-yellow-800'; }
 
         return (
             <div className={`rounded-2xl p-4 ${cardClass} flex flex-col gap-3`}>
@@ -85,12 +72,14 @@ export const LoansView: React.FC<LoansViewProps> = ({
                     </div>
                 </div>
                 <div className="flex gap-2">
-                    <button
-                        onClick={() => handleReturn(loan.id)}
-                        className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all"
-                    >
-                        ✓ Devuelta
-                    </button>
+                    {isOwner && (
+                        <button
+                            onClick={() => handleReturn(loan.id)}
+                            className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all"
+                        >
+                            ✓ Devuelta
+                        </button>
+                    )}
                     {!isPending ? (
                         <button
                             onClick={() => onMarkPendingPickup(loan.id, true)}
@@ -105,17 +94,6 @@ export const LoansView: React.FC<LoansViewProps> = ({
                         >
                             ✕ Cancelar
                         </button>
-                    )}
-                    {waUrl && (
-                        <a
-                            href={waUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            title="Enviar recordatorio por WhatsApp"
-                            className="flex items-center justify-center px-3 py-1.5 bg-green-100 hover:bg-green-200 text-green-800 text-xs font-bold rounded-xl transition-all"
-                        >
-                            📲
-                        </a>
                     )}
                 </div>
             </div>
@@ -136,11 +114,11 @@ export const LoansView: React.FC<LoansViewProps> = ({
 
     return (
         <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm">
-            <div className="flex items-center mb-6">
+            <div className="flex items-center mb-4">
                 <button onClick={onGoBack} className="mr-4 p-2 rounded-full hover:bg-gray-100">
                     <ArrowLeftIcon className="w-5 h-5 text-gray-600" />
                 </button>
-                <div>
+                <div className="flex-1 min-w-0">
                     <h2 className="text-xl font-black text-gray-900 flex items-center gap-2">
                         <ClockIcon className="w-6 h-6 text-indigo-600" />
                         Préstamos Activos
@@ -160,6 +138,10 @@ export const LoansView: React.FC<LoansViewProps> = ({
                         onChange={e => setSearch(e.target.value)}
                         placeholder="Buscar por herramienta o persona..."
                         className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                        autoComplete="off"
+                        autoCorrect="off"
+                        autoCapitalize="off"
+                        spellCheck={false}
                     />
                 </div>
             )}
@@ -174,8 +156,8 @@ export const LoansView: React.FC<LoansViewProps> = ({
             ) : (
                 <>
                     <Section title="📍 Pendientes de recoger" color="text-orange-600" loans={pendingPickup} />
-                    <Section title="🔴 Más de 14 días" color="text-red-600" loans={overdueLoans} />
-                    <Section title="⚠️ Entre 7 y 14 días" color="text-yellow-600" loans={warningLoans} />
+                    <Section title="🔴 Más de 14 días"        color="text-red-600"    loans={overdueLoans} />
+                    <Section title="⚠️ Entre 7 y 14 días"     color="text-yellow-600" loans={warningLoans} />
                     <Section title="✅ Al día (menos de 7 días)" color="text-green-600" loans={normalLoans} />
                 </>
             )}

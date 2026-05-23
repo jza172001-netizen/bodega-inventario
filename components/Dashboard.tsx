@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { Item, Movement, Personnel, PurchaseOrder, PurchaseOrderStatus } from '../types';
 import StatisticsView from './StatisticsView';
+import { WhatsAppRemindersPanel } from './WhatsAppRemindersPanel';
 
 interface DashboardProps {
     items: Item[];
@@ -58,6 +59,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ items, movements, purchase
                     </div>
                 </div>
             )}
+
+            <WhatsAppRemindersPanel movements={movements} items={items} personnel={personnel} />
 
             <StatisticsView items={items} movements={movements} personnel={personnel} onNavigate={onNavigate} />
         </div>

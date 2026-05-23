@@ -4,21 +4,20 @@ import { AddItemModal } from './components/AddItemModal';
 import { EditItemModal } from './components/EditItemModal';
 import { Dashboard } from './components/Dashboard';
 import { Header } from './components/Header';
-import { InventoryView } from './components/InventoryView';
 import { LogMovementModal } from './components/LogMovementModal';
-import { MovementsView } from './components/MovementsView';
 import { AddPersonnelModal } from './components/AddPersonnelModal';
 import { PersonnelView } from './components/PersonnelView';
-import { AddPurchaseOrderModal } from './components/AddPurchaseOrderModal';
-import { PurchaseOrdersView } from './components/PurchaseOrdersView';
-import { ProjectsView } from './components/ProjectsView';
-import { LoansView } from './components/LoansView';
+import { KardexHub } from './components/KardexHub';
 import { ItemHistoryModal } from './components/ItemHistoryModal';
 import { UserManagementModal } from './components/UserManagementModal';
 import CopilotView from './components/CopilotView';
 import { FloatingChat } from './components/FloatingChat';
 import { OnboardingModal } from './components/OnboardingModal';
 import { HelpView } from './components/HelpView';
+import { WhatsAppView } from './components/WhatsAppView';
+import { PickupView } from './components/PickupView';
+import { GlobalSearchModal } from './components/GlobalSearchModal';
+import { SettingsModal, AppConfig, DEFAULT_CONFIG } from './components/SettingsModal';
 import { requestNotificationPermission, checkAndNotifyOverdueLoans } from './services/notificationService';
 
 import { mockItems, mockMovements, mockPersonnel, mockPurchaseOrders, mockProjects, mockUsers } from './mockData';
@@ -33,23 +32,29 @@ import * as db from './services/supabaseService';
 import { DashboardIcon } from './components/icons/DashboardIcon';
 import { MovementsIcon } from './components/icons/MovementsIcon';
 import { PersonnelIcon } from './components/icons/PersonnelIcon';
-import { PurchaseOrdersIcon } from './components/icons/PurchaseOrdersIcon';
-import { HandToolIcon } from './components/icons/HandToolIcon';
-import { ElectricalToolIcon } from './components/icons/ElectricalToolIcon';
-import { PpeIcon } from './components/icons/PpeIcon';
-import { SingleUseIcon } from './components/icons/SingleUseIcon';
-import { HardHatIcon } from './components/icons/HardHatIcon';
-import { ClockIcon } from './components/icons/ClockIcon';
-import { BrainIcon } from './components/icons/BrainIcon';
+import { WhatsAppIcon } from './components/icons/WhatsAppIcon';
 
-type View = 'dashboard' | 'inventory' | 'movements' | 'purchaseOrders' | 'personnel' | 'projects' | 'loans' | 'copilot' | 'help';
+type View = 'dashboard' | 'kardex' | 'personnel' | 'copilot' | 'help' | 'whatsapp' | 'pickup';
+type KardexTab = 'movements' | 'loans' | 'inventory' | 'projects';
 
 const SESSION_KEY = 'bodega_session';
 const ONBOARDING_KEY = 'bodega_onboarding_v1';
 
 const App: React.FC = () => {
-    const [userRole] = useState<UserRole>(UserRole.OWNER);
-    const [userName] = useState<string>('');
+    const [loggedIn, setLoggedIn] = useState(() => !!localStorage.getItem(SESSION_KEY));
+    const [userRole, setUserRole] = useState<UserRole>(() => {
+        try { return JSON.parse(localStorage.getItem(SESSION_KEY) || '{}').role ?? UserRole.OWNER; } catch { return UserRole.OWNER; }
+    });
+    const [userName, setUserName] = useState<string>(() => {
+        try { return JSON.parse(localStorage.getItem(SESSION_KEY) || '{}').name ?? ''; } catch { return ''; }
+    });
+
+    const handleLoginSuccess = (role: UserRole, name: string) => {
+        setUserRole(role);
+        setUserName(name);
+        setLoggedIn(true);
+        localStorage.setItem(SESSION_KEY, JSON.stringify({ role, name }));
+    };
 
     // Carga inicial síncrona desde localStorage (igual que antes), con fallback a mockData
     const [users, setUsers] = useState<AppUser[]>(() => { const s = loadFromLocalStorage(); return s?.users ?? mockUsers; });
@@ -93,12 +98,24 @@ const App: React.FC = () => {
     };
 
     const [currentView, setCurrentView] = useState<View>('dashboard');
-    const [selectedInventoryType, setSelectedInventoryType] = useState<InventoryType | null>(null);
-    const EMPLOYEE_VIEWS: View[] = ['dashboard', 'movements', 'personnel', 'help'];
+    const [kardexTab, setKardexTab] = useState<KardexTab>('movements');
+    const EMPLOYEE_VIEWS: View[] = ['dashboard', 'kardex', 'personnel', 'help', 'whatsapp', 'pickup'];
     const effectiveView: View = (userRole === UserRole.EMPLOYEE && !EMPLOYEE_VIEWS.includes(currentView)) ? 'dashboard' : currentView;
+    const pendingPickupCount = movements.filter(m => m.isLoan && !m.isReturned && m.pendingPickup).length;
     const [isSidebarOpen, setSidebarOpen] = useState(true);
 
+    const CONFIG_KEY = 'bodega_config';
+    const [appConfig, setAppConfig] = useState<AppConfig>(() => {
+        try { return { ...DEFAULT_CONFIG, ...JSON.parse(localStorage.getItem(CONFIG_KEY) || '{}') }; } catch { return DEFAULT_CONFIG; }
+    });
+    const handleConfigChange = (cfg: AppConfig) => {
+        setAppConfig(cfg);
+        localStorage.setItem(CONFIG_KEY, JSON.stringify(cfg));
+    };
+
     const [isInvoiceReaderOpen, setInvoiceReaderOpen] = useState(false);
+    const [isSearchOpen, setSearchOpen] = useState(false);
+    const [isSettingsOpen, setSettingsOpen] = useState(false);
     const [isAddItemModalOpen, setAddItemModalOpen] = useState(false);
     const [isEditModalOpen, setEditModalOpen] = useState(false);
     const [itemToEdit, setItemToEdit] = useState<Item | null>(null);
@@ -136,9 +153,9 @@ const App: React.FC = () => {
         }
     };
 
-    const selectView = (view: View) => {
+    const selectView = (view: View, tab?: KardexTab) => {
         setCurrentView(view);
-        setSelectedInventoryType(null);
+        if (tab) setKardexTab(tab);
         if (window.innerWidth < 768) setSidebarOpen(false);
     };
 
@@ -180,7 +197,8 @@ const App: React.FC = () => {
     };
 
     const handleLogMovement = (m: Omit<Movement, 'id'>) => {
-        const newMov = { ...m, id: `mov-${Date.now()}`, timestamp: new Date() };
+        const ts = m.timestamp instanceof Date ? m.timestamp : new Date(m.timestamp ?? Date.now());
+        const newMov = { ...m, id: `mov-${Date.now()}`, timestamp: ts };
         setMovements(prev => [newMov, ...prev]);
         setItems(prev => prev.map(item => {
             if (item.id === m.itemId) {
@@ -192,7 +210,7 @@ const App: React.FC = () => {
             }
             return item;
         }));
-        withSync(db.addMovement({ ...m, timestamp: new Date() })
+        withSync(db.addMovement({ ...m, timestamp: ts })
             .then(created => setMovements(prev => prev.map(x => x.id === newMov.id ? created : x))));
     };
 
@@ -288,6 +306,8 @@ const App: React.FC = () => {
         db.deleteUser(id).catch(() => {});
     };
 
+    if (!loggedIn) return <LoginView onLoginSuccess={handleLoginSuccess} />;
+
     return (
         <div className="flex h-screen bg-gray-50 overflow-hidden font-sans">
             {/* Backdrop mobile: cierra el sidebar al tocar fuera */}
@@ -299,41 +319,34 @@ const App: React.FC = () => {
             )}
 
             <aside className={`bg-white border-r border-gray-200 shadow-xl transition-all duration-300 ease-in-out fixed md:relative inset-y-0 left-0 z-30 transform md:transform-none ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:${isSidebarOpen ? 'w-64' : 'w-0 overflow-hidden'} flex flex-col`}>
-                <div className="h-16 flex-shrink-0 flex items-center px-6 border-b bg-blue-700 text-white">
-                    <h2 className="text-xl font-black tracking-tighter uppercase italic">Bodega Pro</h2>
+                <div className="h-16 flex-shrink-0 flex items-center px-5 border-b bg-blue-700">
+                    <img
+                        src="/montecielo-logo.png"
+                        alt="Grupo Montecielo"
+                        className="h-8 w-auto object-contain rounded-md"
+                    />
                 </div>
 
                 <div className="flex-1 overflow-y-auto py-4">
                     <nav className="px-2 space-y-1">
                         <NavItem icon={DashboardIcon} label="Resumen" onClick={() => selectView('dashboard')} isActive={effectiveView === 'dashboard'} />
-                        {userRole === UserRole.OWNER && (
-                            <>
-                                <NavHeader label="Gestión" />
-                                <NavItem icon={HardHatIcon} label="Proyectos" onClick={() => selectView('projects')} isActive={effectiveView === 'projects'} />
-                            </>
-                        )}
-                        <NavItem icon={MovementsIcon} label="Kardex" onClick={() => selectView('movements')} isActive={effectiveView === 'movements'} />
-                        {userRole === UserRole.OWNER && (
-                            <>
-                                <NavItem icon={ClockIcon} label="Préstamos" onClick={() => selectView('loans')} isActive={effectiveView === 'loans'} />
-                                <NavHeader label="Inventarios" />
-                                <NavItem icon={HandToolIcon} label="H. Manual" onClick={() => { setCurrentView('inventory'); setSelectedInventoryType(InventoryType.HAND_TOOL); }} isActive={effectiveView === 'inventory' && selectedInventoryType === InventoryType.HAND_TOOL} />
-                                <NavItem icon={ElectricalToolIcon} label="H. Eléctrica" onClick={() => { setCurrentView('inventory'); setSelectedInventoryType(InventoryType.ELECTRICAL_TOOL); }} isActive={effectiveView === 'inventory' && selectedInventoryType === InventoryType.ELECTRICAL_TOOL} />
-                                <NavItem icon={PpeIcon} label="Seguridad" onClick={() => { setCurrentView('inventory'); setSelectedInventoryType(InventoryType.PPE); }} isActive={effectiveView === 'inventory' && selectedInventoryType === InventoryType.PPE} />
-                                <NavItem icon={SingleUseIcon} label="Consumibles" onClick={() => { setCurrentView('inventory'); setSelectedInventoryType(InventoryType.SINGLE_USE); }} isActive={effectiveView === 'inventory' && selectedInventoryType === InventoryType.SINGLE_USE} />
-                                <NavHeader label="Admin" />
-                            </>
-                        )}
                         <NavItem icon={PersonnelIcon} label="Personal" onClick={() => selectView('personnel')} isActive={effectiveView === 'personnel'} />
-                        {userRole === UserRole.OWNER && (
-                            <NavItem icon={PurchaseOrdersIcon} label="Compras" onClick={() => selectView('purchaseOrders')} isActive={effectiveView === 'purchaseOrders'} />
-                        )}
+                        <NavItem icon={MovementsIcon} label="Kardex" onClick={() => selectView('kardex')} isActive={effectiveView === 'kardex'} />
+                        <NavItem icon={WhatsAppIcon} label="WhatsApp" onClick={() => selectView('whatsapp')} isActive={effectiveView === 'whatsapp'} />
+                        <NavItem icon={PickupNavIcon} label="A Recoger" onClick={() => selectView('pickup')} isActive={effectiveView === 'pickup'} badge={pendingPickupCount} />
                     </nav>
                 </div>
 
                 {/* Help & tutorial footer */}
                 <div className="flex-shrink-0 px-2 py-3 border-t border-gray-100 space-y-1">
                     <NavItem icon={QuestionMarkIcon} label="Ayuda ❓" onClick={() => selectView('help')} isActive={currentView === 'help'} />
+                    <button
+                        onClick={() => setSettingsOpen(true)}
+                        className="w-full flex items-center text-left px-4 py-2.5 text-xs font-semibold rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-all"
+                    >
+                        <span className="mr-3 text-base">⚙️</span>
+                        Configuración
+                    </button>
                     <button
                         onClick={() => setShowOnboarding(true)}
                         className="w-full flex items-center text-left px-4 py-2.5 text-xs font-semibold rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-all"
@@ -351,48 +364,46 @@ const App: React.FC = () => {
                     userName={userName}
                     onStartNewBusiness={handleResetAllData}
                     onOpenUserManagement={() => setUserManagementOpen(true)}
-                    onLogout={() => { localStorage.clear(); window.location.reload(); }}
+                    onLogout={() => { localStorage.removeItem(SESSION_KEY); setLoggedIn(false); }}
                     onExportData={handleExportData}
                     onImportData={handleImportData}
                     onResetData={handleResetAllData}
                     setUserRole={() => {}}
                     syncStatus={syncStatus}
-                    onOpenInvoiceReader={() => setInvoiceReaderOpen(true)}
+                    onOpenSearch={() => setSearchOpen(true)}
                 />
                 <main className="flex-1 p-4 md:p-6 overflow-y-auto bg-gray-50">
                     <div className="max-w-7xl mx-auto">
-                        {effectiveView === 'dashboard' && <Dashboard items={items} movements={movements} purchaseOrders={purchaseOrders} personnel={personnel} onNavigate={(v) => selectView(v as View)} />}
-                        {effectiveView === 'inventory' && (
-                            <InventoryView
-                                items={selectedInventoryType ? items.filter(i => i.inventoryType === selectedInventoryType) : items}
+                        {effectiveView === 'dashboard' && (
+                            <Dashboard
+                                items={items}
+                                movements={movements}
+                                personnel={personnel}
+                                purchaseOrders={purchaseOrders}
+                                onNavigate={(v, tab) => selectView(v as View, tab as KardexTab | undefined)}
+                            />
+                        )}
+                        {effectiveView === 'kardex' && (
+                            <KardexHub
+                                items={items}
+                                movements={movements}
+                                personnel={personnel}
+                                projects={projects}
+                                userRole={userRole}
+                                initialTab={kardexTab}
+                                onGoBack={() => selectView('dashboard')}
+                                openLogMovementModal={() => setLogMovementModalOpen(true)}
+                                onDeleteMovement={handleDeleteMovement}
+                                onReturnLoan={handleReturnItem}
+                                onReturnItem={handleReturnItem}
+                                onMarkPendingPickup={handleMarkPendingPickup}
                                 openAddItemModal={() => setAddItemModalOpen(true)}
                                 onEditItem={(i) => { setItemToEdit(i); setEditModalOpen(true); }}
                                 onDeleteItem={handleDeleteItem}
                                 onItemHistory={(i) => { setItemForHistory(i); setHistoryModalOpen(true); }}
-                                userRole={userRole}
-                                category={selectedInventoryType || 'Todos'}
-                                onGoBack={() => selectView('dashboard')}
-                            />
-                        )}
-                        {effectiveView === 'movements' && (
-                            <MovementsView
-                                movements={movements}
-                                items={items}
-                                personnel={personnel}
-                                openLogMovementModal={userRole === UserRole.OWNER ? () => setLogMovementModalOpen(true) : undefined}
-                                onGoBack={() => selectView('dashboard')}
-                                onDeleteMovement={userRole === UserRole.OWNER ? handleDeleteMovement : undefined}
-                            />
-                        )}
-                        {effectiveView === 'purchaseOrders' && (
-                            <PurchaseOrdersView
-                                purchaseOrders={purchaseOrders}
-                                items={items}
-                                openAddPurchaseOrderModal={() => setAddPOModalOpen(true)}
-                                onUpdateStatus={handleUpdatePOStatus}
-                                userRole={userRole}
-                                onGoBack={() => selectView('dashboard')}
-                                onDeleteOrder={handleDeletePO}
+                                onAddProject={handleAddProject}
+                                onDeleteProject={handleDeleteProject}
+                                showEconomicValues={appConfig.showEconomicValues}
                             />
                         )}
                         {effectiveView === 'personnel' && (
@@ -401,33 +412,11 @@ const App: React.FC = () => {
                                 movements={movements}
                                 items={items}
                                 projects={projects}
-                                openAddPersonnelModal={userRole === UserRole.OWNER ? () => setAddPersonnelModalOpen(true) : undefined}
+                                openAddPersonnelModal={() => setAddPersonnelModalOpen(true)}
                                 onGoBack={() => selectView('dashboard')}
                                 onEditPersonnel={handleEditPersonnel}
                                 onDeletePersonnel={handleDeletePersonnel}
                                 userRole={userRole}
-                            />
-                        )}
-                        {effectiveView === 'projects' && (
-                            <ProjectsView
-                                projects={projects}
-                                movements={movements}
-                                items={items}
-                                personnel={personnel}
-                                onAddProject={handleAddProject}
-                                onDeleteProject={handleDeleteProject}
-                                onGoBack={() => selectView('dashboard')}
-                                userRole={userRole}
-                            />
-                        )}
-                        {effectiveView === 'loans' && (
-                            <LoansView
-                                movements={movements}
-                                items={items}
-                                personnel={personnel}
-                                onReturnItem={handleReturnItem}
-                                onMarkPendingPickup={handleMarkPendingPickup}
-                                onGoBack={() => selectView('dashboard')}
                             />
                         )}
                         {effectiveView === 'copilot' && (
@@ -444,6 +433,19 @@ const App: React.FC = () => {
                             />
                         )}
                         {effectiveView === 'help' && <HelpView />}
+                        {effectiveView === 'whatsapp' && (
+                            <WhatsAppView movements={movements} items={items} personnel={personnel} />
+                        )}
+                        {effectiveView === 'pickup' && (
+                            <PickupView
+                                movements={movements}
+                                items={items}
+                                personnel={personnel}
+                                projects={projects}
+                                onMarkPendingPickup={handleMarkPendingPickup}
+                                onReturnItem={handleReturnItem}
+                            />
+                        )}
                     </div>
                 </main>
             </div>
@@ -452,10 +454,25 @@ const App: React.FC = () => {
             <EditItemModal isOpen={isEditModalOpen} onClose={() => setEditModalOpen(false)} onEditItem={handleEditItem} itemToEdit={itemToEdit} />
             <LogMovementModal isOpen={isLogMovementModalOpen} onClose={() => setLogMovementModalOpen(false)} onLogMovement={handleLogMovement} items={items} movements={movements} personnel={personnel} projects={projects} userRole={userRole} />
             <AddPersonnelModal isOpen={isAddPersonnelModalOpen} onClose={() => setAddPersonnelModalOpen(false)} onAddPersonnel={handleAddPersonnel} />
-            <AddPurchaseOrderModal isOpen={isAddPOModalOpen} onClose={() => setAddPOModalOpen(false)} onAddPurchaseOrder={handleAddPurchaseOrder} items={items} />
             <ItemHistoryModal isOpen={isHistoryModalOpen} onClose={() => setHistoryModalOpen(false)} item={itemForHistory} movements={movements} personnel={personnel} />
             <UserManagementModal isOpen={isUserManagementOpen} onClose={() => setUserManagementOpen(false)} users={users} onAddUser={handleAddUser} onDeleteUser={handleDeleteUser} onEditUser={handleEditUser} />
             <InvoiceReaderModal isOpen={isInvoiceReaderOpen} onClose={() => setInvoiceReaderOpen(false)} onImport={(rows, invType) => handleImportItems(rows, invType)} />
+            {isSettingsOpen && (
+                <SettingsModal
+                    config={appConfig}
+                    onChange={handleConfigChange}
+                    onClose={() => setSettingsOpen(false)}
+                />
+            )}
+            {isSearchOpen && (
+                <GlobalSearchModal
+                    items={items}
+                    movements={movements}
+                    personnel={personnel}
+                    onClose={() => setSearchOpen(false)}
+                    onNavigate={(v, tab) => { selectView(v as View, tab as KardexTab | undefined); setSearchOpen(false); }}
+                />
+            )}
             {showOnboarding && <OnboardingModal onFinish={handleOnboardingFinish} />}
             {userRole === UserRole.OWNER && (
                 <FloatingChat
@@ -480,10 +497,22 @@ const QuestionMarkIcon: React.FC<{ className?: string }> = ({ className }) => (
     </svg>
 );
 
-const NavItem: React.FC<{ icon: React.ElementType, label: string, onClick: () => void, isActive: boolean }> = ({ icon: Icon, label, onClick, isActive }) => (
+const PickupNavIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+    </svg>
+);
+
+const NavItem: React.FC<{ icon: React.ElementType, label: string, onClick: () => void, isActive: boolean, badge?: number }> = ({ icon: Icon, label, onClick, isActive, badge }) => (
     <button onClick={onClick} className={`w-full flex items-center text-left px-4 py-3 text-sm font-semibold rounded-xl transition-all duration-200 ${isActive ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'}`}>
         <Icon className={`w-5 h-5 mr-3 ${isActive ? 'text-white' : 'text-gray-400'}`} />
-        {label}
+        <span className="flex-1">{label}</span>
+        {badge != null && badge > 0 && (
+            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${isActive ? 'bg-white text-blue-600' : 'bg-orange-500 text-white'}`}>
+                {badge}
+            </span>
+        )}
     </button>
 );
 
