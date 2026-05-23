@@ -76,7 +76,15 @@ export const LoansView: React.FC<LoansViewProps> = ({
         setReminderLog({ ...newLog });
     };
 
-    const remindAllList = loansWithPhone;
+    // Un representante por persona (el primer préstamo), para enviar 1 mensaje por persona
+    const remindAllList = useMemo(() => {
+        const seen = new Set<string>();
+        return loansWithPhone.filter(m => {
+            if (!m.personnelId || seen.has(m.personnelId)) return false;
+            seen.add(m.personnelId);
+            return true;
+        });
+    }, [loansWithPhone]);
 
     const startRemindAll = () => {
         if (remindAllList.length === 0) return;
