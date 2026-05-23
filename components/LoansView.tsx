@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState } from 'react';
-import { Movement, Item, Personnel, UserRole } from '../types';
+import { Movement, Item, Personnel, UserRole, InventoryType } from '../types';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
 import { ClockIcon } from './icons/ClockIcon';
 
@@ -14,88 +14,122 @@ interface LoansViewProps {
     userRole?: UserRole;
 }
 
+const INV_FILTERS = [
+    { key: '', label: 'Todos' },
+    { key: InventoryType.HAND_TOOL,       label: '🔨 Manual' },
+    { key: InventoryType.ELECTRICAL_TOOL, label: '⚡ Eléctrica' },
+    { key: InventoryType.PPE,             label: '🦺 EPP' },
+    { key: InventoryType.SINGLE_USE,      label: '📦 Consumibles' },
+] as const;
+
 export const LoansView: React.FC<LoansViewProps> = ({
     movements, items, personnel, onReturnItem, onMarkPendingPickup, onGoBack, userRole = UserRole.EMPLOYEE,
 }) => {
     const isOwner = userRole === UserRole.OWNER;
-    const [search, setSearch] = useState('');
+    const [search, setSearch]   = useState('');
+    const [typeFilter, setTypeFilter] = useState<string>('');
+
+    const itemMap    = useMemo(() => new Map(items.map(i => [i.id, i])), [items]);
+    const personMap  = useMemo(() => new Map(personnel.map(p => [p.id, p])), [personnel]);
+
+    const getItemName     = (id: string)  => itemMap.get(id)?.name ?? 'Desconocido';
+    const getPersonName   = (id?: string) => personMap.get(id ?? '')?.name ?? 'Sin asignar';
+    const getDays         = (date: Date | string) =>
+        Math.ceil(Math.abs(Date.now() - new Date(date).getTime()) / 86400000);
 
     const activeLoans = useMemo(() => movements.filter(m => m.isLoan && !m.isReturned), [movements]);
 
-    const getItemName  = (id: string)  => items.find(i => i.id === id)?.name ?? 'Desconocido';
-    const getPersonnelName = (id?: string) => personnel.find(p => p.id === id)?.name ?? 'Sin asignar';
-
-    const getDays = (date: Date) =>
-        Math.ceil(Math.abs(Date.now() - new Date(date).getTime()) / 86400000);
-
     const filteredLoans = useMemo(() => {
-        if (!search.trim()) return activeLoans;
-        const q = search.toLowerCase();
-        return activeLoans.filter(m =>
-            getItemName(m.itemId).toLowerCase().includes(q) ||
-            getPersonnelName(m.personnelId).toLowerCase().includes(q)
-        );
-    }, [activeLoans, search]);
+        let list = activeLoans;
+        if (typeFilter) list = list.filter(m => itemMap.get(m.itemId)?.inventoryType === typeFilter);
+        if (search.trim()) {
+            const q = search.toLowerCase();
+            list = list.filter(m =>
+                getItemName(m.itemId).toLowerCase().includes(q) ||
+                getPersonName(m.personnelId).toLowerCase().includes(q)
+            );
+        }
+        return list;
+    }, [activeLoans, typeFilter, search]);
 
     const pendingPickup = useMemo(() => filteredLoans.filter(m => m.pendingPickup), [filteredLoans]);
-    const overdueLoans  = useMemo(() => filteredLoans.filter(m => !m.pendingPickup && getDays(new Date(m.timestamp)) > 14), [filteredLoans]);
-    const warningLoans  = useMemo(() => filteredLoans.filter(m => !m.pendingPickup && getDays(new Date(m.timestamp)) > 7 && getDays(new Date(m.timestamp)) <= 14), [filteredLoans]);
-    const normalLoans   = useMemo(() => filteredLoans.filter(m => !m.pendingPickup && getDays(new Date(m.timestamp)) <= 7), [filteredLoans]);
+    const overdueLoans  = useMemo(() => filteredLoans.filter(m => !m.pendingPickup && getDays(m.timestamp) > 14), [filteredLoans]);
+    const warningLoans  = useMemo(() => filteredLoans.filter(m => !m.pendingPickup && getDays(m.timestamp) > 7 && getDays(m.timestamp) <= 14), [filteredLoans]);
+    const normalLoans   = useMemo(() => filteredLoans.filter(m => !m.pendingPickup && getDays(m.timestamp) <= 7), [filteredLoans]);
 
     const handleReturn = (id: string) => {
-        if (window.confirm('¿Marcar como devuelta? Esta acción no se puede deshacer.')) {
-            onReturnItem(id);
-        }
+        if (window.confirm('¿Marcar como devuelta? Esta acción no se puede deshacer.')) onReturnItem(id);
     };
 
     const LoanCard: React.FC<{ loan: Movement }> = ({ loan }) => {
-        const days = getDays(new Date(loan.timestamp));
+        const days = getDays(loan.timestamp);
         const isPending = !!loan.pendingPickup;
-
         let cardClass = 'border border-gray-100 bg-white';
         let daysBadge = 'bg-green-100 text-green-800';
-        if (isPending)    { cardClass = 'border border-orange-200 bg-orange-50'; daysBadge = 'bg-orange-100 text-orange-800'; }
-        else if (days > 14) { cardClass = 'border border-red-200 bg-red-50';     daysBadge = 'bg-red-100 text-red-800'; }
+        if (isPending)      { cardClass = 'border border-orange-200 bg-orange-50'; daysBadge = 'bg-orange-100 text-orange-800'; }
+        else if (days > 14) { cardClass = 'border border-red-200 bg-red-50';       daysBadge = 'bg-red-100 text-red-800'; }
         else if (days > 7)  { cardClass = 'border border-yellow-200 bg-yellow-50'; daysBadge = 'bg-yellow-100 text-yellow-800'; }
-
         return (
             <div className={`rounded-2xl p-4 ${cardClass} flex flex-col gap-3`}>
                 <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                         <p className="font-bold text-gray-900 text-sm leading-snug">{getItemName(loan.itemId)}</p>
-                        <p className="text-xs text-gray-500 mt-0.5">x{loan.quantity} · {getPersonnelName(loan.personnelId)}</p>
                         <p className="text-xs text-gray-400 mt-0.5">{new Date(loan.timestamp).toLocaleDateString('es-CO')}</p>
                     </div>
-                    <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${daysBadge}`}>{days} días</span>
-                        {isPending && <span className="text-[10px] font-black bg-orange-500 text-white px-2 py-0.5 rounded-full uppercase tracking-wide">Recoger</span>}
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${daysBadge}`}>{days}d</span>
+                        {isPending && <span className="text-[10px] font-black bg-orange-500 text-white px-2 py-0.5 rounded-full">Recoger</span>}
                     </div>
                 </div>
                 <div className="flex gap-2">
                     {isOwner && (
-                        <button
-                            onClick={() => handleReturn(loan.id)}
-                            className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all"
-                        >
+                        <button onClick={() => handleReturn(loan.id)}
+                            className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all">
                             ✓ Devuelta
                         </button>
                     )}
                     {!isPending ? (
-                        <button
-                            onClick={() => onMarkPendingPickup(loan.id, true)}
-                            className="flex-1 py-1.5 bg-orange-100 hover:bg-orange-200 text-orange-800 text-xs font-bold rounded-xl transition-all"
-                        >
+                        <button onClick={() => onMarkPendingPickup(loan.id, true)}
+                            className="flex-1 py-1.5 bg-orange-100 hover:bg-orange-200 text-orange-800 text-xs font-bold rounded-xl transition-all">
                             📍 Ir a recoger
                         </button>
                     ) : (
-                        <button
-                            onClick={() => onMarkPendingPickup(loan.id, false)}
-                            className="flex-1 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-bold rounded-xl transition-all"
-                        >
+                        <button onClick={() => onMarkPendingPickup(loan.id, false)}
+                            className="flex-1 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-bold rounded-xl transition-all">
                             ✕ Cancelar
                         </button>
                     )}
                 </div>
+            </div>
+        );
+    };
+
+    const WorkerGroup: React.FC<{ loans: Movement[] }> = ({ loans }) => {
+        const byWorker = useMemo(() => {
+            const map = new Map<string, Movement[]>();
+            for (const m of loans) {
+                const key = m.personnelId ?? '__none__';
+                if (!map.has(key)) map.set(key, []);
+                map.get(key)!.push(m);
+            }
+            return [...map.entries()]
+                .map(([key, ms]) => ({ name: getPersonName(key === '__none__' ? undefined : key), loans: ms }))
+                .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+        }, [loans]);
+
+        return (
+            <div className="space-y-4">
+                {byWorker.map(({ name, loans: wLoans }) => (
+                    <div key={name}>
+                        <p className="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                            <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-black text-xs flex-shrink-0">{name.charAt(0)}</span>
+                            {name} <span className="font-normal text-gray-400">({wLoans.length})</span>
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {wLoans.map(l => <LoanCard key={l.id} loan={l} />)}
+                        </div>
+                    </div>
+                ))}
             </div>
         );
     };
@@ -105,9 +139,7 @@ export const LoansView: React.FC<LoansViewProps> = ({
         return (
             <div className="mb-6">
                 <p className={`text-xs font-black uppercase tracking-widest mb-3 ${color}`}>{title} ({loans.length})</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {loans.map(l => <LoanCard key={l.id} loan={l} />)}
-                </div>
+                <WorkerGroup loans={loans} />
             </div>
         );
     };
@@ -127,22 +159,30 @@ export const LoansView: React.FC<LoansViewProps> = ({
                 </div>
             </div>
 
+            {/* Chips de tipo */}
+            <div className="flex gap-2 overflow-x-auto pb-1 mb-3 scrollbar-hide">
+                {INV_FILTERS.map(f => (
+                    <button key={f.key} onClick={() => setTypeFilter(f.key)}
+                        className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-black transition-all ${
+                            typeFilter === f.key
+                                ? 'bg-indigo-600 text-white shadow-sm'
+                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}>
+                        {f.label}
+                    </button>
+                ))}
+            </div>
+
+            {/* Búsqueda */}
             {activeLoans.length > 0 && (
                 <div className="relative mb-4">
                     <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
-                    <input
-                        type="text"
-                        value={search}
-                        onChange={e => setSearch(e.target.value)}
-                        placeholder="Buscar por herramienta o persona..."
+                    <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+                        placeholder="Buscar herramienta o persona..."
                         className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                        autoComplete="off"
-                        autoCorrect="off"
-                        autoCapitalize="off"
-                        spellCheck={false}
-                    />
+                        autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} />
                 </div>
             )}
 
@@ -152,7 +192,7 @@ export const LoansView: React.FC<LoansViewProps> = ({
                     <p className="font-semibold">¡Todo está en bodega!</p>
                 </div>
             ) : filteredLoans.length === 0 ? (
-                <p className="text-center py-10 text-gray-400 text-sm">Sin resultados para "{search}".</p>
+                <p className="text-center py-10 text-gray-400 text-sm">Sin resultados.</p>
             ) : (
                 <>
                     <Section title="📍 Pendientes de recoger" color="text-orange-600" loans={pendingPickup} />
