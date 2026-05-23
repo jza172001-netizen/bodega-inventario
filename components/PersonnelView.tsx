@@ -70,7 +70,7 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {personnel.map(p => {
+                    {[...personnel].sort((a, b) => a.name.localeCompare(b.name, 'es')).map(p => {
                         const activeLoans = movements.filter(m => m.personnelId === p.id && m.isLoan && !m.isReturned);
                         const activeItems = activeLoans.map(m => items.find(i => i.id === m.itemId)).filter(Boolean) as Item[];
                         const visibleChips = activeItems.slice(0, 3);
