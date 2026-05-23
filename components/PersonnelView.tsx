@@ -6,8 +6,6 @@ import { TrashIcon } from './icons/TrashIcon';
 import { EditIcon } from './icons/EditIcon';
 import { PersonnelDetailModal } from './PersonnelDetailModal';
 import { EditPersonnelModal } from './EditPersonnelModal';
-import { buildPersonGroups, buildPersonReminderUrl } from '../services/whatsappService';
-
 interface PersonnelViewProps {
     personnel: Personnel[];
     movements: Movement[];
@@ -78,10 +76,6 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
                         const visibleChips = activeItems.slice(0, 3);
                         const extra = activeItems.length - visibleChips.length;
 
-                        const waUrl = p.phone && activeLoans.length > 0
-                            ? buildPersonReminderUrl(p.phone, p.name, buildPersonGroups(p, movements, items))
-                            : null;
-
                         return (
                             <div
                                 key={p.id}
@@ -105,17 +99,6 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
 
                                     {/* Action buttons — always visible for owner */}
                                     <div className="flex items-center gap-1 flex-shrink-0" onClick={e => e.stopPropagation()}>
-                                        {waUrl && (
-                                            <a
-                                                href={waUrl}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="p-1.5 text-green-600 hover:text-green-700 hover:bg-green-100 rounded-lg transition-colors"
-                                                title="Recordar por WhatsApp"
-                                            >
-                                                📲
-                                            </a>
-                                        )}
                                         {isOwner && (
                                             <>
                                                 <button
