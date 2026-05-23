@@ -188,6 +188,22 @@ export async function markMovementPendingPickup(id: string, pending: boolean): P
     if (error) throw error;
 }
 
+export async function updateMovementProject(id: string, projectId: string | null): Promise<void> {
+    const { error } = await supabase
+        .from('movements')
+        .update({ project_id: projectId })
+        .eq('id', id);
+    if (error) throw error;
+}
+
+export async function updateMovementPersonnel(id: string, personnelId: string): Promise<void> {
+    const { error } = await supabase
+        .from('movements')
+        .update({ personnel_id: personnelId })
+        .eq('id', id);
+    if (error) throw error;
+}
+
 // ─── PERSONNEL ───────────────────────────────────────────────────────────────
 
 export async function fetchPersonnel(): Promise<Personnel[]> {

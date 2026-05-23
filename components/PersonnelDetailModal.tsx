@@ -6,17 +6,31 @@ interface Props {
     movements: Movement[];
     items: Item[];
     projects: Project[];
+    allPersonnel?: Personnel[];
     onReturnLoan?: (movementId: string) => void;
+    onMarkPendingPickup?: (movementId: string, pending: boolean) => void;
+    onAssignProject?: (movementId: string, projectId: string) => void;
+    onCreateProject?: (name: string) => Project;
+    onTransferLoan?: (movementId: string, newPersonnelId: string) => void;
     onClose: () => void;
 }
 
 type Tab = 'manual' | 'electric' | 'consumo' | 'epp';
+type ActionPanel = 'project' | 'transfer' | null;
 
 const currentYear = new Date().getFullYear();
 const daysSince = (d: Date) => Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
 
-export const PersonnelDetailModal: React.FC<Props> = ({ person, movements, items, projects, onReturnLoan, onClose }) => {
+export const PersonnelDetailModal: React.FC<Props> = ({
+    person, movements, items, projects, allPersonnel = [],
+    onReturnLoan, onMarkPendingPickup, onAssignProject, onCreateProject, onTransferLoan,
+    onClose,
+}) => {
     const [tab, setTab] = useState<Tab>('manual');
+    const [openPanel, setOpenPanel] = useState<{ key: string; type: ActionPanel }>({ key: '', type: null });
+    const [newProjectName, setNewProjectName] = useState('');
+    const [selectedProject, setSelectedProject] = useState('');
+    const [selectedPerson, setSelectedPerson] = useState('');
 
     const myMovements = useMemo(
         () => movements.filter(m => m.personnelId === person.id),
@@ -25,43 +39,53 @@ export const PersonnelDetailModal: React.FC<Props> = ({ person, movements, items
 
     const itemByType = (type: InventoryType) => new Set(items.filter(i => i.inventoryType === type).map(i => i.id));
 
-    type LoanGroup = { itemId: string; totalQty: number; movementIds: string[]; date: Date; workers: string[] };
+    type LoanGroup = {
+        itemId: string;
+        totalQty: number;
+        movementIds: string[];
+        date: Date;
+        workers: string[];
+        projectId?: string;
+        pendingPickup: boolean;
+    };
 
-    // Agrupa por ítem + día exacto. Mismo ítem mismo día → 1 tarjeta sumando cantidades y uniendo nombres de trabajadores.
     const groupLoans = (loanMovements: Movement[]): LoanGroup[] => {
         const map = new Map<string, LoanGroup>();
         for (const m of loanMovements) {
             const ts = new Date(m.timestamp);
             const dayKey = `${m.itemId}__${ts.getFullYear()}-${ts.getMonth()}-${ts.getDate()}`;
             if (!map.has(dayKey)) {
-                map.set(dayKey, { itemId: m.itemId, totalQty: 0, movementIds: [], date: ts, workers: [] });
+                map.set(dayKey, { itemId: m.itemId, totalQty: 0, movementIds: [], date: ts, workers: [], projectId: m.projectId, pendingPickup: false });
             }
             const g = map.get(dayKey)!;
             g.totalQty += m.quantity;
             g.movementIds.push(m.id);
             if (m.notes && !g.workers.includes(m.notes)) g.workers.push(m.notes);
+            if (m.pendingPickup) g.pendingPickup = true;
+            if (m.projectId && !g.projectId) g.projectId = m.projectId;
         }
         return [...map.values()].sort((a, b) => b.date.getTime() - a.date.getTime());
     };
 
-    // H. Manual: préstamos activos agrupados por ítem
+    // Re-derive active loans from live movements so actions update in real time
+    const liveMovements = useMemo(
+        () => movements.filter(m => m.personnelId === person.id),
+        [movements, person.id]
+    );
+
     const activeManual = useMemo(() => {
-        const manualIds = itemByType(InventoryType.HAND_TOOL);
-        const loans = myMovements.filter(m => m.isLoan && !m.isReturned && manualIds.has(m.itemId));
-        return groupLoans(loans);
-    }, [myMovements, items]);
+        const ids = itemByType(InventoryType.HAND_TOOL);
+        return groupLoans(liveMovements.filter(m => m.isLoan && !m.isReturned && ids.has(m.itemId)));
+    }, [liveMovements, items]);
 
-    // H. Eléctrica: préstamos activos agrupados por ítem
     const activeElectric = useMemo(() => {
-        const electricIds = itemByType(InventoryType.ELECTRICAL_TOOL);
-        const loans = myMovements.filter(m => m.isLoan && !m.isReturned && electricIds.has(m.itemId));
-        return groupLoans(loans);
-    }, [myMovements, items]);
+        const ids = itemByType(InventoryType.ELECTRICAL_TOOL);
+        return groupLoans(liveMovements.filter(m => m.isLoan && !m.isReturned && ids.has(m.itemId)));
+    }, [liveMovements, items]);
 
-    // Consumibles: salidas sin préstamo del año, agrupadas por ítem
     const consumoYear = useMemo(() => {
         const consumoIds = itemByType(InventoryType.SINGLE_USE);
-        const checkouts = myMovements.filter(m =>
+        const checkouts = liveMovements.filter(m =>
             m.type === MovementType.CHECK_OUT && !m.isLoan && consumoIds.has(m.itemId) &&
             new Date(m.timestamp).getFullYear() === currentYear
         );
@@ -75,12 +99,11 @@ export const PersonnelDetailModal: React.FC<Props> = ({ person, movements, items
             if (ts > grouped[m.itemId].lastDate) grouped[m.itemId].lastDate = ts;
         });
         return Object.values(grouped).sort((a, b) => b.total - a.total);
-    }, [myMovements, items]);
+    }, [liveMovements, items]);
 
-    // EPP: salidas sin préstamo del año, agrupadas por ítem
     const eppYear = useMemo(() => {
         const eppIds = itemByType(InventoryType.PPE);
-        const checkouts = myMovements.filter(m =>
+        const checkouts = liveMovements.filter(m =>
             m.type === MovementType.CHECK_OUT && !m.isLoan && eppIds.has(m.itemId) &&
             new Date(m.timestamp).getFullYear() === currentYear
         );
@@ -94,10 +117,11 @@ export const PersonnelDetailModal: React.FC<Props> = ({ person, movements, items
             if (ts > grouped[m.itemId].lastDate) grouped[m.itemId].lastDate = ts;
         });
         return Object.values(grouped).sort((a, b) => b.total - a.total);
-    }, [myMovements, items]);
+    }, [liveMovements, items]);
 
     const itemName = (id: string) => items.find(i => i.id === id)?.name ?? 'Ítem eliminado';
     const itemUnit = (id: string) => items.find(i => i.id === id)?.unit ?? 'und';
+    const projectName = (id?: string) => id ? (projects.find(p => p.id === id)?.name ?? id) : null;
 
     const TABS: { key: Tab; label: string; count: number }[] = [
         { key: 'manual', label: 'H. Manual', count: activeManual.length },
@@ -106,39 +130,213 @@ export const PersonnelDetailModal: React.FC<Props> = ({ person, movements, items
         { key: 'epp', label: 'EPP', count: eppYear.length },
     ];
 
-    const handleReturn = (g: { itemId: string; movementIds: string[]; date: Date }) => {
+    const handleReturn = (g: LoanGroup) => {
         const fecha = g.date.toLocaleDateString('es-CO');
         if (window.confirm(`¿Confirmar devolución de "${itemName(g.itemId)}" (${fecha})?`)) {
             g.movementIds.forEach(id => onReturnLoan?.(id));
         }
     };
 
+    const handlePickupToggle = (g: LoanGroup) => {
+        const next = !g.pendingPickup;
+        g.movementIds.forEach(id => onMarkPendingPickup?.(id, next));
+    };
+
+    const groupKey = (g: LoanGroup) => `${g.itemId}__${g.date.getTime()}`;
+
+    const togglePanel = (g: LoanGroup, type: ActionPanel) => {
+        const k = groupKey(g);
+        if (openPanel.key === k && openPanel.type === type) {
+            setOpenPanel({ key: '', type: null });
+        } else {
+            setOpenPanel({ key: k, type });
+            setNewProjectName('');
+            setSelectedProject(g.projectId ?? '');
+            setSelectedPerson('');
+        }
+    };
+
+    const handleAssignProject = (g: LoanGroup) => {
+        if (!selectedProject) return;
+        g.movementIds.forEach(id => onAssignProject?.(id, selectedProject));
+        setOpenPanel({ key: '', type: null });
+    };
+
+    const handleCreateAndAssign = (g: LoanGroup) => {
+        const name = newProjectName.trim();
+        if (!name || !onCreateProject) return;
+        const created = onCreateProject(name);
+        g.movementIds.forEach(id => onAssignProject?.(id, created.id));
+        setNewProjectName('');
+        setOpenPanel({ key: '', type: null });
+    };
+
+    const handleTransfer = (g: LoanGroup) => {
+        if (!selectedPerson) return;
+        g.movementIds.forEach(id => onTransferLoan?.(id, selectedPerson));
+        setOpenPanel({ key: '', type: null });
+    };
+
     const ToolCard = ({ g }: { g: LoanGroup }) => {
         const d = daysSince(g.date);
-        const colorClass = d > 14 ? 'border-red-200 bg-red-50' : d > 7 ? 'border-yellow-200 bg-yellow-50' : 'border-blue-100 bg-blue-50';
-        const badgeClass = d > 14 ? 'bg-red-100 text-red-700' : d > 7 ? 'bg-yellow-100 text-yellow-700' : 'bg-blue-100 text-blue-700';
+        const isPending = g.pendingPickup;
+        const colorClass = isPending ? 'border-orange-200 bg-orange-50' : d > 14 ? 'border-red-200 bg-red-50' : d > 7 ? 'border-yellow-200 bg-yellow-50' : 'border-blue-100 bg-blue-50';
+        const badgeClass = isPending ? 'bg-orange-100 text-orange-700' : d > 14 ? 'bg-red-100 text-red-700' : d > 7 ? 'bg-yellow-100 text-yellow-700' : 'bg-blue-100 text-blue-700';
+        const key = groupKey(g);
+        const proj = projectName(g.projectId);
+
+        const isProjectOpen  = openPanel.key === key && openPanel.type === 'project';
+        const isTransferOpen = openPanel.key === key && openPanel.type === 'transfer';
+
+        const otherPersonnel = allPersonnel.filter(p => p.id !== person.id).sort((a, b) => a.name.localeCompare(b.name, 'es'));
+
         return (
-            <div className={`flex items-center justify-between p-4 rounded-xl border ${colorClass}`}>
-                <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-gray-800 text-sm">{itemName(g.itemId)}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">{g.totalQty} {itemUnit(g.itemId)} · {g.date.toLocaleDateString('es-CO')}</p>
-                    <p className="text-xs font-semibold text-indigo-600 mt-1">
-                        👷 {g.workers.length > 0 ? g.workers.join(', ') : person.name}
-                    </p>
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className={`text-xs font-black px-2.5 py-1 rounded-full ${badgeClass}`}>
-                        {d === 0 ? 'hoy' : `${d}d fuera`}
+            <div className={`rounded-xl border ${colorClass} overflow-hidden`}>
+                {/* Main row */}
+                <div className="flex items-start justify-between p-3 gap-2">
+                    <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-gray-800 text-sm leading-snug">{itemName(g.itemId)}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                            {g.totalQty} {itemUnit(g.itemId)} · {g.date.toLocaleDateString('es-CO')}
+                        </p>
+                        {proj && (
+                            <p className="text-xs text-indigo-600 font-semibold mt-0.5 truncate">📁 {proj}</p>
+                        )}
+                        {isPending && (
+                            <p className="text-xs font-black text-orange-600 mt-0.5">📍 Pendiente de recoger</p>
+                        )}
+                    </div>
+                    <span className={`flex-shrink-0 text-xs font-black px-2.5 py-1 rounded-full ${badgeClass}`}>
+                        {d === 0 ? 'hoy' : `${d}d`}
                     </span>
+                </div>
+
+                {/* Action buttons */}
+                <div className="flex gap-1.5 px-3 pb-3 flex-wrap">
+                    {/* Pickup toggle */}
+                    {onMarkPendingPickup && (
+                        <button
+                            onClick={() => handlePickupToggle(g)}
+                            className={`text-[11px] font-bold px-2.5 py-1.5 rounded-lg transition-all ${
+                                isPending
+                                    ? 'bg-orange-500 text-white hover:bg-orange-600'
+                                    : 'bg-orange-100 text-orange-700 hover:bg-orange-200'
+                            }`}
+                        >
+                            {isPending ? '✕ No recoger' : '📍 Ir a recoger'}
+                        </button>
+                    )}
+
+                    {/* Assign project */}
+                    {onAssignProject && (
+                        <button
+                            onClick={() => togglePanel(g, 'project')}
+                            className={`text-[11px] font-bold px-2.5 py-1.5 rounded-lg transition-all ${
+                                isProjectOpen
+                                    ? 'bg-indigo-600 text-white'
+                                    : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
+                            }`}
+                        >
+                            📁 Proyecto
+                        </button>
+                    )}
+
+                    {/* Transfer to another person */}
+                    {onTransferLoan && otherPersonnel.length > 0 && (
+                        <button
+                            onClick={() => togglePanel(g, 'transfer')}
+                            className={`text-[11px] font-bold px-2.5 py-1.5 rounded-lg transition-all ${
+                                isTransferOpen
+                                    ? 'bg-purple-600 text-white'
+                                    : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                            }`}
+                        >
+                            ↗️ Traspasar
+                        </button>
+                    )}
+
+                    {/* Return */}
                     {onReturnLoan && (
                         <button
                             onClick={() => handleReturn(g)}
-                            className="text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded-lg font-bold"
+                            className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white transition-all"
                         >
-                            Devolver
+                            ✓ Devolver
                         </button>
                     )}
                 </div>
+
+                {/* Project panel */}
+                {isProjectOpen && (
+                    <div className="border-t border-indigo-100 bg-indigo-50 px-3 py-3 space-y-2">
+                        <p className="text-[11px] font-black text-indigo-700 uppercase tracking-wide">Asignar proyecto</p>
+                        {projects.length > 0 && (
+                            <div className="flex gap-2">
+                                <select
+                                    value={selectedProject}
+                                    onChange={e => setSelectedProject(e.target.value)}
+                                    className="flex-1 text-xs border border-indigo-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
+                                >
+                                    <option value="">— Elegir proyecto —</option>
+                                    {[...projects].sort((a, b) => a.name.localeCompare(b.name, 'es')).map(p => (
+                                        <option key={p.id} value={p.id}>{p.name}</option>
+                                    ))}
+                                </select>
+                                <button
+                                    onClick={() => handleAssignProject(g)}
+                                    disabled={!selectedProject}
+                                    className="text-xs font-bold px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg disabled:opacity-40 transition-all"
+                                >
+                                    Asignar
+                                </button>
+                            </div>
+                        )}
+                        <p className="text-[10px] text-indigo-500 font-semibold">O crear proyecto nuevo:</p>
+                        <div className="flex gap-2">
+                            <input
+                                type="text"
+                                value={newProjectName}
+                                onChange={e => setNewProjectName(e.target.value)}
+                                placeholder="Nombre del proyecto..."
+                                className="flex-1 text-xs border border-indigo-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                onKeyDown={e => { if (e.key === 'Enter') handleCreateAndAssign(g); }}
+                            />
+                            <button
+                                onClick={() => handleCreateAndAssign(g)}
+                                disabled={!newProjectName.trim()}
+                                className="text-xs font-bold px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg disabled:opacity-40 transition-all"
+                            >
+                                Crear
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Transfer panel */}
+                {isTransferOpen && (
+                    <div className="border-t border-purple-100 bg-purple-50 px-3 py-3 space-y-2">
+                        <p className="text-[11px] font-black text-purple-700 uppercase tracking-wide">Traspasar a otro trabajador</p>
+                        <div className="flex gap-2">
+                            <select
+                                value={selectedPerson}
+                                onChange={e => setSelectedPerson(e.target.value)}
+                                className="flex-1 text-xs border border-purple-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-purple-400 bg-white"
+                            >
+                                <option value="">— Elegir trabajador —</option>
+                                {otherPersonnel.map(p => (
+                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                ))}
+                            </select>
+                            <button
+                                onClick={() => handleTransfer(g)}
+                                disabled={!selectedPerson}
+                                className="text-xs font-bold px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-40 transition-all"
+                            >
+                                Traspasar
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
         );
     };
@@ -217,7 +415,7 @@ export const PersonnelDetailModal: React.FC<Props> = ({ person, movements, items
                             </div>
                         ) : (
                             <div className="space-y-3">
-                                {activeManual.map(g => <ToolCard key={g.itemId} g={g} />)}
+                                {activeManual.map(g => <ToolCard key={groupKey(g)} g={g} />)}
                             </div>
                         )
                     )}
@@ -230,7 +428,7 @@ export const PersonnelDetailModal: React.FC<Props> = ({ person, movements, items
                             </div>
                         ) : (
                             <div className="space-y-3">
-                                {activeElectric.map(g => <ToolCard key={g.itemId} g={g} />)}
+                                {activeElectric.map(g => <ToolCard key={groupKey(g)} g={g} />)}
                             </div>
                         )
                     )}

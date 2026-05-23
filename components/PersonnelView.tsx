@@ -15,6 +15,11 @@ interface PersonnelViewProps {
     onGoBack: () => void;
     onEditPersonnel?: (person: Personnel) => void;
     onDeletePersonnel?: (id: string) => void;
+    onReturnLoan?: (movementId: string) => void;
+    onMarkPendingPickup?: (movementId: string, pending: boolean) => void;
+    onAssignProject?: (movementId: string, projectId: string) => void;
+    onCreateProject?: (name: string) => Project;
+    onTransferLoan?: (movementId: string, newPersonnelId: string) => void;
     userRole?: UserRole;
 }
 
@@ -27,6 +32,11 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
     onGoBack,
     onEditPersonnel,
     onDeletePersonnel,
+    onReturnLoan,
+    onMarkPendingPickup,
+    onAssignProject,
+    onCreateProject,
+    onTransferLoan,
     userRole,
 }) => {
     const [detailPerson, setDetailPerson] = useState<Personnel | null>(null);
@@ -148,6 +158,12 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
                     movements={movements}
                     items={items}
                     projects={projects}
+                    allPersonnel={personnel}
+                    onReturnLoan={onReturnLoan}
+                    onMarkPendingPickup={onMarkPendingPickup}
+                    onAssignProject={onAssignProject}
+                    onCreateProject={onCreateProject}
+                    onTransferLoan={onTransferLoan}
                     onClose={() => setDetailPerson(null)}
                 />
             )}

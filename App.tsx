@@ -227,6 +227,16 @@ const App: React.FC = () => {
         withSync(db.markMovementPendingPickup(id, pending));
     };
 
+    const handleAssignProjectToLoan = (movementId: string, projectId: string) => {
+        setMovements(prev => prev.map(m => m.id === movementId ? { ...m, projectId } : m));
+        withSync(db.updateMovementProject(movementId, projectId));
+    };
+
+    const handleTransferLoan = (movementId: string, newPersonnelId: string) => {
+        setMovements(prev => prev.map(m => m.id === movementId ? { ...m, personnelId: newPersonnelId } : m));
+        withSync(db.updateMovementPersonnel(movementId, newPersonnelId));
+    };
+
     const handleAddPersonnel = (p: Omit<Personnel, 'id'>) => {
         const newP = { ...p, id: `per-${Date.now()}` };
         setPersonnel(prev => [...prev, newP]);
@@ -264,6 +274,8 @@ const App: React.FC = () => {
         withSync(db.addProject(p).then(created => setProjects(prev => prev.map(x => x.id === newP.id ? created : x))));
         return newP;
     };
+
+    const handleCreateProjectByName = (name: string): Project => handleAddProjectSync({ name, status: 'active' });
 
     const handleDeleteProject = (id: string) => {
         setProjects(prev => prev.filter(p => p.id !== id));
@@ -415,6 +427,10 @@ const App: React.FC = () => {
                                 onEditPersonnel={handleEditPersonnel}
                                 onDeletePersonnel={handleDeletePersonnel}
                                 onReturnLoan={handleReturnItem}
+                                onMarkPendingPickup={handleMarkPendingPickup}
+                                onAssignProject={handleAssignProjectToLoan}
+                                onCreateProject={handleCreateProjectByName}
+                                onTransferLoan={handleTransferLoan}
                                 userRole={userRole}
                             />
                         )}
