@@ -6,12 +6,10 @@ import { LoansView } from './LoansView';
 import { InventoryView } from './InventoryView';
 import { ProjectsView } from './ProjectsView';
 import { TraceabilityView } from './TraceabilityView';
-import { AuditLogView } from './AuditLogView';
 
-type KardexTab = 'movements' | 'loans' | 'inventory' | 'projects' | 'traceability' | 'audit';
+type KardexTab = 'movements' | 'loans' | 'inventory' | 'projects' | 'traceability';
 
 interface KardexHubProps {
-    // data
     items: Item[];
     movements: Movement[];
     personnel: Personnel[];
@@ -21,41 +19,35 @@ interface KardexHubProps {
     initialTab?: KardexTab;
     initialInventoryType?: InventoryType | null;
     onGoBack: () => void;
-    // movements handlers
     openLogMovementModal: () => void;
     onDeleteMovement?: (id: string) => void;
     onReturnLoan?: (movementId: string) => void;
-    // loans handlers
     onReturnItem: (movementId: string) => void;
     onMarkPendingPickup: (movementId: string, pending: boolean) => void;
-    // inventory handlers
     openAddItemModal: () => void;
     onEditItem: (item: Item) => void;
     onDeleteItem: (itemId: string) => void;
     onItemHistory: (item: Item) => void;
     onOpenInvoiceReader?: () => void;
-    // project handlers
     onAddProject: (p: Omit<Project, 'id'>) => void;
     onDeleteProject?: (id: string) => void;
     showEconomicValues?: boolean;
-    onClearAuditLogs?: () => void;
 }
 
 const TABS: Array<{ id: KardexTab; label: string; icon: string }> = [
-    { id: 'movements',    label: 'Historial',      icon: '📋' },
-    { id: 'loans',        label: 'Préstamos',      icon: '🔑' },
-    { id: 'inventory',    label: 'Inventario',     icon: '📦' },
-    { id: 'projects',     label: 'Proyectos',      icon: '🏗' },
-    { id: 'traceability', label: 'Trazabilidad',   icon: '🔍' },
-    { id: 'audit',        label: 'Bitácora',       icon: '🛡️' },
+    { id: 'movements',    label: 'Historial',    icon: '📋' },
+    { id: 'loans',        label: 'Préstamos',    icon: '🔑' },
+    { id: 'inventory',    label: 'Inventario',   icon: '📦' },
+    { id: 'projects',     label: 'Proyectos',    icon: '🏗' },
+    { id: 'traceability', label: 'Trazabilidad', icon: '🔍' },
 ];
 
 const INV_TYPES: Array<{ type: InventoryType | null; label: string }> = [
-    { type: null,                        label: 'Todos' },
-    { type: InventoryType.HAND_TOOL,     label: '🔨 H. Manual' },
+    { type: null,                          label: 'Todos' },
+    { type: InventoryType.HAND_TOOL,       label: '🔨 H. Manual' },
     { type: InventoryType.ELECTRICAL_TOOL, label: '⚡ H. Eléctrica' },
-    { type: InventoryType.PPE,           label: '🦺 Seguridad' },
-    { type: InventoryType.SINGLE_USE,    label: '📦 Consumibles' },
+    { type: InventoryType.PPE,             label: '🦺 Seguridad' },
+    { type: InventoryType.SINGLE_USE,      label: '📦 Consumibles' },
 ];
 
 export const KardexHub: React.FC<KardexHubProps> = ({
@@ -66,7 +58,6 @@ export const KardexHub: React.FC<KardexHubProps> = ({
     onReturnItem, onMarkPendingPickup,
     openAddItemModal, onEditItem, onDeleteItem, onItemHistory, onOpenInvoiceReader,
     onAddProject, onDeleteProject, showEconomicValues = false,
-    onClearAuditLogs,
 }) => {
     const [activeTab, setActiveTab] = useState<KardexTab>(initialTab);
     const [invType, setInvType] = useState<InventoryType | null>(initialInventoryType);
@@ -123,6 +114,7 @@ export const KardexHub: React.FC<KardexHubProps> = ({
                     movements={movements}
                     items={items}
                     personnel={personnel}
+                    auditLogs={auditLogs}
                     openLogMovementModal={openLogMovementModal}
                     onDeleteMovement={onDeleteMovement}
                     onReturnLoan={onReturnLoan}
@@ -180,13 +172,6 @@ export const KardexHub: React.FC<KardexHubProps> = ({
                 />
             )}
 
-            {activeTab === 'audit' && (
-                <AuditLogView
-                    auditLogs={auditLogs}
-                    userRole={userRole}
-                    onClearLogs={onClearAuditLogs}
-                />
-            )}
         </div>
     );
 };

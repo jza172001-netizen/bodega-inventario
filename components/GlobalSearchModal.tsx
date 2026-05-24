@@ -29,7 +29,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
     const personnelMap = useMemo(() => new Map(personnel.map(p => [p.id, p])), [personnel]);
 
     const norm = (s: string) =>
-        s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+        s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
     const itemResults = useMemo(() => {
         const q = norm(query.trim());

@@ -55,6 +55,7 @@ const App: React.FC = () => {
         setUserName(name);
         setLoggedIn(true);
         localStorage.setItem(SESSION_KEY, JSON.stringify({ role, name }));
+        addAuditLog('USER_LOGIN', `Ingresó a la app: ${name} (${role})`, name);
     };
 
     // Carga inicial síncrona desde localStorage (igual que antes), con fallback a mockData
@@ -66,12 +67,12 @@ const App: React.FC = () => {
     const [projects, setProjects] = useState<Project[]>(() => { const s = loadFromLocalStorage(); return s?.projects ?? mockProjects; });
     const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => { const s = loadFromLocalStorage(); return s?.auditLogs ?? []; });
 
-    const addAuditLog = (action: string, description: string) => {
+    const addAuditLog = (action: string, description: string, actorOverride?: string) => {
         const entry: AuditLog = {
             id: `audit-${Date.now()}-${Math.random().toString(36).slice(2)}`,
             timestamp: new Date(),
             action,
-            actor: userName,
+            actor: actorOverride ?? userName,
             description,
         };
         setAuditLogs(prev => [entry, ...prev]);
@@ -244,10 +245,14 @@ const App: React.FC = () => {
         }));
         withSync(db.addMovement({ ...m, timestamp: ts })
             .then(created => setMovements(prev => prev.map(x => x.id === newMov.id ? created : x))));
+        const itemName   = items.find(i => i.id === m.itemId)?.name ?? 'herramienta';
+        const personName = m.personnelId ? personnel.find(p => p.id === m.personnelId)?.name : undefined;
         if (m.isLoan) {
-            const itemName = items.find(i => i.id === m.itemId)?.name ?? 'herramienta';
-            const personName = m.personnelId ? personnel.find(p => p.id === m.personnelId)?.name : undefined;
             addAuditLog('LOAN_CREATED', `Préstamo: "${itemName}"${personName ? ` → ${personName}` : ''}`);
+        } else if (m.type === MovementType.CHECK_OUT) {
+            addAuditLog('ITEM_EDITED', `📤 Salida: "${itemName}" ×${m.quantity}${personName ? ` — ${personName}` : ''}`);
+        } else if (m.type === MovementType.CHECK_IN) {
+            addAuditLog('ITEM_CREATED', `📥 Entrada: "${itemName}" ×${m.quantity}${personName ? ` — ${personName}` : ''}`);
         }
     };
 
@@ -554,7 +559,6 @@ const App: React.FC = () => {
                                 onAddProject={handleAddProject}
                                 onDeleteProject={handleDeleteProject}
                                 showEconomicValues={appConfig.showEconomicValues}
-                                onClearAuditLogs={handleClearAuditLogs}
                             />
                         )}
                         {effectiveView === 'personnel' && (
