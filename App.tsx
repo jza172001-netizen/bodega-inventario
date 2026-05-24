@@ -22,7 +22,7 @@ import { SettingsModal, AppConfig, DEFAULT_CONFIG } from './components/SettingsM
 import { requestNotificationPermission, checkAndNotifyPickup } from './services/notificationService';
 
 import { mockItems, mockMovements, mockPersonnel, mockPurchaseOrders, mockProjects, mockUsers } from './mockData';
-import { Item, Movement, MovementType, Personnel, PurchaseOrder, UserRole, InventoryType, Project, AppUser, PurchaseOrderStatus, AuditLog } from './types';
+import { Item, Movement, MovementType, Personnel, PurchaseOrder, UserRole, InventoryType, Project, AppUser, PurchaseOrderStatus, AuditLog, BehaviorLog } from './types';
 import { LoginView } from './components/LoginView';
 import { LandingPage } from './components/LandingPage';
 import { InvoiceReaderModal } from './components/InvoiceReaderModal';
@@ -50,15 +50,7 @@ const App: React.FC = () => {
         try { return JSON.parse(localStorage.getItem(SESSION_KEY) || '{}').name ?? ''; } catch { return ''; }
     });
 
-    const handleLoginSuccess = (role: UserRole, name: string) => {
-        setUserRole(role);
-        setUserName(name);
-        setLoggedIn(true);
-        localStorage.setItem(SESSION_KEY, JSON.stringify({ role, name }));
-        addAuditLog('USER_LOGIN', `Ingresó a la app: ${name} (${role})`, name);
-    };
-
-    // Carga inicial síncrona desde localStorage (igual que antes), con fallback a mockData
+    // Carga inicial síncrona desde localStorage, con fallback a mockData
     const [users, setUsers] = useState<AppUser[]>(() => { const s = loadFromLocalStorage(); return s?.users ?? mockUsers; });
     const [items, setItems] = useState<Item[]>(() => { const s = loadFromLocalStorage(); return s?.items ?? mockItems; });
     const [movements, setMovements] = useState<Movement[]>(() => { const s = loadFromLocalStorage(); return s?.movements ?? mockMovements; });
@@ -66,6 +58,7 @@ const App: React.FC = () => {
     const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(() => { const s = loadFromLocalStorage(); return s?.purchaseOrders ?? mockPurchaseOrders; });
     const [projects, setProjects] = useState<Project[]>(() => { const s = loadFromLocalStorage(); return s?.projects ?? mockProjects; });
     const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => { const s = loadFromLocalStorage(); return s?.auditLogs ?? []; });
+    const [behaviorLogs, setBehaviorLogs] = useState<BehaviorLog[]>(() => { const s = loadFromLocalStorage(); return s?.behaviorLogs ?? []; });
 
     const addAuditLog = (action: string, description: string, actorOverride?: string) => {
         const entry: AuditLog = {
@@ -78,8 +71,52 @@ const App: React.FC = () => {
         setAuditLogs(prev => [entry, ...prev]);
     };
 
-    // Auto-save a localStorage en cada cambio (igual que antes)
-    useEffect(() => { saveToLocalStorage({ items, movements, personnel, purchaseOrders, projects, users, auditLogs }); }, [items, movements, personnel, purchaseOrders, projects, users, auditLogs]);
+    const addBehaviorLog = (action: string, detail: string) => {
+        const entry: BehaviorLog = {
+            id: `beh-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            timestamp: new Date(),
+            actor: userName,
+            action,
+            detail,
+        };
+        setBehaviorLogs(prev => [entry, ...prev]);
+    };
+
+    const handleLoginSuccess = (role: UserRole, name: string) => {
+        setUserRole(role);
+        setUserName(name);
+        setLoggedIn(true);
+        localStorage.setItem(SESSION_KEY, JSON.stringify({ role, name }));
+        addAuditLog('USER_LOGIN', `Ingresó a la app: ${name} (${role})`, name);
+        setBehaviorLogs(prev => [{
+            id: `beh-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            timestamp: new Date(),
+            actor: name,
+            action: 'SESSION_LOGIN',
+            detail: `Inició sesión`,
+        }, ...prev]);
+    };
+
+    const handleFirstSetup = (userId: string, username: string, password: string) => {
+        setUsers(prev => prev.map(u => u.id === userId ? { ...u, username, password, setupComplete: true } : u));
+        const user = users.find(u => u.id === userId);
+        if (user) handleLoginSuccess(user.role, user.name);
+    };
+
+    const handleLogout = () => {
+        setBehaviorLogs(prev => [{
+            id: `beh-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            timestamp: new Date(),
+            actor: userName,
+            action: 'SESSION_LOGOUT',
+            detail: `Cerró sesión`,
+        }, ...prev]);
+        localStorage.removeItem(SESSION_KEY);
+        setLoggedIn(false);
+    };
+
+    // Auto-save a localStorage en cada cambio
+    useEffect(() => { saveToLocalStorage({ items, movements, personnel, purchaseOrders, projects, users, auditLogs, behaviorLogs }); }, [items, movements, personnel, purchaseOrders, projects, users, auditLogs, behaviorLogs]);
 
     // Notificar herramientas pendientes de recoger cada vez que se abre la app
     useEffect(() => {
@@ -112,7 +149,12 @@ const App: React.FC = () => {
     const [currentView, setCurrentView] = useState<View>('dashboard');
     const [kardexTab, setKardexTab] = useState<KardexTab>('movements');
     const EMPLOYEE_VIEWS: View[] = ['dashboard', 'kardex', 'personnel', 'help', 'whatsapp', 'pickup'];
-    const effectiveView: View = (userRole === UserRole.EMPLOYEE && !EMPLOYEE_VIEWS.includes(currentView)) ? 'dashboard' : currentView;
+    const VISITOR_VIEWS: View[] = ['dashboard', 'kardex'];
+    const effectiveView: View = (userRole === UserRole.VISITOR && !VISITOR_VIEWS.includes(currentView))
+        ? 'dashboard'
+        : (userRole === UserRole.EMPLOYEE && !EMPLOYEE_VIEWS.includes(currentView))
+            ? 'dashboard'
+            : currentView;
     const pendingPickupCount = movements.filter(m => m.isLoan && !m.isReturned && m.pendingPickup).length;
     const [isSidebarOpen, setSidebarOpen] = useState(true);
 
@@ -170,13 +212,24 @@ const App: React.FC = () => {
         );
     };
 
+    const NAV_LABELS: Record<View, string> = {
+        dashboard: 'Resumen',
+        kardex: 'Kardex',
+        personnel: 'Personal',
+        copilot: 'Copiloto IA',
+        help: 'Ayuda',
+        whatsapp: 'WhatsApp',
+        pickup: 'A Recoger',
+    };
+
     const selectView = (view: View, tab?: KardexTab) => {
         setCurrentView(view);
         if (tab) setKardexTab(tab);
         if (window.innerWidth < 768) setSidebarOpen(false);
+        addBehaviorLog('NAV', `Abrió ${NAV_LABELS[view] ?? view}${tab ? ` → ${tab}` : ''}`);
     };
 
-    // ── Handlers síncronos (igual que original) + sync Supabase en background ──
+    // ── Handlers síncronos + sync Supabase en background ──
 
     const handleImportItems = (newItems: Array<Omit<Item, 'id'>>, inventoryType?: InventoryType) => {
         const created = newItems.map(i => ({
@@ -447,13 +500,13 @@ const App: React.FC = () => {
         );
     };
 
-    // ── PIN de autorización para acciones destructivas ──────────────────────
+    // ── PIN de autorización para acciones destructivas ──
     const [pinAction, setPinAction] = useState<null | { fn: () => void; title?: string; message?: string }>(null);
     const requirePin = (fn: () => void, title?: string, message?: string) => {
         setPinAction({ fn, title, message });
     };
 
-    if (!loggedIn) return <LoginView onLoginSuccess={handleLoginSuccess} />;
+    if (!loggedIn) return <LoginView users={users} onLoginSuccess={handleLoginSuccess} onFirstSetup={handleFirstSetup} />;
 
     return (
         <div className="flex h-screen bg-gray-50 overflow-hidden font-sans">
@@ -477,10 +530,14 @@ const App: React.FC = () => {
                 <div className="flex-1 overflow-y-auto py-4">
                     <nav className="px-2 space-y-1">
                         <NavItem icon={DashboardIcon} label="Resumen" onClick={() => selectView('dashboard')} isActive={effectiveView === 'dashboard'} />
-                        <NavItem icon={PersonnelIcon} label="Personal" onClick={() => selectView('personnel')} isActive={effectiveView === 'personnel'} />
                         <NavItem icon={MovementsIcon} label="Kardex" onClick={() => selectView('kardex')} isActive={effectiveView === 'kardex'} />
-                        <NavItem icon={WhatsAppIcon} label="WhatsApp" onClick={() => selectView('whatsapp')} isActive={effectiveView === 'whatsapp'} />
-                        <NavItem icon={PickupNavIcon} label="A Recoger" onClick={() => selectView('pickup')} isActive={effectiveView === 'pickup'} badge={pendingPickupCount} />
+                        {userRole !== UserRole.VISITOR && (
+                            <>
+                                <NavItem icon={PersonnelIcon} label="Personal" onClick={() => selectView('personnel')} isActive={effectiveView === 'personnel'} />
+                                <NavItem icon={WhatsAppIcon} label="WhatsApp" onClick={() => selectView('whatsapp')} isActive={effectiveView === 'whatsapp'} />
+                                <NavItem icon={PickupNavIcon} label="A Recoger" onClick={() => selectView('pickup')} isActive={effectiveView === 'pickup'} badge={pendingPickupCount} />
+                            </>
+                        )}
                     </nav>
                 </div>
 
@@ -502,7 +559,7 @@ const App: React.FC = () => {
                         Ver tutorial
                     </button>
                     <button
-                        onClick={() => { localStorage.removeItem(SESSION_KEY); setLoggedIn(false); }}
+                        onClick={handleLogout}
                         className="w-full flex items-center text-left px-4 py-2.5 text-xs font-semibold rounded-xl text-gray-400 hover:bg-red-50 hover:text-red-600 transition-all"
                     >
                         <span className="mr-3 text-base">🚪</span>
@@ -518,13 +575,13 @@ const App: React.FC = () => {
                     userName={userName}
                     onStartNewBusiness={handleResetAllData}
                     onOpenUserManagement={() => setUserManagementOpen(true)}
-                    onLogout={() => { localStorage.removeItem(SESSION_KEY); setLoggedIn(false); }}
+                    onLogout={handleLogout}
                     onExportData={handleExportData}
                     onImportData={handleImportData}
                     onResetData={handleResetAllData}
                     setUserRole={() => {}}
                     syncStatus={syncStatus}
-                    onOpenSearch={() => setSearchOpen(true)}
+                    onOpenSearch={() => { setSearchOpen(true); addBehaviorLog('BUTTON', 'Abrió búsqueda global'); }}
                 />
                 <main className="flex-1 p-4 md:p-6 overflow-y-auto bg-gray-50">
                     <div className="max-w-7xl mx-auto">
@@ -544,21 +601,25 @@ const App: React.FC = () => {
                                 personnel={personnel}
                                 projects={projects}
                                 auditLogs={auditLogs}
+                                behaviorLogs={behaviorLogs}
+                                users={users}
                                 userRole={userRole}
                                 initialTab={kardexTab}
                                 onGoBack={() => selectView('dashboard')}
-                                openLogMovementModal={() => setLogMovementModalOpen(true)}
+                                openLogMovementModal={() => { setLogMovementModalOpen(true); addBehaviorLog('BUTTON', 'Abrió modal Registrar movimiento'); }}
                                 onDeleteMovement={handleDeleteMovement}
                                 onReturnLoan={handleReturnItem}
                                 onReturnItem={handleReturnItem}
                                 onMarkPendingPickup={handleMarkPendingPickup}
-                                openAddItemModal={() => setAddItemModalOpen(true)}
-                                onEditItem={(i) => { setItemToEdit(i); setEditModalOpen(true); }}
+                                openAddItemModal={() => { setAddItemModalOpen(true); addBehaviorLog('BUTTON', 'Abrió modal Agregar ítem'); }}
+                                onEditItem={(i) => { setItemToEdit(i); setEditModalOpen(true); addBehaviorLog('BUTTON', `Editó ítem: ${i.name}`); }}
                                 onDeleteItem={handleDeleteItem}
-                                onItemHistory={(i) => { setItemForHistory(i); setHistoryModalOpen(true); }}
+                                onItemHistory={(i) => { setItemForHistory(i); setHistoryModalOpen(true); addBehaviorLog('BUTTON', `Ver historial: ${i.name}`); }}
+                                onOpenInvoiceReader={() => { setInvoiceReaderOpen(true); addBehaviorLog('BUTTON', 'Abrió Leer factura'); }}
                                 onAddProject={handleAddProject}
                                 onDeleteProject={handleDeleteProject}
                                 showEconomicValues={appConfig.showEconomicValues}
+                                onTabChange={(tab) => addBehaviorLog('NAV', `Kardex → ${tab}`)}
                             />
                         )}
                         {effectiveView === 'personnel' && (
@@ -602,7 +663,6 @@ const App: React.FC = () => {
                                 items={items}
                                 personnel={personnel}
                                 projects={projects}
-                                userRole={userRole}
                                 onMarkPendingPickup={handleMarkPendingPickup}
                                 onReturnItem={handleReturnItem}
                             />
@@ -632,6 +692,7 @@ const App: React.FC = () => {
                     personnel={personnel}
                     onClose={() => setSearchOpen(false)}
                     onNavigate={(v, tab) => { selectView(v as View, tab as KardexTab | undefined); setSearchOpen(false); }}
+                    onBehaviorLog={addBehaviorLog}
                 />
             )}
             {showOnboarding && <OnboardingModal onFinish={handleOnboardingFinish} />}
@@ -643,7 +704,7 @@ const App: React.FC = () => {
                     onClose={() => setPinAction(null)}
                 />
             )}
-            {userRole === UserRole.OWNER && (
+            {(userRole === UserRole.OWNER || userRole === UserRole.EMPLOYEE) && (
                 <FloatingChat
                     items={items}
                     movements={movements}
@@ -654,6 +715,7 @@ const App: React.FC = () => {
                     onCreateItem={handleAddItemSync}
                     onCreateProject={handleAddProjectSync}
                     onCreatePersonnel={handleAddPersonnelSync}
+                    onBehaviorLog={addBehaviorLog}
                 />
             )}
         </div>

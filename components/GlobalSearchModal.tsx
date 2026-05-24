@@ -8,6 +8,7 @@ interface GlobalSearchModalProps {
     personnel: Personnel[];
     onClose: () => void;
     onNavigate: (view: string, tab?: string) => void;
+    onBehaviorLog?: (action: string, detail: string) => void;
 }
 
 const TYPE_LABEL: Record<InventoryType, string> = {
@@ -18,7 +19,7 @@ const TYPE_LABEL: Record<InventoryType, string> = {
 };
 
 export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
-    items, movements, personnel, onClose, onNavigate,
+    items, movements, personnel, onClose, onNavigate, onBehaviorLog,
 }) => {
     const [query, setQuery] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
@@ -63,7 +64,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
     const hasResults = itemResults.length > 0 || personnelResults.length > 0;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 px-4" onClick={onClose}>
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 px-4" onClick={() => { if (query.trim().length >= 2) onBehaviorLog?.('SEARCH_QUERY', `Buscó: ${query.trim()}`); onClose(); }}>
             <div
                 className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden"
                 onClick={e => e.stopPropagation()}
@@ -85,7 +86,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                         autoCapitalize="off"
                         spellCheck={false}
                     />
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xs font-semibold px-2 py-1 rounded-lg hover:bg-gray-100">
+                    <button onClick={() => { if (query.trim().length >= 2) onBehaviorLog?.('SEARCH_QUERY', `Buscó: ${query.trim()}`); onClose(); }} className="text-gray-400 hover:text-gray-600 text-xs font-semibold px-2 py-1 rounded-lg hover:bg-gray-100">
                         ESC
                     </button>
                 </div>
@@ -106,7 +107,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                             {personnelResults.map(({ person, loanItems }) => (
                                 <button
                                     key={person.id}
-                                    onClick={() => { onNavigate('kardex', 'loans'); onClose(); }}
+                                    onClick={() => { onBehaviorLog?.('SEARCH_SELECT', `Seleccionó personal: ${person.name}`); onNavigate('kardex', 'loans'); onClose(); }}
                                     className="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-gray-50 transition-colors"
                                 >
                                     <div className="flex items-start justify-between gap-2">
@@ -140,7 +141,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                             {itemResults.map(({ item, holder, recent }) => (
                                 <button
                                     key={item.id}
-                                    onClick={() => { onNavigate('kardex', 'inventory'); onClose(); }}
+                                    onClick={() => { onBehaviorLog?.('SEARCH_SELECT', `Seleccionó ítem: ${item.name}`); onNavigate('kardex', 'inventory'); onClose(); }}
                                     className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-50 transition-colors"
                                 >
                                     <div className="flex items-start justify-between gap-2">
