@@ -106,7 +106,7 @@ export const PickupView: React.FC<Props> = ({
                     <button key={f.key} onClick={() => setTypeFilter(f.key)}
                         className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-black transition-all ${
                             typeFilter === f.key
-                                ? 'bg-orange-500 text-white shadow-sm'
+                                ? 'bg-indigo-600 text-white shadow-sm'
                                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                         }`}>
                         {f.label}
@@ -118,13 +118,13 @@ export const PickupView: React.FC<Props> = ({
                 <p className="text-center py-10 text-gray-400 text-sm">Sin resultados para ese tipo.</p>
             ) : (
                 byWorker.map(({ name, loans }) => (
-                    <div key={name} className="bg-white rounded-2xl border border-orange-200 overflow-hidden shadow-sm">
-                        <div className="bg-orange-500 px-4 py-2.5 flex items-center gap-2">
-                            <span className="w-7 h-7 rounded-full bg-white/30 text-white flex items-center justify-center font-black text-sm">
+                    <div key={name} className="bg-white rounded-2xl border border-indigo-100 overflow-hidden shadow-sm">
+                        <div className="bg-indigo-700 px-4 py-2.5 flex items-center gap-2">
+                            <span className="w-7 h-7 rounded-full bg-white/20 text-white flex items-center justify-center font-black text-sm">
                                 {name.charAt(0)}
                             </span>
                             <p className="text-sm font-black text-white">{name}</p>
-                            <span className="ml-auto text-xs font-bold text-orange-100">{loans.length} ítem{loans.length !== 1 ? 's' : ''}</span>
+                            <span className="ml-auto text-xs font-bold text-indigo-200">{loans.length} ítem{loans.length !== 1 ? 's' : ''}</span>
                         </div>
                         <div className="divide-y divide-gray-50">
                             {loans.map(m => {

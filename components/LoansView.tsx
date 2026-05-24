@@ -97,7 +97,7 @@ export const LoansView: React.FC<LoansViewProps> = ({
         const isPending = !!loan.pendingPickup;
         let cardClass = 'border border-gray-100 bg-white';
         let daysBadge = 'bg-green-100 text-green-800';
-        if (isPending)      { cardClass = 'border border-orange-200 bg-orange-50'; daysBadge = 'bg-orange-100 text-orange-800'; }
+        if (isPending)      { cardClass = 'border border-indigo-100 bg-indigo-50'; daysBadge = 'bg-indigo-100 text-indigo-700'; }
         else if (days > 14) { cardClass = 'border border-red-200 bg-red-50';       daysBadge = 'bg-red-100 text-red-800'; }
         else if (days > 7)  { cardClass = 'border border-yellow-200 bg-yellow-50'; daysBadge = 'bg-yellow-100 text-yellow-800'; }
         return (
@@ -109,7 +109,7 @@ export const LoansView: React.FC<LoansViewProps> = ({
                     </div>
                     <div className="flex flex-col items-end gap-1 flex-shrink-0">
                         <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${daysBadge}`}>{days}d</span>
-                        {isPending && <span className="text-[10px] font-black bg-orange-500 text-white px-2 py-0.5 rounded-full">Recoger</span>}
+                        {isPending && <span className="text-[10px] font-black bg-indigo-600 text-white px-2 py-0.5 rounded-full">Recoger</span>}
                     </div>
                 </div>
                 <div className="flex gap-2">
@@ -121,7 +121,7 @@ export const LoansView: React.FC<LoansViewProps> = ({
                     )}
                     {!isPending ? (
                         <button onClick={() => { onBehaviorLog?.('ACTION', `Marcó "ir a recoger": ${getItemName(loan.itemId)}`); onMarkPendingPickup(loan.id, true); }}
-                            className="flex-1 py-1.5 bg-orange-100 hover:bg-orange-200 text-orange-800 text-xs font-bold rounded-xl transition-all">
+                            className="flex-1 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-xl transition-all">
                             📍 Ir a recoger
                         </button>
                     ) : isOwner ? (
@@ -130,7 +130,7 @@ export const LoansView: React.FC<LoansViewProps> = ({
                             ✕ Cancelar recogida
                         </button>
                     ) : (
-                        <span className="flex-1 py-1.5 text-center text-[10px] text-orange-600 font-bold bg-orange-50 rounded-xl">
+                        <span className="flex-1 py-1.5 text-center text-[10px] text-indigo-600 font-bold bg-indigo-50 rounded-xl">
                             📍 Pendiente de recoger
                         </span>
                     )}
@@ -238,7 +238,7 @@ export const LoansView: React.FC<LoansViewProps> = ({
                     <p className="text-center py-10 text-gray-400 text-sm">Sin resultados.</p>
                 ) : (
                     <>
-                        <Section title="📍 Pendientes de recoger" color="text-orange-600" loans={pendingPickup} />
+                        <Section title="📍 Pendientes de recoger" color="text-indigo-600" loans={pendingPickup} />
                         <Section title="🔴 Más de 14 días"        color="text-red-600"    loans={overdueLoans} />
                         <Section title="⚠️ Entre 7 y 14 días"     color="text-yellow-600" loans={warningLoans} />
                         <Section title="✅ Al día (menos de 7 días)" color="text-green-600" loans={normalLoans} />
