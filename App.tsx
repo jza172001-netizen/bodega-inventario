@@ -593,7 +593,7 @@ const App: React.FC = () => {
                 <div className="flex-shrink-0 px-2 py-3 border-t border-gray-100 space-y-1">
                     <NavItem icon={QuestionMarkIcon} label="Ayuda ❓" onClick={() => selectView('help')} isActive={currentView === 'help'} />
                     <button
-                        onClick={() => setSettingsOpen(true)}
+                        onClick={() => { addBehaviorLog('BUTTON', 'Abrió: Configuración'); setSettingsOpen(true); }}
                         className="w-full flex items-center text-left px-4 py-2.5 text-xs font-semibold rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-all"
                     >
                         <span className="mr-3 text-base">⚙️</span>
@@ -622,7 +622,7 @@ const App: React.FC = () => {
                     userRole={userRole}
                     userName={userName}
                     onStartNewBusiness={handleResetAllData}
-                    onOpenUserManagement={() => setUserManagementOpen(true)}
+                    onOpenUserManagement={() => { addBehaviorLog('BUTTON', 'Abrió: Gestión de usuarios'); setUserManagementOpen(true); }}
                     onLogout={handleLogout}
                     onExportData={handleExportData}
                     onImportData={handleImportData}
@@ -701,6 +701,7 @@ const App: React.FC = () => {
                                 onCreateItem={handleAddItemSync}
                                 onCreateProject={handleAddProjectSync}
                                 onCreatePersonnel={handleAddPersonnelSync}
+                                onBehaviorLog={addBehaviorLog}
                             />
                         )}
                         {effectiveView === 'help' && <HelpView />}

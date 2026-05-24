@@ -189,6 +189,7 @@ export const KardexHub: React.FC<KardexHubProps> = ({
                     auditLogs={auditLogs}
                     behaviorLogs={behaviorLogs}
                     users={users}
+                    onBehaviorLog={onBehaviorLog}
                 />
             )}
         </div>

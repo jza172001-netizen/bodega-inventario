@@ -1,5 +1,5 @@
 
-import React, { useMemo, useState, useRef, useCallback } from 'react';
+import React, { useMemo, useState, useRef, useCallback, useEffect } from 'react';
 import { Movement, Item, Personnel, UserRole, InventoryType, ReturnCondition } from '../types';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
 import { ClockIcon } from './icons/ClockIcon';
@@ -32,6 +32,17 @@ export const LoansView: React.FC<LoansViewProps> = ({
     const [typeFilter, setTypeFilter] = useState<string>('');
     const [returningLoan, setReturningLoan] = useState<Movement | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
+    const bottomSentinelRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const el = bottomSentinelRef.current;
+        if (!el) return;
+        const obs = new IntersectionObserver(([entry]) => {
+            if (entry.isIntersecting) onBehaviorLog?.('SCROLL', 'Llegó al fondo: Préstamos');
+        }, { threshold: 0.5 });
+        obs.observe(el);
+        return () => obs.disconnect();
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     const itemMap   = useMemo(() => new Map(items.map(i => [i.id, i])), [items]);
     const personMap = useMemo(() => new Map(personnel.map(p => [p.id, p])), [personnel]);
@@ -242,6 +253,7 @@ export const LoansView: React.FC<LoansViewProps> = ({
                         <Section title="🔴 Más de 14 días"        color="text-red-600"    loans={overdueLoans} />
                         <Section title="⚠️ Entre 7 y 14 días"     color="text-yellow-600" loans={warningLoans} />
                         <Section title="✅ Al día (menos de 7 días)" color="text-green-600" loans={normalLoans} />
+                        <div ref={bottomSentinelRef} className="h-px" />
                     </>
                 )}
             </div>

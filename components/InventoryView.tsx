@@ -1,5 +1,5 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { Item, InventoryType, UserRole } from '../types';
 import { PlusIcon } from './icons/PlusIcon';
 import { EditIcon } from './icons/EditIcon';
@@ -22,6 +22,17 @@ interface InventoryViewProps {
 
 export const InventoryView: React.FC<InventoryViewProps> = ({ items, openAddItemModal, onEditItem, onDeleteItem, onItemHistory, onOpenInvoiceReader, userRole, category, onGoBack, onBehaviorLog }) => {
     const [search, setSearch] = useState('');
+    const bottomSentinelRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const el = bottomSentinelRef.current;
+        if (!el) return;
+        const obs = new IntersectionObserver(([entry]) => {
+            if (entry.isIntersecting) onBehaviorLog?.('SCROLL', 'Llegó al fondo: Inventario');
+        }, { threshold: 0.5 });
+        obs.observe(el);
+        return () => obs.disconnect();
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     const displayItems = useMemo(() => {
         if (!search.trim()) return items;
@@ -170,6 +181,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, openAddItem
                     </div>
                 )}
             </div>{/* end desktop table */}
+            <div ref={bottomSentinelRef} className="h-px" />
         </div>
     );
 };

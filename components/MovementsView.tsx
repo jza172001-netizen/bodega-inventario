@@ -1,5 +1,5 @@
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Movement, Item, Personnel, InventoryType, MovementType, UserRole } from '../types';
 import { TruckIcon } from './icons/TruckIcon';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
@@ -46,6 +46,17 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
     const isOwner = userRole === UserRole.OWNER;
     const [page, setPage] = useState(0);
     const [filter, setFilter] = useState<FilterKey>('');
+    const bottomSentinelRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const el = bottomSentinelRef.current;
+        if (!el) return;
+        const obs = new IntersectionObserver(([entry]) => {
+            if (entry.isIntersecting) onBehaviorLog?.('SCROLL', 'Llegó al fondo: Historial');
+        }, { threshold: 0.5 });
+        obs.observe(el);
+        return () => obs.disconnect();
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     const itemMap      = useMemo(() => new Map(items.map(i => [i.id, i])), [items]);
     const personnelMap = useMemo(() => new Map(personnel.map(p => [p.id, p])), [personnel]);
@@ -192,6 +203,7 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
                     </div>
                 </div>
             )}
+            <div ref={bottomSentinelRef} className="h-px" />
         </div>
     );
 };

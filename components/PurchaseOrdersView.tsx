@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { PurchaseOrder, Item, UserRole, PurchaseOrderStatus } from '../types';
 import { PlusIcon } from './icons/PlusIcon';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
@@ -13,9 +13,15 @@ interface PurchaseOrdersViewProps {
     userRole: UserRole;
     onGoBack: () => void;
     onDeleteOrder?: (id: string) => void;
+    onBehaviorLog?: (action: string, detail: string) => void;
 }
 
-export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({ purchaseOrders, items, openAddPurchaseOrderModal, onUpdateStatus, userRole, onGoBack, onDeleteOrder }) => {
+export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({ purchaseOrders, items, openAddPurchaseOrderModal, onUpdateStatus, userRole, onGoBack, onDeleteOrder, onBehaviorLog }) => {
+    const [statusFilter, setStatusFilter] = useState<PurchaseOrderStatus | ''>('');
+
+    const filtered = statusFilter
+        ? purchaseOrders.filter(o => o.status === statusFilter)
+        : purchaseOrders;
     
     const getItemName = (itemId: string) => items.find(i => i.id === itemId)?.name || 'N/A';
     
@@ -39,18 +45,28 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({ purchase
                     <h2 className="text-xl font-black text-gray-800 uppercase">Órdenes de Compra</h2>
                 </div>
                 {userRole === UserRole.OWNER && (
-                    <button onClick={openAddPurchaseOrderModal} className="flex items-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">
+                    <button onClick={() => { onBehaviorLog?.('BUTTON', 'Abrió: Nueva orden de compra'); openAddPurchaseOrderModal(); }} className="flex items-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">
                         <PlusIcon className="w-5 h-5 mr-2" />
                         Crear Orden
                     </button>
                 )}
             </div>
 
+            {/* Filtros de estado */}
+            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                {([['', 'Todos'], [PurchaseOrderStatus.ORDERED, '📋 Pedido'], [PurchaseOrderStatus.SHIPPED, '🚚 Enviado'], [PurchaseOrderStatus.RECEIVED, '✅ Recibido'], [PurchaseOrderStatus.CANCELLED, '❌ Cancelado']] as [PurchaseOrderStatus | '', string][]).map(([s, label]) => (
+                    <button key={s} onClick={() => { setStatusFilter(s); onBehaviorLog?.('FILTER', `OC: estado=${label}`); }}
+                        className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-black transition-all ${statusFilter === s ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                        {label}
+                    </button>
+                ))}
+            </div>
+
             <div className="grid grid-cols-1 gap-4">
-                {purchaseOrders.map(order => (
+                {filtered.map(order => (
                     <div key={order.id} className="bg-white p-5 rounded-xl shadow-md relative">
-                         <button 
-                            onClick={() => { if(window.confirm('¿Borrar orden?')) onDeleteOrder?.(order.id)}}
+                         <button
+                            onClick={() => { if(window.confirm('¿Borrar orden?')) { onBehaviorLog?.('ACTION', `Eliminó OC: ${order.supplier}`); onDeleteOrder?.(order.id); }}}
                             className="absolute top-4 right-4 text-gray-300 hover:text-red-500"
                         >
                             <TrashIcon className="w-5 h-5" />

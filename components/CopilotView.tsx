@@ -13,6 +13,7 @@ interface CopilotViewProps {
     onCreateItem: (item: Omit<Item, 'id'>) => Item;
     onCreateProject: (project: Omit<Project, 'id'>) => Project;
     onCreatePersonnel: (person: Omit<Personnel, 'id'>) => Personnel;
+    onBehaviorLog?: (action: string, detail: string) => void;
 }
 
 type ChatMsg = {
@@ -46,7 +47,7 @@ const WELCOME = 'Hola 👋 Puedo registrar salidas, **crear proyectos, trabajado
 
 const CopilotView: React.FC<CopilotViewProps> = ({
     items, movements, personnel, purchaseOrders, projects,
-    onLogMovements, onCreateItem, onCreateProject, onCreatePersonnel,
+    onLogMovements, onCreateItem, onCreateProject, onCreatePersonnel, onBehaviorLog,
 }) => {
     const [messages, setMessages] = useState<ChatMsg[]>([
         { id: uid(), role: 'bot', text: WELCOME }
@@ -153,6 +154,7 @@ const CopilotView: React.FC<CopilotViewProps> = ({
     const handleSend = async (text: string) => {
         const trimmed = text.trim();
         if (!trimmed) return;
+        onBehaviorLog?.('CHAT_MESSAGE', `Escribió en copilot: ${trimmed.slice(0, 80)}`);
         setMessages(prev => [...prev, { id: uid(), role: 'user', text: trimmed }]);
         setInput('');
         setLoading(true);
@@ -187,6 +189,7 @@ const CopilotView: React.FC<CopilotViewProps> = ({
             }
         } else {
             if (/informe|reporte|análisis completo/i.test(trimmed)) {
+                onBehaviorLog?.('BUTTON', 'Generó reporte en Copilot');
                 try { const txt = await generateInventoryAnalysis(items, movements); addBot(txt); }
                 catch { addBot('Error generando el informe.'); }
             } else {
