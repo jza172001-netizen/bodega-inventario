@@ -56,11 +56,7 @@ export const AuditLogView: React.FC<AuditLogViewProps> = ({ auditLogs, userRole,
         return [...map.entries()];
     }, [filtered]);
 
-    const handleClear = () => {
-        if (window.confirm('¿Borrar toda la bitácora de auditoría? Esta acción no se puede deshacer.')) {
-            onClearLogs?.();
-        }
-    };
+    const handleClear = () => { onClearLogs?.(); };
 
     return (
         <div className="space-y-4">

@@ -17,6 +17,7 @@ import { HelpView } from './components/HelpView';
 import { WhatsAppView } from './components/WhatsAppView';
 import { PickupView } from './components/PickupView';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
+import { PinConfirmModal } from './components/PinConfirmModal';
 import { SettingsModal, AppConfig, DEFAULT_CONFIG } from './components/SettingsModal';
 import { requestNotificationPermission, checkAndNotifyPickup } from './services/notificationService';
 
@@ -153,14 +154,19 @@ const App: React.FC = () => {
     };
 
     const handleResetAllData = () => {
-        if (window.confirm("¿ESTÁS SEGURO? Se borrarán todos los productos, trabajadores y movimientos. Esta acción no se puede deshacer.")) {
-            setItems([]);
-            setMovements([]);
-            setPersonnel([]);
-            setPurchaseOrders([]);
-            setProjects([]);
-            alert("Bodega limpia. Ahora puedes empezar a registrar tus propios materiales.");
-        }
+        requirePin(
+            () => {
+                setItems([]);
+                setMovements([]);
+                setPersonnel([]);
+                setPurchaseOrders([]);
+                setProjects([]);
+                addAuditLog('ITEM_DELETED', 'Se borró toda la bodega (reset completo)');
+                alert('Bodega limpia. Ahora puedes empezar a registrar tus propios materiales.');
+            },
+            'Borrar toda la bodega',
+            'Se eliminarán TODOS los productos, trabajadores y movimientos. Irreversible.',
+        );
     };
 
     const selectView = (view: View, tab?: KardexTab) => {
@@ -210,13 +216,16 @@ const App: React.FC = () => {
     const handleDeleteItem = (id: string) => {
         const item = items.find(i => i.id === id);
         const hasMovements = movements.some(m => m.itemId === id);
-        const msg = hasMovements
-            ? 'Este artículo tiene movimientos registrados. ¿Eliminar de todas formas? Los registros históricos quedarán sin referencia.'
-            : `¿Eliminar "${item?.name ?? 'este artículo'}" del inventario?`;
-        if (!window.confirm(msg)) return;
-        setItems(prev => prev.filter(i => i.id !== id));
-        withSync(db.deleteItem(id));
-        addAuditLog('ITEM_DELETED', `Se eliminó "${item?.name ?? id}" del inventario`);
+        const detail = hasMovements ? 'Tiene movimientos registrados. Los registros históricos quedarán sin referencia.' : undefined;
+        requirePin(
+            () => {
+                setItems(prev => prev.filter(i => i.id !== id));
+                withSync(db.deleteItem(id));
+                addAuditLog('ITEM_DELETED', `Se eliminó "${item?.name ?? id}" del inventario`);
+            },
+            `Eliminar "${item?.name ?? 'ítem'}"`,
+            detail,
+        );
     };
 
     const handleLogMovement = (m: Omit<Movement, 'id'>) => {
@@ -245,10 +254,15 @@ const App: React.FC = () => {
     const handleDeleteMovement = (id: string) => {
         const mov = movements.find(m => m.id === id);
         const itemName = mov ? items.find(i => i.id === mov.itemId)?.name ?? mov.itemId : id;
-        if (!window.confirm(`¿Eliminar este registro de movimiento (${itemName})? Esta acción no se puede deshacer.`)) return;
-        setMovements(prev => prev.filter(m => m.id !== id));
-        withSync(db.deleteMovement(id));
-        addAuditLog('MOVEMENT_DELETED', `Se eliminó registro de movimiento: "${itemName}"`);
+        requirePin(
+            () => {
+                setMovements(prev => prev.filter(m => m.id !== id));
+                withSync(db.deleteMovement(id));
+                addAuditLog('MOVEMENT_DELETED', `Se eliminó registro de movimiento: "${itemName}"`);
+            },
+            `Eliminar registro de "${itemName}"`,
+            'Esta acción no se puede deshacer.',
+        );
     };
 
     const handleReturnItem = (id: string, condition?: string, notes?: string) => {
@@ -336,13 +350,16 @@ const App: React.FC = () => {
     const handleDeletePersonnel = (id: string) => {
         const person = personnel.find(p => p.id === id);
         const hasMovements = movements.some(m => m.personnelId === id);
-        const msg = hasMovements
-            ? `"${person?.name}" tiene movimientos registrados. ¿Eliminar de todas formas?`
-            : `¿Eliminar trabajador "${person?.name ?? 'este trabajador'}"?`;
-        if (!window.confirm(msg)) return;
-        setPersonnel(prev => prev.filter(p => p.id !== id));
-        withSync(db.deletePersonnel(id));
-        addAuditLog('PERSONNEL_DELETED', `Se eliminó trabajador: "${person?.name ?? id}"`);
+        const detail = hasMovements ? 'Tiene movimientos registrados. Se perderá la referencia en el historial.' : undefined;
+        requirePin(
+            () => {
+                setPersonnel(prev => prev.filter(p => p.id !== id));
+                withSync(db.deletePersonnel(id));
+                addAuditLog('PERSONNEL_DELETED', `Se eliminó trabajador: "${person?.name ?? id}"`);
+            },
+            `Eliminar trabajador "${person?.name ?? 'trabajador'}"`,
+            detail,
+        );
     };
 
     const handleAddProject = (p: Omit<Project, 'id'>) => {
@@ -364,10 +381,14 @@ const App: React.FC = () => {
 
     const handleDeleteProject = (id: string) => {
         const project = projects.find(p => p.id === id);
-        if (!window.confirm(`¿Eliminar proyecto "${project?.name ?? 'este proyecto'}"?`)) return;
-        setProjects(prev => prev.filter(p => p.id !== id));
-        withSync(db.deleteProject(id));
-        addAuditLog('PROJECT_DELETED', `Se eliminó proyecto: "${project?.name ?? id}"`);
+        requirePin(
+            () => {
+                setProjects(prev => prev.filter(p => p.id !== id));
+                withSync(db.deleteProject(id));
+                addAuditLog('PROJECT_DELETED', `Se eliminó proyecto: "${project?.name ?? id}"`);
+            },
+            `Eliminar proyecto "${project?.name ?? 'proyecto'}"`,
+        );
     };
 
     const handleAddPurchaseOrder = (o: Omit<PurchaseOrder, 'id'>) => {
@@ -403,12 +424,29 @@ const App: React.FC = () => {
 
     const handleDeleteUser = (id: string) => {
         const user = users.find(u => u.id === id);
-        setUsers(prev => prev.filter(u => u.id !== id));
-        db.deleteUser(id).catch(() => {});
-        addAuditLog('USER_DELETED', `Se eliminó usuario: "${user?.username ?? id}"`);
+        requirePin(
+            () => {
+                setUsers(prev => prev.filter(u => u.id !== id));
+                db.deleteUser(id).catch(() => {});
+                addAuditLog('USER_DELETED', `Se eliminó usuario: "${user?.username ?? id}"`);
+            },
+            `Eliminar usuario "${user?.username ?? 'usuario'}"`,
+        );
     };
 
-    const handleClearAuditLogs = () => { setAuditLogs([]); };
+    const handleClearAuditLogs = () => {
+        requirePin(
+            () => setAuditLogs([]),
+            'Limpiar bitácora',
+            'Se borrarán todos los registros de auditoría.',
+        );
+    };
+
+    // ── PIN de autorización para acciones destructivas ──────────────────────
+    const [pinAction, setPinAction] = useState<null | { fn: () => void; title?: string; message?: string }>(null);
+    const requirePin = (fn: () => void, title?: string, message?: string) => {
+        setPinAction({ fn, title, message });
+    };
 
     if (!loggedIn) return <LoginView onLoginSuccess={handleLoginSuccess} />;
 
@@ -593,6 +631,14 @@ const App: React.FC = () => {
                 />
             )}
             {showOnboarding && <OnboardingModal onFinish={handleOnboardingFinish} />}
+            {pinAction && (
+                <PinConfirmModal
+                    title={pinAction.title}
+                    message={pinAction.message}
+                    onConfirm={pinAction.fn}
+                    onClose={() => setPinAction(null)}
+                />
+            )}
             {userRole === UserRole.OWNER && (
                 <FloatingChat
                     items={items}
