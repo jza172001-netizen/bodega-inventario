@@ -72,13 +72,13 @@ const App: React.FC = () => {
         try {
             const session = JSON.parse(localStorage.getItem(SESSION_KEY) || '{}');
             if (!session.name) return '';
-            // Si el nombre guardado es genérico (Administrador, Bodeguero, Visitante), usar el del seed
-            const genericNames = ['Administrador', 'Bodeguero', 'Visitante', 'administrador', 'bodeguero', 'visitante'];
-            if (genericNames.includes(session.name)) {
-                const seed = seedUsers.find(u => u.role === session.role);
-                return seed?.name ?? session.name;
-            }
-            return session.name;
+            if (session.role === UserRole.VISITOR) return 'Visitante';
+            // Si el nombre guardado coincide exactamente con un seed, usarlo
+            if (seedUsers.some(u => u.name === session.name)) return session.name;
+            // Nombre desactualizado (ej: 'Julio' → 'Juli', 'Administrador' → 'Juli')
+            // Para OWNER siempre hay un único seed; para EMPLOYEE buscamos por rol
+            const seed = seedUsers.find(u => u.role === session.role);
+            return seed?.name ?? session.name;
         } catch { return ''; }
     });
     const [items, setItems] = useState<Item[]>(() => { const s = loadFromLocalStorage(); return s?.items ?? mockItems; });
@@ -86,8 +86,17 @@ const App: React.FC = () => {
     const [personnel, setPersonnel] = useState<Personnel[]>(() => { const s = loadFromLocalStorage(); return s?.personnel ?? mockPersonnel; });
     const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(() => { const s = loadFromLocalStorage(); return s?.purchaseOrders ?? mockPurchaseOrders; });
     const [projects, setProjects] = useState<Project[]>(() => { const s = loadFromLocalStorage(); return s?.projects ?? mockProjects; });
-    const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => { const s = loadFromLocalStorage(); return s?.auditLogs ?? []; });
-    const [behaviorLogs, setBehaviorLogs] = useState<BehaviorLog[]>(() => { const s = loadFromLocalStorage(); return s?.behaviorLogs ?? []; });
+    const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
+        const s = loadFromLocalStorage();
+        const logs = s?.auditLogs ?? [];
+        return logs.map(l => l.actor === 'Administrador' ? { ...l, actor: 'Juli' } : l);
+    });
+    const [behaviorLogs, setBehaviorLogs] = useState<BehaviorLog[]>(() => {
+        const s = loadFromLocalStorage();
+        const logs = s?.behaviorLogs ?? [];
+        const fix: Record<string, string> = { Julio: 'Juli', julio: 'Juli', Administrador: 'Juli', administrador: 'Juli' };
+        return logs.map(l => fix[l.actor] ? { ...l, actor: fix[l.actor] } : l);
+    });
 
     const addAuditLog = (action: string, description: string, actorOverride?: string) => {
         const entry: AuditLog = {
