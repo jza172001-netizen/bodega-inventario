@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState } from 'react';
-import { Movement, Item, Personnel, Project, ReturnCondition, InventoryType, AuditLog, BehaviorLog, AppUser } from '../types';
+import { Movement, Item, Personnel, Project, ReturnCondition, InventoryType, AuditLog, BehaviorLog, AppUser, UserRole } from '../types';
 
 interface Props {
     movements: Movement[];
@@ -89,11 +89,10 @@ export const TraceabilityView: React.FC<Props> = ({
     const projectMap = useMemo(() => new Map(projects.map(p => [p.id, p])), [projects]);
 
     const allActors = useMemo(() => {
-        const set = new Set<string>();
-        behaviorLogs.forEach(l => { if (l.actor) set.add(l.actor); });
-        auditLogs.forEach(l => { if (l.actor) set.add(l.actor); });
-        return [...set].sort();
-    }, [behaviorLogs, auditLogs]);
+        const owners   = users.filter(u => u.role === UserRole.OWNER).map(u => u.name);
+        const employees = users.filter(u => u.role === UserRole.EMPLOYEE).map(u => u.name);
+        return [...owners, ...employees, 'Visitante'];
+    }, [users]);
 
     // Combined entries for Actividad tab
     const combinedEntries = useMemo<CombinedEntry[]>(() => {

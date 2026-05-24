@@ -44,6 +44,12 @@ const TYPE_LABELS: Record<InventoryType, string> = {
 };
 
 
+const QUICK = [
+    { label: '📦 Stock bajo',     q: '¿Qué materiales tienen stock bajo?' },
+    { label: '🔑 Préstamos',      q: '¿Qué herramientas están prestadas?' },
+    { label: '🕒 Movimientos',    q: 'Muestra los últimos movimientos' },
+];
+
 type ChatMsg = { id: string; role: 'user' | 'bot'; text: string };
 
 const uid = () => Math.random().toString(36).slice(2);
@@ -411,6 +417,18 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                         </div>
                     </div>
 
+
+                    {/* Quick query buttons — solo en modo chat */}
+                    {!wizardStep && (
+                        <div className="bg-gray-50 px-3 py-2 flex gap-1.5 border-b border-gray-200 flex-shrink-0">
+                            {QUICK.map(q => (
+                                <button key={q.q} onClick={() => handleSend(q.q)} disabled={loading}
+                                    className="flex-1 py-1.5 bg-white border border-gray-200 hover:border-blue-400 hover:bg-blue-50 text-gray-600 hover:text-blue-700 rounded-xl text-[11px] font-semibold transition-all disabled:opacity-50 text-center">
+                                    {q.label}
+                                </button>
+                            ))}
+                        </div>
+                    )}
 
                     {/* Wizard or Chat */}
                     {wizardStep ? renderWizard() : (
