@@ -21,6 +21,7 @@ interface PersonnelViewProps {
     onCreateProject?: (name: string) => Project;
     onTransferLoan?: (movementId: string, newPersonnelId: string) => void;
     userRole?: UserRole;
+    onBehaviorLog?: (action: string, detail: string) => void;
 }
 
 export const PersonnelView: React.FC<PersonnelViewProps> = ({
@@ -38,6 +39,7 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
     onCreateProject,
     onTransferLoan,
     userRole,
+    onBehaviorLog,
 }) => {
     const [detailPerson, setDetailPerson] = useState<Personnel | null>(null);
     const [editPerson, setEditPerson] = useState<Personnel | null>(null);
@@ -52,12 +54,14 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
             return;
         }
         if (window.confirm(`¿Eliminar a ${p.name}? Su historial de movimientos se conserva.`)) {
+            onBehaviorLog?.('ACTION', `Eliminó trabajador: ${p.name}`);
             onDeletePersonnel?.(p.id);
         }
     };
 
     const openEdit = (e: React.MouseEvent, p: Personnel) => {
         e.stopPropagation();
+        onBehaviorLog?.('BUTTON', `Editó trabajador: ${p.name}`);
         setEditPerson(p);
     };
 
@@ -89,7 +93,7 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
                         return (
                             <div
                                 key={p.id}
-                                onClick={() => setDetailPerson(p)}
+                                onClick={() => { onBehaviorLog?.('NAV', `Abrió detalle: ${p.name}`); setDetailPerson(p); }}
                                 className="p-4 border rounded-xl bg-gray-50 hover:bg-blue-50 hover:border-blue-200 cursor-pointer transition-all"
                             >
                                 <div className="flex items-start justify-between gap-2">

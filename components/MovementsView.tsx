@@ -35,12 +35,13 @@ interface MovementsViewProps {
     onDeleteMovement?: (id: string) => void;
     onGoBack: () => void;
     userRole?: UserRole;
+    onBehaviorLog?: (action: string, detail: string) => void;
 }
 
 export const MovementsView: React.FC<MovementsViewProps> = ({
     movements, items, personnel, filterType,
     openLogMovementModal, onReturnLoan, onDeleteMovement, onGoBack,
-    userRole = UserRole.EMPLOYEE,
+    userRole = UserRole.EMPLOYEE, onBehaviorLog,
 }) => {
     const isOwner = userRole === UserRole.OWNER;
     const [page, setPage] = useState(0);
@@ -103,7 +104,7 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
             {/* Filter chips */}
             <div className="flex gap-2 overflow-x-auto px-4 py-3 border-b border-gray-50 scrollbar-hide">
                 {FILTERS.map(f => (
-                    <button key={f.key} onClick={() => setFilter(f.key)}
+                    <button key={f.key} onClick={() => { setFilter(f.key); onBehaviorLog?.('FILTER', `Filtro historial: ${f.label}`); }}
                         className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-black transition-all ${
                             filter === f.key
                                 ? 'bg-indigo-600 text-white shadow-sm'
@@ -162,7 +163,7 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
                                         </button>
                                     )}
                                     {onDeleteMovement && (!m.isLoan || m.isReturned) && (
-                                        <button onClick={() => onDeleteMovement(m.id)}
+                                        <button onClick={() => { onBehaviorLog?.('ACTION', `Eliminó movimiento: ${itemName}`); onDeleteMovement(m.id); }}
                                             className="text-red-400 hover:text-red-600 p-1">
                                             <TrashIcon className="w-4 h-4" />
                                         </button>

@@ -17,9 +17,10 @@ interface InventoryViewProps {
     userRole: UserRole;
     category: string | null;
     onGoBack: () => void;
+    onBehaviorLog?: (action: string, detail: string) => void;
 }
 
-export const InventoryView: React.FC<InventoryViewProps> = ({ items, openAddItemModal, onEditItem, onDeleteItem, onItemHistory, onOpenInvoiceReader, userRole, category, onGoBack }) => {
+export const InventoryView: React.FC<InventoryViewProps> = ({ items, openAddItemModal, onEditItem, onDeleteItem, onItemHistory, onOpenInvoiceReader, userRole, category, onGoBack, onBehaviorLog }) => {
     const [search, setSearch] = useState('');
 
     const displayItems = useMemo(() => {
@@ -67,6 +68,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, openAddItem
                             type="text"
                             value={search}
                             onChange={e => setSearch(e.target.value)}
+                            onBlur={e => { if (e.target.value.trim().length > 1) onBehaviorLog?.('SEARCH', `Buscó en inventario: "${e.target.value.trim()}"`); }}
                             placeholder="Buscar artículo..."
                             className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             autoComplete="off"
@@ -100,11 +102,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, openAddItem
                             <span className="text-sm font-bold text-gray-800">{item.quantity} <span className="text-xs font-normal text-gray-500">{item.unit}</span></span>
                             <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStockStatusColor(item)}`}>{getStockStatusText(item)}</span>
                             <div className="flex gap-1">
-                                <button onClick={() => onItemHistory(item)} className="text-blue-500 p-1" title="Historial"><HistoryIcon className="w-4 h-4"/></button>
+                                <button onClick={() => { onBehaviorLog?.('BUTTON', `Ver historial: ${item.name}`); onItemHistory(item); }} className="text-blue-500 p-1" title="Historial"><HistoryIcon className="w-4 h-4"/></button>
                                 {userRole === UserRole.OWNER && (
                                     <>
-                                        <button onClick={() => onEditItem(item)} className="text-indigo-500 p-1"><EditIcon className="w-4 h-4"/></button>
-                                        <button onClick={() => onDeleteItem(item.id)} className="text-red-400 p-1"><TrashIcon className="w-4 h-4"/></button>
+                                        <button onClick={() => { onBehaviorLog?.('BUTTON', `Editó ítem: ${item.name}`); onEditItem(item); }} className="text-indigo-500 p-1"><EditIcon className="w-4 h-4"/></button>
+                                        <button onClick={() => { onBehaviorLog?.('ACTION', `Eliminó ítem: ${item.name}`); onDeleteItem(item.id); }} className="text-red-400 p-1"><TrashIcon className="w-4 h-4"/></button>
                                     </>
                                 )}
                             </div>
@@ -144,15 +146,15 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, openAddItem
                                     </span>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                                    <button onClick={() => onItemHistory(item)} className="text-blue-600 hover:text-blue-900 p-1" title="Ver Historial (Kardex)">
+                                    <button onClick={() => { onBehaviorLog?.('BUTTON', `Ver historial: ${item.name}`); onItemHistory(item); }} className="text-blue-600 hover:text-blue-900 p-1" title="Ver Historial (Kardex)">
                                         <HistoryIcon className="w-5 h-5"/>
                                     </button>
                                     {userRole === UserRole.OWNER && (
                                         <>
-                                            <button onClick={() => onEditItem(item)} className="text-indigo-600 hover:text-indigo-900 p-1" title="Editar">
+                                            <button onClick={() => { onBehaviorLog?.('BUTTON', `Editó ítem: ${item.name}`); onEditItem(item); }} className="text-indigo-600 hover:text-indigo-900 p-1" title="Editar">
                                                 <EditIcon className="w-5 h-5"/>
                                             </button>
-                                            <button onClick={() => onDeleteItem(item.id)} className="text-red-600 hover:text-red-900 p-1" title="Eliminar">
+                                            <button onClick={() => { onBehaviorLog?.('ACTION', `Eliminó ítem: ${item.name}`); onDeleteItem(item.id); }} className="text-red-600 hover:text-red-900 p-1" title="Eliminar">
                                                 <TrashIcon className="w-5 h-5"/>
                                             </button>
                                         </>

@@ -12,6 +12,7 @@ interface Props {
     userRole?: UserRole;
     onMarkPendingPickup: (movementId: string, pending: boolean) => void;
     onReturnItem: (movementId: string, condition?: string, notes?: string) => void;
+    onBehaviorLog?: (action: string, detail: string) => void;
 }
 
 const INV_FILTERS = [
@@ -23,7 +24,7 @@ const INV_FILTERS = [
 ] as const;
 
 export const PickupView: React.FC<Props> = ({
-    movements, items, personnel, projects, userRole = UserRole.EMPLOYEE, onMarkPendingPickup, onReturnItem,
+    movements, items, personnel, projects, userRole = UserRole.EMPLOYEE, onMarkPendingPickup, onReturnItem, onBehaviorLog,
 }) => {
     const isOwner = userRole === UserRole.OWNER;
     const [typeFilter, setTypeFilter] = useState<string>('');
@@ -142,15 +143,17 @@ export const PickupView: React.FC<Props> = ({
                                             {isOwner && (
                                                 <button
                                                     onClick={() => {
-                                                        if (window.confirm(`¿Cancelar "a recoger" para ${it?.name ?? 'esta herramienta'}? Se quitará de la lista.`))
+                                                        if (window.confirm(`¿Cancelar "a recoger" para ${it?.name ?? 'esta herramienta'}? Se quitará de la lista.`)) {
+                                                            onBehaviorLog?.('ACTION', `Canceló recogida (Vista Recoger): ${it?.name ?? 'herramienta'}`);
                                                             onMarkPendingPickup(m.id, false);
+                                                        }
                                                     }}
                                                     className="text-xs px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold rounded-xl transition-all"
                                                     title="Quitar de la lista">
                                                     ✕
                                                 </button>
                                             )}
-                                            <button onClick={() => setReturningMovement(m)}
+                                            <button onClick={() => { onBehaviorLog?.('BUTTON', `Confirmó recogida: ${it?.name ?? 'herramienta'}`); setReturningMovement(m); }}
                                                 className="text-xs px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-all">
                                                 ✓ Recogida
                                             </button>

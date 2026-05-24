@@ -40,6 +40,7 @@ interface KardexHubProps {
     onDeleteProject?: (id: string) => void;
     showEconomicValues?: boolean;
     onTabChange?: (tab: KardexTab) => void;
+    onBehaviorLog?: (action: string, detail: string) => void;
 }
 
 const TABS: Array<{ id: KardexTab; label: string; icon: string }> = [
@@ -61,7 +62,7 @@ const INV_TYPES: Array<{ type: InventoryType | null; label: string }> = [
 export const KardexHub: React.FC<KardexHubProps> = ({
     items, movements, personnel, projects, auditLogs, behaviorLogs, users, userRole,
     initialTab = 'movements', initialInventoryType = null,
-    onGoBack, onTabChange,
+    onGoBack, onTabChange, onBehaviorLog,
     openLogMovementModal, onDeleteMovement, onReturnLoan,
     onReturnItem, onMarkPendingPickup,
     openAddItemModal, onEditItem, onDeleteItem, onItemHistory, onOpenInvoiceReader,
@@ -75,6 +76,8 @@ export const KardexHub: React.FC<KardexHubProps> = ({
     const handleTabClick = (tab: KardexTab) => {
         setActiveTab(tab);
         onTabChange?.(tab);
+        const tabLabel = TABS.find(t => t.id === tab)?.label ?? tab;
+        onBehaviorLog?.('NAV', `Kardex → ${tabLabel}`);
     };
 
     const filteredItems = invType ? items.filter(i => i.inventoryType === invType) : items;
@@ -106,7 +109,7 @@ export const KardexHub: React.FC<KardexHubProps> = ({
                         {INV_TYPES.map(t => (
                             <button
                                 key={String(t.type)}
-                                onClick={() => setInvType(t.type)}
+                                onClick={() => { setInvType(t.type); onBehaviorLog?.('FILTER', `Filtro inventario: ${t.label}`); }}
                                 className={`flex-shrink-0 text-xs font-semibold px-3 py-1 rounded-full border transition-all ${
                                     invType === t.type
                                         ? 'bg-blue-600 text-white border-blue-600'
@@ -130,6 +133,7 @@ export const KardexHub: React.FC<KardexHubProps> = ({
                     onReturnLoan={onReturnLoan}
                     onGoBack={onGoBack}
                     userRole={userRole}
+                    onBehaviorLog={onBehaviorLog}
                 />
             )}
 
@@ -142,6 +146,7 @@ export const KardexHub: React.FC<KardexHubProps> = ({
                     onMarkPendingPickup={onMarkPendingPickup}
                     onGoBack={onGoBack}
                     userRole={userRole}
+                    onBehaviorLog={onBehaviorLog}
                 />
             )}
 
@@ -156,6 +161,7 @@ export const KardexHub: React.FC<KardexHubProps> = ({
                     userRole={userRole}
                     category={categoryLabel}
                     onGoBack={onGoBack}
+                    onBehaviorLog={onBehaviorLog}
                 />
             )}
 
@@ -170,6 +176,7 @@ export const KardexHub: React.FC<KardexHubProps> = ({
                     onGoBack={onGoBack}
                     userRole={userRole}
                     showEconomicValues={showEconomicValues}
+                    onBehaviorLog={onBehaviorLog}
                 />
             )}
 

@@ -19,6 +19,7 @@ interface Props {
     items: Item[];
     personnel: Personnel[];
     readOnly?: boolean;
+    onBehaviorLog?: (action: string, detail: string) => void;
 }
 
 interface PersonGroup {
@@ -38,7 +39,7 @@ const REPORT_LABELS: Record<ReportType, string> = {
     general:    '📋 General',
 };
 
-export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, readOnly = false }) => {
+export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, readOnly = false, onBehaviorLog }) => {
     const [log, setLog] = useState<ReminderLog>(loadReminderLog);
 
     // ── Weekly "due" queue ──────────────────────────────────────────────────
@@ -96,6 +97,7 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
 
     const remindWeekly = (g: PersonGroup) => {
         if (!g.person.phone) return;
+        onBehaviorLog?.('ACTION', `Envió recordatorio WA a: ${g.person.name}`);
         const rGroups = buildPersonGroups(g.person, movements, items, 7);
         window.open(buildPersonReminderUrl(g.person.phone, g.person.name, rGroups), '_blank');
         const newLog = recordReminders(g.loans.map(m => m.id));
@@ -143,6 +145,7 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
             return g.loans.some(m => itemMap.get(m.itemId)?.inventoryType === invType);
         });
         if (relevant.length === 0) return;
+        onBehaviorLog?.('ACTION', `Inició reporte WA: ${REPORT_LABELS[type]} (${relevant.length} personas)`);
         setReportType(type);
         setReportQueue(relevant);
         setReportStep(0);

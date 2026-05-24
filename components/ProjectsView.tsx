@@ -15,6 +15,7 @@ interface ProjectsViewProps {
     onGoBack: () => void;
     userRole: UserRole;
     showEconomicValues?: boolean;
+    onBehaviorLog?: (action: string, detail: string) => void;
 }
 
 const MOV_LABEL: Record<string, string> = {
@@ -273,7 +274,7 @@ const ProjectDetail: React.FC<{
 
 // ── Projects list ─────────────────────────────────────────────────────────────
 export const ProjectsView: React.FC<ProjectsViewProps> = ({
-    projects, movements, items, personnel, onAddProject, onDeleteProject, onGoBack, userRole, showEconomicValues = false,
+    projects, movements, items, personnel, onAddProject, onDeleteProject, onGoBack, userRole, showEconomicValues = false, onBehaviorLog,
 }) => {
     const [isAdding, setIsAdding] = useState(false);
     const [newProjectName, setNewProjectName] = useState('');
@@ -300,6 +301,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!newProjectName.trim()) return;
+        onBehaviorLog?.('ACTION', `Creó proyecto: ${newProjectName.trim()}`);
         onAddProject({ name: newProjectName.trim(), description: newProjectDesc.trim(), status: 'active' });
         setIsAdding(false);
         setNewProjectName('');
@@ -365,13 +367,13 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                         <div key={project.id} className="bg-white border border-gray-100 rounded-2xl p-5 hover:shadow-md transition-all cursor-pointer relative group">
                             {onDeleteProject && userRole === UserRole.OWNER && (
                                 <button
-                                    onClick={e => { e.stopPropagation(); if (window.confirm('¿Borrar obra?')) onDeleteProject(project.id); }}
+                                    onClick={e => { e.stopPropagation(); if (window.confirm('¿Borrar obra?')) { onBehaviorLog?.('ACTION', `Eliminó proyecto: ${project.name}`); onDeleteProject(project.id); } }}
                                     className="absolute top-3 right-3 p-1.5 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
                                 >
                                     <TrashIcon className="w-4 h-4" />
                                 </button>
                             )}
-                            <div onClick={() => setSelectedProjectId(project.id)}>
+                            <div onClick={() => { onBehaviorLog?.('NAV', `Abrió proyecto: ${project.name}`); setSelectedProjectId(project.id); }}>
                                 <div className="flex items-start justify-between mb-3">
                                     <h3 className="font-black text-base text-gray-900 uppercase leading-tight pr-6">{project.name}</h3>
                                     <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full flex-shrink-0 ${project.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}>

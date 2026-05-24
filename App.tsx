@@ -631,6 +631,7 @@ const App: React.FC = () => {
                                 personnel={personnel}
                                 purchaseOrders={purchaseOrders}
                                 onNavigate={(v, tab) => selectView(v as View, tab as KardexTab | undefined)}
+                                onBehaviorLog={addBehaviorLog}
                             />
                         )}
                         {effectiveView === 'kardex' && (
@@ -658,7 +659,7 @@ const App: React.FC = () => {
                                 onAddProject={handleAddProject}
                                 onDeleteProject={handleDeleteProject}
                                 showEconomicValues={appConfig.showEconomicValues}
-                                onTabChange={(tab) => addBehaviorLog('NAV', `Kardex → ${tab}`)}
+                                onBehaviorLog={addBehaviorLog}
                             />
                         )}
                         {effectiveView === 'personnel' && (
@@ -677,6 +678,7 @@ const App: React.FC = () => {
                                 onCreateProject={handleCreateProjectByName}
                                 onTransferLoan={handleTransferLoan}
                                 userRole={userRole}
+                                onBehaviorLog={addBehaviorLog}
                             />
                         )}
                         {effectiveView === 'copilot' && (
@@ -694,7 +696,7 @@ const App: React.FC = () => {
                         )}
                         {effectiveView === 'help' && <HelpView />}
                         {effectiveView === 'whatsapp' && (
-                            <WhatsAppView movements={movements} items={items} personnel={personnel} readOnly={userRole === UserRole.VISITOR} />
+                            <WhatsAppView movements={movements} items={items} personnel={personnel} readOnly={userRole === UserRole.VISITOR} onBehaviorLog={addBehaviorLog} />
                         )}
                         {effectiveView === 'pickup' && (
                             <PickupView
@@ -704,6 +706,7 @@ const App: React.FC = () => {
                                 projects={projects}
                                 onMarkPendingPickup={handleMarkPendingPickup}
                                 onReturnItem={handleReturnItem}
+                                onBehaviorLog={addBehaviorLog}
                             />
                         )}
                     </div>

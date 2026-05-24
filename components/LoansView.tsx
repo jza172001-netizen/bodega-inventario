@@ -13,6 +13,7 @@ interface LoansViewProps {
     onMarkPendingPickup: (movementId: string, pending: boolean) => void;
     onGoBack: () => void;
     userRole?: UserRole;
+    onBehaviorLog?: (action: string, detail: string) => void;
 }
 
 const INV_FILTERS = [
@@ -24,7 +25,7 @@ const INV_FILTERS = [
 ] as const;
 
 export const LoansView: React.FC<LoansViewProps> = ({
-    movements, items, personnel, onReturnItem, onMarkPendingPickup, onGoBack, userRole = UserRole.EMPLOYEE,
+    movements, items, personnel, onReturnItem, onMarkPendingPickup, onGoBack, userRole = UserRole.EMPLOYEE, onBehaviorLog,
 }) => {
     const isOwner = userRole === UserRole.OWNER;
     const [search, setSearch]     = useState('');
@@ -78,11 +79,16 @@ export const LoansView: React.FC<LoansViewProps> = ({
     }, []);
 
     const handleReturn = (loan: Movement) => {
+        onBehaviorLog?.('BUTTON', `Abrió devolución: ${getItemName(loan.itemId)} (${getPersonName(loan.personnelId)})`);
         setReturningLoan(loan);
     };
 
     const confirmReturn = (ids: string[], condition: ReturnCondition, notes: string) => {
-        ids.forEach(id => onReturnItem(id, condition, notes));
+        ids.forEach(id => {
+            const loan = movements.find(m => m.id === id);
+            if (loan) onBehaviorLog?.('ACTION', `Confirmó devolución: ${getItemName(loan.itemId)} de ${getPersonName(loan.personnelId)} — ${condition}`);
+            onReturnItem(id, condition, notes);
+        });
         setReturningLoan(null);
     };
 
@@ -114,12 +120,12 @@ export const LoansView: React.FC<LoansViewProps> = ({
                         </button>
                     )}
                     {!isPending ? (
-                        <button onClick={() => onMarkPendingPickup(loan.id, true)}
+                        <button onClick={() => { onBehaviorLog?.('ACTION', `Marcó "ir a recoger": ${getItemName(loan.itemId)}`); onMarkPendingPickup(loan.id, true); }}
                             className="flex-1 py-1.5 bg-orange-100 hover:bg-orange-200 text-orange-800 text-xs font-bold rounded-xl transition-all">
                             📍 Ir a recoger
                         </button>
                     ) : isOwner ? (
-                        <button onClick={() => { if (window.confirm('¿Cancelar la recogida pendiente?')) onMarkPendingPickup(loan.id, false); }}
+                        <button onClick={() => { if (window.confirm('¿Cancelar la recogida pendiente?')) { onBehaviorLog?.('ACTION', `Canceló recogida: ${getItemName(loan.itemId)}`); onMarkPendingPickup(loan.id, false); } }}
                             className="flex-1 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-bold rounded-xl transition-all">
                             ✕ Cancelar recogida
                         </button>
@@ -199,7 +205,7 @@ export const LoansView: React.FC<LoansViewProps> = ({
                 {/* Chips de tipo */}
                 <div className="flex gap-2 overflow-x-auto pb-1 mb-3 scrollbar-hide">
                     {INV_FILTERS.map(f => (
-                        <button key={f.key} onClick={() => setTypeFilter(f.key)}
+                        <button key={f.key} onClick={() => { setTypeFilter(f.key); onBehaviorLog?.('FILTER', `Filtro préstamos: ${f.label}`); }}
                             className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-black transition-all ${
                                 typeFilter === f.key
                                     ? 'bg-indigo-600 text-white shadow-sm'
