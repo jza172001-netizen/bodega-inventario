@@ -21,7 +21,7 @@ import { SettingsModal, AppConfig, DEFAULT_CONFIG } from './components/SettingsM
 import { requestNotificationPermission, checkAndNotifyPickup } from './services/notificationService';
 
 import { mockItems, mockMovements, mockPersonnel, mockPurchaseOrders, mockProjects, mockUsers } from './mockData';
-import { Item, Movement, MovementType, Personnel, PurchaseOrder, UserRole, InventoryType, Project, AppUser, PurchaseOrderStatus } from './types';
+import { Item, Movement, MovementType, Personnel, PurchaseOrder, UserRole, InventoryType, Project, AppUser, PurchaseOrderStatus, AuditLog } from './types';
 import { LoginView } from './components/LoginView';
 import { LandingPage } from './components/LandingPage';
 import { InvoiceReaderModal } from './components/InvoiceReaderModal';
@@ -63,9 +63,21 @@ const App: React.FC = () => {
     const [personnel, setPersonnel] = useState<Personnel[]>(() => { const s = loadFromLocalStorage(); return s?.personnel ?? mockPersonnel; });
     const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(() => { const s = loadFromLocalStorage(); return s?.purchaseOrders ?? mockPurchaseOrders; });
     const [projects, setProjects] = useState<Project[]>(() => { const s = loadFromLocalStorage(); return s?.projects ?? mockProjects; });
+    const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => { const s = loadFromLocalStorage(); return s?.auditLogs ?? []; });
+
+    const addAuditLog = (action: string, description: string) => {
+        const entry: AuditLog = {
+            id: `audit-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            timestamp: new Date(),
+            action,
+            actor: userName,
+            description,
+        };
+        setAuditLogs(prev => [entry, ...prev]);
+    };
 
     // Auto-save a localStorage en cada cambio (igual que antes)
-    useEffect(() => { saveToLocalStorage({ items, movements, personnel, purchaseOrders, projects, users }); }, [items, movements, personnel, purchaseOrders, projects, users]);
+    useEffect(() => { saveToLocalStorage({ items, movements, personnel, purchaseOrders, projects, users, auditLogs }); }, [items, movements, personnel, purchaseOrders, projects, users, auditLogs]);
 
     // Notificar herramientas pendientes de recoger cada vez que se abre la app
     useEffect(() => {
@@ -173,25 +185,38 @@ const App: React.FC = () => {
         const newItem = { ...i, id: `i-${Date.now()}` };
         setItems(prev => [...prev, newItem]);
         withSync(db.addItem(i).then(created => setItems(prev => prev.map(x => x.id === newItem.id ? created : x))));
+        addAuditLog('ITEM_CREATED', `Se agregó "${i.name}" al inventario`);
     };
 
     const handleAddItemSync = (i: Omit<Item, 'id'>): Item => {
         const newItem = { ...i, id: `i-${Date.now()}` };
         setItems(prev => [...prev, newItem]);
         withSync(db.addItem(i).then(created => setItems(prev => prev.map(x => x.id === newItem.id ? created : x))));
+        addAuditLog('ITEM_CREATED', `Se agregó "${i.name}" al inventario`);
         return newItem;
     };
 
     const handleEditItem = (updated: Item) => {
-        setItems(prev => prev.map(i => i.id === updated.id ? updated : i));
+        const prev = items.find(i => i.id === updated.id);
+        setItems(p => p.map(i => i.id === updated.id ? updated : i));
         withSync(db.updateItem(updated));
+        if (prev?.name !== updated.name) {
+            addAuditLog('ITEM_EDITED', `Se editó "${prev?.name ?? updated.name}" → nombre cambiado a "${updated.name}"`);
+        } else {
+            addAuditLog('ITEM_EDITED', `Se editó "${updated.name}"`);
+        }
     };
 
     const handleDeleteItem = (id: string) => {
+        const item = items.find(i => i.id === id);
         const hasMovements = movements.some(m => m.itemId === id);
-        if (hasMovements && !window.confirm('Este artículo tiene movimientos registrados. ¿Eliminar de todas formas? Los registros históricos quedarán sin referencia.')) return;
+        const msg = hasMovements
+            ? 'Este artículo tiene movimientos registrados. ¿Eliminar de todas formas? Los registros históricos quedarán sin referencia.'
+            : `¿Eliminar "${item?.name ?? 'este artículo'}" del inventario?`;
+        if (!window.confirm(msg)) return;
         setItems(prev => prev.filter(i => i.id !== id));
         withSync(db.deleteItem(id));
+        addAuditLog('ITEM_DELETED', `Se eliminó "${item?.name ?? id}" del inventario`);
     };
 
     const handleLogMovement = (m: Omit<Movement, 'id'>) => {
@@ -210,21 +235,42 @@ const App: React.FC = () => {
         }));
         withSync(db.addMovement({ ...m, timestamp: ts })
             .then(created => setMovements(prev => prev.map(x => x.id === newMov.id ? created : x))));
+        if (m.isLoan) {
+            const itemName = items.find(i => i.id === m.itemId)?.name ?? 'herramienta';
+            const personName = m.personnelId ? personnel.find(p => p.id === m.personnelId)?.name : undefined;
+            addAuditLog('LOAN_CREATED', `Préstamo: "${itemName}"${personName ? ` → ${personName}` : ''}`);
+        }
     };
 
     const handleDeleteMovement = (id: string) => {
+        const mov = movements.find(m => m.id === id);
+        const itemName = mov ? items.find(i => i.id === mov.itemId)?.name ?? mov.itemId : id;
+        if (!window.confirm(`¿Eliminar este registro de movimiento (${itemName})? Esta acción no se puede deshacer.`)) return;
         setMovements(prev => prev.filter(m => m.id !== id));
         withSync(db.deleteMovement(id));
+        addAuditLog('MOVEMENT_DELETED', `Se eliminó registro de movimiento: "${itemName}"`);
     };
 
     const handleReturnItem = (id: string, condition?: string, notes?: string) => {
+        const mov = movements.find(m => m.id === id);
+        const itemName = mov ? items.find(i => i.id === mov.itemId)?.name ?? 'herramienta' : 'herramienta';
+        const personName = mov?.personnelId ? personnel.find(p => p.id === mov.personnelId)?.name : undefined;
         setMovements(prev => prev.map(m => m.id === id ? { ...m, isReturned: true, returnCondition: condition as import('./types').ReturnCondition | undefined, returnNotes: notes } : m));
         withSync(db.markMovementReturned(id, condition as import('./types').ReturnCondition | undefined, notes));
+        addAuditLog('LOAN_RETURNED', `Devuelta: "${itemName}"${personName ? ` de ${personName}` : ''}${condition ? ` — estado: ${condition}` : ''}`);
     };
 
     const handleMarkPendingPickup = (id: string, pending: boolean) => {
+        const mov = movements.find(m => m.id === id);
+        const itemName = mov ? items.find(i => i.id === mov.itemId)?.name ?? 'herramienta' : 'herramienta';
+        const personName = mov?.personnelId ? personnel.find(p => p.id === mov.personnelId)?.name : undefined;
         setMovements(prev => prev.map(m => m.id === id ? { ...m, pendingPickup: pending } : m));
         withSync(db.markMovementPendingPickup(id, pending));
+        if (pending) {
+            addAuditLog('PICKUP_MARKED', `Marcado a recoger: "${itemName}"${personName ? ` de ${personName}` : ''}`);
+        } else {
+            addAuditLog('PICKUP_CANCELLED', `Cancelada recogida: "${itemName}"${personName ? ` de ${personName}` : ''}`);
+        }
     };
 
     const handleAssignProjectToLoan = (movementId: string, projectId: string) => {
@@ -237,6 +283,10 @@ const App: React.FC = () => {
         if (!original) return;
 
         const fromName = personnel.find(p => p.id === original.personnelId)?.name ?? 'trabajador anterior';
+        const toName   = personnel.find(p => p.id === newPersonnelId)?.name ?? 'trabajador destino';
+        const itemName = items.find(i => i.id === original.itemId)?.name ?? 'herramienta';
+
+        if (!window.confirm(`¿Traspasar "${itemName}" de ${fromName} a ${toName}?`)) return;
 
         // Cierra el préstamo original sin tocar el stock (la herramienta no regresó a bodega)
         setMovements(prev => prev.map(m => m.id === movementId ? { ...m, isReturned: true, pendingPickup: false } : m));
@@ -254,51 +304,70 @@ const App: React.FC = () => {
         };
         setMovements(prev => [newMov, ...prev]);
         withSync(db.addMovement(newMov));
+        addAuditLog('LOAN_TRANSFERRED', `Traspaso: "${itemName}" de ${fromName} → ${toName}`);
     };
 
     const handleAddPersonnel = (p: Omit<Personnel, 'id'>) => {
         const newP = { ...p, id: `per-${Date.now()}` };
         setPersonnel(prev => [...prev, newP]);
         withSync(db.addPersonnel(p).then(created => setPersonnel(prev => prev.map(x => x.id === newP.id ? created : x))));
+        addAuditLog('PERSONNEL_CREATED', `Se agregó trabajador: "${p.name}"`);
     };
 
     const handleAddPersonnelSync = (p: Omit<Personnel, 'id'>): Personnel => {
         const newP = { ...p, id: `per-${Date.now()}` };
         setPersonnel(prev => [...prev, newP]);
         withSync(db.addPersonnel(p).then(created => setPersonnel(prev => prev.map(x => x.id === newP.id ? created : x))));
+        addAuditLog('PERSONNEL_CREATED', `Se agregó trabajador: "${p.name}"`);
         return newP;
     };
 
     const handleEditPersonnel = (p: Personnel) => {
-        setPersonnel(prev => prev.map(pers => pers.id === p.id ? p : pers));
+        const prev = personnel.find(pers => pers.id === p.id);
+        setPersonnel(ps => ps.map(pers => pers.id === p.id ? p : pers));
         withSync(db.updatePersonnel(p));
+        if (prev?.name !== p.name) {
+            addAuditLog('PERSONNEL_EDITED', `Se cambió nombre de trabajador: "${prev?.name}" → "${p.name}"`);
+        } else {
+            addAuditLog('PERSONNEL_EDITED', `Se editó trabajador: "${p.name}"`);
+        }
     };
 
     const handleDeletePersonnel = (id: string) => {
+        const person = personnel.find(p => p.id === id);
         const hasMovements = movements.some(m => m.personnelId === id);
-        if (hasMovements && !window.confirm('Este personal tiene movimientos registrados. ¿Eliminar de todas formas?')) return;
+        const msg = hasMovements
+            ? `"${person?.name}" tiene movimientos registrados. ¿Eliminar de todas formas?`
+            : `¿Eliminar trabajador "${person?.name ?? 'este trabajador'}"?`;
+        if (!window.confirm(msg)) return;
         setPersonnel(prev => prev.filter(p => p.id !== id));
         withSync(db.deletePersonnel(id));
+        addAuditLog('PERSONNEL_DELETED', `Se eliminó trabajador: "${person?.name ?? id}"`);
     };
 
     const handleAddProject = (p: Omit<Project, 'id'>) => {
         const newP = { ...p, id: `p-${Date.now()}` };
         setProjects(prev => [...prev, newP]);
         withSync(db.addProject(p).then(created => setProjects(prev => prev.map(x => x.id === newP.id ? created : x))));
+        addAuditLog('PROJECT_CREATED', `Se creó proyecto: "${p.name}"`);
     };
 
     const handleAddProjectSync = (p: Omit<Project, 'id'>): Project => {
         const newP = { ...p, id: `p-${Date.now()}` };
         setProjects(prev => [...prev, newP]);
         withSync(db.addProject(p).then(created => setProjects(prev => prev.map(x => x.id === newP.id ? created : x))));
+        addAuditLog('PROJECT_CREATED', `Se creó proyecto: "${p.name}"`);
         return newP;
     };
 
     const handleCreateProjectByName = (name: string): Project => handleAddProjectSync({ name, status: 'active' });
 
     const handleDeleteProject = (id: string) => {
+        const project = projects.find(p => p.id === id);
+        if (!window.confirm(`¿Eliminar proyecto "${project?.name ?? 'este proyecto'}"?`)) return;
         setProjects(prev => prev.filter(p => p.id !== id));
         withSync(db.deleteProject(id));
+        addAuditLog('PROJECT_DELETED', `Se eliminó proyecto: "${project?.name ?? id}"`);
     };
 
     const handleAddPurchaseOrder = (o: Omit<PurchaseOrder, 'id'>) => {
@@ -323,17 +392,23 @@ const App: React.FC = () => {
     const handleAddUser = (u: AppUser) => {
         setUsers(prev => [...prev, u]);
         withSync(db.addUser(u));
+        addAuditLog('USER_CREATED', `Se creó usuario: "${u.username}" (${u.role})`);
     };
 
     const handleEditUser = (u: AppUser) => {
         setUsers(prev => prev.map(user => user.id === u.id ? u : user));
         withSync(db.updateUser(u));
+        addAuditLog('PERSONNEL_EDITED', `Se editó usuario: "${u.username}"`);
     };
 
     const handleDeleteUser = (id: string) => {
+        const user = users.find(u => u.id === id);
         setUsers(prev => prev.filter(u => u.id !== id));
         db.deleteUser(id).catch(() => {});
+        addAuditLog('USER_DELETED', `Se eliminó usuario: "${user?.username ?? id}"`);
     };
+
+    const handleClearAuditLogs = () => { setAuditLogs([]); };
 
     if (!loggedIn) return <LoginView onLoginSuccess={handleLoginSuccess} />;
 
@@ -425,6 +500,7 @@ const App: React.FC = () => {
                                 movements={movements}
                                 personnel={personnel}
                                 projects={projects}
+                                auditLogs={auditLogs}
                                 userRole={userRole}
                                 initialTab={kardexTab}
                                 onGoBack={() => selectView('dashboard')}
@@ -440,6 +516,7 @@ const App: React.FC = () => {
                                 onAddProject={handleAddProject}
                                 onDeleteProject={handleDeleteProject}
                                 showEconomicValues={appConfig.showEconomicValues}
+                                onClearAuditLogs={handleClearAuditLogs}
                             />
                         )}
                         {effectiveView === 'personnel' && (
@@ -483,6 +560,7 @@ const App: React.FC = () => {
                                 items={items}
                                 personnel={personnel}
                                 projects={projects}
+                                userRole={userRole}
                                 onMarkPendingPickup={handleMarkPendingPickup}
                                 onReturnItem={handleReturnItem}
                             />

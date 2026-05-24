@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState } from 'react';
-import { Movement, Item, Personnel, Project, InventoryType, ReturnCondition } from '../types';
+import { Movement, Item, Personnel, Project, InventoryType, ReturnCondition, UserRole } from '../types';
 import { buildConsolidatedPickupUrl, MELLO_NAME } from '../services/whatsappService';
 import { ReturnToolModal } from './ReturnToolModal';
 
@@ -9,6 +9,7 @@ interface Props {
     items: Item[];
     personnel: Personnel[];
     projects: Project[];
+    userRole?: UserRole;
     onMarkPendingPickup: (movementId: string, pending: boolean) => void;
     onReturnItem: (movementId: string, condition?: string, notes?: string) => void;
 }
@@ -22,8 +23,9 @@ const INV_FILTERS = [
 ] as const;
 
 export const PickupView: React.FC<Props> = ({
-    movements, items, personnel, projects, onMarkPendingPickup, onReturnItem,
+    movements, items, personnel, projects, userRole = UserRole.EMPLOYEE, onMarkPendingPickup, onReturnItem,
 }) => {
+    const isOwner = userRole === UserRole.OWNER;
     const [typeFilter, setTypeFilter] = useState<string>('');
     const [returningMovement, setReturningMovement] = useState<Movement | null>(null);
 
@@ -137,11 +139,17 @@ export const PickupView: React.FC<Props> = ({
                                             </p>
                                         </div>
                                         <div className="flex gap-2 flex-shrink-0">
-                                            <button onClick={() => onMarkPendingPickup(m.id, false)}
-                                                className="text-xs px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold rounded-xl transition-all"
-                                                title="Quitar de la lista">
-                                                ✕
-                                            </button>
+                                            {isOwner && (
+                                                <button
+                                                    onClick={() => {
+                                                        if (window.confirm(`¿Cancelar "a recoger" para ${it?.name ?? 'esta herramienta'}? Se quitará de la lista.`))
+                                                            onMarkPendingPickup(m.id, false);
+                                                    }}
+                                                    className="text-xs px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold rounded-xl transition-all"
+                                                    title="Quitar de la lista">
+                                                    ✕
+                                                </button>
+                                            )}
                                             <button onClick={() => setReturningMovement(m)}
                                                 className="text-xs px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-all">
                                                 ✓ Recogida

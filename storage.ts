@@ -6,7 +6,7 @@
  * También permite exportar/importar como archivo JSON local.
  */
 
-import { Item, Movement, Personnel, PurchaseOrder, Project, AppUser } from './types';
+import { Item, Movement, Personnel, PurchaseOrder, Project, AppUser, AuditLog } from './types';
 
 const STORAGE_KEY = 'warehouse_inventory_pro_data';
 const STORAGE_VERSION = '3.0';
@@ -20,6 +20,7 @@ export interface AppData {
     purchaseOrders: PurchaseOrder[];
     projects: Project[];
     users: AppUser[];
+    auditLogs?: AuditLog[];
 }
 
 // ── AUTO-SAVE: guarda en localStorage ──────────────────────
@@ -54,6 +55,9 @@ export function loadFromLocalStorage(): Partial<AppData> | null {
             expectedDeliveryDate: po.expectedDeliveryDate ? new Date(po.expectedDeliveryDate) : undefined,
             receivedDate: po.receivedDate ? new Date(po.receivedDate) : undefined,
         }));
+        if (data.auditLogs) {
+            data.auditLogs = data.auditLogs.map(l => ({ ...l, timestamp: new Date(l.timestamp) }));
+        }
         return data;
     } catch (e) {
         console.warn('Error cargando desde localStorage:', e);
@@ -104,6 +108,9 @@ export function importFromFile(
                 expectedDeliveryDate: po.expectedDeliveryDate ? new Date(po.expectedDeliveryDate) : undefined,
                 receivedDate: po.receivedDate ? new Date(po.receivedDate) : undefined,
             }));
+            if (data.auditLogs) {
+                data.auditLogs = data.auditLogs.map(l => ({ ...l, timestamp: new Date(l.timestamp) }));
+            }
             onSuccess(data);
         } catch {
             onError?.('Archivo inválido. Asegúrate de importar un JSON exportado desde esta app.');

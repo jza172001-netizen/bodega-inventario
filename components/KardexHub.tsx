@@ -1,13 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
-import { Item, Movement, Personnel, Project, InventoryType, UserRole } from '../types';
+import { Item, Movement, Personnel, Project, InventoryType, UserRole, AuditLog } from '../types';
 import { MovementsView } from './MovementsView';
 import { LoansView } from './LoansView';
 import { InventoryView } from './InventoryView';
 import { ProjectsView } from './ProjectsView';
 import { TraceabilityView } from './TraceabilityView';
+import { AuditLogView } from './AuditLogView';
 
-type KardexTab = 'movements' | 'loans' | 'inventory' | 'projects' | 'traceability';
+type KardexTab = 'movements' | 'loans' | 'inventory' | 'projects' | 'traceability' | 'audit';
 
 interface KardexHubProps {
     // data
@@ -15,6 +16,7 @@ interface KardexHubProps {
     movements: Movement[];
     personnel: Personnel[];
     projects: Project[];
+    auditLogs: AuditLog[];
     userRole: UserRole;
     initialTab?: KardexTab;
     initialInventoryType?: InventoryType | null;
@@ -36,6 +38,7 @@ interface KardexHubProps {
     onAddProject: (p: Omit<Project, 'id'>) => void;
     onDeleteProject?: (id: string) => void;
     showEconomicValues?: boolean;
+    onClearAuditLogs?: () => void;
 }
 
 const TABS: Array<{ id: KardexTab; label: string; icon: string }> = [
@@ -44,6 +47,7 @@ const TABS: Array<{ id: KardexTab; label: string; icon: string }> = [
     { id: 'inventory',    label: 'Inventario',     icon: '📦' },
     { id: 'projects',     label: 'Proyectos',      icon: '🏗' },
     { id: 'traceability', label: 'Trazabilidad',   icon: '🔍' },
+    { id: 'audit',        label: 'Bitácora',       icon: '🛡️' },
 ];
 
 const INV_TYPES: Array<{ type: InventoryType | null; label: string }> = [
@@ -55,13 +59,14 @@ const INV_TYPES: Array<{ type: InventoryType | null; label: string }> = [
 ];
 
 export const KardexHub: React.FC<KardexHubProps> = ({
-    items, movements, personnel, projects, userRole,
+    items, movements, personnel, projects, auditLogs, userRole,
     initialTab = 'movements', initialInventoryType = null,
     onGoBack,
     openLogMovementModal, onDeleteMovement, onReturnLoan,
     onReturnItem, onMarkPendingPickup,
     openAddItemModal, onEditItem, onDeleteItem, onItemHistory, onOpenInvoiceReader,
     onAddProject, onDeleteProject, showEconomicValues = false,
+    onClearAuditLogs,
 }) => {
     const [activeTab, setActiveTab] = useState<KardexTab>(initialTab);
     const [invType, setInvType] = useState<InventoryType | null>(initialInventoryType);
@@ -172,6 +177,14 @@ export const KardexHub: React.FC<KardexHubProps> = ({
                     items={items}
                     personnel={personnel}
                     projects={projects}
+                />
+            )}
+
+            {activeTab === 'audit' && (
+                <AuditLogView
+                    auditLogs={auditLogs}
+                    userRole={userRole}
+                    onClearLogs={onClearAuditLogs}
                 />
             )}
         </div>

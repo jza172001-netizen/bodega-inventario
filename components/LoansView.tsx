@@ -118,11 +118,15 @@ export const LoansView: React.FC<LoansViewProps> = ({
                             className="flex-1 py-1.5 bg-orange-100 hover:bg-orange-200 text-orange-800 text-xs font-bold rounded-xl transition-all">
                             📍 Ir a recoger
                         </button>
-                    ) : (
-                        <button onClick={() => onMarkPendingPickup(loan.id, false)}
+                    ) : isOwner ? (
+                        <button onClick={() => { if (window.confirm('¿Cancelar la recogida pendiente?')) onMarkPendingPickup(loan.id, false); }}
                             className="flex-1 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-bold rounded-xl transition-all">
-                            ✕ Cancelar
+                            ✕ Cancelar recogida
                         </button>
+                    ) : (
+                        <span className="flex-1 py-1.5 text-center text-[10px] text-orange-600 font-bold bg-orange-50 rounded-xl">
+                            📍 Pendiente de recoger
+                        </span>
                     )}
                 </div>
             </div>

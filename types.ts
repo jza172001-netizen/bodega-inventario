@@ -95,3 +95,11 @@ export interface PurchaseOrder {
     receivedDate?: Date;
     notes?: string;
 }
+
+export interface AuditLog {
+    id: string;
+    timestamp: Date;
+    action: string;
+    actor: string;
+    description: string;
+}
