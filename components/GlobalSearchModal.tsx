@@ -28,11 +28,14 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
     const itemMap      = useMemo(() => new Map(items.map(i => [i.id, i])), [items]);
     const personnelMap = useMemo(() => new Map(personnel.map(p => [p.id, p])), [personnel]);
 
+    const norm = (s: string) =>
+        s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
     const itemResults = useMemo(() => {
-        const q = query.trim().toLowerCase();
+        const q = norm(query.trim());
         if (q.length < 2) return [];
         return items
-            .filter(i => i.name.toLowerCase().includes(q) || i.subCategory.toLowerCase().includes(q))
+            .filter(i => norm(i.name).includes(q) || norm(i.subCategory).includes(q))
             .slice(0, 8)
             .map(item => {
                 const activeLoan = movements.find(m => m.itemId === item.id && m.isLoan && !m.isReturned);
@@ -45,10 +48,10 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
     }, [query, items, movements, personnelMap]);
 
     const personnelResults = useMemo(() => {
-        const q = query.trim().toLowerCase();
+        const q = norm(query.trim());
         if (q.length < 2) return [];
         return personnel
-            .filter(p => p.name.toLowerCase().includes(q))
+            .filter(p => norm(p.name).includes(q))
             .slice(0, 4)
             .map(person => {
                 const activeLoans = movements.filter(m => m.personnelId === person.id && m.isLoan && !m.isReturned);
