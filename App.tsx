@@ -42,21 +42,30 @@ type KardexTab = 'movements' | 'loans' | 'inventory' | 'projects';
 const SESSION_KEY = 'bodega_session';
 const ONBOARDING_KEY = 'bodega_onboarding_v1';
 
+// Migra datos de usuarios viejos: toma name/role del seed pero preserva credenciales.
+// Busca por ID primero; si no coincide, busca por role (para compatibilidad con datos legacy).
+const migrateUsers = (stored: AppUser[]): AppUser[] => {
+    const usedIds = new Set<string>();
+    return seedUsers.map(seed => {
+        let found = stored.find(u => u.id === seed.id);
+        if (!found) found = stored.find(u => u.role === seed.role && !usedIds.has(u.id));
+        if (found) {
+            usedIds.add(found.id);
+            return { ...seed, username: found.username, password: found.password, setupComplete: found.setupComplete ?? (!!found.username && !!found.password) };
+        }
+        return seed;
+    });
+};
+
 const App: React.FC = () => {
     const [loggedIn, setLoggedIn] = useState(() => !!localStorage.getItem(SESSION_KEY));
     const [userRole, setUserRole] = useState<UserRole>(() => {
         try { return JSON.parse(localStorage.getItem(SESSION_KEY) || '{}').role ?? UserRole.OWNER; } catch { return UserRole.OWNER; }
     });
     // Carga inicial síncrona desde localStorage, con fallback a mockData
-    // Siempre toma name/role del seed para que reflejen cambios sin borrar credenciales
     const [users, setUsers] = useState<AppUser[]>(() => {
         const s = loadFromLocalStorage();
-        const stored = s?.users ?? mockUsers;
-        return seedUsers.map(seed => {
-            const found = stored.find(u => u.id === seed.id);
-            if (found) return { ...seed, username: found.username, password: found.password, setupComplete: found.setupComplete ?? (!!found.username && !!found.password) };
-            return seed;
-        });
+        return migrateUsers(s?.users ?? mockUsers);
     });
 
     const [userName, setUserName] = useState<string>(() => {
@@ -145,7 +154,7 @@ const App: React.FC = () => {
 
     // Sync desde Supabase en background al montar (no bloquea la UI)
     useEffect(() => {
-        db.fetchUsers().then(data => { if (data.length > 0) setUsers(data); }).catch(() => {});
+        db.fetchUsers().then(data => { if (data.length > 0) setUsers(migrateUsers(data)); }).catch(() => {});
         db.fetchItems().then(data => { if (data.length > 0) setItems(data); }).catch(() => {});
         db.fetchMovements().then(data => { if (data.length > 0) setMovements(data); }).catch(() => {});
         db.fetchPersonnel().then(data => { if (data.length > 0) setPersonnel(data); }).catch(() => {});

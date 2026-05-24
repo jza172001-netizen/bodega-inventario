@@ -144,7 +144,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ users, onLoginSuccess, onF
                                     className="w-full flex items-center gap-4 p-4 bg-white border-2 border-gray-200 hover:border-blue-400 hover:shadow-md rounded-2xl text-left transition-all group shadow-sm"
                                 >
                                     <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white text-xl font-black flex-shrink-0 group-hover:scale-105 transition-transform ${user.role === UserRole.OWNER ? 'bg-indigo-600' : 'bg-blue-500'}`}>
-                                        {user.role === UserRole.OWNER ? '👷👷👷' : '👷'}
+                                        {'👷'}
                                     </div>
                                     <div>
                                         <p className="font-black text-gray-900">{user.name}</p>
@@ -176,8 +176,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ users, onLoginSuccess, onF
 
                         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
                             <div className="flex items-center gap-3 mb-5">
-                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white text-base ${selectedUser.role === UserRole.OWNER ? 'bg-indigo-600' : 'bg-blue-500'}`}>
-                                    {selectedUser.role === UserRole.OWNER ? '👷👷👷' : '👷'}
+                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white text-2xl ${selectedUser.role === UserRole.OWNER ? 'bg-indigo-600' : 'bg-blue-500'}`}>
+                                    👷
                                 </div>
                                 <div>
                                     <p className="font-black text-gray-900">{selectedUser.name}</p>
