@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Item, Movement, Personnel, Project, InventoryType, UserRole } from '../types';
+import { Item, Movement, Personnel, Project, InventoryType, UserRole, AuditLog, BehaviorLog, AppUser } from '../types';
 import { MovementsView } from './MovementsView';
 import { LoansView } from './LoansView';
 import { InventoryView } from './InventoryView';
@@ -15,6 +15,9 @@ interface KardexHubProps {
     movements: Movement[];
     personnel: Personnel[];
     projects: Project[];
+    auditLogs: AuditLog[];
+    behaviorLogs: BehaviorLog[];
+    users: AppUser[];
     userRole: UserRole;
     initialTab?: KardexTab;
     initialInventoryType?: InventoryType | null;
@@ -36,6 +39,7 @@ interface KardexHubProps {
     onAddProject: (p: Omit<Project, 'id'>) => void;
     onDeleteProject?: (id: string) => void;
     showEconomicValues?: boolean;
+    onTabChange?: (tab: KardexTab) => void;
 }
 
 const TABS: Array<{ id: KardexTab; label: string; icon: string }> = [
@@ -55,9 +59,9 @@ const INV_TYPES: Array<{ type: InventoryType | null; label: string }> = [
 ];
 
 export const KardexHub: React.FC<KardexHubProps> = ({
-    items, movements, personnel, projects, userRole,
+    items, movements, personnel, projects, auditLogs, behaviorLogs, users, userRole,
     initialTab = 'movements', initialInventoryType = null,
-    onGoBack,
+    onGoBack, onTabChange,
     openLogMovementModal, onDeleteMovement, onReturnLoan,
     onReturnItem, onMarkPendingPickup,
     openAddItemModal, onEditItem, onDeleteItem, onItemHistory, onOpenInvoiceReader,
@@ -67,6 +71,11 @@ export const KardexHub: React.FC<KardexHubProps> = ({
     const [invType, setInvType] = useState<InventoryType | null>(initialInventoryType);
 
     useEffect(() => { setActiveTab(initialTab); }, [initialTab]);
+
+    const handleTabClick = (tab: KardexTab) => {
+        setActiveTab(tab);
+        onTabChange?.(tab);
+    };
 
     const filteredItems = invType ? items.filter(i => i.inventoryType === invType) : items;
     const categoryLabel = INV_TYPES.find(t => t.type === invType)?.label ?? 'Todos';
@@ -79,7 +88,7 @@ export const KardexHub: React.FC<KardexHubProps> = ({
                     {TABS.map(tab => (
                         <button
                             key={tab.id}
-                            onClick={() => setActiveTab(tab.id)}
+                            onClick={() => handleTabClick(tab.id)}
                             className={`flex-1 flex flex-col items-center py-3 px-1 text-xs font-bold transition-all border-b-2 ${
                                 activeTab === tab.id
                                     ? 'border-blue-600 text-blue-600 bg-blue-50'
@@ -92,7 +101,6 @@ export const KardexHub: React.FC<KardexHubProps> = ({
                     ))}
                 </div>
 
-                {/* Inventory sub-filter — only visible on inventory tab */}
                 {activeTab === 'inventory' && (
                     <div className="flex gap-1.5 px-3 py-2 border-t border-gray-100 overflow-x-auto">
                         {INV_TYPES.map(t => (
@@ -112,7 +120,6 @@ export const KardexHub: React.FC<KardexHubProps> = ({
                 )}
             </div>
 
-            {/* Active tab content */}
             {activeTab === 'movements' && (
                 <MovementsView
                     movements={movements}
@@ -172,6 +179,9 @@ export const KardexHub: React.FC<KardexHubProps> = ({
                     items={items}
                     personnel={personnel}
                     projects={projects}
+                    auditLogs={auditLogs}
+                    behaviorLogs={behaviorLogs}
+                    users={users}
                 />
             )}
         </div>

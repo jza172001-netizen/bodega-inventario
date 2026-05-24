@@ -17,11 +17,12 @@ import { HelpView } from './components/HelpView';
 import { WhatsAppView } from './components/WhatsAppView';
 import { PickupView } from './components/PickupView';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
+import { PinConfirmModal } from './components/PinConfirmModal';
 import { SettingsModal, AppConfig, DEFAULT_CONFIG } from './components/SettingsModal';
 import { requestNotificationPermission, checkAndNotifyPickup } from './services/notificationService';
 
 import { mockItems, mockMovements, mockPersonnel, mockPurchaseOrders, mockProjects, mockUsers } from './mockData';
-import { Item, Movement, MovementType, Personnel, PurchaseOrder, UserRole, InventoryType, Project, AppUser, PurchaseOrderStatus } from './types';
+import { Item, Movement, MovementType, Personnel, PurchaseOrder, UserRole, InventoryType, Project, AppUser, PurchaseOrderStatus, AuditLog, BehaviorLog } from './types';
 import { LoginView } from './components/LoginView';
 import { LandingPage } from './components/LandingPage';
 import { InvoiceReaderModal } from './components/InvoiceReaderModal';
@@ -49,23 +50,73 @@ const App: React.FC = () => {
         try { return JSON.parse(localStorage.getItem(SESSION_KEY) || '{}').name ?? ''; } catch { return ''; }
     });
 
-    const handleLoginSuccess = (role: UserRole, name: string) => {
-        setUserRole(role);
-        setUserName(name);
-        setLoggedIn(true);
-        localStorage.setItem(SESSION_KEY, JSON.stringify({ role, name }));
-    };
-
-    // Carga inicial síncrona desde localStorage (igual que antes), con fallback a mockData
+    // Carga inicial síncrona desde localStorage, con fallback a mockData
     const [users, setUsers] = useState<AppUser[]>(() => { const s = loadFromLocalStorage(); return s?.users ?? mockUsers; });
     const [items, setItems] = useState<Item[]>(() => { const s = loadFromLocalStorage(); return s?.items ?? mockItems; });
     const [movements, setMovements] = useState<Movement[]>(() => { const s = loadFromLocalStorage(); return s?.movements ?? mockMovements; });
     const [personnel, setPersonnel] = useState<Personnel[]>(() => { const s = loadFromLocalStorage(); return s?.personnel ?? mockPersonnel; });
     const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(() => { const s = loadFromLocalStorage(); return s?.purchaseOrders ?? mockPurchaseOrders; });
     const [projects, setProjects] = useState<Project[]>(() => { const s = loadFromLocalStorage(); return s?.projects ?? mockProjects; });
+    const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => { const s = loadFromLocalStorage(); return s?.auditLogs ?? []; });
+    const [behaviorLogs, setBehaviorLogs] = useState<BehaviorLog[]>(() => { const s = loadFromLocalStorage(); return s?.behaviorLogs ?? []; });
 
-    // Auto-save a localStorage en cada cambio (igual que antes)
-    useEffect(() => { saveToLocalStorage({ items, movements, personnel, purchaseOrders, projects, users }); }, [items, movements, personnel, purchaseOrders, projects, users]);
+    const addAuditLog = (action: string, description: string, actorOverride?: string) => {
+        const entry: AuditLog = {
+            id: `audit-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            timestamp: new Date(),
+            action,
+            actor: actorOverride ?? userName,
+            description,
+        };
+        setAuditLogs(prev => [entry, ...prev]);
+    };
+
+    const addBehaviorLog = (action: string, detail: string) => {
+        const entry: BehaviorLog = {
+            id: `beh-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            timestamp: new Date(),
+            actor: userName,
+            action,
+            detail,
+        };
+        setBehaviorLogs(prev => [entry, ...prev]);
+    };
+
+    const handleLoginSuccess = (role: UserRole, name: string) => {
+        setUserRole(role);
+        setUserName(name);
+        setLoggedIn(true);
+        localStorage.setItem(SESSION_KEY, JSON.stringify({ role, name }));
+        addAuditLog('USER_LOGIN', `Ingresó a la app: ${name} (${role})`, name);
+        setBehaviorLogs(prev => [{
+            id: `beh-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            timestamp: new Date(),
+            actor: name,
+            action: 'SESSION_LOGIN',
+            detail: `Inició sesión`,
+        }, ...prev]);
+    };
+
+    const handleFirstSetup = (userId: string, username: string, password: string) => {
+        setUsers(prev => prev.map(u => u.id === userId ? { ...u, username, password, setupComplete: true } : u));
+        const user = users.find(u => u.id === userId);
+        if (user) handleLoginSuccess(user.role, user.name);
+    };
+
+    const handleLogout = () => {
+        setBehaviorLogs(prev => [{
+            id: `beh-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            timestamp: new Date(),
+            actor: userName,
+            action: 'SESSION_LOGOUT',
+            detail: `Cerró sesión`,
+        }, ...prev]);
+        localStorage.removeItem(SESSION_KEY);
+        setLoggedIn(false);
+    };
+
+    // Auto-save a localStorage en cada cambio
+    useEffect(() => { saveToLocalStorage({ items, movements, personnel, purchaseOrders, projects, users, auditLogs, behaviorLogs }); }, [items, movements, personnel, purchaseOrders, projects, users, auditLogs, behaviorLogs]);
 
     // Notificar herramientas pendientes de recoger cada vez que se abre la app
     useEffect(() => {
@@ -98,7 +149,12 @@ const App: React.FC = () => {
     const [currentView, setCurrentView] = useState<View>('dashboard');
     const [kardexTab, setKardexTab] = useState<KardexTab>('movements');
     const EMPLOYEE_VIEWS: View[] = ['dashboard', 'kardex', 'personnel', 'help', 'whatsapp', 'pickup'];
-    const effectiveView: View = (userRole === UserRole.EMPLOYEE && !EMPLOYEE_VIEWS.includes(currentView)) ? 'dashboard' : currentView;
+    const VISITOR_VIEWS: View[] = ['dashboard', 'kardex'];
+    const effectiveView: View = (userRole === UserRole.VISITOR && !VISITOR_VIEWS.includes(currentView))
+        ? 'dashboard'
+        : (userRole === UserRole.EMPLOYEE && !EMPLOYEE_VIEWS.includes(currentView))
+            ? 'dashboard'
+            : currentView;
     const pendingPickupCount = movements.filter(m => m.isLoan && !m.isReturned && m.pendingPickup).length;
     const [isSidebarOpen, setSidebarOpen] = useState(true);
 
@@ -141,23 +197,39 @@ const App: React.FC = () => {
     };
 
     const handleResetAllData = () => {
-        if (window.confirm("¿ESTÁS SEGURO? Se borrarán todos los productos, trabajadores y movimientos. Esta acción no se puede deshacer.")) {
-            setItems([]);
-            setMovements([]);
-            setPersonnel([]);
-            setPurchaseOrders([]);
-            setProjects([]);
-            alert("Bodega limpia. Ahora puedes empezar a registrar tus propios materiales.");
-        }
+        requirePin(
+            () => {
+                setItems([]);
+                setMovements([]);
+                setPersonnel([]);
+                setPurchaseOrders([]);
+                setProjects([]);
+                addAuditLog('ITEM_DELETED', 'Se borró toda la bodega (reset completo)');
+                alert('Bodega limpia. Ahora puedes empezar a registrar tus propios materiales.');
+            },
+            'Borrar toda la bodega',
+            'Se eliminarán TODOS los productos, trabajadores y movimientos. Irreversible.',
+        );
+    };
+
+    const NAV_LABELS: Record<View, string> = {
+        dashboard: 'Resumen',
+        kardex: 'Kardex',
+        personnel: 'Personal',
+        copilot: 'Copiloto IA',
+        help: 'Ayuda',
+        whatsapp: 'WhatsApp',
+        pickup: 'A Recoger',
     };
 
     const selectView = (view: View, tab?: KardexTab) => {
         setCurrentView(view);
         if (tab) setKardexTab(tab);
         if (window.innerWidth < 768) setSidebarOpen(false);
+        addBehaviorLog('NAV', `Abrió ${NAV_LABELS[view] ?? view}${tab ? ` → ${tab}` : ''}`);
     };
 
-    // ── Handlers síncronos (igual que original) + sync Supabase en background ──
+    // ── Handlers síncronos + sync Supabase en background ──
 
     const handleImportItems = (newItems: Array<Omit<Item, 'id'>>, inventoryType?: InventoryType) => {
         const created = newItems.map(i => ({
@@ -173,25 +245,41 @@ const App: React.FC = () => {
         const newItem = { ...i, id: `i-${Date.now()}` };
         setItems(prev => [...prev, newItem]);
         withSync(db.addItem(i).then(created => setItems(prev => prev.map(x => x.id === newItem.id ? created : x))));
+        addAuditLog('ITEM_CREATED', `Se agregó "${i.name}" al inventario`);
     };
 
     const handleAddItemSync = (i: Omit<Item, 'id'>): Item => {
         const newItem = { ...i, id: `i-${Date.now()}` };
         setItems(prev => [...prev, newItem]);
         withSync(db.addItem(i).then(created => setItems(prev => prev.map(x => x.id === newItem.id ? created : x))));
+        addAuditLog('ITEM_CREATED', `Se agregó "${i.name}" al inventario`);
         return newItem;
     };
 
     const handleEditItem = (updated: Item) => {
-        setItems(prev => prev.map(i => i.id === updated.id ? updated : i));
+        const prev = items.find(i => i.id === updated.id);
+        setItems(p => p.map(i => i.id === updated.id ? updated : i));
         withSync(db.updateItem(updated));
+        if (prev?.name !== updated.name) {
+            addAuditLog('ITEM_EDITED', `Se editó "${prev?.name ?? updated.name}" → nombre cambiado a "${updated.name}"`);
+        } else {
+            addAuditLog('ITEM_EDITED', `Se editó "${updated.name}"`);
+        }
     };
 
     const handleDeleteItem = (id: string) => {
+        const item = items.find(i => i.id === id);
         const hasMovements = movements.some(m => m.itemId === id);
-        if (hasMovements && !window.confirm('Este artículo tiene movimientos registrados. ¿Eliminar de todas formas? Los registros históricos quedarán sin referencia.')) return;
-        setItems(prev => prev.filter(i => i.id !== id));
-        withSync(db.deleteItem(id));
+        const detail = hasMovements ? 'Tiene movimientos registrados. Los registros históricos quedarán sin referencia.' : undefined;
+        requirePin(
+            () => {
+                setItems(prev => prev.filter(i => i.id !== id));
+                withSync(db.deleteItem(id));
+                addAuditLog('ITEM_DELETED', `Se eliminó "${item?.name ?? id}" del inventario`);
+            },
+            `Eliminar "${item?.name ?? 'ítem'}"`,
+            detail,
+        );
     };
 
     const handleLogMovement = (m: Omit<Movement, 'id'>) => {
@@ -210,21 +298,51 @@ const App: React.FC = () => {
         }));
         withSync(db.addMovement({ ...m, timestamp: ts })
             .then(created => setMovements(prev => prev.map(x => x.id === newMov.id ? created : x))));
+        const itemName   = items.find(i => i.id === m.itemId)?.name ?? 'herramienta';
+        const personName = m.personnelId ? personnel.find(p => p.id === m.personnelId)?.name : undefined;
+        if (m.isLoan) {
+            addAuditLog('LOAN_CREATED', `Préstamo: "${itemName}"${personName ? ` → ${personName}` : ''}`);
+        } else if (m.type === MovementType.CHECK_OUT) {
+            addAuditLog('ITEM_EDITED', `📤 Salida: "${itemName}" ×${m.quantity}${personName ? ` — ${personName}` : ''}`);
+        } else if (m.type === MovementType.CHECK_IN) {
+            addAuditLog('ITEM_CREATED', `📥 Entrada: "${itemName}" ×${m.quantity}${personName ? ` — ${personName}` : ''}`);
+        }
     };
 
     const handleDeleteMovement = (id: string) => {
-        setMovements(prev => prev.filter(m => m.id !== id));
-        withSync(db.deleteMovement(id));
+        const mov = movements.find(m => m.id === id);
+        const itemName = mov ? items.find(i => i.id === mov.itemId)?.name ?? mov.itemId : id;
+        requirePin(
+            () => {
+                setMovements(prev => prev.filter(m => m.id !== id));
+                withSync(db.deleteMovement(id));
+                addAuditLog('MOVEMENT_DELETED', `Se eliminó registro de movimiento: "${itemName}"`);
+            },
+            `Eliminar registro de "${itemName}"`,
+            'Esta acción no se puede deshacer.',
+        );
     };
 
     const handleReturnItem = (id: string, condition?: string, notes?: string) => {
+        const mov = movements.find(m => m.id === id);
+        const itemName = mov ? items.find(i => i.id === mov.itemId)?.name ?? 'herramienta' : 'herramienta';
+        const personName = mov?.personnelId ? personnel.find(p => p.id === mov.personnelId)?.name : undefined;
         setMovements(prev => prev.map(m => m.id === id ? { ...m, isReturned: true, returnCondition: condition as import('./types').ReturnCondition | undefined, returnNotes: notes } : m));
         withSync(db.markMovementReturned(id, condition as import('./types').ReturnCondition | undefined, notes));
+        addAuditLog('LOAN_RETURNED', `Devuelta: "${itemName}"${personName ? ` de ${personName}` : ''}${condition ? ` — estado: ${condition}` : ''}`);
     };
 
     const handleMarkPendingPickup = (id: string, pending: boolean) => {
+        const mov = movements.find(m => m.id === id);
+        const itemName = mov ? items.find(i => i.id === mov.itemId)?.name ?? 'herramienta' : 'herramienta';
+        const personName = mov?.personnelId ? personnel.find(p => p.id === mov.personnelId)?.name : undefined;
         setMovements(prev => prev.map(m => m.id === id ? { ...m, pendingPickup: pending } : m));
         withSync(db.markMovementPendingPickup(id, pending));
+        if (pending) {
+            addAuditLog('PICKUP_MARKED', `Marcado a recoger: "${itemName}"${personName ? ` de ${personName}` : ''}`);
+        } else {
+            addAuditLog('PICKUP_CANCELLED', `Cancelada recogida: "${itemName}"${personName ? ` de ${personName}` : ''}`);
+        }
     };
 
     const handleAssignProjectToLoan = (movementId: string, projectId: string) => {
@@ -237,6 +355,10 @@ const App: React.FC = () => {
         if (!original) return;
 
         const fromName = personnel.find(p => p.id === original.personnelId)?.name ?? 'trabajador anterior';
+        const toName   = personnel.find(p => p.id === newPersonnelId)?.name ?? 'trabajador destino';
+        const itemName = items.find(i => i.id === original.itemId)?.name ?? 'herramienta';
+
+        if (!window.confirm(`¿Traspasar "${itemName}" de ${fromName} a ${toName}?`)) return;
 
         // Cierra el préstamo original sin tocar el stock (la herramienta no regresó a bodega)
         setMovements(prev => prev.map(m => m.id === movementId ? { ...m, isReturned: true, pendingPickup: false } : m));
@@ -254,51 +376,77 @@ const App: React.FC = () => {
         };
         setMovements(prev => [newMov, ...prev]);
         withSync(db.addMovement(newMov));
+        addAuditLog('LOAN_TRANSFERRED', `Traspaso: "${itemName}" de ${fromName} → ${toName}`);
     };
 
     const handleAddPersonnel = (p: Omit<Personnel, 'id'>) => {
         const newP = { ...p, id: `per-${Date.now()}` };
         setPersonnel(prev => [...prev, newP]);
         withSync(db.addPersonnel(p).then(created => setPersonnel(prev => prev.map(x => x.id === newP.id ? created : x))));
+        addAuditLog('PERSONNEL_CREATED', `Se agregó trabajador: "${p.name}"`);
     };
 
     const handleAddPersonnelSync = (p: Omit<Personnel, 'id'>): Personnel => {
         const newP = { ...p, id: `per-${Date.now()}` };
         setPersonnel(prev => [...prev, newP]);
         withSync(db.addPersonnel(p).then(created => setPersonnel(prev => prev.map(x => x.id === newP.id ? created : x))));
+        addAuditLog('PERSONNEL_CREATED', `Se agregó trabajador: "${p.name}"`);
         return newP;
     };
 
     const handleEditPersonnel = (p: Personnel) => {
-        setPersonnel(prev => prev.map(pers => pers.id === p.id ? p : pers));
+        const prev = personnel.find(pers => pers.id === p.id);
+        setPersonnel(ps => ps.map(pers => pers.id === p.id ? p : pers));
         withSync(db.updatePersonnel(p));
+        if (prev?.name !== p.name) {
+            addAuditLog('PERSONNEL_EDITED', `Se cambió nombre de trabajador: "${prev?.name}" → "${p.name}"`);
+        } else {
+            addAuditLog('PERSONNEL_EDITED', `Se editó trabajador: "${p.name}"`);
+        }
     };
 
     const handleDeletePersonnel = (id: string) => {
+        const person = personnel.find(p => p.id === id);
         const hasMovements = movements.some(m => m.personnelId === id);
-        if (hasMovements && !window.confirm('Este personal tiene movimientos registrados. ¿Eliminar de todas formas?')) return;
-        setPersonnel(prev => prev.filter(p => p.id !== id));
-        withSync(db.deletePersonnel(id));
+        const detail = hasMovements ? 'Tiene movimientos registrados. Se perderá la referencia en el historial.' : undefined;
+        requirePin(
+            () => {
+                setPersonnel(prev => prev.filter(p => p.id !== id));
+                withSync(db.deletePersonnel(id));
+                addAuditLog('PERSONNEL_DELETED', `Se eliminó trabajador: "${person?.name ?? id}"`);
+            },
+            `Eliminar trabajador "${person?.name ?? 'trabajador'}"`,
+            detail,
+        );
     };
 
     const handleAddProject = (p: Omit<Project, 'id'>) => {
         const newP = { ...p, id: `p-${Date.now()}` };
         setProjects(prev => [...prev, newP]);
         withSync(db.addProject(p).then(created => setProjects(prev => prev.map(x => x.id === newP.id ? created : x))));
+        addAuditLog('PROJECT_CREATED', `Se creó proyecto: "${p.name}"`);
     };
 
     const handleAddProjectSync = (p: Omit<Project, 'id'>): Project => {
         const newP = { ...p, id: `p-${Date.now()}` };
         setProjects(prev => [...prev, newP]);
         withSync(db.addProject(p).then(created => setProjects(prev => prev.map(x => x.id === newP.id ? created : x))));
+        addAuditLog('PROJECT_CREATED', `Se creó proyecto: "${p.name}"`);
         return newP;
     };
 
     const handleCreateProjectByName = (name: string): Project => handleAddProjectSync({ name, status: 'active' });
 
     const handleDeleteProject = (id: string) => {
-        setProjects(prev => prev.filter(p => p.id !== id));
-        withSync(db.deleteProject(id));
+        const project = projects.find(p => p.id === id);
+        requirePin(
+            () => {
+                setProjects(prev => prev.filter(p => p.id !== id));
+                withSync(db.deleteProject(id));
+                addAuditLog('PROJECT_DELETED', `Se eliminó proyecto: "${project?.name ?? id}"`);
+            },
+            `Eliminar proyecto "${project?.name ?? 'proyecto'}"`,
+        );
     };
 
     const handleAddPurchaseOrder = (o: Omit<PurchaseOrder, 'id'>) => {
@@ -323,19 +471,42 @@ const App: React.FC = () => {
     const handleAddUser = (u: AppUser) => {
         setUsers(prev => [...prev, u]);
         withSync(db.addUser(u));
+        addAuditLog('USER_CREATED', `Se creó usuario: "${u.username}" (${u.role})`);
     };
 
     const handleEditUser = (u: AppUser) => {
         setUsers(prev => prev.map(user => user.id === u.id ? u : user));
         withSync(db.updateUser(u));
+        addAuditLog('PERSONNEL_EDITED', `Se editó usuario: "${u.username}"`);
     };
 
     const handleDeleteUser = (id: string) => {
-        setUsers(prev => prev.filter(u => u.id !== id));
-        db.deleteUser(id).catch(() => {});
+        const user = users.find(u => u.id === id);
+        requirePin(
+            () => {
+                setUsers(prev => prev.filter(u => u.id !== id));
+                db.deleteUser(id).catch(() => {});
+                addAuditLog('USER_DELETED', `Se eliminó usuario: "${user?.username ?? id}"`);
+            },
+            `Eliminar usuario "${user?.username ?? 'usuario'}"`,
+        );
     };
 
-    if (!loggedIn) return <LoginView onLoginSuccess={handleLoginSuccess} />;
+    const handleClearAuditLogs = () => {
+        requirePin(
+            () => setAuditLogs([]),
+            'Limpiar bitácora',
+            'Se borrarán todos los registros de auditoría.',
+        );
+    };
+
+    // ── PIN de autorización para acciones destructivas ──
+    const [pinAction, setPinAction] = useState<null | { fn: () => void; title?: string; message?: string }>(null);
+    const requirePin = (fn: () => void, title?: string, message?: string) => {
+        setPinAction({ fn, title, message });
+    };
+
+    if (!loggedIn) return <LoginView users={users} onLoginSuccess={handleLoginSuccess} onFirstSetup={handleFirstSetup} />;
 
     return (
         <div className="flex h-screen bg-gray-50 overflow-hidden font-sans">
@@ -359,10 +530,14 @@ const App: React.FC = () => {
                 <div className="flex-1 overflow-y-auto py-4">
                     <nav className="px-2 space-y-1">
                         <NavItem icon={DashboardIcon} label="Resumen" onClick={() => selectView('dashboard')} isActive={effectiveView === 'dashboard'} />
-                        <NavItem icon={PersonnelIcon} label="Personal" onClick={() => selectView('personnel')} isActive={effectiveView === 'personnel'} />
                         <NavItem icon={MovementsIcon} label="Kardex" onClick={() => selectView('kardex')} isActive={effectiveView === 'kardex'} />
-                        <NavItem icon={WhatsAppIcon} label="WhatsApp" onClick={() => selectView('whatsapp')} isActive={effectiveView === 'whatsapp'} />
-                        <NavItem icon={PickupNavIcon} label="A Recoger" onClick={() => selectView('pickup')} isActive={effectiveView === 'pickup'} badge={pendingPickupCount} />
+                        {userRole !== UserRole.VISITOR && (
+                            <>
+                                <NavItem icon={PersonnelIcon} label="Personal" onClick={() => selectView('personnel')} isActive={effectiveView === 'personnel'} />
+                                <NavItem icon={WhatsAppIcon} label="WhatsApp" onClick={() => selectView('whatsapp')} isActive={effectiveView === 'whatsapp'} />
+                                <NavItem icon={PickupNavIcon} label="A Recoger" onClick={() => selectView('pickup')} isActive={effectiveView === 'pickup'} badge={pendingPickupCount} />
+                            </>
+                        )}
                     </nav>
                 </div>
 
@@ -384,7 +559,7 @@ const App: React.FC = () => {
                         Ver tutorial
                     </button>
                     <button
-                        onClick={() => { localStorage.removeItem(SESSION_KEY); setLoggedIn(false); }}
+                        onClick={handleLogout}
                         className="w-full flex items-center text-left px-4 py-2.5 text-xs font-semibold rounded-xl text-gray-400 hover:bg-red-50 hover:text-red-600 transition-all"
                     >
                         <span className="mr-3 text-base">🚪</span>
@@ -400,13 +575,13 @@ const App: React.FC = () => {
                     userName={userName}
                     onStartNewBusiness={handleResetAllData}
                     onOpenUserManagement={() => setUserManagementOpen(true)}
-                    onLogout={() => { localStorage.removeItem(SESSION_KEY); setLoggedIn(false); }}
+                    onLogout={handleLogout}
                     onExportData={handleExportData}
                     onImportData={handleImportData}
                     onResetData={handleResetAllData}
                     setUserRole={() => {}}
                     syncStatus={syncStatus}
-                    onOpenSearch={() => setSearchOpen(true)}
+                    onOpenSearch={() => { setSearchOpen(true); addBehaviorLog('BUTTON', 'Abrió búsqueda global'); }}
                 />
                 <main className="flex-1 p-4 md:p-6 overflow-y-auto bg-gray-50">
                     <div className="max-w-7xl mx-auto">
@@ -425,21 +600,26 @@ const App: React.FC = () => {
                                 movements={movements}
                                 personnel={personnel}
                                 projects={projects}
+                                auditLogs={auditLogs}
+                                behaviorLogs={behaviorLogs}
+                                users={users}
                                 userRole={userRole}
                                 initialTab={kardexTab}
                                 onGoBack={() => selectView('dashboard')}
-                                openLogMovementModal={() => setLogMovementModalOpen(true)}
+                                openLogMovementModal={() => { setLogMovementModalOpen(true); addBehaviorLog('BUTTON', 'Abrió modal Registrar movimiento'); }}
                                 onDeleteMovement={handleDeleteMovement}
                                 onReturnLoan={handleReturnItem}
                                 onReturnItem={handleReturnItem}
                                 onMarkPendingPickup={handleMarkPendingPickup}
-                                openAddItemModal={() => setAddItemModalOpen(true)}
-                                onEditItem={(i) => { setItemToEdit(i); setEditModalOpen(true); }}
+                                openAddItemModal={() => { setAddItemModalOpen(true); addBehaviorLog('BUTTON', 'Abrió modal Agregar ítem'); }}
+                                onEditItem={(i) => { setItemToEdit(i); setEditModalOpen(true); addBehaviorLog('BUTTON', `Editó ítem: ${i.name}`); }}
                                 onDeleteItem={handleDeleteItem}
-                                onItemHistory={(i) => { setItemForHistory(i); setHistoryModalOpen(true); }}
+                                onItemHistory={(i) => { setItemForHistory(i); setHistoryModalOpen(true); addBehaviorLog('BUTTON', `Ver historial: ${i.name}`); }}
+                                onOpenInvoiceReader={() => { setInvoiceReaderOpen(true); addBehaviorLog('BUTTON', 'Abrió Leer factura'); }}
                                 onAddProject={handleAddProject}
                                 onDeleteProject={handleDeleteProject}
                                 showEconomicValues={appConfig.showEconomicValues}
+                                onTabChange={(tab) => addBehaviorLog('NAV', `Kardex → ${tab}`)}
                             />
                         )}
                         {effectiveView === 'personnel' && (
@@ -512,10 +692,19 @@ const App: React.FC = () => {
                     personnel={personnel}
                     onClose={() => setSearchOpen(false)}
                     onNavigate={(v, tab) => { selectView(v as View, tab as KardexTab | undefined); setSearchOpen(false); }}
+                    onBehaviorLog={addBehaviorLog}
                 />
             )}
             {showOnboarding && <OnboardingModal onFinish={handleOnboardingFinish} />}
-            {userRole === UserRole.OWNER && (
+            {pinAction && (
+                <PinConfirmModal
+                    title={pinAction.title}
+                    message={pinAction.message}
+                    onConfirm={pinAction.fn}
+                    onClose={() => setPinAction(null)}
+                />
+            )}
+            {(userRole === UserRole.OWNER || userRole === UserRole.EMPLOYEE) && (
                 <FloatingChat
                     items={items}
                     movements={movements}
@@ -526,6 +715,7 @@ const App: React.FC = () => {
                     onCreateItem={handleAddItemSync}
                     onCreateProject={handleAddProjectSync}
                     onCreatePersonnel={handleAddPersonnelSync}
+                    onBehaviorLog={addBehaviorLog}
                 />
             )}
         </div>

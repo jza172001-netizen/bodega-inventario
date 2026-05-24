@@ -1,16 +1,17 @@
 
 export enum UserRole {
-    OWNER = 'owner',
+    OWNER    = 'owner',
     EMPLOYEE = 'employee',
+    VISITOR  = 'visitor',
 }
 
-// Nueva interfaz para usuarios del sistema
 export interface AppUser {
     id: string;
-    username: string; // Sensible a mayúsculas/minúsculas
+    username: string;
     password: string;
     role: UserRole;
-    name: string; // Nombre real (ej: Juan Perez)
+    name: string;
+    setupComplete?: boolean;
 }
 
 export enum InventoryType {
@@ -94,4 +95,20 @@ export interface PurchaseOrder {
     expectedDeliveryDate?: Date;
     receivedDate?: Date;
     notes?: string;
+}
+
+export interface AuditLog {
+    id: string;
+    timestamp: Date;
+    action: string;
+    actor: string;
+    description: string;
+}
+
+export interface BehaviorLog {
+    id: string;
+    timestamp: Date;
+    actor: string;
+    action: string;
+    detail: string;
 }

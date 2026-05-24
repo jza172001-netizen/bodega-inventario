@@ -13,6 +13,7 @@ interface FloatingChatProps {
     onCreateItem: (item: Omit<Item, 'id'>) => Item;
     onCreateProject: (p: Omit<Project, 'id'>) => Project;
     onCreatePersonnel: (p: Omit<Personnel, 'id'>) => Personnel;
+    onBehaviorLog?: (action: string, detail: string) => void;
 }
 
 type WizardStep =
@@ -71,6 +72,7 @@ const parseItemList = (text: string) =>
 export const FloatingChat: React.FC<FloatingChatProps> = ({
     items, movements, personnel, purchaseOrders, projects,
     onLogMovements, onCreateItem, onCreateProject, onCreatePersonnel,
+    onBehaviorLog,
 }) => {
     const [open, setOpen] = useState(false);
     const [messages, setMessages] = useState<ChatMsg[]>([
@@ -101,6 +103,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         setMessages(prev => [...prev, { id: uid(), role: 'user', text: trimmed }]);
         setInput('');
         setLoading(true);
+        onBehaviorLog?.('CHAT_MESSAGE', `Escribió en chatbot: ${trimmed}`);
         const resp = await askCopilot(trimmed, { items, movements, personnel, purchaseOrders });
         addBot(resp);
         setLoading(false);
@@ -148,7 +151,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         cancelWizard();
     };
 
-    // ── WIZARD PANEL ────────────────────────────────────────────────────────
+    // ── Wizard render ────────────────────────────────────────────────────────
 
     const renderWizard = () => {
         if (wizardStep === 'select_types') {
@@ -483,7 +486,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             )}
 
             {/* FAB */}
-            <button onClick={() => setOpen(v => !v)}
+            <button onClick={() => { setOpen(v => { if (!v) onBehaviorLog?.('CHAT_OPENED', 'Abrió el chatbot'); return !v; }); }}
                 className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-700 active:scale-95 shadow-xl flex items-center justify-center transition-all duration-200"
                 aria-label="Abrir asistente">
                 {open
