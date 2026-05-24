@@ -44,7 +44,8 @@ export function loadFromLocalStorage(): Partial<AppData> | null {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) return null;
         const data = JSON.parse(raw) as AppData;
-        if (data.version !== STORAGE_VERSION) return null;
+        // Migrar versiones anteriores en lugar de borrar todo
+        if (!data.version || !data.items || !data.movements) return null;
         // Restaurar fechas (JSON serializa Date como string)
         data.movements = data.movements.map(m => ({
             ...m,
@@ -61,6 +62,13 @@ export function loadFromLocalStorage(): Partial<AppData> | null {
         }
         if (data.behaviorLogs) {
             data.behaviorLogs = data.behaviorLogs.map(l => ({ ...l, timestamp: new Date(l.timestamp) }));
+        }
+        // Si un usuario ya tiene credenciales, setupComplete siempre es true
+        if (data.users) {
+            data.users = data.users.map(u => ({
+                ...u,
+                setupComplete: u.setupComplete ?? (!!u.username && !!u.password),
+            }));
         }
         return data;
     } catch (e) {
