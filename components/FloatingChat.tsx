@@ -43,13 +43,6 @@ const TYPE_LABELS: Record<InventoryType, string> = {
     [InventoryType.SINGLE_USE]:      '📦 Consumible',
 };
 
-const QUICK = [
-    { label: '📦 Stock bajo',     q: '¿Qué materiales tienen stock bajo?' },
-    { label: '🔑 Préstamos',      q: '¿Qué herramientas están prestadas?' },
-    { label: '🔥 Más consumidos', q: '¿Cuáles son los más consumidos?' },
-    { label: '🕒 Movimientos',    q: 'Muestra los últimos movimientos' },
-    { label: '🛒 Órdenes',        q: '¿Órdenes de compra pendientes?' },
-];
 
 type ChatMsg = { id: string; role: 'user' | 'bot'; text: string };
 
@@ -418,17 +411,6 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                         </div>
                     </div>
 
-                    {/* Quick buttons — only in chat mode */}
-                    {!wizardStep && (
-                        <div className="bg-gray-50 px-3 py-2 flex flex-wrap gap-1.5 border-b border-gray-200 flex-shrink-0">
-                            {QUICK.map(q => (
-                                <button key={q.q} onClick={() => handleSend(q.q)} disabled={loading}
-                                    className="px-2.5 py-1 bg-white border border-gray-200 hover:border-blue-400 hover:bg-blue-50 text-gray-600 hover:text-blue-700 rounded-full text-[11px] font-semibold transition-all disabled:opacity-50">
-                                    {q.label}
-                                </button>
-                            ))}
-                        </div>
-                    )}
 
                     {/* Wizard or Chat */}
                     {wizardStep ? renderWizard() : (

@@ -149,7 +149,7 @@ const App: React.FC = () => {
     const [currentView, setCurrentView] = useState<View>('dashboard');
     const [kardexTab, setKardexTab] = useState<KardexTab>('movements');
     const EMPLOYEE_VIEWS: View[] = ['dashboard', 'kardex', 'personnel', 'help', 'whatsapp', 'pickup'];
-    const VISITOR_VIEWS: View[] = ['dashboard', 'kardex'];
+    const VISITOR_VIEWS: View[] = ['dashboard', 'kardex', 'whatsapp'];
     const effectiveView: View = (userRole === UserRole.VISITOR && !VISITOR_VIEWS.includes(currentView))
         ? 'dashboard'
         : (userRole === UserRole.EMPLOYEE && !EMPLOYEE_VIEWS.includes(currentView))
@@ -531,10 +531,10 @@ const App: React.FC = () => {
                     <nav className="px-2 space-y-1">
                         <NavItem icon={DashboardIcon} label="Resumen" onClick={() => selectView('dashboard')} isActive={effectiveView === 'dashboard'} />
                         <NavItem icon={MovementsIcon} label="Kardex" onClick={() => selectView('kardex')} isActive={effectiveView === 'kardex'} />
+                        <NavItem icon={WhatsAppIcon} label="WhatsApp" onClick={() => selectView('whatsapp')} isActive={effectiveView === 'whatsapp'} />
                         {userRole !== UserRole.VISITOR && (
                             <>
                                 <NavItem icon={PersonnelIcon} label="Personal" onClick={() => selectView('personnel')} isActive={effectiveView === 'personnel'} />
-                                <NavItem icon={WhatsAppIcon} label="WhatsApp" onClick={() => selectView('whatsapp')} isActive={effectiveView === 'whatsapp'} />
                                 <NavItem icon={PickupNavIcon} label="A Recoger" onClick={() => selectView('pickup')} isActive={effectiveView === 'pickup'} badge={pendingPickupCount} />
                             </>
                         )}
@@ -655,7 +655,7 @@ const App: React.FC = () => {
                         )}
                         {effectiveView === 'help' && <HelpView />}
                         {effectiveView === 'whatsapp' && (
-                            <WhatsAppView movements={movements} items={items} personnel={personnel} />
+                            <WhatsAppView movements={movements} items={items} personnel={personnel} readOnly={userRole === UserRole.VISITOR} />
                         )}
                         {effectiveView === 'pickup' && (
                             <PickupView
