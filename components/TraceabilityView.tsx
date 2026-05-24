@@ -1,5 +1,5 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { Movement, Item, Personnel, Project, ReturnCondition, InventoryType, AuditLog, BehaviorLog, AppUser, UserRole } from '../types';
 
 interface Props {
@@ -10,6 +10,7 @@ interface Props {
     auditLogs: AuditLog[];
     behaviorLogs: BehaviorLog[];
     users: AppUser[];
+    onBehaviorLog?: (action: string, detail: string) => void;
 }
 
 type MainTab = 'actividad' | 'estadisticas' | 'herramientas';
@@ -36,9 +37,12 @@ const ALL_CONDITIONS: ReturnCondition[] = ['good', 'worn', 'incomplete', 'damage
 const BEHAVIOR_CATEGORY: Record<string, { label: string; icon: string; color: string; bg: string }> = {
     SESSION: { label: 'Sesión',     icon: '🔐', color: 'text-indigo-700', bg: 'bg-indigo-50' },
     NAV:     { label: 'Navegación', icon: '🧭', color: 'text-blue-700',   bg: 'bg-blue-50'   },
+    FILTER:  { label: 'Filtro',     icon: '🎛️', color: 'text-teal-700',   bg: 'bg-teal-50'   },
     SEARCH:  { label: 'Búsqueda',   icon: '🔎', color: 'text-gray-700',   bg: 'bg-gray-50'   },
     CHAT:    { label: 'Chatbot',    icon: '💬', color: 'text-purple-700', bg: 'bg-purple-50' },
-    BUTTON:  { label: 'Botones',    icon: '🖱️', color: 'text-orange-700', bg: 'bg-orange-50' },
+    BUTTON:  { label: 'Botón',      icon: '🖱️', color: 'text-orange-700', bg: 'bg-orange-50' },
+    ACTION:  { label: 'Acción',     icon: '✅', color: 'text-green-700',  bg: 'bg-green-50'  },
+    SCROLL:  { label: 'Scroll',     icon: '📜', color: 'text-slate-700',  bg: 'bg-slate-50'  },
 };
 
 const AUDIT_CATEGORY: Record<string, { icon: string; color: string; bg: string }> = {
@@ -67,22 +71,53 @@ type CombinedEntry =
     | { kind: 'audit';    ts: Date; data: AuditLog };
 
 function getBehaviorCategory(action: string): keyof typeof BEHAVIOR_CATEGORY {
-    if (action.startsWith('SESSION') || action === 'USER_LOGIN' || action === 'USER_LOGOUT') return 'SESSION';
+    if (action === 'SESSION' || action === 'USER_LOGIN' || action === 'USER_LOGOUT') return 'SESSION';
     if (action.startsWith('NAV')) return 'NAV';
+    if (action.startsWith('FILTER')) return 'FILTER';
     if (action.startsWith('SEARCH')) return 'SEARCH';
     if (action.startsWith('CHAT')) return 'CHAT';
-    if (action.startsWith('BUTTON')) return 'BUTTON';
+    if (action.startsWith('ACTION')) return 'ACTION';
+    if (action.startsWith('SCROLL')) return 'SCROLL';
     return 'BUTTON';
 }
 
 export const TraceabilityView: React.FC<Props> = ({
-    movements, items, personnel, projects, auditLogs, behaviorLogs, users,
+    movements, items, personnel, projects, auditLogs, behaviorLogs, users, onBehaviorLog,
 }) => {
     const [mainTab, setMainTab] = useState<MainTab>('actividad');
     const [herramientasTab, setHerramientasTab] = useState<HerramientasTab>('tools');
     const [selectedItemId, setSelectedItemId] = useState('');
     const [actorFilter, setActorFilter] = useState('');
     const [typeFilter, setTypeFilter] = useState('');
+
+    const bottomSentinelRef = useRef<HTMLDivElement>(null);
+
+    // Scroll sentinel — fires once when the bottom of the activity list becomes visible
+    useEffect(() => {
+        const el = bottomSentinelRef.current;
+        if (!el) return;
+        const obs = new IntersectionObserver(([entry]) => {
+            if (entry.isIntersecting) onBehaviorLog?.('SCROLL', 'Llegó al fondo: Trazabilidad');
+        }, { threshold: 0.5 });
+        obs.observe(el);
+        return () => obs.disconnect();
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const changeMainTab = (tab: MainTab) => {
+        const label = tab === 'actividad' ? 'Actividad' : tab === 'estadisticas' ? 'Estadísticas' : 'Herramientas';
+        setMainTab(tab);
+        onBehaviorLog?.('NAV', `Trazabilidad → ${label}`);
+    };
+
+    const changeActorFilter = (actor: string) => {
+        setActorFilter(actor);
+        onBehaviorLog?.('FILTER', `Trazabilidad: actor=${actor || 'Todos'}`);
+    };
+
+    const changeTypeFilter = (type: string) => {
+        setTypeFilter(type);
+        onBehaviorLog?.('FILTER', `Trazabilidad: tipo=${type || 'Todo'}`);
+    };
 
     const itemMap    = useMemo(() => new Map(items.map(i => [i.id, i])), [items]);
     const personMap  = useMemo(() => new Map(personnel.map(p => [p.id, p])), [personnel]);
@@ -94,7 +129,6 @@ export const TraceabilityView: React.FC<Props> = ({
         return [...owners, ...employees, 'Visitante'];
     }, [users]);
 
-    // Combined entries for Actividad tab
     const combinedEntries = useMemo<CombinedEntry[]>(() => {
         const bEntries: CombinedEntry[] = behaviorLogs.map(l => ({ kind: 'behavior', ts: new Date(l.timestamp), data: l }));
         const aEntries: CombinedEntry[] = auditLogs.map(l => ({ kind: 'audit', ts: new Date(l.timestamp), data: l }));
@@ -103,16 +137,19 @@ export const TraceabilityView: React.FC<Props> = ({
 
     const filteredEntries = useMemo(() => {
         return combinedEntries.filter(e => {
-            const actor = e.kind === 'behavior' ? e.data.actor : e.data.actor;
-            const action = e.kind === 'behavior' ? e.data.action : e.data.action;
+            const actor = e.data.actor;
+            const action = e.data.action;
             if (actorFilter && actor !== actorFilter) return false;
             if (typeFilter) {
                 if (typeFilter === 'SESSION' && e.kind === 'behavior') return getBehaviorCategory(action) === 'SESSION';
                 if (typeFilter === 'SESSION' && e.kind === 'audit') return action === 'USER_LOGIN' || action === 'USER_LOGOUT';
                 if (typeFilter === 'NAV' && e.kind === 'behavior') return getBehaviorCategory(action) === 'NAV';
+                if (typeFilter === 'FILTER' && e.kind === 'behavior') return getBehaviorCategory(action) === 'FILTER';
                 if (typeFilter === 'SEARCH' && e.kind === 'behavior') return getBehaviorCategory(action) === 'SEARCH';
                 if (typeFilter === 'CHAT' && e.kind === 'behavior') return getBehaviorCategory(action) === 'CHAT';
                 if (typeFilter === 'BUTTON' && e.kind === 'behavior') return getBehaviorCategory(action) === 'BUTTON';
+                if (typeFilter === 'ACTION' && e.kind === 'behavior') return getBehaviorCategory(action) === 'ACTION';
+                if (typeFilter === 'SCROLL' && e.kind === 'behavior') return getBehaviorCategory(action) === 'SCROLL';
                 if (typeFilter === 'NEGOCIO' && e.kind === 'audit') return action !== 'USER_LOGIN' && action !== 'USER_LOGOUT';
                 return false;
             }
@@ -120,43 +157,77 @@ export const TraceabilityView: React.FC<Props> = ({
         });
     }, [combinedEntries, actorFilter, typeFilter]);
 
-    // Stats
+    // Existing stats
     const actionCounts = useMemo(() => {
         const map = new Map<string, number>();
-        behaviorLogs.forEach(l => map.set(l.action, (map.get(l.action) ?? 0) + 1));
-        auditLogs.forEach(l => map.set(l.action, (map.get(l.action) ?? 0) + 1));
+        behaviorLogs.forEach(l => map.set(l.detail, (map.get(l.detail) ?? 0) + 1));
         return [...map.entries()].sort((a, b) => b[1] - a[1]);
-    }, [behaviorLogs, auditLogs]);
+    }, [behaviorLogs]);
 
     const actorStats = useMemo(() => {
-        const map = new Map<string, { count: number; lastSeen: Date; actions: Map<string, number> }>();
+        const map = new Map<string, { count: number; lastSeen: Date; categories: Map<string, number> }>();
         const process = (actor: string, ts: Date, action: string) => {
             if (!actor) return;
-            if (!map.has(actor)) map.set(actor, { count: 0, lastSeen: ts, actions: new Map() });
+            if (!map.has(actor)) map.set(actor, { count: 0, lastSeen: ts, categories: new Map() });
             const e = map.get(actor)!;
             e.count++;
             if (ts > e.lastSeen) e.lastSeen = ts;
-            e.actions.set(action, (e.actions.get(action) ?? 0) + 1);
+            const cat = getBehaviorCategory(action);
+            e.categories.set(cat, (e.categories.get(cat) ?? 0) + 1);
         };
         behaviorLogs.forEach(l => process(l.actor, new Date(l.timestamp), l.action));
         auditLogs.forEach(l => process(l.actor, new Date(l.timestamp), l.action));
         return [...map.entries()].map(([actor, v]) => {
-            const topAction = [...v.actions.entries()].sort((a, b) => b[1] - a[1])[0];
-            return { actor, ...v, topAction };
+            const topCat = [...v.categories.entries()].sort((a, b) => b[1] - a[1])[0];
+            return { actor, count: v.count, lastSeen: v.lastSeen, topCat };
         }).sort((a, b) => b.count - a.count);
     }, [behaviorLogs, auditLogs]);
 
     const searchQueries = useMemo(() =>
-        behaviorLogs.filter(l => l.action === 'SEARCH_QUERY').slice(0, 20),
-        [behaviorLogs]
-    );
+        behaviorLogs.filter(l => l.action === 'SEARCH_QUERY').slice(0, 20), [behaviorLogs]);
 
     const chatMessages = useMemo(() =>
-        behaviorLogs.filter(l => l.action === 'CHAT_MESSAGE').slice(0, 20),
-        [behaviorLogs]
-    );
+        behaviorLogs.filter(l => l.action === 'CHAT_MESSAGE').slice(0, 20), [behaviorLogs]);
 
-    // Tool condition data (existing traceability logic)
+    // New stats
+    const categoryCounts = useMemo(() => {
+        const map = new Map<string, number>();
+        behaviorLogs.forEach(l => {
+            const cat = getBehaviorCategory(l.action);
+            map.set(cat, (map.get(cat) ?? 0) + 1);
+        });
+        return [...map.entries()].sort((a, b) => b[1] - a[1]);
+    }, [behaviorLogs]);
+
+    const sectionVisits = useMemo(() => {
+        const map = new Map<string, number>();
+        behaviorLogs
+            .filter(l => l.action === 'NAV' && l.detail.startsWith('Abrió '))
+            .forEach(l => {
+                const section = l.detail.replace('Abrió ', '');
+                map.set(section, (map.get(section) ?? 0) + 1);
+            });
+        return [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+    }, [behaviorLogs]);
+
+    const filterUsage = useMemo(() => {
+        const map = new Map<string, number>();
+        behaviorLogs
+            .filter(l => l.action === 'FILTER')
+            .forEach(l => map.set(l.detail, (map.get(l.detail) ?? 0) + 1));
+        return [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15);
+    }, [behaviorLogs]);
+
+    const hourlyActivity = useMemo(() => {
+        const hours = new Array(24).fill(0) as number[];
+        [...behaviorLogs, ...auditLogs].forEach(l => {
+            const h = new Date(l.timestamp).getHours();
+            hours[h]++;
+        });
+        return hours;
+    }, [behaviorLogs, auditLogs]);
+
+    // Tool condition data
     const returnedWithCondition = useMemo(() =>
         movements.filter(m =>
             m.isLoan && m.isReturned && m.returnCondition &&
@@ -223,6 +294,8 @@ export const TraceabilityView: React.FC<Props> = ({
         [returnedWithCondition, itemMap]
     );
 
+    const maxHourly = Math.max(...hourlyActivity, 1);
+
     const IssueBar = ({ rate }: { rate: number }) => (
         <div className="flex items-center gap-2 min-w-0">
             <div className="flex-1 bg-gray-100 rounded-full h-1.5 min-w-[60px]">
@@ -244,7 +317,7 @@ export const TraceabilityView: React.FC<Props> = ({
                     { key: 'estadisticas', label: 'Estadísticas',  icon: '📊' },
                     { key: 'herramientas', label: 'Herramientas',  icon: '🔧' },
                 ] as { key: MainTab; label: string; icon: string }[]).map(t => (
-                    <button key={t.key} onClick={() => setMainTab(t.key)}
+                    <button key={t.key} onClick={() => changeMainTab(t.key)}
                         className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-3 text-xs font-bold transition-all border-b-2 ${
                             mainTab === t.key ? 'border-blue-600 text-blue-600 bg-blue-50' : 'border-transparent text-gray-500 hover:text-gray-700'
                         }`}>
@@ -257,16 +330,15 @@ export const TraceabilityView: React.FC<Props> = ({
             {/* ── ACTIVIDAD ── */}
             {mainTab === 'actividad' && (
                 <div>
-                    {/* Filters */}
                     <div className="px-4 py-3 border-b border-gray-50 space-y-2">
                         {/* Actor filter */}
                         <div className="flex gap-2 overflow-x-auto scrollbar-hide">
-                            <button onClick={() => setActorFilter('')}
+                            <button onClick={() => changeActorFilter('')}
                                 className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-black transition-all ${!actorFilter ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
                                 Todos
                             </button>
                             {allActors.map(actor => (
-                                <button key={actor} onClick={() => setActorFilter(actorFilter === actor ? '' : actor)}
+                                <button key={actor} onClick={() => changeActorFilter(actorFilter === actor ? '' : actor)}
                                     className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-black transition-all ${actorFilter === actor ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
                                     {actor}
                                 </button>
@@ -277,13 +349,16 @@ export const TraceabilityView: React.FC<Props> = ({
                             {[
                                 { key: '', label: 'Todo' },
                                 { key: 'SESSION', label: '🔐 Sesión' },
-                                { key: 'NAV', label: '🧭 Navegación' },
+                                { key: 'NAV', label: '🧭 Nav' },
+                                { key: 'FILTER', label: '🎛️ Filtros' },
                                 { key: 'SEARCH', label: '🔎 Búsqueda' },
-                                { key: 'CHAT', label: '💬 Chatbot' },
+                                { key: 'CHAT', label: '💬 Chat' },
                                 { key: 'BUTTON', label: '🖱️ Botones' },
+                                { key: 'ACTION', label: '✅ Acciones' },
+                                { key: 'SCROLL', label: '📜 Scroll' },
                                 { key: 'NEGOCIO', label: '📋 Negocio' },
                             ].map(f => (
-                                <button key={f.key} onClick={() => setTypeFilter(f.key)}
+                                <button key={f.key} onClick={() => changeTypeFilter(f.key)}
                                     className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold transition-all ${typeFilter === f.key ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
                                     {f.label}
                                 </button>
@@ -336,6 +411,7 @@ export const TraceabilityView: React.FC<Props> = ({
                                 </div>
                             );
                         })}
+                        <div ref={bottomSentinelRef} className="h-px" />
                     </div>
                 </div>
             )}
@@ -343,40 +419,123 @@ export const TraceabilityView: React.FC<Props> = ({
             {/* ── ESTADÍSTICAS ── */}
             {mainTab === 'estadisticas' && (
                 <div className="p-4 space-y-6 max-h-[70vh] overflow-y-auto">
-                    {/* Por usuario */}
+
+                    {/* Distribución por categoría */}
+                    {categoryCounts.length > 0 && (
+                        <div>
+                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Distribución por categoría</p>
+                            {categoryCounts.map(([cat, count]) => {
+                                const meta = BEHAVIOR_CATEGORY[cat];
+                                const total = behaviorLogs.length || 1;
+                                const pct = Math.round((count / total) * 100);
+                                return (
+                                    <div key={cat} className="flex items-center gap-3 py-1.5">
+                                        <span className="text-sm w-5 flex-shrink-0">{meta?.icon ?? '•'}</span>
+                                        <span className="text-xs font-semibold text-gray-600 w-20 flex-shrink-0">{meta?.label ?? cat}</span>
+                                        <div className="flex-1 bg-gray-100 rounded-full h-2">
+                                            <div className={`h-2 rounded-full ${meta?.bg.replace('bg-', 'bg-').replace('-50', '-400') ?? 'bg-blue-400'}`}
+                                                style={{ width: `${pct}%` }} />
+                                        </div>
+                                        <span className="text-xs font-black text-gray-700 w-10 text-right flex-shrink-0">{count}×</span>
+                                        <span className="text-[10px] text-gray-400 w-8 flex-shrink-0">{pct}%</span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    {/* Secciones más visitadas */}
+                    {sectionVisits.length > 0 && (
+                        <div>
+                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Secciones más visitadas</p>
+                            {sectionVisits.map(([section, count], i) => (
+                                <div key={section} className="flex items-center gap-3 py-1.5 border-b border-gray-50 last:border-0">
+                                    <span className={`w-5 h-5 flex items-center justify-center rounded-full text-[10px] font-black flex-shrink-0 ${i === 0 ? 'bg-blue-500 text-white' : i === 1 ? 'bg-blue-300 text-white' : 'bg-gray-100 text-gray-500'}`}>{i + 1}</span>
+                                    <span className="flex-1 text-xs font-semibold text-gray-700 truncate">{section}</span>
+                                    <span className="text-xs font-black text-blue-600 flex-shrink-0">{count}×</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Filtros más usados */}
+                    {filterUsage.length > 0 && (
+                        <div>
+                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Filtros más usados</p>
+                            {filterUsage.map(([detail, count]) => (
+                                <div key={detail} className="flex items-center gap-3 py-1.5 border-b border-gray-50 last:border-0">
+                                    <span className="text-sm flex-shrink-0">🎛️</span>
+                                    <span className="flex-1 text-xs text-gray-600 truncate">{detail}</span>
+                                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                                        <div className="w-14 bg-gray-100 rounded-full h-1.5">
+                                            <div className="h-1.5 rounded-full bg-teal-400"
+                                                style={{ width: `${Math.round((count / (filterUsage[0]?.[1] ?? 1)) * 100)}%` }} />
+                                        </div>
+                                        <span className="text-xs font-black text-gray-700 w-6 text-right">{count}×</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Horario de uso */}
+                    {behaviorLogs.length > 0 && (
+                        <div>
+                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Actividad por hora del día</p>
+                            <div className="flex items-end gap-0.5 h-16">
+                                {hourlyActivity.map((count, h) => (
+                                    <div key={h} className="flex-1 flex flex-col items-center gap-0.5">
+                                        <div className="w-full bg-blue-500 rounded-t-sm transition-all"
+                                            style={{ height: `${Math.round((count / maxHourly) * 52)}px`, opacity: count > 0 ? 1 : 0.15 }}
+                                            title={`${h}:00 — ${count} eventos`} />
+                                        {(h % 6 === 0) && (
+                                            <span className="text-[8px] text-gray-400 font-semibold">{h}h</span>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Actividad por usuario */}
                     <div>
                         <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Actividad por usuario</p>
                         {actorStats.length === 0
                             ? <p className="text-sm text-gray-400 text-center py-4">Sin datos aún.</p>
-                            : actorStats.map(s => (
-                                <div key={s.actor} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
-                                    <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 font-black text-sm flex items-center justify-center flex-shrink-0">
-                                        {s.actor.charAt(0).toUpperCase()}
+                            : actorStats.map(s => {
+                                const catMeta = s.topCat ? BEHAVIOR_CATEGORY[s.topCat[0]] : null;
+                                return (
+                                    <div key={s.actor} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
+                                        <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 font-black text-sm flex items-center justify-center flex-shrink-0">
+                                            {s.actor.charAt(0).toUpperCase()}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-bold text-gray-900">{s.actor}</p>
+                                            <p className="text-[10px] text-gray-400">
+                                                {s.count} eventos · {s.lastSeen.toLocaleDateString('es-CO')}
+                                            </p>
+                                            {catMeta && (
+                                                <p className="text-[10px] text-gray-500">
+                                                    Más: {catMeta.icon} {catMeta.label} ({s.topCat![1]}×)
+                                                </p>
+                                            )}
+                                        </div>
+                                        <span className="text-xl font-black text-indigo-600 flex-shrink-0">{s.count}</span>
                                     </div>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-bold text-gray-900">{s.actor}</p>
-                                        <p className="text-[10px] text-gray-400">
-                                            {s.count} eventos · Última vez: {s.lastSeen.toLocaleDateString('es-CO')}
-                                        </p>
-                                        {s.topAction && (
-                                            <p className="text-[10px] text-gray-500">Más frecuente: {s.topAction[0]} ({s.topAction[1]}×)</p>
-                                        )}
-                                    </div>
-                                    <span className="text-xl font-black text-indigo-600 flex-shrink-0">{s.count}</span>
-                                </div>
-                            ))
+                                );
+                            })
                         }
                     </div>
 
-                    {/* Botones más usados */}
+                    {/* Acciones más frecuentes */}
                     <div>
                         <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Acciones más frecuentes</p>
                         {actionCounts.length === 0
                             ? <p className="text-sm text-gray-400 text-center py-4">Sin datos aún.</p>
-                            : actionCounts.slice(0, 15).map(([action, count]) => (
-                                <div key={action} className="flex items-center gap-3 py-1.5 border-b border-gray-50 last:border-0">
+                            : actionCounts.slice(0, 15).map(([detail, count]) => (
+                                <div key={detail} className="flex items-center gap-3 py-1.5 border-b border-gray-50 last:border-0">
                                     <div className="flex-1 min-w-0">
-                                        <p className="text-xs font-semibold text-gray-700 truncate">{action}</p>
+                                        <p className="text-xs font-semibold text-gray-700 truncate">{detail}</p>
                                     </div>
                                     <div className="flex items-center gap-2 flex-shrink-0">
                                         <div className="w-20 bg-gray-100 rounded-full h-1.5">
@@ -417,6 +576,10 @@ export const TraceabilityView: React.FC<Props> = ({
                                 ))}
                             </div>
                         </div>
+                    )}
+
+                    {behaviorLogs.length === 0 && auditLogs.length === 0 && (
+                        <p className="text-sm text-gray-400 text-center py-8">Sin datos de actividad todavía.</p>
                     )}
                 </div>
             )}
