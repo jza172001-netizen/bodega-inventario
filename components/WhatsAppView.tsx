@@ -237,8 +237,13 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
                     👁️ Modo visitante — solo lectura
                 </div>
             )}
+            {/* Wrapper relativo para el overlay bloqueador */}
+            <div className="relative">
+            {readOnly && (
+                <div className="absolute inset-0 z-10 cursor-not-allowed" />
+            )}
             {/* Page header */}
-            <div className={`flex items-start justify-between gap-3 ${readOnly ? 'pointer-events-none select-none opacity-70' : ''}`}>
+            <div className="flex items-start justify-between gap-3">
                 <div>
                     <h1 className="text-xl font-black text-gray-900">📱 WhatsApp Recordatorios</h1>
                     <p className="text-xs text-gray-400 mt-0.5">
@@ -301,7 +306,7 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
                     <p className="text-sm mt-1">No hay herramientas prestadas.</p>
                 </div>
             ) : (
-                <div className={readOnly ? 'pointer-events-none select-none opacity-70' : ''}><>
+                <>
                     {/* Pendientes (+8 días sin recordar) */}
                     {dueGroups.length > 0 && (
                         <div className="bg-white rounded-2xl border border-green-200 overflow-hidden shadow-sm">
@@ -384,8 +389,9 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
                             </p>
                         </div>
                     )}
-                </></div>
+                </>
             )}
+            </div>{/* cierra wrapper relativo */}
         </div>
     );
 };
