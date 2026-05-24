@@ -22,6 +22,7 @@ import { SettingsModal, AppConfig, DEFAULT_CONFIG } from './components/SettingsM
 import { requestNotificationPermission, checkAndNotifyPickup } from './services/notificationService';
 
 import { mockItems, mockMovements, mockPersonnel, mockPurchaseOrders, mockProjects, mockUsers } from './mockData';
+import { realUsers as seedUsers } from './realData';
 import { Item, Movement, MovementType, Personnel, PurchaseOrder, UserRole, InventoryType, Project, AppUser, PurchaseOrderStatus, AuditLog, BehaviorLog } from './types';
 import { LoginView } from './components/LoginView';
 import { LandingPage } from './components/LandingPage';
@@ -46,12 +47,31 @@ const App: React.FC = () => {
     const [userRole, setUserRole] = useState<UserRole>(() => {
         try { return JSON.parse(localStorage.getItem(SESSION_KEY) || '{}').role ?? UserRole.OWNER; } catch { return UserRole.OWNER; }
     });
-    const [userName, setUserName] = useState<string>(() => {
-        try { return JSON.parse(localStorage.getItem(SESSION_KEY) || '{}').name ?? ''; } catch { return ''; }
+    // Carga inicial síncrona desde localStorage, con fallback a mockData
+    // Siempre toma name/role del seed para que reflejen cambios sin borrar credenciales
+    const [users, setUsers] = useState<AppUser[]>(() => {
+        const s = loadFromLocalStorage();
+        const stored = s?.users ?? mockUsers;
+        return seedUsers.map(seed => {
+            const found = stored.find(u => u.id === seed.id);
+            if (found) return { ...seed, username: found.username, password: found.password, setupComplete: found.setupComplete ?? (!!found.username && !!found.password) };
+            return seed;
+        });
     });
 
-    // Carga inicial síncrona desde localStorage, con fallback a mockData
-    const [users, setUsers] = useState<AppUser[]>(() => { const s = loadFromLocalStorage(); return s?.users ?? mockUsers; });
+    const [userName, setUserName] = useState<string>(() => {
+        try {
+            const session = JSON.parse(localStorage.getItem(SESSION_KEY) || '{}');
+            if (!session.name) return '';
+            // Si el nombre guardado es genérico (Administrador, Bodeguero, Visitante), usar el del seed
+            const genericNames = ['Administrador', 'Bodeguero', 'Visitante', 'administrador', 'bodeguero', 'visitante'];
+            if (genericNames.includes(session.name)) {
+                const seed = seedUsers.find(u => u.role === session.role);
+                return seed?.name ?? session.name;
+            }
+            return session.name;
+        } catch { return ''; }
+    });
     const [items, setItems] = useState<Item[]>(() => { const s = loadFromLocalStorage(); return s?.items ?? mockItems; });
     const [movements, setMovements] = useState<Movement[]>(() => { const s = loadFromLocalStorage(); return s?.movements ?? mockMovements; });
     const [personnel, setPersonnel] = useState<Personnel[]>(() => { const s = loadFromLocalStorage(); return s?.personnel ?? mockPersonnel; });
