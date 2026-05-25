@@ -2,11 +2,6 @@ import React from 'react';
 
 export const PersonnelIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
-        {/* dome */}
-        <path strokeLinecap="round" strokeLinejoin="round" d="M5 10.5Q12 2 19 10.5" />
-        {/* brim line */}
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3 12h18" />
-        {/* base band */}
-        <path strokeLinecap="round" strokeLinejoin="round" d="M5 10.5h14v2a2 2 0 01-2 2H7a2 2 0 01-2-2v-2z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0zM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
     </svg>
 );
