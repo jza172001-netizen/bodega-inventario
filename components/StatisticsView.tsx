@@ -3,6 +3,7 @@ import React, { useMemo, useEffect, useState, useRef, useCallback } from 'react'
 import { Item, Movement, MovementType, InventoryType, Personnel, Project } from '../types';
 import { generateRotationAnalysis } from '../services/geminiService';
 import { PrintReportView } from './PrintReportView';
+import { exportReportAsDocx } from '../services/docxExportService';
 
 interface StatisticsViewProps {
     items: Item[];
@@ -54,6 +55,8 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
     const [rotationRecs, setRotationRecs] = useState<Record<string, { recommendation: string; severity: string }>>({});
     const [printPeriod, setPrintPeriod] = useState<PrintPeriod>(null);
     const [showPeriodModal, setShowPeriodModal] = useState(false);
+    const [showDocxModal, setShowDocxModal] = useState(false);
+    const [docxExporting, setDocxExporting] = useState(false);
     const [activeDetail, setActiveDetail] = useState<{ title: string; rows: DetailRow[]; navigateTo?: { view: string; tab?: string } } | null>(null);
     const printRef = useRef<HTMLDivElement>(null);
 
@@ -71,6 +74,19 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
         setShowPeriodModal(false);
         setTimeout(() => window.print(), 200);
     }, []);
+
+    const handleExportDocx = useCallback(async (period: NonNullable<PrintPeriod>) => {
+        setDocxExporting(true);
+        setShowDocxModal(false);
+        const range = getPeriodRange(period);
+        await exportReportAsDocx({
+            items, movements, personnel, projects,
+            periodLabel: range.label,
+            fromDate: range.fromDate,
+            toDate: range.toDate,
+        });
+        setDocxExporting(false);
+    }, [getPeriodRange, items, movements, personnel, projects]);
 
     // Date boundaries
     const thirtyDaysAgo = useMemo(() => { const d = new Date(); d.setDate(d.getDate() - 30); return d; }, []);
@@ -374,17 +390,49 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                 </div>
             )}
 
+            {/* Modal selector de período DOCX */}
+            {showDocxModal && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+                        <div className="flex items-center gap-2 mb-1">
+                            <span className="text-2xl">📄</span>
+                            <h3 className="text-lg font-bold text-gray-900">Exportar informe DOCX</h3>
+                        </div>
+                        <p className="text-sm text-gray-500 mb-5">Formato profesional Grupo Montecielo — se descarga como archivo Word</p>
+                        <div className="space-y-2">
+                            {([
+                                { key: 'week', label: 'Esta semana', sub: 'Últimos 7 días' },
+                                { key: 'month', label: 'Este mes', sub: 'Últimos 30 días' },
+                                { key: 'quarter', label: 'Este trimestre', sub: 'Últimos 90 días' },
+                            ] as const).map(opt => (
+                                <button key={opt.key} onClick={() => handleExportDocx(opt.key)}
+                                    className="w-full text-left px-4 py-3 rounded-xl border border-gray-200 hover:border-amber-400 hover:bg-amber-50 transition-all">
+                                    <p className="font-semibold text-gray-800 text-sm">{opt.label}</p>
+                                    <p className="text-xs text-gray-400">{opt.sub}</p>
+                                </button>
+                            ))}
+                        </div>
+                        <button onClick={() => setShowDocxModal(false)} className="mt-4 w-full text-sm text-gray-400 hover:text-gray-600 py-2">Cancelar</button>
+                    </div>
+                </div>
+            )}
+
             {/* Componente de impresión */}
             {periodRange && (
                 <PrintReportView ref={printRef} items={items} movements={movements} personnel={personnel} projects={projects} periodLabel={periodRange.label} fromDate={periodRange.fromDate} toDate={periodRange.toDate} />
             )}
 
-            {/* Botón exportar PDF */}
-            <div className="flex justify-end">
+            {/* Botones exportar */}
+            <div className="flex justify-end gap-2 flex-wrap">
+                <button onClick={() => setShowDocxModal(true)} disabled={docxExporting}
+                    className="flex items-center gap-2 px-4 py-2 bg-amber-50 border border-amber-200 hover:border-amber-400 hover:bg-amber-100 text-amber-800 font-semibold rounded-xl text-sm transition-all shadow-sm disabled:opacity-60">
+                    <span className="text-base">📄</span>
+                    {docxExporting ? 'Generando DOCX...' : 'Exportar DOCX'}
+                </button>
                 <button onClick={() => setShowPeriodModal(true)}
                     className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 hover:border-blue-400 hover:bg-blue-50 text-gray-700 font-semibold rounded-xl text-sm transition-all shadow-sm">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                    Exportar informe PDF
+                    Exportar PDF
                 </button>
             </div>
 
