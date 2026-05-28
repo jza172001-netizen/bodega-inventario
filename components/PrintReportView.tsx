@@ -148,7 +148,8 @@ export const PrintReportView = React.forwardRef<HTMLDivElement, PrintReportViewP
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <div>
                             <p style={{ margin: 0, fontSize: '22px', fontWeight: 900, color: BLUE, letterSpacing: '-0.5px', lineHeight: 1 }}>GRUPO MONTECIELO</p>
-                            <p style={{ margin: '2px 0 0', fontSize: '10px', color: GRAY, fontWeight: 600 }}>Informe de Operaciones de Bodega</p>
+                            <p style={{ margin: '3px 0 0', fontSize: '14px', fontWeight: 900, color: '#d97706', letterSpacing: '0.01em', lineHeight: 1 }}>BODEGA INVENTARIO</p>
+                            <p style={{ margin: '3px 0 0', fontSize: '10px', color: GRAY, fontWeight: 600 }}>Informe de Operaciones de Bodega</p>
                         </div>
                         <div style={{ textAlign: 'right' }}>
                             <p style={{ margin: 0, fontSize: '12px', fontWeight: 900, color: DARK }}>{periodLabel.toUpperCase()}</p>
