@@ -100,7 +100,10 @@ const App: React.FC = () => {
     const handleFirstSetup = (userId: string, username: string, password: string) => {
         setUsers(prev => prev.map(u => u.id === userId ? { ...u, username, password, setupComplete: true } : u));
         const user = users.find(u => u.id === userId);
-        if (user) handleLoginSuccess(user.role, user.name);
+        if (user) {
+            db.updateUser({ ...user, username, password, setupComplete: true }).catch(() => {});
+            handleLoginSuccess(user.role, user.name);
+        }
     };
 
     const handleLogout = () => {
@@ -125,7 +128,15 @@ const App: React.FC = () => {
 
     // Sync desde Supabase en background al montar (no bloquea la UI)
     useEffect(() => {
-        db.fetchUsers().then(data => { if (data.length > 0) setUsers(data); }).catch(() => {});
+        db.fetchUsers().then(data => {
+            if (data.length > 0) setUsers(prev => data.map(remote => {
+                const local = prev.find(p => p.id === remote.id);
+                // Supabase fetchUsers always returns password:''. Preserve local creds.
+                return local
+                    ? { ...remote, password: local.password || remote.password, setupComplete: local.setupComplete ?? !!remote.username }
+                    : remote;
+            }));
+        }).catch(() => {});
         db.fetchItems().then(data => { if (data.length > 0) setItems(data); }).catch(() => {});
         db.fetchMovements().then(data => { if (data.length > 0) setMovements(data); }).catch(() => {});
         db.fetchPersonnel().then(data => { if (data.length > 0) setPersonnel(data); }).catch(() => {});
