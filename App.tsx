@@ -54,7 +54,16 @@ const App: React.FC = () => {
     const [users, setUsers] = useState<AppUser[]>(() => { const s = loadFromLocalStorage(); return s?.users ?? mockUsers; });
     const [items, setItems] = useState<Item[]>(() => { const s = loadFromLocalStorage(); return s?.items ?? mockItems; });
     const [movements, setMovements] = useState<Movement[]>(() => { const s = loadFromLocalStorage(); return s?.movements ?? mockMovements; });
-    const [personnel, setPersonnel] = useState<Personnel[]>(() => { const s = loadFromLocalStorage(); return s?.personnel ?? mockPersonnel; });
+    const [personnel, setPersonnel] = useState<Personnel[]>(() => {
+        const s = loadFromLocalStorage();
+        const ls = s?.personnel;
+        // Filter corrupted records: valid names are ≥ 4 chars (catches ghost entries like "Do", "mi", "PAG")
+        if (ls?.length) {
+            const valid = ls.filter(p => p.name?.trim().length >= 4);
+            if (valid.length > 0) return valid;
+        }
+        return mockPersonnel;
+    });
     const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(() => { const s = loadFromLocalStorage(); return s?.purchaseOrders ?? mockPurchaseOrders; });
     const [projects, setProjects] = useState<Project[]>(() => { const s = loadFromLocalStorage(); return s?.projects ?? mockProjects; });
     const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => { const s = loadFromLocalStorage(); return s?.auditLogs ?? []; });
