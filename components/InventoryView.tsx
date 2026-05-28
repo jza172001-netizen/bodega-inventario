@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState } from 'react';
-import { Item, InventoryType, UserRole } from '../types';
+import { Item, InventoryType, UserRole, Movement, Personnel } from '../types';
 import { PlusIcon } from './icons/PlusIcon';
 import { EditIcon } from './icons/EditIcon';
 import { TrashIcon } from './icons/TrashIcon';
@@ -9,6 +9,8 @@ import { HistoryIcon } from './icons/HistoryIcon';
 
 interface InventoryViewProps {
     items: Item[];
+    movements?: Movement[];
+    personnel?: Personnel[];
     openAddItemModal: () => void;
     onEditItem: (item: Item) => void;
     onDeleteItem: (itemId: string) => void;
@@ -19,18 +21,27 @@ interface InventoryViewProps {
     onGoBack: () => void;
 }
 
-export const InventoryView: React.FC<InventoryViewProps> = ({ items, openAddItemModal, onEditItem, onDeleteItem, onItemHistory, onOpenInvoiceReader, userRole, category, onGoBack }) => {
+export const InventoryView: React.FC<InventoryViewProps> = ({ items, movements = [], personnel = [], openAddItemModal, onEditItem, onDeleteItem, onItemHistory, onOpenInvoiceReader, userRole, category, onGoBack }) => {
     const [search, setSearch] = useState('');
+
+    const activeLoans = useMemo(() => movements.filter(m => m.isLoan && !m.isReturned), [movements]);
 
     const displayItems = useMemo(() => {
         if (!search.trim()) return items;
         const q = search.toLowerCase();
-        return items.filter(i =>
-            i.name.toLowerCase().includes(q) ||
-            i.subCategory.toLowerCase().includes(q) ||
-            i.category.toLowerCase().includes(q)
-        );
-    }, [items, search]);
+        return items.filter(i => {
+            if (i.name.toLowerCase().includes(q)) return true;
+            if (i.subCategory.toLowerCase().includes(q)) return true;
+            if (i.category.toLowerCase().includes(q)) return true;
+            // C8: also match by active-loan worker name
+            const loan = activeLoans.find(m => m.itemId === i.id);
+            if (loan?.personnelId) {
+                const name = personnel.find(p => p.id === loan.personnelId)?.name ?? '';
+                if (name.toLowerCase().includes(q)) return true;
+            }
+            return false;
+        });
+    }, [items, search, activeLoans, personnel]);
 
     const getStockStatusColor = (item: Item) => {
         if (item.minStock <= 0) return 'bg-gray-200 text-gray-800';
