@@ -29,27 +29,66 @@ interface PersonGroup {
     isDue: boolean;
 }
 
-type ReportType = 'manual' | 'electrical' | 'general';
-
-const WA_REPORT_KEY = 'bodega_wa_report_queue';
-
-const REPORT_LABELS: Record<ReportType, string> = {
-    manual:     '🔨 Manual',
-    electrical: '⚡ Eléctrica',
-    general:    '📋 General',
+type WeeklyLog = {
+    week: string; // Monday of week, e.g. '2026-05-25'
+    sent: Partial<Record<string, string[]>>; // inventoryType value → personId[]
 };
+
+const WEEKLY_LOG_KEY  = 'wa_weekly_v1';
+const QUEUE_KEY       = 'wa_remind_queue_v1';
+const STEP_KEY        = 'wa_remind_step_v1';
+
+const getWeekKey = (): string => {
+    const d = new Date();
+    const dow = d.getDay() || 7;
+    const mon = new Date(d);
+    mon.setDate(d.getDate() - (dow - 1));
+    return mon.toISOString().split('T')[0];
+};
+
+const loadWeeklyLog = (): WeeklyLog => {
+    try {
+        const raw = localStorage.getItem(WEEKLY_LOG_KEY);
+        if (!raw) return { week: getWeekKey(), sent: {} };
+        const parsed: WeeklyLog = JSON.parse(raw);
+        return parsed.week === getWeekKey() ? parsed : { week: getWeekKey(), sent: {} };
+    } catch { return { week: getWeekKey(), sent: {} }; }
+};
+
+const CATEGORY_BTNS = [
+    { key: InventoryType.HAND_TOOL,       label: '🔨 Manual',      active: 'bg-amber-500 hover:bg-amber-600' },
+    { key: InventoryType.ELECTRICAL_TOOL, label: '⚡ Eléctrica',   active: 'bg-yellow-500 hover:bg-yellow-600' },
+    { key: InventoryType.PPE,             label: '🦺 EPP',         active: 'bg-orange-500 hover:bg-orange-600' },
+    { key: InventoryType.SINGLE_USE,      label: '📦 Consumibles', active: 'bg-purple-500 hover:bg-purple-600' },
+] as const;
 
 export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, readOnly = false, onBehaviorLog }) => {
     const [log, setLog] = useState<ReminderLog>(loadReminderLog);
+    const [weeklyLog, setWeeklyLog] = useState<WeeklyLog>(loadWeeklyLog);
 
-    // ── Weekly "due" queue ──────────────────────────────────────────────────
-    const [queue, setQueue] = useState<PersonGroup[] | null>(null);
-    const [step, setStep] = useState(0);
+    // C5: Persist queue/step in sessionStorage to survive mobile tab reloads
+    const [queue, setQueue] = useState<PersonGroup[] | null>(() => {
+        try {
+            const s = sessionStorage.getItem(QUEUE_KEY);
+            return s ? JSON.parse(s) : null;
+        } catch { return null; }
+    });
+    const [step, setStep] = useState<number>(() => {
+        try {
+            const s = sessionStorage.getItem(STEP_KEY);
+            return s ? parseInt(s, 10) : 0;
+        } catch { return 0; }
+    });
 
-    // ── Monthly report queue ────────────────────────────────────────────────
-    const [reportQueue, setReportQueue] = useState<PersonGroup[] | null>(null);
-    const [reportStep, setReportStep] = useState(0);
-    const [reportType, setReportType] = useState<ReportType>('general');
+    useEffect(() => {
+        if (queue === null) {
+            sessionStorage.removeItem(QUEUE_KEY);
+            sessionStorage.removeItem(STEP_KEY);
+        } else {
+            sessionStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+            sessionStorage.setItem(STEP_KEY, String(step));
+        }
+    }, [queue, step]);
 
     const itemMap = new Map(items.map(i => [i.id, i]));
     const activeLoans = movements.filter(m => m.isLoan && !m.isReturned);
@@ -65,118 +104,98 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
         const isDue = hasPhone && personLoans.some(m => isDueForReminder(m.id, m.timestamp, log));
         groups.push({ person, loans: personLoans, hasPhone, isDue });
     }
+
     groups.sort((a, b) => a.person.name.localeCompare(b.person.name, 'es'));
 
-    const dueGroups     = groups.filter(g => g.isDue);
-    const onTrackGroups = groups.filter(g => g.hasPhone && !g.isDue);
-    const noPhoneGroups = groups.filter(g => !g.hasPhone);
+    const dueGroups       = groups.filter(g => g.isDue);
+    const onTrackGroups   = groups.filter(g => g.hasPhone && !g.isDue);
+    const noPhoneGroups   = groups.filter(g => !g.hasPhone);
 
-    // Restore monthly report queue from localStorage after mobile browser reload
-    useEffect(() => {
-        try {
-            const saved = localStorage.getItem(WA_REPORT_KEY);
-            if (!saved) return;
-            const { personIds, step: s, type } = JSON.parse(saved) as {
-                personIds: string[]; step: number; type: ReportType;
-            };
-            const restored = personIds
-                .map(id => groups.find(g => g.person.id === id))
-                .filter(Boolean) as PersonGroup[];
-            if (restored.length > 0 && s < restored.length) {
-                setReportQueue(restored);
-                setReportStep(s);
-                setReportType(type);
-            } else {
-                localStorage.removeItem(WA_REPORT_KEY);
-            }
-        } catch {}
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    // ── Core send functions ─────────────────────────────────────────────────
-
-    const remindWeekly = (g: PersonGroup) => {
+    const remind = (g: PersonGroup, windowDays = 7) => {
         if (!g.person.phone) return;
-        onBehaviorLog?.('ACTION', `Envió recordatorio WA a: ${g.person.name}`);
-        const rGroups = buildPersonGroups(g.person, movements, items, 7);
-        window.open(buildPersonReminderUrl(g.person.phone, g.person.name, rGroups), '_blank');
+        const grps = buildPersonGroups(g.person, movements, items, windowDays);
+        window.open(buildPersonReminderUrl(g.person.phone, g.person.name, grps), '_blank');
         const newLog = recordReminders(g.loans.map(m => m.id));
         setLog({ ...newLog });
     };
 
-    const remindFiltered = (g: PersonGroup, type: ReportType) => {
-        if (!g.person.phone) return;
-        let rGroups = buildPersonGroups(g.person, movements, items, 30);
-        if (type === 'manual')     rGroups = rGroups.filter(rg => rg.emoji === '🔨');
-        if (type === 'electrical') rGroups = rGroups.filter(rg => rg.emoji === '⚡');
-        window.open(buildPersonReminderUrl(g.person.phone, g.person.name, rGroups), '_blank');
-        const newLog = recordReminders(g.loans.map(m => m.id));
-        setLog({ ...newLog });
-    };
-
-    // ── Weekly queue ────────────────────────────────────────────────────────
+    const remindMonthly = (g: PersonGroup) => remind(g, 30);
 
     const startRemindAll = () => {
         if (dueGroups.length === 0) return;
         const frozen = [...dueGroups];
         setQueue(frozen);
         setStep(0);
-        remindWeekly(frozen[0]);
+        remind(frozen[0]);
     };
 
     const nextStep = () => {
         if (!queue) return;
-        // Functional update to avoid stale closure
-        setStep(prev => {
-            const next = prev + 1;
-            if (next >= queue.length) { setQueue(null); return 0; }
-            remindWeekly(queue[next]);
-            return next;
-        });
+        const next = step + 1;
+        if (next >= queue.length) { setQueue(null); setStep(0); return; }
+        setStep(next);
+        remind(queue[next]);
     };
 
-    // ── Monthly report queue ────────────────────────────────────────────────
-
-    const startReport = (type: ReportType) => {
-        const relevant = groups.filter(g => {
-            if (!g.hasPhone) return false;
-            if (type === 'general') return true;
-            const invType = type === 'manual' ? InventoryType.HAND_TOOL : InventoryType.ELECTRICAL_TOOL;
-            return g.loans.some(m => itemMap.get(m.itemId)?.inventoryType === invType);
-        });
-        if (relevant.length === 0) return;
-        onBehaviorLog?.('ACTION', `Inició reporte WA: ${REPORT_LABELS[type]} (${relevant.length} personas)`);
-        setReportType(type);
-        setReportQueue(relevant);
-        setReportStep(0);
-        remindFiltered(relevant[0], type);
-        try {
-            localStorage.setItem(WA_REPORT_KEY, JSON.stringify({
-                personIds: relevant.map(g => g.person.id), step: 0, type,
-            }));
-        } catch {}
+    const startRemindAllMonthly = () => {
+        const withPhone = groups.filter(g => g.hasPhone);
+        withPhone.forEach((g, i) => setTimeout(() => remindMonthly(g), i * 400));
     };
 
-    const nextReportStep = () => {
-        if (!reportQueue) return;
-        setReportStep(prev => {
-            const next = prev + 1;
-            if (next >= reportQueue.length) {
-                setReportQueue(null);
-                try { localStorage.removeItem(WA_REPORT_KEY); } catch {}
-                return 0;
+    // C6: Weekly category batch reminders
+    const getGroupsForCategory = (catKey: string): PersonGroup[] =>
+        groups.filter(g => g.hasPhone && g.loans.some(m => itemMap.get(m.itemId)?.inventoryType === catKey));
+
+    const pendingInCategory = (catKey: string): PersonGroup[] => {
+        const sent = weeklyLog.sent[catKey] ?? [];
+        return getGroupsForCategory(catKey).filter(g => !sent.includes(g.person.id));
+    };
+
+    const isCategoryDone = (catKey: string): boolean => {
+        const cat = getGroupsForCategory(catKey);
+        if (cat.length === 0) return false;
+        return pendingInCategory(catKey).length === 0;
+    };
+
+    const getGeneralPending = (): PersonGroup[] => {
+        const allSent = new Set(Object.values(weeklyLog.sent).flat());
+        return groups.filter(g => g.hasPhone && !allSent.has(g.person.id));
+    };
+
+    const saveWeekly = (updated: WeeklyLog) => {
+        localStorage.setItem(WEEKLY_LOG_KEY, JSON.stringify(updated));
+        setWeeklyLog(updated);
+    };
+
+    const remindCategory = (catKey: string) => {
+        const toSend = pendingInCategory(catKey);
+        if (toSend.length === 0) return;
+        toSend.forEach((g, i) => setTimeout(() => remind(g), i * 400));
+        const newWL: WeeklyLog = { week: weeklyLog.week, sent: { ...weeklyLog.sent } };
+        const existing = newWL.sent[catKey] ?? [];
+        newWL.sent[catKey] = [...new Set([...existing, ...toSend.map(g => g.person.id)])];
+        saveWeekly(newWL);
+    };
+
+    const remindGeneralWeekly = () => {
+        const toSend = getGeneralPending();
+        if (toSend.length === 0) return;
+        toSend.forEach((g, i) => setTimeout(() => remind(g), i * 400));
+        const newWL: WeeklyLog = { week: weeklyLog.week, sent: { ...weeklyLog.sent } };
+        for (const g of toSend) {
+            for (const m of g.loans) {
+                const catKey = itemMap.get(m.itemId)?.inventoryType;
+                if (!catKey) continue;
+                const existing = newWL.sent[catKey] ?? [];
+                if (!existing.includes(g.person.id))
+                    newWL.sent[catKey] = [...existing, g.person.id];
             }
-            remindFiltered(reportQueue[next], reportType);
-            try {
-                localStorage.setItem(WA_REPORT_KEY, JSON.stringify({
-                    personIds: reportQueue.map(g => g.person.id), step: next, type: reportType,
-                }));
-            } catch {}
-            return next;
-        });
+        }
+        saveWeekly(newWL);
     };
 
-    // ── PersonCard ──────────────────────────────────────────────────────────
+    const generalPending = getGeneralPending();
+    const hasPhoneUsers = groups.some(g => g.hasPhone);
 
     const PersonCard: React.FC<{ g: PersonGroup }> = ({ g }) => {
         const maxDays = Math.max(...g.loans.map(m => daysSince(m.timestamp)));
@@ -214,7 +233,7 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
                 {g.hasPhone ? (
                     <div className="flex flex-col gap-1 flex-shrink-0">
                         <button
-                            onClick={() => remindWeekly(g)}
+                            onClick={() => remind(g)}
                             className={`flex items-center gap-1 px-3 py-2 text-xs font-black rounded-xl transition-all ${
                                 g.isDue
                                     ? 'bg-green-600 hover:bg-green-700 text-white'
@@ -222,6 +241,13 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
                             }`}
                         >
                             📲 Semana
+                        </button>
+                        <button
+                            onClick={() => remindMonthly(g)}
+                            className="flex items-center gap-1 px-3 py-2 text-xs font-black bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-xl transition-all"
+                            title="Resumen del último mes"
+                        >
+                            📅 Mes
                         </button>
                     </div>
                 ) : (
@@ -240,11 +266,8 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
                     👁️ Modo visitante — solo lectura
                 </div>
             )}
-            {/* Wrapper relativo para el overlay bloqueador */}
             <div className="relative">
-            {readOnly && (
-                <div className="absolute inset-0 z-10 cursor-not-allowed" />
-            )}
+            {readOnly && <div className="absolute inset-0 z-10 cursor-not-allowed" />}
             {/* Page header */}
             <div className="flex items-start justify-between gap-3">
                 <div>
@@ -254,21 +277,15 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
                         {dueGroups.length > 0 && ` · ${dueGroups.length} persona${dueGroups.length > 1 ? 's' : ''} sin recordar`}
                     </p>
                 </div>
-                <div className="flex flex-col gap-1.5 flex-shrink-0 items-end">
-                    {/* 3 report buttons — hidden when a report is already running */}
-                    {groups.some(g => g.hasPhone) && !reportQueue && (
-                        <div className="flex gap-1.5">
-                            {(['manual', 'electrical', 'general'] as ReportType[]).map(type => (
-                                <button
-                                    key={type}
-                                    onClick={() => startReport(type)}
-                                    className="flex items-center gap-1 px-2.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black rounded-xl transition-colors"
-                                    title={`Enviar reporte ${REPORT_LABELS[type]} a todos (uno por uno)`}
-                                >
-                                    {REPORT_LABELS[type]}
-                                </button>
-                            ))}
-                        </div>
+                <div className="flex flex-col gap-1.5 flex-shrink-0">
+                    {hasPhoneUsers && (
+                        <button
+                            onClick={startRemindAllMonthly}
+                            className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl transition-colors"
+                            title="Enviar resumen del último mes a todos"
+                        >
+                            📅 Resumen mes a todos
+                        </button>
                     )}
                     <a
                         href={buildTestReminderUrl()}
@@ -282,23 +299,48 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
                 </div>
             </div>
 
-            {/* Banner — reporte mensual activo */}
-            {reportQueue && (
-                <div className="bg-blue-50 border border-blue-200 rounded-2xl px-4 py-3 flex items-center justify-between gap-3">
-                    <div>
-                        <p className="text-sm font-black text-blue-900">
-                            Reporte {REPORT_LABELS[reportType]} — Paso {reportStep + 1} de {reportQueue.length}
-                        </p>
-                        <p className="text-xs text-blue-700">
-                            {reportQueue[reportStep]?.person.name} · WhatsApp abierto → toca Enviar → vuelve aquí
-                        </p>
+            {/* C6: Category weekly batch buttons */}
+            {hasPhoneUsers && activeLoans.length > 0 && (
+                <div>
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">
+                        Recordar por categoría — semana actual
+                    </p>
+                    <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                        {CATEGORY_BTNS.map(btn => {
+                            const pending = pendingInCategory(btn.key);
+                            const done = isCategoryDone(btn.key);
+                            const noData = getGroupsForCategory(btn.key).length === 0;
+                            const disabled = done || noData;
+                            return (
+                                <button
+                                    key={btn.key}
+                                    onClick={() => remindCategory(btn.key)}
+                                    disabled={disabled}
+                                    className={`flex-shrink-0 px-3 py-2 text-xs font-black rounded-xl transition-all ${
+                                        disabled
+                                            ? 'bg-gray-100 text-gray-300 cursor-not-allowed'
+                                            : `${btn.active} text-white`
+                                    }`}
+                                    title={done ? 'Ya enviado esta semana' : noData ? 'Sin préstamos en esta categoría' : `Recordar a ${pending.length} persona${pending.length !== 1 ? 's' : ''}`}
+                                >
+                                    {btn.label}{!disabled && pending.length > 0 ? ` (${pending.length})` : done ? ' ✓' : ''}
+                                </button>
+                            );
+                        })}
+                        {/* General smart button */}
+                        <button
+                            onClick={remindGeneralWeekly}
+                            disabled={generalPending.length === 0}
+                            className={`flex-shrink-0 px-3 py-2 text-xs font-black rounded-xl transition-all ${
+                                generalPending.length === 0
+                                    ? 'bg-gray-100 text-gray-300 cursor-not-allowed'
+                                    : 'bg-green-600 hover:bg-green-700 text-white'
+                            }`}
+                            title={generalPending.length === 0 ? 'Todos recordados esta semana' : `Recordar a ${generalPending.length} persona${generalPending.length !== 1 ? 's' : ''} sin contactar esta semana`}
+                        >
+                            🌐 General{generalPending.length > 0 ? ` (${generalPending.length})` : ' ✓'}
+                        </button>
                     </div>
-                    <button
-                        onClick={nextReportStep}
-                        className="flex-shrink-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl transition-colors"
-                    >
-                        {reportStep < reportQueue.length - 1 ? 'Siguiente →' : '✓ Listo'}
-                    </button>
                 </div>
             )}
 
@@ -330,7 +372,7 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
                                 )}
                             </div>
 
-                            {/* Banner paso a paso — recordatorio semanal */}
+                            {/* Banner paso a paso */}
                             {queue && (
                                 <div className="bg-green-50 border-b border-green-200 px-4 py-3 flex items-center justify-between gap-3">
                                     <div>
@@ -351,7 +393,7 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
                             )}
 
                             <div className="p-3 space-y-2">
-                                {dueGroups.map(g => (
+                                {dueGroups.map((g) => (
                                     <div key={g.person.id} className={queue && queue[step]?.person.id === g.person.id ? 'ring-2 ring-green-400 rounded-2xl' : ''}>
                                         <PersonCard g={g} />
                                     </div>
@@ -394,7 +436,7 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
                     )}
                 </>
             )}
-            </div>{/* cierra wrapper relativo */}
+            </div>
         </div>
     );
 };

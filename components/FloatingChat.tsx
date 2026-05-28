@@ -44,9 +44,9 @@ const CATEGORY_BY_TYPE: Record<InventoryType, string> = {
     [InventoryType.SINGLE_USE]:      'Materiales',
 };
 
-
 type ChatMsg = { id: string; role: 'user' | 'bot'; text: string };
 const uid = () => Math.random().toString(36).slice(2);
+const todayISO = () => new Date().toISOString().split('T')[0];
 
 const INIT_WIZARD: WizardData = {
     selectedTypes: [], worker: null, newWorkerName: '',
@@ -69,7 +69,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
 }) => {
     const [open, setOpen] = useState(false);
     const [messages, setMessages] = useState<ChatMsg[]>([
-        { id: uid(), role: 'bot', text: '¡Hola! Usa los botones rápidos para consultar el inventario.' },
+        { id: uid(), role: 'bot', text: '¡Hola! Usa los botones de abajo para registrar salidas, asignar herramientas o agregar ítems al inventario.' },
     ]);
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
@@ -78,6 +78,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     // Wizard state
     const [wizardStep, setWizardStep] = useState<WizardStep | null>(null);
     const [wizardData, setWizardData] = useState<WizardData>(INIT_WIZARD);
+    const [wizardDate, setWizardDate] = useState<string>(todayISO());
 
     // Panel state
     const [activePanel, setActivePanel] = useState<ActivePanel>(null);
@@ -85,6 +86,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     const [loanInvType, setLoanInvType] = useState<InventoryType | null>(null);
     const [loanSelected, setLoanSelected] = useState<Map<string, number>>(new Map());
     const [loanProjectId, setLoanProjectId] = useState('');
+    const [loanDate, setLoanDate] = useState<string>(todayISO());
     const [createInvType, setCreateInvType] = useState<InventoryType | null>(null);
     const [createName, setCreateName] = useState('');
     const [createQty, setCreateQty] = useState(1);
@@ -132,8 +134,10 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
 
     const startWizard = () => {
         setWizardData(INIT_WIZARD);
+        setWizardDate(todayISO());
         setWizardStep('select_types');
         setActivePanel(null);
+        onBehaviorLog?.('BUTTON', 'Tocó botón: Registrar salida');
     };
 
     const cancelWizard = () => { setWizardStep(null); setInput(''); };
@@ -144,6 +148,8 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         const project = wizardData.project
             ?? (wizardData.newProjectName.trim() ? onCreateProject({ name: wizardData.newProjectName.trim(), status: 'active' }) : null);
 
+        const ts = wizardDate ? new Date(wizardDate + 'T12:00:00') : new Date();
+
         const toLog: Array<Omit<Movement, 'id'>> = [];
         for (const type of wizardData.selectedTypes) {
             const parsed = parseItemList(wizardData.itemInputs[type] ?? '');
@@ -152,12 +158,13 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                 let item = items.find(i => i.inventoryType === type && i.name.toLowerCase() === rawName.toLowerCase());
                 if (!item) item = items.find(i => i.inventoryType === type && i.name.toLowerCase().includes(rawName.toLowerCase()));
                 if (!item) item = onCreateItem({ name: rawName, inventoryType: type, quantity: 0, unit: 'unidad', category: 'Sin clasificar', subCategory: 'General', minStock: 0, price: 0 });
-                toLog.push({ itemId: item.id, type: MovementType.CHECK_OUT, quantity, timestamp: new Date(), personnelId: worker?.id, projectId: project?.id, notes: '', isLoan: LOAN_TYPES.has(type), isReturned: false });
+                toLog.push({ itemId: item.id, type: MovementType.CHECK_OUT, quantity, timestamp: ts, personnelId: worker?.id, projectId: project?.id, notes: '', isLoan: LOAN_TYPES.has(type), isReturned: false });
             }
         }
         if (toLog.length > 0) {
             onLogMovements(toLog);
-            addBot(`✅ ${toLog.length} salida(s) registradas${worker ? ` para ${worker.name}` : ''}${project ? ` · ${project.name}` : ''}.`);
+            const dateLabel = wizardDate !== todayISO() ? ` (fecha: ${new Date(wizardDate + 'T12:00:00').toLocaleDateString('es-CO')})` : '';
+            addBot(`✅ ${toLog.length} salida(s) registradas${worker ? ` para ${worker.name}` : ''}${project ? ` · ${project.name}` : ''}${dateLabel}.`);
         } else {
             addBot('No se registraron salidas (sin artículos válidos).');
         }
@@ -170,6 +177,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         setActivePanel(p);
         setWizardStep(null);
         setLoanPersonnelId(''); setLoanInvType(null); setLoanSelected(new Map()); setLoanProjectId('');
+        setLoanDate(todayISO());
         setCreateInvType(null); setCreateName(''); setCreateQty(1); setCreateUnit('unidades');
         onBehaviorLog?.('BUTTON', `Tocó panel "${p === 'loan' ? 'Asignar herramienta' : 'Agregar al inventario'}"`);
     };
@@ -194,15 +202,17 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
 
     const confirmLoan = () => {
         if (!loanPersonnelId || loanSelected.size === 0) return;
+        const ts = loanDate ? new Date(loanDate + 'T12:00:00') : new Date();
         const movs: Array<Omit<Movement, 'id'>> = [...loanSelected.entries()].map(([itemId, qty]) => ({
             itemId, type: MovementType.CHECK_OUT, quantity: qty,
-            timestamp: new Date(), personnelId: loanPersonnelId,
+            timestamp: ts, personnelId: loanPersonnelId,
             projectId: loanProjectId || undefined, notes: '', isLoan: true, isReturned: false,
         }));
         onLogMovements(movs);
         const workerName = personnel.find(p => p.id === loanPersonnelId)?.name ?? 'trabajador';
         const itemNames = [...loanSelected.keys()].map(id => items.find(i => i.id === id)?.name ?? id);
-        addBot(`✅ Préstamo registrado para ${workerName}: ${itemNames.join(', ')}.`);
+        const dateLabel = loanDate !== todayISO() ? ` (fecha: ${new Date(loanDate + 'T12:00:00').toLocaleDateString('es-CO')})` : '';
+        addBot(`✅ Préstamo registrado para ${workerName}: ${itemNames.join(', ')}${dateLabel}.`);
         closePanel();
     };
 
@@ -260,26 +270,25 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                         <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1">Paso 2 de 4</p>
                         <p className="text-sm font-bold text-gray-800 mb-3">¿Para quién es la salida?</p>
                         <div className="space-y-1 max-h-44 overflow-y-auto mb-2 pr-1">
-                            {personnel.map(p => (
+                            {sortedPersonnel.map(p => (
                                 <button key={p.id} onClick={() => { setWizardData(d => ({ ...d, worker: p, newWorkerName: '' })); setWizardStep('select_project'); }}
-                                    className="w-full flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-all text-left">
-                                    <div className="w-7 h-7 rounded-full bg-blue-200 text-blue-700 flex items-center justify-center text-xs font-bold flex-shrink-0">{p.name.charAt(0)}</div>
-                                    <span className="text-sm font-medium text-gray-700 truncate">{p.name}</span>
+                                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all ${wizardData.worker?.id === p.id ? 'bg-blue-50 border border-blue-300' : 'bg-gray-50 hover:bg-blue-50 border border-transparent hover:border-blue-200'}`}>
+                                    <span className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-black text-xs flex-shrink-0">{p.name.charAt(0)}</span>
+                                    <span className="text-sm font-medium text-gray-800">{p.name}</span>
                                 </button>
                             ))}
-                            {personnel.length === 0 && <p className="text-xs text-gray-400 py-2 text-center">Sin personal registrado</p>}
                         </div>
                         <button onClick={() => setWizardStep('create_worker')}
-                            className="w-full py-2 text-xs font-semibold text-blue-600 border border-dashed border-blue-300 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all">
-                            + Crear nuevo trabajador
+                            className="w-full py-2 text-xs font-semibold text-blue-600 hover:text-blue-800 border border-dashed border-blue-300 rounded-xl hover:border-blue-500 transition-all">
+                            + Nuevo trabajador
+                        </button>
+                        <button onClick={() => { setWizardData(d => ({ ...d, worker: null, newWorkerName: '' })); setWizardStep('select_project'); }}
+                            className="w-full mt-1 py-2 text-xs font-semibold text-gray-500 hover:text-gray-700 border border-dashed border-gray-300 rounded-xl hover:border-gray-400 transition-all">
+                            Sin asignar trabajador →
                         </button>
                     </div>
                     <div className="flex gap-2">
                         <button onClick={() => setWizardStep('select_types')} className="px-3 py-2 text-xs text-gray-400 hover:text-gray-600 border border-gray-200 rounded-xl">← Atrás</button>
-                        <button onClick={() => { setWizardData(d => ({ ...d, worker: null, newWorkerName: '' })); setWizardStep('select_project'); }}
-                            className="flex-1 py-2 border border-gray-300 text-gray-600 hover:bg-gray-50 font-semibold rounded-xl text-xs transition-all">
-                            Sin asignar →
-                        </button>
                     </div>
                 </div>
             );
@@ -290,7 +299,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                     <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest">Paso 2 de 4</p>
                     <p className="text-sm font-bold text-gray-800">Nombre del nuevo trabajador:</p>
                     <input type="text" value={wizardData.newWorkerName} onChange={e => setWizardData(d => ({ ...d, newWorkerName: e.target.value }))}
-                        placeholder="Ej: Carlos Rodríguez" autoFocus
+                        placeholder="Ej: Carlos García" autoFocus
                         onKeyDown={e => { if (e.key === 'Enter' && wizardData.newWorkerName.trim()) setWizardStep('select_project'); }}
                         className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                     <div className="flex gap-2">
@@ -304,28 +313,26 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             );
         }
         if (wizardStep === 'select_project') {
-            const activeP = projects.filter(p => p.status === 'active');
             return (
                 <div className="flex-1 overflow-y-auto px-3 py-4 space-y-3">
                     <div>
                         <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1">Paso 3 de 4</p>
-                        <p className="text-sm font-bold text-gray-800 mb-3">¿Para qué proyecto?</p>
-                        <div className="space-y-1 max-h-36 overflow-y-auto mb-2 pr-1">
-                            {activeP.map(p => (
+                        <p className="text-sm font-bold text-gray-800 mb-3">¿A qué proyecto va?</p>
+                        <div className="space-y-1 max-h-44 overflow-y-auto mb-2 pr-1">
+                            {activeProjects.map(p => (
                                 <button key={p.id} onClick={() => { setWizardData(d => ({ ...d, project: p, newProjectName: '' })); setWizardStep('enter_items'); }}
-                                    className="w-full flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-all text-left">
-                                    <span className="text-sm">🏗</span>
-                                    <span className="text-sm font-medium text-gray-700 truncate">{p.name}</span>
+                                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all ${wizardData.project?.id === p.id ? 'bg-blue-50 border border-blue-300' : 'bg-gray-50 hover:bg-blue-50 border border-transparent hover:border-blue-200'}`}>
+                                    <span className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-black text-xs flex-shrink-0">P</span>
+                                    <span className="text-sm font-medium text-gray-800">{p.name}</span>
                                 </button>
                             ))}
-                            {activeP.length === 0 && <p className="text-xs text-gray-400 py-2 text-center">Sin proyectos activos</p>}
                         </div>
                         <button onClick={() => setWizardStep('create_project')}
-                            className="w-full py-2 text-xs font-semibold text-blue-600 border border-dashed border-blue-300 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all mb-1">
-                            + Crear nuevo proyecto
+                            className="w-full py-2 text-xs font-semibold text-blue-600 hover:text-blue-800 border border-dashed border-blue-300 rounded-xl hover:border-blue-500 transition-all">
+                            + Nuevo proyecto
                         </button>
                         <button onClick={() => { setWizardData(d => ({ ...d, project: null, newProjectName: '' })); setWizardStep('enter_items'); }}
-                            className="w-full py-2 text-xs font-semibold text-gray-500 hover:text-gray-700 border border-dashed border-gray-300 rounded-xl hover:border-gray-400 transition-all">
+                            className="w-full mt-1 py-2 text-xs font-semibold text-gray-500 hover:text-gray-700 border border-dashed border-gray-300 rounded-xl hover:border-gray-400 transition-all">
                             Sin proyecto →
                         </button>
                     </div>
@@ -399,7 +406,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                             <div className="flex gap-2 text-xs"><span className="text-gray-400 w-20 flex-shrink-0">Proyecto</span><span className="font-semibold text-gray-800">{projectName}</span></div>
                             <div className="flex gap-2 text-xs"><span className="text-gray-400 w-20 flex-shrink-0">Artículos</span><span className="font-semibold text-gray-800">{preview.length} elemento(s)</span></div>
                         </div>
-                        <div className="space-y-1 max-h-40 overflow-y-auto">
+                        <div className="space-y-1 max-h-32 overflow-y-auto mb-3">
                             {preview.map((it, i) => (
                                 <div key={i} className="flex items-center gap-2 text-xs px-2 py-1.5 rounded-lg bg-white border border-gray-100">
                                     <span>{TYPE_LABELS[it.type].split(' ')[0]}</span>
@@ -408,6 +415,13 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                     {LOAN_TYPES.has(it.type) && <span className="text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0">Préstamo</span>}
                                 </div>
                             ))}
+                        </div>
+                        {/* Fecha retroactiva */}
+                        <div>
+                            <label className="text-[10px] font-black text-blue-600 uppercase tracking-wide block mb-1">Fecha del movimiento</label>
+                            <input type="date" value={wizardDate} onChange={e => setWizardDate(e.target.value)}
+                                max={todayISO()}
+                                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
                         </div>
                     </div>
                     <div className="flex gap-2">
@@ -432,7 +446,6 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                 <button onClick={closePanel} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
             </div>
 
-            {/* Trabajador */}
             <div>
                 <label className="text-[10px] font-black text-blue-600 uppercase tracking-wide block mb-1">Trabajador *</label>
                 <select value={loanPersonnelId} onChange={e => setLoanPersonnelId(e.target.value)}
@@ -442,7 +455,6 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                 </select>
             </div>
 
-            {/* Tipo */}
             <div>
                 <label className="text-[10px] font-black text-blue-600 uppercase tracking-wide block mb-1">Tipo *</label>
                 <div className="flex gap-2">
@@ -455,7 +467,6 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                 </div>
             </div>
 
-            {/* Lista de herramientas */}
             {loanInvType && (
                 <div>
                     <label className="text-[10px] font-black text-blue-600 uppercase tracking-wide block mb-1">
@@ -489,7 +500,6 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                 </div>
             )}
 
-            {/* Proyecto */}
             <div>
                 <label className="text-[10px] font-black text-blue-600 uppercase tracking-wide block mb-1">Proyecto (opcional)</label>
                 <select value={loanProjectId} onChange={e => setLoanProjectId(e.target.value)}
@@ -497,6 +507,14 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                     <option value="">— Sin proyecto —</option>
                     {activeProjects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
+            </div>
+
+            {/* Fecha retroactiva */}
+            <div>
+                <label className="text-[10px] font-black text-blue-600 uppercase tracking-wide block mb-1">Fecha del préstamo</label>
+                <input type="date" value={loanDate} onChange={e => setLoanDate(e.target.value)}
+                    max={todayISO()}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" />
             </div>
 
             <button onClick={confirmLoan} disabled={!loanPersonnelId || loanSelected.size === 0}
@@ -515,7 +533,6 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                 <button onClick={closePanel} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
             </div>
 
-            {/* Tipo */}
             <div>
                 <label className="text-[10px] font-black text-green-700 uppercase tracking-wide block mb-1">Tipo *</label>
                 <div className="grid grid-cols-2 gap-1.5">
@@ -528,7 +545,6 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                 </div>
             </div>
 
-            {/* Hint eléctrica */}
             {createInvType === InventoryType.ELECTRICAL_TOOL && (
                 <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
                     <span className="text-amber-500 text-sm flex-shrink-0">⚠️</span>
@@ -539,7 +555,6 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                 </div>
             )}
 
-            {/* Nombre */}
             <div>
                 <label className="text-[10px] font-black text-green-700 uppercase tracking-wide block mb-1">Nombre *</label>
                 <input type="text" value={createName} onChange={e => setCreateName(e.target.value)}
@@ -547,7 +562,6 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                     className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400" />
             </div>
 
-            {/* Cantidad + Unidad */}
             <div className="grid grid-cols-2 gap-2">
                 <div>
                     <label className="text-[10px] font-black text-green-700 uppercase tracking-wide block mb-1">Cantidad</label>
@@ -607,16 +621,19 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                     {!inAction && (
                         <div className="px-3 pt-3 pb-1 flex gap-2 flex-shrink-0">
                             <button onClick={startWizard}
-                                className="flex-1 py-2 bg-gray-800 hover:bg-gray-900 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 transition-all shadow-sm">
-                                🚀 Registrar salida
+                                className="flex-1 py-2 pb-2.5 bg-gray-800 hover:bg-gray-900 text-white rounded-xl flex flex-col items-center justify-center gap-0.5 transition-all shadow-sm">
+                                <span className="font-bold text-xs">🚀 Registrar salida</span>
+                                <span className="text-[9px] opacity-70 leading-tight text-center px-1">Despacha, presta — crea ítems y proyectos</span>
                             </button>
                             <button onClick={() => openPanel('loan')}
-                                className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 transition-all shadow-sm">
-                                📦 Asignar
+                                className="flex-1 py-2 pb-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl flex flex-col items-center justify-center gap-0.5 transition-all shadow-sm">
+                                <span className="font-bold text-xs">📦 Asignar</span>
+                                <span className="text-[9px] opacity-70 leading-tight text-center px-1">Asigna ítem a trabajador y/o proyecto</span>
                             </button>
                             <button onClick={() => openPanel('create')}
-                                className="flex-1 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 transition-all shadow-sm">
-                                ➕ Agregar
+                                className="flex-1 py-2 pb-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl flex flex-col items-center justify-center gap-0.5 transition-all shadow-sm">
+                                <span className="font-bold text-xs">➕ Agregar</span>
+                                <span className="text-[9px] opacity-70 leading-tight text-center px-1">Crea un ítem nuevo en el inventario</span>
                             </button>
                         </div>
                     )}

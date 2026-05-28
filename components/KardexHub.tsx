@@ -153,6 +153,8 @@ export const KardexHub: React.FC<KardexHubProps> = ({
             {activeTab === 'inventory' && (
                 <InventoryView
                     items={filteredItems}
+                    movements={movements}
+                    personnel={personnel}
                     openAddItemModal={openAddItemModal}
                     onEditItem={onEditItem}
                     onDeleteItem={onDeleteItem}

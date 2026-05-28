@@ -83,7 +83,15 @@ const App: React.FC = () => {
     });
     const [items, setItems] = useState<Item[]>(() => { const s = loadFromLocalStorage(); return s?.items ?? mockItems; });
     const [movements, setMovements] = useState<Movement[]>(() => { const s = loadFromLocalStorage(); return s?.movements ?? mockMovements; });
-    const [personnel, setPersonnel] = useState<Personnel[]>(() => { const s = loadFromLocalStorage(); return s?.personnel ?? mockPersonnel; });
+    const [personnel, setPersonnel] = useState<Personnel[]>(() => {
+        const s = loadFromLocalStorage();
+        const ls = s?.personnel;
+        if (ls?.length) {
+            const valid = ls.filter(p => p.name?.trim().length >= 4);
+            if (valid.length > 0) return valid;
+        }
+        return mockPersonnel;
+    });
     const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(() => { const s = loadFromLocalStorage(); return s?.purchaseOrders ?? mockPurchaseOrders; });
     const [projects, setProjects] = useState<Project[]>(() => { const s = loadFromLocalStorage(); return s?.projects ?? mockProjects; });
     const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
@@ -139,7 +147,10 @@ const App: React.FC = () => {
     const handleFirstSetup = (userId: string, username: string, password: string) => {
         setUsers(prev => prev.map(u => u.id === userId ? { ...u, username, password, setupComplete: true } : u));
         const user = users.find(u => u.id === userId);
-        if (user) handleLoginSuccess(user.role, user.name);
+        if (user) {
+            db.updateUser({ ...user, username, password, setupComplete: true }).catch(() => {});
+            handleLoginSuccess(user.role, user.name);
+        }
     };
 
     const handleLogout = () => {
@@ -735,7 +746,7 @@ const App: React.FC = () => {
             <EditItemModal isOpen={isEditModalOpen} onClose={() => setEditModalOpen(false)} onEditItem={handleEditItem} itemToEdit={itemToEdit} />
             <LogMovementModal isOpen={isLogMovementModalOpen} onClose={() => setLogMovementModalOpen(false)} onLogMovement={handleLogMovement} items={items} movements={movements} personnel={personnel} projects={projects} userRole={userRole} />
             <AddPersonnelModal isOpen={isAddPersonnelModalOpen} onClose={() => setAddPersonnelModalOpen(false)} onAddPersonnel={handleAddPersonnel} />
-            <ItemHistoryModal isOpen={isHistoryModalOpen} onClose={() => setHistoryModalOpen(false)} item={itemForHistory} movements={movements} personnel={personnel} />
+            <ItemHistoryModal isOpen={isHistoryModalOpen} onClose={() => setHistoryModalOpen(false)} item={itemForHistory} movements={movements} personnel={personnel} projects={projects} onReturnItem={handleReturnItem} onTransferLoan={handleTransferLoan} onAssignProject={handleAssignProjectToLoan} />
             <UserManagementModal isOpen={isUserManagementOpen} onClose={() => setUserManagementOpen(false)} users={users} onAddUser={handleAddUser} onDeleteUser={handleDeleteUser} onEditUser={handleEditUser} />
             <InvoiceReaderModal isOpen={isInvoiceReaderOpen} onClose={() => setInvoiceReaderOpen(false)} onImport={(rows, invType) => handleImportItems(rows, invType)} />
             {isSettingsOpen && (
