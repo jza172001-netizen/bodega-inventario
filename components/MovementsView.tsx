@@ -1,5 +1,5 @@
 
-import React, { useMemo, useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { Movement, Item, Personnel, InventoryType, MovementType, UserRole } from '../types';
 import { TruckIcon } from './icons/TruckIcon';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
@@ -46,6 +46,9 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
     const isOwner = userRole === UserRole.OWNER;
     const [page, setPage] = useState(0);
     const [filter, setFilter] = useState<FilterKey>('');
+    const [dateFrom, setDateFrom] = useState('');
+    const [dateTo, setDateTo]     = useState('');
+    const [groupByTool, setGroupByTool] = useState(false);
     const bottomSentinelRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -82,13 +85,83 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
         });
     }, [allMovements, filter]);
 
-    useEffect(() => { setPage(0); }, [filter, filterType]);
+    const byDate = useMemo(() => {
+        let list = filtered;
+        if (dateFrom) list = list.filter(m => new Date(m.timestamp) >= new Date(dateFrom));
+        if (dateTo)   list = list.filter(m => new Date(m.timestamp) <= new Date(dateTo + 'T23:59:59'));
+        return list;
+    }, [filtered, dateFrom, dateTo]);
 
-    const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+    const toolGroups = useMemo(() => {
+        if (!groupByTool) return [];
+        const map = new Map<string, { item: Item; movements: Movement[] }>();
+        for (const m of byDate) {
+            const item = itemMap.get(m.itemId);
+            if (!item) continue;
+            if (!map.has(m.itemId)) map.set(m.itemId, { item, movements: [] });
+            map.get(m.itemId)!.movements.push(m);
+        }
+        return [...map.values()].sort((a, b) => a.item.name.localeCompare(b.item.name, 'es'));
+    }, [byDate, groupByTool, itemMap]);
+
+    useEffect(() => { setPage(0); }, [filter, filterType, dateFrom, dateTo, groupByTool]);
+
+    const totalPages = Math.ceil(byDate.length / PAGE_SIZE);
     const paged = useMemo(
-        () => filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE),
-        [filtered, page],
+        () => byDate.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE),
+        [byDate, page],
     );
+
+    const renderMovementRow = useCallback((m: Movement) => {
+        const itemName   = getItemName(m.itemId);
+        const personName = getPersonName(m.personnelId);
+        const timeStr    = new Date(m.timestamp).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' });
+        const isActiveLoan = !!m.isLoan && !m.isReturned;
+        const isReturned   = !!m.isLoan && !!m.isReturned;
+        const isCheckOut   = m.type === MovementType.CHECK_OUT && !m.isLoan;
+        const isCheckIn    = m.type === MovementType.CHECK_IN;
+
+        return (
+            <div key={m.id} className="flex items-start gap-3 px-4 py-3 hover:bg-gray-50/50">
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline gap-1.5 flex-wrap">
+                        <span className="text-sm font-bold text-gray-900">{itemName}</span>
+                        <span className="text-xs text-gray-400">×{m.quantity}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                        {isActiveLoan && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">🔑 Préstamo activo</span>}
+                        {isReturned   && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-green-100 text-green-700">✅ Devuelta</span>}
+                        {isCheckOut   && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-700">📤 Salida</span>}
+                        {isCheckIn    && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">📥 Entrada</span>}
+                        {m.pendingPickup && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700">📍 A recoger</span>}
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-1 flex-wrap text-[10px] text-gray-400">
+                        <span>{timeStr}</span>
+                        {personName && <><span>·</span><span className="font-semibold text-gray-500">{personName}</span></>}
+                        {m.returnCondition && <><span>·</span><span>{CONDITION_LABEL[m.returnCondition] ?? m.returnCondition}</span></>}
+                        {m.notes && <><span>·</span><span className="italic truncate max-w-[140px]">{m.notes}</span></>}
+                    </div>
+                </div>
+                {isOwner && (
+                    <div className="flex flex-col gap-1 flex-shrink-0">
+                        {isActiveLoan && onReturnLoan && (
+                            <button onClick={() => onReturnLoan(m.id)}
+                                className="text-xs bg-indigo-600 text-white px-2.5 py-1.5 rounded-lg hover:bg-indigo-700 font-bold">
+                                Devolver
+                            </button>
+                        )}
+                        {onDeleteMovement && (!m.isLoan || m.isReturned) && (
+                            <button onClick={() => { onBehaviorLog?.('ACTION', `Eliminó movimiento: ${itemName}`); onDeleteMovement(m.id); }}
+                                className="text-red-400 hover:text-red-600 p-1">
+                                <TrashIcon className="w-4 h-4" />
+                            </button>
+                        )}
+                    </div>
+                )}
+            </div>
+        );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOwner, onReturnLoan, onDeleteMovement, onBehaviorLog, itemMap, personnelMap]);
 
     return (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -100,7 +173,10 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
                     </button>
                     <div>
                         <h2 className="text-base font-black text-gray-900">Historial de herramientas</h2>
-                        <p className="text-xs text-gray-400">{allMovements.length} movimientos</p>
+                        <p className="text-xs text-gray-400">
+                            {byDate.length} movimiento{byDate.length !== 1 ? 's' : ''}
+                            {byDate.length !== allMovements.length && ` (de ${allMovements.length})`}
+                        </p>
                     </div>
                 </div>
                 {openLogMovementModal && isOwner && (
@@ -126,65 +202,55 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
                 ))}
             </div>
 
-            {/* Movement list */}
-            <div className="divide-y divide-gray-50">
-                {paged.length === 0 && (
-                    <p className="text-center py-12 text-gray-400 text-sm">Sin movimientos.</p>
+            {/* Date range + group toggle */}
+            <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-50 flex-wrap">
+                <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+                    className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-300 text-gray-600" />
+                <span className="text-xs text-gray-400">—</span>
+                <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+                    className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-300 text-gray-600" />
+                {(dateFrom || dateTo) && (
+                    <button onClick={() => { setDateFrom(''); setDateTo(''); }}
+                        className="text-xs text-indigo-500 font-semibold hover:text-indigo-700">
+                        Limpiar
+                    </button>
                 )}
-
-                {paged.map(m => {
-                    const itemName   = getItemName(m.itemId);
-                    const personName = getPersonName(m.personnelId);
-                    const timeStr    = new Date(m.timestamp).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' });
-                    const isActiveLoan = !!m.isLoan && !m.isReturned;
-                    const isReturned   = !!m.isLoan && !!m.isReturned;
-                    const isCheckOut   = m.type === MovementType.CHECK_OUT && !m.isLoan;
-                    const isCheckIn    = m.type === MovementType.CHECK_IN;
-
-                    return (
-                        <div key={m.id} className="flex items-start gap-3 px-4 py-3 hover:bg-gray-50/50">
-                            <div className="flex-1 min-w-0">
-                                <div className="flex items-baseline gap-1.5 flex-wrap">
-                                    <span className="text-sm font-bold text-gray-900">{itemName}</span>
-                                    <span className="text-xs text-gray-400">×{m.quantity}</span>
-                                </div>
-
-                                <div className="flex flex-wrap gap-1 mt-1">
-                                    {isActiveLoan && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">🔑 Préstamo activo</span>}
-                                    {isReturned   && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-green-100 text-green-700">✅ Devuelta</span>}
-                                    {isCheckOut   && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-700">📤 Salida</span>}
-                                    {isCheckIn    && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">📥 Entrada</span>}
-                                    {m.pendingPickup && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700">📍 A recoger</span>}
-                                </div>
-
-                                <div className="flex items-center gap-1.5 mt-1 flex-wrap text-[10px] text-gray-400">
-                                    <span>{timeStr}</span>
-                                    {personName && <><span>·</span><span className="font-semibold text-gray-500">{personName}</span></>}
-                                    {m.returnCondition && <><span>·</span><span>{CONDITION_LABEL[m.returnCondition] ?? m.returnCondition}</span></>}
-                                    {m.notes && <><span>·</span><span className="italic truncate max-w-[140px]">{m.notes}</span></>}
-                                </div>
-                            </div>
-
-                            {isOwner && (
-                                <div className="flex flex-col gap-1 flex-shrink-0">
-                                    {isActiveLoan && onReturnLoan && (
-                                        <button onClick={() => onReturnLoan(m.id)}
-                                            className="text-xs bg-indigo-600 text-white px-2.5 py-1.5 rounded-lg hover:bg-indigo-700 font-bold">
-                                            Devolver
-                                        </button>
-                                    )}
-                                    {onDeleteMovement && (!m.isLoan || m.isReturned) && (
-                                        <button onClick={() => { onBehaviorLog?.('ACTION', `Eliminó movimiento: ${itemName}`); onDeleteMovement(m.id); }}
-                                            className="text-red-400 hover:text-red-600 p-1">
-                                            <TrashIcon className="w-4 h-4" />
-                                        </button>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    );
-                })}
+                <button onClick={() => setGroupByTool(g => !g)}
+                    className={`ml-auto flex-shrink-0 text-xs font-black px-3 py-1.5 rounded-full transition-all ${
+                        groupByTool ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}>
+                    {groupByTool ? '📦 Por herramienta' : '📋 Cronológico'}
+                </button>
             </div>
+
+            {/* Movement list */}
+            {groupByTool ? (
+                <div>
+                    {toolGroups.length === 0 && (
+                        <p className="text-center py-12 text-gray-400 text-sm">Sin movimientos.</p>
+                    )}
+                    {toolGroups.map(({ item, movements: ms }) => (
+                        <div key={item.id}>
+                            <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
+                                <p className="text-sm font-black text-gray-800">{item.name}</p>
+                                <span className="text-[10px] font-bold bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">
+                                    {ms.length} mov.
+                                </span>
+                            </div>
+                            <div className="divide-y divide-gray-50">
+                                {ms.map(m => renderMovementRow(m))}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            ) : (
+                <div className="divide-y divide-gray-50">
+                    {paged.length === 0 && (
+                        <p className="text-center py-12 text-gray-400 text-sm">Sin movimientos.</p>
+                    )}
+                    {paged.map(m => renderMovementRow(m))}
+                </div>
+            )}
 
             {totalPages > 1 && (
                 <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
