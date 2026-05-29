@@ -272,7 +272,7 @@ export async function exportReportAsDocx(opts: {
     // Consumables: [4212,2340,1872,936]  Indicators: [6552,2808]
     const KPI_W  = [2340, 2340, 2340, 2340] as const;
     const PER_W  = [2808, 5148, 1404]       as const;
-    const CAP_W  = [2995, 1404, 936, 1123, 2059, 843] as const;
+    const CAP_W  = [2700, 900, 1200, 700, 900, 1700, 1260] as const;
     const CONS_W = [4212, 2340, 1872, 936]  as const;
     const IND_W  = [6552, 2808]             as const;
 
@@ -328,10 +328,11 @@ export async function exportReportAsDocx(opts: {
             width: { size: 9360, type: WidthType.DXA },
             columnWidths: [...CAP_W],
             rows: [
-                tableHeader(['Herramienta', 'Tipo', 'Cantidad', 'Estado', 'Responsable', 'Días'], [...CAP_W]),
+                tableHeader(['Herramienta', 'Tipo', 'Marca', 'Cantidad', 'Estado', 'Responsable', 'Días'], [...CAP_W]),
                 ...capitalItems.map((ci, idx) => tableRow([
                     ci.item.name,
                     ci.item.inventoryType === InventoryType.HAND_TOOL ? 'Manual' : 'Eléctrica',
+                    ci.item.inventoryType === InventoryType.ELECTRICAL_TOOL ? (ci.item.brand ?? '—') : '—',
                     String(ci.item.quantity),
                     ci.holder ? 'Prestado' : ci.item.quantity <= 0 ? 'Agotado' : 'Disponible',
                     ci.holder ?? '—',

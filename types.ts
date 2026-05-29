@@ -48,6 +48,7 @@ export interface Item {
     price?: number;
     unit: string;
     color?: string;
+    brand?: string;
     requiresReturnNote?: boolean;
 }
 

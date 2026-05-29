@@ -19,6 +19,7 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, o
     const [minStock, setMinStock] = useState(0);
     const [unit, setUnit] = useState('');
     const [color, setColor] = useState('');
+    const [brand, setBrand] = useState('');
     const [requiresReturnNote, setRequiresReturnNote] = useState(false);
 
     const UNIT_OPTIONS = ['unidades', 'pares', 'caja', 'bolsa', 'rollo', 'pliego', 'litro', 'ml', 'galón', 'kg', 'g', 'ton', 'm', 'cm', 'mm', 'km', 'm²', 'm³', 'yarda'];
@@ -33,6 +34,7 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, o
             setMinStock(itemToEdit.minStock);
             setUnit(itemToEdit.unit);
             setColor(itemToEdit.color || '');
+            setBrand(itemToEdit.brand || '');
             setRequiresReturnNote(itemToEdit.requiresReturnNote ?? false);
         }
     }, [itemToEdit]);
@@ -50,7 +52,8 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, o
             quantity,
             minStock,
             unit,
-            color: color || undefined,
+            color: inventoryType === InventoryType.ELECTRICAL_TOOL ? (color || undefined) : undefined,
+            brand: inventoryType === InventoryType.ELECTRICAL_TOOL ? (brand || undefined) : undefined,
             requiresReturnNote: requiresReturnNote || undefined,
         };
         onEditItem(updatedItem);
@@ -108,11 +111,19 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, o
                                 <input type="text" value={unit} onChange={e => setUnit(e.target.value)} required className="w-full input-style"/>
                             )}
                         </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Color (Opcional)</label>
-                            <input type="text" value={color} onChange={e => setColor(e.target.value)} className="w-full input-style"/>
-                        </div>
+                        {inventoryType === InventoryType.ELECTRICAL_TOOL && (
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Color (Opcional)</label>
+                                <input type="text" value={color} onChange={e => setColor(e.target.value)} className="w-full input-style"/>
+                            </div>
+                        )}
                     </div>
+                    {inventoryType === InventoryType.ELECTRICAL_TOOL && (
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Marca (Opcional)</label>
+                            <input type="text" value={brand} onChange={e => setBrand(e.target.value)} className="w-full input-style" placeholder="Ej: Stanley, DeWalt, Bosch..."/>
+                        </div>
+                    )}
                     {(inventoryType === 'Herramienta Manual' || inventoryType === 'Herramienta Eléctrica') && (
                         <div className="flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">
                             <input

@@ -25,6 +25,7 @@ function dbToItem(row: Record<string, unknown>): Item {
         price: Number(row.price),
         unit: row.unit as string,
         color: row.color as string | undefined,
+        brand: row.brand as string | undefined,
         requiresReturnNote: row.requires_return_note as boolean | undefined,
     };
 }
@@ -40,6 +41,7 @@ function itemToDb(item: Omit<Item, 'id'>): Record<string, unknown> {
         price: item.price,
         unit: item.unit,
         color: item.color ?? null,
+        brand: item.brand ?? null,
         requires_return_note: item.requiresReturnNote ?? false,
     };
 }

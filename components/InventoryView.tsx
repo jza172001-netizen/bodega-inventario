@@ -118,6 +118,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, movements =
                         <div className="min-w-0 flex-1">
                             <p className="font-semibold text-gray-900 text-sm truncate cursor-pointer" onClick={() => onItemHistory(item)}>{item.name}</p>
                             <p className="text-xs text-gray-500 truncate">{item.subCategory}</p>
+                            {item.inventoryType === InventoryType.ELECTRICAL_TOOL && (item.brand || item.color) && (
+                                <div className="flex flex-wrap gap-1 mt-0.5">
+                                    {item.brand && <span className="text-[10px] font-semibold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">{item.brand}</span>}
+                                    {item.color && <span className="text-[10px] font-semibold bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full">{item.color}</span>}
+                                </div>
+                            )}
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
                             <span className="text-sm font-bold text-gray-800">{item.quantity} <span className="text-xs font-normal text-gray-500">{item.unit}</span></span>
@@ -155,8 +161,14 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, movements =
                     <tbody className="bg-white divide-y divide-gray-200">
                         {displayItems.map(item => (
                             <tr key={item.id} className="hover:bg-gray-50">
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 cursor-pointer" onClick={() => onItemHistory(item)}>
+                                <td className="px-6 py-4 text-sm font-medium text-gray-900 cursor-pointer" onClick={() => onItemHistory(item)}>
                                     {item.name}
+                                    {item.inventoryType === InventoryType.ELECTRICAL_TOOL && (item.brand || item.color) && (
+                                        <div className="flex flex-wrap gap-1 mt-1">
+                                            {item.brand && <span className="text-[10px] font-semibold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">{item.brand}</span>}
+                                            {item.color && <span className="text-[10px] font-semibold bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full">{item.color}</span>}
+                                        </div>
+                                    )}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.subCategory}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 font-semibold">{item.quantity}</td>
