@@ -2,7 +2,6 @@
 import React, { useMemo, useEffect, useState, useRef, useCallback } from 'react';
 import { Item, Movement, MovementType, InventoryType, Personnel, Project } from '../types';
 import { generateRotationAnalysis } from '../services/geminiService';
-import { PrintReportView } from './PrintReportView';
 import { exportReportAsDocx } from '../services/docxExportService';
 
 interface StatisticsViewProps {
@@ -42,7 +41,7 @@ const TYPE_CONFIG: Record<string, { label: string; color: string; dot: string }>
 const getTypeConfig = (type: string) =>
     TYPE_CONFIG[type] ?? { label: type, color: 'bg-gray-100 text-gray-700', dot: 'bg-gray-400' };
 
-type PrintPeriod = 'week' | 'month' | 'quarter' | null;
+type DocxPeriod = 'week' | 'month' | 'quarter';
 
 const INV_TYPE_LABEL: Record<string, string> = {
     [InventoryType.HAND_TOOL]: '🔨 H. Manual',
@@ -53,29 +52,20 @@ const INV_TYPE_LABEL: Record<string, string> = {
 
 const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, personnel = [], projects = [], onNavigate }) => {
     const [rotationRecs, setRotationRecs] = useState<Record<string, { recommendation: string; severity: string }>>({});
-    const [printPeriod, setPrintPeriod] = useState<PrintPeriod>(null);
-    const [showPeriodModal, setShowPeriodModal] = useState(false);
     const [showDocxModal, setShowDocxModal] = useState(false);
     const [docxExporting, setDocxExporting] = useState(false);
     const [activeDetail, setActiveDetail] = useState<{ title: string; rows: DetailRow[]; navigateTo?: { view: string; tab?: string } } | null>(null);
-    const printRef = useRef<HTMLDivElement>(null);
 
-    const getPeriodRange = useCallback((period: NonNullable<PrintPeriod>): { fromDate: Date; toDate: Date; label: string } => {
+    const getPeriodRange = useCallback((period: DocxPeriod): { fromDate: Date; toDate: Date; label: string } => {
         const now = new Date();
         const days = period === 'week' ? 7 : period === 'month' ? 30 : 90;
         const from = new Date(now);
         from.setDate(from.getDate() - days);
-        const labels: Record<NonNullable<PrintPeriod>, string> = { week: 'Últimos 7 días', month: 'Último mes', quarter: 'Últimos 90 días' };
+        const labels: Record<DocxPeriod, string> = { week: 'Últimos 7 días', month: 'Último mes', quarter: 'Últimos 90 días' };
         return { fromDate: from, toDate: now, label: labels[period] };
     }, []);
 
-    const handlePrint = useCallback((period: NonNullable<PrintPeriod>) => {
-        setPrintPeriod(period);
-        setShowPeriodModal(false);
-        setTimeout(() => window.print(), 200);
-    }, []);
-
-    const handleExportDocx = useCallback(async (period: NonNullable<PrintPeriod>) => {
+    const handleExportDocx = useCallback(async (period: DocxPeriod) => {
         setDocxExporting(true);
         setShowDocxModal(false);
         const range = getPeriodRange(period);
@@ -196,7 +186,6 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
     }, [movements, itemMap]);
 
     const maxConsumed = topConsumed[0]?.qty ?? 1;
-    const periodRange = printPeriod ? getPeriodRange(printPeriod) : null;
 
     // ── DETAIL PANEL HELPERS ──────────────────────────────────────────────────
     const showSalidasDetail = () => {
@@ -366,30 +355,6 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                 </div>
             )}
 
-            {/* Modal selector de período PDF */}
-            {showPeriodModal && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
-                        <h3 className="text-lg font-bold text-gray-900 mb-1">Exportar informe PDF</h3>
-                        <p className="text-sm text-gray-500 mb-5">Selecciona el período del informe</p>
-                        <div className="space-y-2">
-                            {([
-                                { key: 'week', label: 'Esta semana', sub: 'Últimos 7 días' },
-                                { key: 'month', label: 'Este mes', sub: 'Últimos 30 días' },
-                                { key: 'quarter', label: 'Este trimestre', sub: 'Últimos 90 días' },
-                            ] as const).map(opt => (
-                                <button key={opt.key} onClick={() => handlePrint(opt.key)}
-                                    className="w-full text-left px-4 py-3 rounded-xl border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-all">
-                                    <p className="font-semibold text-gray-800 text-sm">{opt.label}</p>
-                                    <p className="text-xs text-gray-400">{opt.sub}</p>
-                                </button>
-                            ))}
-                        </div>
-                        <button onClick={() => setShowPeriodModal(false)} className="mt-4 w-full text-sm text-gray-400 hover:text-gray-600 py-2">Cancelar</button>
-                    </div>
-                </div>
-            )}
-
             {/* Modal selector de período DOCX */}
             {showDocxModal && (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -417,22 +382,12 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                 </div>
             )}
 
-            {/* Componente de impresión */}
-            {periodRange && (
-                <PrintReportView ref={printRef} items={items} movements={movements} personnel={personnel} projects={projects} periodLabel={periodRange.label} fromDate={periodRange.fromDate} toDate={periodRange.toDate} />
-            )}
-
-            {/* Botones exportar */}
-            <div className="flex justify-end gap-2 flex-wrap">
+            {/* Botón exportar DOCX */}
+            <div className="flex justify-end">
                 <button onClick={() => setShowDocxModal(true)} disabled={docxExporting}
                     className="flex items-center gap-2 px-4 py-2 bg-amber-50 border border-amber-200 hover:border-amber-400 hover:bg-amber-100 text-amber-800 font-semibold rounded-xl text-sm transition-all shadow-sm disabled:opacity-60">
                     <span className="text-base">📄</span>
                     {docxExporting ? 'Generando DOCX...' : 'Exportar DOCX'}
-                </button>
-                <button onClick={() => setShowPeriodModal(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 hover:border-blue-400 hover:bg-blue-50 text-gray-700 font-semibold rounded-xl text-sm transition-all shadow-sm">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                    Exportar PDF
                 </button>
             </div>
 
