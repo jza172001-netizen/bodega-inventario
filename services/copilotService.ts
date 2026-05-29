@@ -274,6 +274,49 @@ export function parseBulkAddIntent(text: string, items: Item[], projects: Projec
     return { isBulkAdd: true, items: bulkItems, matchedPersonnel: persResult.matched, rawPersonnel: rawPerson, personnelCandidates: persResult.candidates, matchedProject: projResult.matched, rawProject, projectCandidates: projResult.candidates };
 }
 
+export interface ParsedEdit {
+    item: Item;
+    field: 'brand' | 'color';
+    newValue: string;
+}
+
+export function parseEditIntent(text: string, items: Item[]): ParsedEdit | null {
+    if (!/\b(pon(?:le)?|cambia|actualiz[a]|modifica|edita)\b/i.test(text)) return null;
+
+    let field: 'brand' | 'color' | null = null;
+    if (/\bmarca\b|\bbrand\b/i.test(text)) field = 'brand';
+    else if (/\bcolor\b/i.test(text)) field = 'color';
+    if (!field) return null;
+
+    const electricItems = items.filter(i => i.inventoryType === InventoryType.ELECTRICAL_TOOL);
+    if (electricItems.length === 0) return null;
+
+    // Strip verbs, field keyword, and articles to isolate the two parts around "a"
+    let body = text
+        .replace(/\b(pon(?:le)?|cambia|actualiz[a]|modifica|edita)\b/gi, '')
+        .replace(/\b(marca|brand|color)\b/gi, '')
+        .replace(/\b(el|la|los|las|del|de)\b/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const aIdx = body.search(/\s+a\s+/i);
+    if (aIdx < 0) return null;
+
+    const part1 = body.slice(0, aIdx).trim();
+    const part2 = body.slice(aIdx).replace(/^\s+a\s+/i, '').trim();
+
+    // Case B: "<item> a <value>" — item in part1
+    const m1 = fuzzyMatchItems(part1, electricItems);
+    if (m1.matched) return { item: m1.matched, field, newValue: part2 };
+
+    // Case A: "<value> a <item>" — item in part2
+    const m2 = fuzzyMatchItems(part2, electricItems);
+    if (m2.matched) return { item: m2.matched, field, newValue: part1 };
+
+    return null;
+}
+
+
 export function parseExitIntent(text: string, items: Item[], projects: Project[], personnel: Personnel[]): ParsedExit {
     if (!EXIT_VERBS.test(text)) {
         return { isExitIntent: false, movements: [], matchedProject: null, projectCandidates: [], rawProject: '', matchedPersonnel: null, personnelCandidates: [], rawPersonnel: '' };

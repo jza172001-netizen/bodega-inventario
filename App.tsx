@@ -283,6 +283,25 @@ const App: React.FC = () => {
         );
     };
 
+    const handleResetMaterials = () => {
+        requirePin(
+            () => {
+                setItems([]);
+                setMovements([]);
+                setPurchaseOrders([]);
+                addAuditLog('ITEM_DELETED', 'Restableció materiales (ítems, movimientos, OC). Personal conservado.');
+                Promise.all([
+                    db.deleteAllMovements(),
+                    db.deleteAllItems(),
+                    db.deleteAllPurchaseOrders(),
+                ]).catch(e => console.error('Error limpiando materiales:', e));
+                alert('Materiales limpiados. El personal se conserva.');
+            },
+            'Restablecer solo materiales',
+            'Se eliminarán ítems, movimientos y órdenes de compra. El personal permanece.',
+        );
+    };
+
     const NAV_LABELS: Record<View, string> = {
         dashboard: 'Resumen',
         kardex: 'Kardex',
@@ -733,6 +752,7 @@ const App: React.FC = () => {
                                 onCreateItem={handleAddItemSync}
                                 onCreateProject={handleAddProjectSync}
                                 onCreatePersonnel={handleAddPersonnelSync}
+                                onEditItem={handleEditItem}
                                 onBehaviorLog={addBehaviorLog}
                             />
                         )}
@@ -781,6 +801,7 @@ const App: React.FC = () => {
                     onClose={() => setSettingsOpen(false)}
                     userRole={userRole}
                     onResetAllData={handleResetAllData}
+                    onResetMaterials={handleResetMaterials}
                 />
             )}
             {isSearchOpen && (

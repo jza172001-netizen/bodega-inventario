@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Item, Movement, Personnel, PurchaseOrder, MovementType, PurchaseOrderStatus, Project, InventoryType } from '../types';
 import { generateInventoryAnalysis } from '../services/geminiService';
-import { askCopilot, parseExitIntent, parseCreationIntent, ParsedExit, PendingMovement } from '../services/copilotService';
+import { askCopilot, parseExitIntent, parseCreationIntent, parseEditIntent, ParsedExit, ParsedEdit, PendingMovement } from '../services/copilotService';
 
 interface CopilotViewProps {
     items: Item[];
@@ -13,6 +13,7 @@ interface CopilotViewProps {
     onCreateItem: (item: Omit<Item, 'id'>) => Item;
     onCreateProject: (project: Omit<Project, 'id'>) => Project;
     onCreatePersonnel: (person: Omit<Personnel, 'id'>) => Personnel;
+    onEditItem?: (item: Item) => void;
     onBehaviorLog?: (action: string, detail: string) => void;
 }
 
@@ -21,6 +22,7 @@ type ChatMsg = {
     role: 'user' | 'bot';
     text: string;
     parsedExit?: ParsedExit;
+    parsedEdit?: ParsedEdit;
     pendingItemCreate?: { name: string; unit: string };
     confirmed?: boolean;
 };
@@ -47,7 +49,7 @@ const WELCOME = 'Hola 👋 Puedo registrar salidas, **crear proyectos, trabajado
 
 const CopilotView: React.FC<CopilotViewProps> = ({
     items, movements, personnel, purchaseOrders, projects,
-    onLogMovements, onCreateItem, onCreateProject, onCreatePersonnel, onBehaviorLog,
+    onLogMovements, onCreateItem, onCreateProject, onCreatePersonnel, onEditItem, onBehaviorLog,
 }) => {
     const [messages, setMessages] = useState<ChatMsg[]>([
         { id: uid(), role: 'bot', text: WELCOME }
@@ -179,6 +181,13 @@ const CopilotView: React.FC<CopilotViewProps> = ({
             return;
         }
 
+        const editIntent = parseEditIntent(trimmed, items);
+        if (editIntent) {
+            addBot('', { parsedEdit: editIntent });
+            setLoading(false);
+            return;
+        }
+
         const parsed = parseExitIntent(trimmed, items, projects, personnel);
         if (parsed.isExitIntent) {
             const allUnknown = parsed.movements.every(m => !m.matchedItem && !m.candidates.length);
@@ -219,6 +228,20 @@ const CopilotView: React.FC<CopilotViewProps> = ({
     };
 
     const handleCancelExit = (msgId: string) => {
+        setMessages(prev => prev.map(m => m.id === msgId ? { ...m, confirmed: true } : m));
+        addBot('Cancelado.');
+    };
+
+    const handleConfirmEdit = (msg: ChatMsg) => {
+        const edit = msg.parsedEdit!;
+        const updated = { ...edit.item, [edit.field]: edit.newValue };
+        onEditItem?.(updated);
+        setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, confirmed: true } : m));
+        const fieldLabel = edit.field === 'brand' ? 'Marca' : 'Color';
+        addBot(`✅ **${edit.item.name}** actualizado. ${fieldLabel}: **${edit.newValue}**.`);
+    };
+
+    const handleCancelEdit = (msgId: string) => {
         setMessages(prev => prev.map(m => m.id === msgId ? { ...m, confirmed: true } : m));
         addBot('Cancelado.');
     };
@@ -281,6 +304,12 @@ const CopilotView: React.FC<CopilotViewProps> = ({
                                 onCreateProject={(name) => handleInlineProjectCreate(msg.id, name)}
                                 onCreatePersonnel={(name) => handleInlinePersonnelCreate(msg.id, name)}
                                 onConfirm={() => handleConfirmExit(msg)} onCancel={() => handleCancelExit(msg.id)} />
+                        ) : msg.parsedEdit && !msg.confirmed ? (
+                            <EditConfirmCard
+                                edit={msg.parsedEdit}
+                                onConfirm={() => handleConfirmEdit(msg)}
+                                onCancel={() => handleCancelEdit(msg.id)}
+                            />
                         ) : msg.pendingItemCreate && !msg.confirmed ? (
                             <PendingItemTypeCard name={msg.pendingItemCreate.name} unit={msg.pendingItemCreate.unit}
                                 onSelect={(type) => handlePendingItemType(msg.id, msg.pendingItemCreate!.name, msg.pendingItemCreate!.unit, type)} />
@@ -619,6 +648,35 @@ const MovementRow: React.FC<{
                         <button onClick={() => setShowCreate(true)} className="text-xs font-black text-blue-600 hover:underline">+ Crear ítem</button>
                     </div>
                 )}
+            </div>
+        </div>
+    );
+};
+
+// ─── EditConfirmCard ──────────────────────────────────────────────────────────
+
+const EditConfirmCard: React.FC<{ edit: ParsedEdit; onConfirm: () => void; onCancel: () => void }> = ({ edit, onConfirm, onCancel }) => {
+    const currentVal = edit.field === 'brand' ? edit.item.brand : edit.item.color;
+    const fieldLabel = edit.field === 'brand' ? 'Marca' : 'Color';
+    return (
+        <div className="w-full max-w-[92%] bg-white border border-purple-200 rounded-2xl rounded-bl-sm shadow-md p-4">
+            <p className="text-xs font-black text-purple-500 uppercase tracking-widest mb-3">✏️ Actualizar herramienta</p>
+            <p className="text-sm font-semibold text-gray-800 mb-1">{edit.item.name}</p>
+            <div className="flex items-center gap-2 text-sm text-gray-600 mb-4">
+                <span className="font-semibold">{fieldLabel}:</span>
+                <span className="text-gray-400 line-through">{currentVal || '—'}</span>
+                <span>→</span>
+                <span className="font-bold text-purple-700">{edit.newValue}</span>
+            </div>
+            <div className="flex gap-2">
+                <button onClick={onConfirm}
+                    className="flex-1 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-sm transition-all">
+                    ✅ Confirmar
+                </button>
+                <button onClick={onCancel}
+                    className="px-4 py-2 border border-gray-200 text-gray-500 hover:bg-gray-50 rounded-xl text-sm font-semibold">
+                    ✕
+                </button>
             </div>
         </div>
     );

@@ -18,6 +18,7 @@ interface SettingsModalProps {
     onClose: () => void;
     userRole?: UserRole;
     onResetAllData?: () => void;
+    onResetMaterials?: () => void;
 }
 
 const Toggle: React.FC<{ label: string; description: string; value: boolean; onToggle: () => void }> = ({ label, description, value, onToggle }) => (
@@ -35,8 +36,9 @@ const Toggle: React.FC<{ label: string; description: string; value: boolean; onT
     </div>
 );
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ config, onChange, onClose, userRole, onResetAllData }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ config, onChange, onClose, userRole, onResetAllData, onResetMaterials }) => {
     const [resetStep, setResetStep] = useState(0);
+    const [matResetStep, setMatResetStep] = useState(0);
     const isOwner = userRole === UserRole.OWNER;
 
     const handleResetClick = () => {
@@ -89,32 +91,64 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ config, onChange, 
                         onToggle={() => onChange({ ...config, showEconomicValues: !config.showEconomicValues })}
                     />
 
-                    {isOwner && onResetAllData && (
+                    {isOwner && (onResetAllData || onResetMaterials) && (
                         <>
                             <p className="text-[10px] font-black text-red-400 uppercase tracking-widest pt-5 pb-1">Zona de peligro</p>
-                            <div className="py-3 border-t border-red-50">
-                                <p className="text-xs text-gray-500 mb-3">
-                                    Borra <strong>todos</strong> los ítems, movimientos, trabajadores y proyectos — tanto en la app como en la base de datos. Esta acción es irreversible.
-                                </p>
-                                <div className="flex gap-2">
-                                    {resetStep > 0 && (
-                                        <button onClick={() => setResetStep(0)}
-                                            className="px-3 py-2 text-xs font-semibold bg-gray-100 text-gray-600 rounded-xl hover:bg-gray-200 transition-colors">
-                                            Cancelar
-                                        </button>
-                                    )}
-                                    <button onClick={handleResetClick}
-                                        className={`flex-1 py-2 text-xs font-black rounded-xl transition-all ${
-                                            resetStep === 0
-                                                ? 'bg-red-50 text-red-600 hover:bg-red-100'
-                                                : resetStep === 1
-                                                    ? 'bg-red-400 text-white hover:bg-red-500'
-                                                    : 'bg-red-700 text-white hover:bg-red-800'
+
+                            {onResetMaterials && (
+                                <div className="py-3 border-t border-orange-50">
+                                    <p className="text-xs text-gray-500 mb-3">
+                                        Borra ítems, movimientos y órdenes de compra — <strong>el personal se conserva</strong>.
+                                    </p>
+                                    <div className="flex gap-2">
+                                        {matResetStep > 0 && (
+                                            <button onClick={() => setMatResetStep(0)}
+                                                className="px-3 py-2 text-xs font-semibold bg-gray-100 text-gray-600 rounded-xl hover:bg-gray-200 transition-colors">
+                                                Cancelar
+                                            </button>
+                                        )}
+                                        <button onClick={() => {
+                                            if (matResetStep < 2) { setMatResetStep(s => s + 1); return; }
+                                            setMatResetStep(0);
+                                            onResetMaterials();
+                                        }} className={`flex-1 py-2 text-xs font-black rounded-xl transition-all ${
+                                            matResetStep === 0
+                                                ? 'bg-orange-50 text-orange-600 hover:bg-orange-100'
+                                                : matResetStep === 1
+                                                    ? 'bg-orange-400 text-white hover:bg-orange-500'
+                                                    : 'bg-orange-700 text-white hover:bg-orange-800'
                                         }`}>
-                                        {resetLabels[resetStep]}
-                                    </button>
+                                            {['🗂 Restablecer solo materiales', '⚠️ ¿Seguro? Borra ítems y movimientos', '🔴 Confirmar — acción irreversible'][matResetStep]}
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
+                            )}
+
+                            {onResetAllData && (
+                                <div className="py-3 border-t border-red-50">
+                                    <p className="text-xs text-gray-500 mb-3">
+                                        Borra <strong>todos</strong> los ítems, movimientos, trabajadores y proyectos — tanto en la app como en la base de datos. Esta acción es irreversible.
+                                    </p>
+                                    <div className="flex gap-2">
+                                        {resetStep > 0 && (
+                                            <button onClick={() => setResetStep(0)}
+                                                className="px-3 py-2 text-xs font-semibold bg-gray-100 text-gray-600 rounded-xl hover:bg-gray-200 transition-colors">
+                                                Cancelar
+                                            </button>
+                                        )}
+                                        <button onClick={handleResetClick}
+                                            className={`flex-1 py-2 text-xs font-black rounded-xl transition-all ${
+                                                resetStep === 0
+                                                    ? 'bg-red-50 text-red-600 hover:bg-red-100'
+                                                    : resetStep === 1
+                                                        ? 'bg-red-400 text-white hover:bg-red-500'
+                                                        : 'bg-red-700 text-white hover:bg-red-800'
+                                            }`}>
+                                            {resetLabels[resetStep]}
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </>
                     )}
                 </div>
