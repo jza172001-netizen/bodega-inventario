@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Personnel, UserRole, Movement, Item, Project } from '../types';
 import { PlusIcon } from './icons/PlusIcon';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
@@ -46,6 +46,21 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
 
     const isOwner = userRole === UserRole.OWNER;
 
+    const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+    const sortedPersonnel = useMemo(
+        () => [...personnel].sort((a, b) => a.name.localeCompare(b.name, 'es')),
+        [personnel],
+    );
+    const activeLetters = useMemo(() => {
+        const s = new Set<string>();
+        for (const p of sortedPersonnel) s.add(p.name.charAt(0).toUpperCase());
+        return s;
+    }, [sortedPersonnel]);
+    const jumpToLetter = useCallback((letter: string) => {
+        const el = document.querySelector(`[data-person-letter="${letter}"]`);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, []);
+
     const handleDelete = (e: React.MouseEvent, p: Personnel) => {
         e.stopPropagation();
         const hasLoans = movements.some(m => m.personnelId === p.id && m.isLoan && !m.isReturned);
@@ -65,9 +80,12 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
         setEditPerson(p);
     };
 
+    const seenLetters = new Set<string>();
+
     return (
         <>
-            <div className="bg-white p-6 rounded-xl shadow-md">
+            <div className="relative">
+            <div className="bg-white p-6 rounded-xl shadow-md pr-10">
                 <div className="flex justify-between items-center mb-4">
                     <div className="flex items-center">
                         <button onClick={onGoBack} className="mr-4 p-2 rounded-full hover:bg-gray-100">
@@ -84,7 +102,10 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {[...personnel].sort((a, b) => a.name.localeCompare(b.name, 'es')).map(p => {
+                    {sortedPersonnel.map(p => {
+                        const letter = p.name.charAt(0).toUpperCase();
+                        const isFirst = !seenLetters.has(letter);
+                        if (isFirst) seenLetters.add(letter);
                         const activeLoans = movements.filter(m => m.personnelId === p.id && m.isLoan && !m.isReturned);
                         const activeItems = activeLoans.map(m => items.find(i => i.id === m.itemId)).filter(Boolean) as Item[];
                         const visibleChips = activeItems.slice(0, 3);
@@ -95,6 +116,7 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
                                 key={p.id}
                                 onClick={() => { onBehaviorLog?.('NAV', `Abrió detalle: ${p.name}`); setDetailPerson(p); }}
                                 className="p-4 border rounded-xl bg-gray-50 hover:bg-blue-50 hover:border-blue-200 cursor-pointer transition-all"
+                                {...(isFirst ? { 'data-person-letter': letter } : {})}
                             >
                                 <div className="flex items-start justify-between gap-2">
                                     <div className="flex items-center space-x-3 min-w-0 flex-1">
@@ -154,6 +176,28 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
                         <p>No hay personal registrado.</p>
                     </div>
                 )}
+            </div>
+
+            {/* Índice A-Z lateral derecho */}
+            <div className="fixed right-1 top-1/2 -translate-y-1/2 flex flex-col items-center gap-0.5 z-30">
+                {ALPHABET.map(letter => {
+                    const active = activeLetters.has(letter);
+                    return (
+                        <button
+                            key={letter}
+                            onClick={() => active && jumpToLetter(letter)}
+                            disabled={!active}
+                            className={`w-5 h-5 flex items-center justify-center text-[10px] font-black rounded-full transition-all ${
+                                active
+                                    ? 'text-blue-600 hover:text-white hover:bg-blue-500 cursor-pointer'
+                                    : 'text-gray-300 cursor-default'
+                            }`}
+                        >
+                            {letter}
+                        </button>
+                    );
+                })}
+            </div>
             </div>
 
             {detailPerson && (

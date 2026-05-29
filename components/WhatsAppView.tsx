@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Movement, Item, Personnel, InventoryType } from '../types';
 import {
     ReminderLog,
@@ -207,6 +207,28 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
     const totalWithPhone = groups.filter(g => g.hasPhone).length;
     const generalDone = totalWithPhone > 0 && generalSentCount() >= totalWithPhone;
 
+    const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+    // Map: letter → first person.id that appears in render order (due → onTrack → noPhone)
+    const firstOfLetterMap = useMemo(() => {
+        const map = new Map<string, string>();
+        for (const g of [...dueGroups, ...onTrackGroups, ...noPhoneGroups]) {
+            const letter = g.person.name.charAt(0).toUpperCase();
+            if (!map.has(letter)) map.set(letter, g.person.id);
+        }
+        return map;
+    }, [dueGroups, onTrackGroups, noPhoneGroups]);
+    const activeLetters = useMemo(() => new Set(firstOfLetterMap.keys()), [firstOfLetterMap]);
+    const jumpToLetter = useCallback((letter: string) => {
+        const el = document.querySelector(`[data-person-letter="${letter}"]`);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, []);
+
+    const wrapCard = (g: PersonGroup, node: React.ReactNode) => {
+        const letter = g.person.name.charAt(0).toUpperCase();
+        if (firstOfLetterMap.get(letter) !== g.person.id) return node;
+        return <div key={`az-${g.person.id}`} data-person-letter={letter}>{node}</div>;
+    };
+
     const PersonCard: React.FC<{ g: PersonGroup; highlight?: boolean }> = ({ g, highlight }) => {
         const maxDays = Math.max(...g.loans.map(m => daysSince(m.timestamp)));
         const itemNames = g.loans.map(m => itemMap.get(m.itemId)?.name ?? '—').join(', ');
@@ -259,7 +281,7 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
     };
 
     return (
-        <div className="space-y-4 max-w-2xl mx-auto">
+        <div className="space-y-4 max-w-2xl mx-auto pr-6">
             {readOnly && (
                 <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-xs font-semibold text-amber-700">
                     👁️ Modo visitante — solo lectura
@@ -370,13 +392,13 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
                                 )}
                             </div>
                             <div className="p-3 space-y-2">
-                                {dueGroups.map(g => (
+                                {dueGroups.map(g => wrapCard(g, (
                                     <PersonCard
                                         key={g.person.id}
                                         g={g}
                                         highlight={!!queue && queue[step]?.person.id === g.person.id}
                                     />
-                                ))}
+                                )))}
                             </div>
                         </div>
                     )}
@@ -395,13 +417,13 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
                         <div>
                             <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2">📋 Préstamos activos — al día</p>
                             <div className="space-y-2">
-                                {onTrackGroups.map(g => (
+                                {onTrackGroups.map(g => wrapCard(g, (
                                     <PersonCard
                                         key={g.person.id}
                                         g={g}
                                         highlight={!!queue && queue[step]?.person.id === g.person.id}
                                     />
-                                ))}
+                                )))}
                             </div>
                         </div>
                     )}
@@ -410,7 +432,7 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
                         <div>
                             <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2">⚠️ Sin número de WhatsApp</p>
                             <div className="space-y-2">
-                                {noPhoneGroups.map(g => <PersonCard key={g.person.id} g={g} />)}
+                                {noPhoneGroups.map(g => wrapCard(g, <PersonCard key={g.person.id} g={g} />))}
                             </div>
                             <p className="text-[10px] text-gray-400 mt-2 text-center">
                                 Agrega el teléfono en la sección Personal → toca el nombre del trabajador → editar.
@@ -421,6 +443,29 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
             )}
 
             <div ref={bottomRef} className="h-px" />
+
+            {/* Índice A-Z lateral derecho */}
+            {activeLetters.size > 0 && (
+                <div className="fixed right-1 top-1/2 -translate-y-1/2 flex flex-col items-center gap-0.5 z-30">
+                    {ALPHABET.map(letter => {
+                        const active = activeLetters.has(letter);
+                        return (
+                            <button
+                                key={letter}
+                                onClick={() => active && jumpToLetter(letter)}
+                                disabled={!active}
+                                className={`w-5 h-5 flex items-center justify-center text-[10px] font-black rounded-full transition-all ${
+                                    active
+                                        ? 'text-green-600 hover:text-white hover:bg-green-500 cursor-pointer'
+                                        : 'text-gray-300 cursor-default'
+                                }`}
+                            >
+                                {letter}
+                            </button>
+                        );
+                    })}
+                </div>
+            )}
             </div>
         </div>
     );

@@ -38,9 +38,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, movements =
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     const displayItems = useMemo(() => {
-        if (!search.trim()) return items;
+        const sorted = [...items].sort((a, b) => a.name.localeCompare(b.name, 'es'));
+        if (!search.trim()) return sorted;
         const q = search.toLowerCase();
-        return items.filter(i => {
+        return sorted.filter(i => {
             if (i.name.toLowerCase().includes(q)) return true;
             if (i.subCategory.toLowerCase().includes(q)) return true;
             if (i.category.toLowerCase().includes(q)) return true;
