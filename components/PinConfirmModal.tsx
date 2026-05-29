@@ -7,7 +7,7 @@ interface PinConfirmModalProps {
     onClose: () => void;
 }
 
-const ADMIN_USER = 'july';
+const ADMIN_USER = 'Juli';
 const ADMIN_PIN  = '6274';
 
 export const PinConfirmModal: React.FC<PinConfirmModalProps> = ({
@@ -26,7 +26,7 @@ export const PinConfirmModal: React.FC<PinConfirmModalProps> = ({
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (user.trim() === ADMIN_USER && pin === ADMIN_PIN) {
+        if (user.trim().toLowerCase() === ADMIN_USER.toLowerCase() && pin === ADMIN_PIN) {
             onConfirm();
             onClose();
         } else {
