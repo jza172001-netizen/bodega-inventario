@@ -52,6 +52,7 @@ const sectionHeading = (text: string) => new Paragraph({
     alignment: AlignmentType.LEFT,
 });
 
+// Fix 1: widths in PCT units = value * 50 (fiftieths of a percent)
 const tableHeader = (cells: string[], widths: number[]) => new TableRow({
     tableHeader: true,
     children: cells.map((text, i) => new TableCell({
@@ -209,21 +210,35 @@ export async function exportReportAsDocx(opts: {
         ],
     });
 
-    // ── Cover page ────────────────────────────────────────────────────
+    // Fix 2 — Cover footer
+    const coverFooter = new Footer({
+        children: [
+            new Paragraph({
+                children: [
+                    run('Bodega Pro — Sistema de Trazabilidad de Inventarios  ·  Documento de uso corporativo', { size: 8, color: GRAY }),
+                ],
+                alignment: AlignmentType.CENTER,
+                border: { top: blueBorder },
+            }),
+        ],
+    });
+
+    // Fix 5 — Cover page redesign
     const coverChildren = [
-        para(run(''), { spaceAfter: 1200 }),                       // top spacer
+        para(run(''), { spaceAfter: 2000 }),                       // big top spacer (~1.4 inches)
         ...(logoRunLg
             ? [new Paragraph({ children: [logoRunLg], alignment: AlignmentType.CENTER, spacing: { after: 240 } })]
             : []),
         para([
-            run('GRUPO ', { bold: true, size: 36, color: NAVY }),
-            run('MONTECIELO', { bold: true, size: 36, color: NAVY }),
+            run('GRUPO ', { bold: true, size: 36, color: AMBER }),
+            run('MONTECIELO', { bold: true, size: 36, color: AMBER }),
         ], { align: AlignmentType.CENTER, spaceAfter: 80 }),
         para(run('BODEGA INVENTARIO', { bold: true, size: 36, color: AMBER }), { align: AlignmentType.CENTER, spaceAfter: 320 }),
-        para(run('Informe de Operaciones de Bodega', { italics: true, size: 13, color: GRAY }), { align: AlignmentType.CENTER, spaceAfter: 80 }),
+        para(run('Sistema de Trazabilidad de Inventarios', { italics: true, size: 13, color: GRAY }), { align: AlignmentType.CENTER, spaceAfter: 80 }),
+        para(run(periodLabel, { size: 11, color: GRAY }), { align: AlignmentType.CENTER, spaceAfter: 80 }),
         para(run(`${fmtShort(fromDate)} — ${fmtShort(toDate)}`, { size: 11, color: GRAY }), { align: AlignmentType.CENTER, spaceAfter: 600 }),
-        para(run('Generado automáticamente por Bodega Pro', { bold: true, size: 10, color: NAVY }), { align: AlignmentType.CENTER, spaceAfter: 80 }),
-        para(run(`Fecha de generación: ${today}`, { size: 9, color: GRAY }), { align: AlignmentType.CENTER }),
+        para(run(`Generado: ${today}`, { bold: true, size: 10, color: NAVY }), { align: AlignmentType.CENTER, spaceAfter: 80 }),
+        para(run('Preparado por Bodega Pro  ·  Uso interno corporativo', { size: 9, color: GRAY }), { align: AlignmentType.CENTER }),
         new Paragraph({ children: [new PageBreak()], spacing: { before: 0, after: 0 } }),
     ];
 
@@ -252,27 +267,29 @@ export async function exportReportAsDocx(opts: {
     ];
 
     // ── 1. Resumen ejecutivo ──────────────────────────────────────────
+    // Fix 1: 25% → 1250, 100% → 5000
     const execChildren: FileChild[] = [
         sectionHeading('1. Resumen Ejecutivo'),
         para(run(prose, { size: 11, color: '374151' }), { spaceAfter: 200 }),
 
         // KPI mini-table
         new Table({
-            width: { size: 100, type: WidthType.PERCENTAGE },
+            width: { size: 5000, type: WidthType.PERCENTAGE },
             rows: [
-                tableHeader(['Ítems en inventario', 'Despachos (ud)', 'Préstamos activos', 'Stock bajo mínimo'], [25, 25, 25, 25]),
+                tableHeader(['Ítems en inventario', 'Despachos (ud)', 'Préstamos activos', 'Stock bajo mínimo'], [1250, 1250, 1250, 1250]),
                 tableRow([
                     String(items.length),
                     String(checkOuts),
                     String(activeLoans.length),
                     String(lowStock),
-                ], [25, 25, 25, 25]),
+                ], [1250, 1250, 1250, 1250]),
             ],
         }),
         new Paragraph({ children: [new PageBreak()], spacing: { before: 600, after: 0 } }),
     ];
 
     // ── 2. Personal ───────────────────────────────────────────────────
+    // Fix 4: single compact table, one row per worker
     const personnelChildren: FileChild[] = [
         sectionHeading('2. Personal con Herramientas Asignadas'),
     ];
@@ -280,40 +297,30 @@ export async function exportReportAsDocx(opts: {
     if (personnelLoans.length === 0) {
         personnelChildren.push(para(run('No hay herramientas en préstamo activo.', { size: 10, color: GRAY })));
     } else {
-        personnelLoans.forEach(({ name, loans }, idx) => {
-            if (idx > 0) personnelChildren.push(para(run(''), { spaceBefore: 80 }));
-            personnelChildren.push(
-                para(run(name, { bold: true, size: 11, color: NAVY }), { spaceBefore: 200 })
-            );
-            const pRows = loans.map((loan, li) => {
-                const item = itemMap.get(loan.itemId);
-                const days = Math.floor((Date.now() - new Date(loan.timestamp).getTime()) / 86400000);
-                return tableRow([
-                    item?.name ?? '—',
-                    item?.inventoryType === InventoryType.HAND_TOOL ? 'H. Manual' :
-                    item?.inventoryType === InventoryType.ELECTRICAL_TOOL ? 'H. Eléctrica' :
-                    item?.inventoryType === InventoryType.PPE ? 'EPP' : 'Consumible',
-                    `${days}d`,
-                ], [60, 25, 15], li % 2 === 1);
-            });
-            personnelChildren.push(
-                new Table({
-                    width: { size: 100, type: WidthType.PERCENTAGE },
-                    rows: [tableHeader(['Herramienta', 'Tipo', 'Días fuera'], [60, 25, 15]), ...pRows],
-                })
-            );
+        // Columns: Trabajador (30% = 1500), Herramientas (55% = 2750), Días max (15% = 750)
+        const pRows = personnelLoans.map(({ name, loans }, idx) => {
+            const toolNames = loans.map(l => itemMap.get(l.itemId)?.name ?? '—').join(', ');
+            const maxDays = Math.max(...loans.map(l => Math.floor((Date.now() - new Date(l.timestamp).getTime()) / 86400000)));
+            return tableRow([name, toolNames, `${maxDays}d`], [1500, 2750, 750], idx % 2 === 1);
         });
+        personnelChildren.push(
+            new Table({
+                width: { size: 5000, type: WidthType.PERCENTAGE },
+                rows: [tableHeader(['Trabajador', 'Herramientas asignadas', 'Días max'], [1500, 2750, 750]), ...pRows],
+            })
+        );
     }
 
     personnelChildren.push(new Paragraph({ children: [new PageBreak()], spacing: { before: 600, after: 0 } }));
 
     // ── 3. Capital items ──────────────────────────────────────────────
+    // Fix 1: 32→1600, 15→750, 10→500, 12→600, 22→1100, 9→450; 100→5000
     const capitalChildren: FileChild[] = [
         sectionHeading('3. Inventario de Herramientas (Capital)'),
         new Table({
-            width: { size: 100, type: WidthType.PERCENTAGE },
+            width: { size: 5000, type: WidthType.PERCENTAGE },
             rows: [
-                tableHeader(['Herramienta', 'Tipo', 'Cantidad', 'Estado', 'Responsable', 'Días'], [32, 15, 10, 12, 22, 9]),
+                tableHeader(['Herramienta', 'Tipo', 'Cantidad', 'Estado', 'Responsable', 'Días'], [1600, 750, 500, 600, 1100, 450]),
                 ...capitalItems.map((ci, idx) => tableRow([
                     ci.item.name,
                     ci.item.inventoryType === InventoryType.HAND_TOOL ? 'Manual' : 'Eléctrica',
@@ -321,13 +328,14 @@ export async function exportReportAsDocx(opts: {
                     ci.holder ? 'Prestado' : ci.item.quantity <= 0 ? 'Agotado' : 'Disponible',
                     ci.holder ?? '—',
                     ci.holder ? `${ci.days}d` : '—',
-                ], [32, 15, 10, 12, 22, 9], idx % 2 === 1)),
+                ], [1600, 750, 500, 600, 1100, 450], idx % 2 === 1)),
             ],
         }),
         new Paragraph({ children: [new PageBreak()], spacing: { before: 600, after: 0 } }),
     ];
 
     // ── 4. Consumables ────────────────────────────────────────────────
+    // Fix 1: 45→2250, 25→1250, 20→1000, 10→500; 100→5000
     const consChildren: FileChild[] = [
         sectionHeading('4. Materiales de Consumo del Período'),
     ];
@@ -337,15 +345,15 @@ export async function exportReportAsDocx(opts: {
     } else {
         consChildren.push(
             new Table({
-                width: { size: 100, type: WidthType.PERCENTAGE },
+                width: { size: 5000, type: WidthType.PERCENTAGE },
                 rows: [
-                    tableHeader(['Material', 'Categoría', 'Cantidad consumida', 'Unidad'], [45, 25, 20, 10]),
+                    tableHeader(['Material', 'Categoría', 'Cantidad consumida', 'Unidad'], [2250, 1250, 1000, 500]),
                     ...consumables.map((c, i) => tableRow([
                         c.item.name,
                         c.item.inventoryType === InventoryType.PPE ? 'EPP / Seguridad' : 'Consumible',
                         String(c.qty),
                         c.item.unit,
-                    ], [45, 25, 20, 10], i % 2 === 1)),
+                    ], [2250, 1250, 1000, 500], i % 2 === 1)),
                 ],
             })
         );
@@ -353,19 +361,20 @@ export async function exportReportAsDocx(opts: {
     consChildren.push(new Paragraph({ children: [new PageBreak()], spacing: { before: 600, after: 0 } }));
 
     // ── 5. Indicators ─────────────────────────────────────────────────
+    // Fix 1: 70→3500, 30→1500; 100→5000
     const indChildren: FileChild[] = [
         sectionHeading('5. Indicadores Generales'),
         new Table({
-            width: { size: 100, type: WidthType.PERCENTAGE },
+            width: { size: 5000, type: WidthType.PERCENTAGE },
             rows: [
-                tableHeader(['Indicador', 'Valor'], [70, 30]),
-                tableRow(['Período analizado', `${fmtLong(fromDate)} al ${fmtLong(toDate)}`], [70, 30]),
-                tableRow(['Total ítems en inventario', String(items.length)], [70, 30], true),
-                tableRow(['Herramientas en préstamo activo', String(activeLoans.length)], [70, 30]),
-                tableRow(['Despachos en el período', String(checkOuts)], [70, 30], true),
-                tableRow(['Ingresos en el período', String(checkIns)], [70, 30]),
-                tableRow(['Ítems con stock bajo mínimo', String(lowStock)], [70, 30], true),
-                tableRow(['Trabajadores con herramientas', String(personnelLoans.length)], [70, 30]),
+                tableHeader(['Indicador', 'Valor'], [3500, 1500]),
+                tableRow(['Período analizado', `${fmtLong(fromDate)} al ${fmtLong(toDate)}`], [3500, 1500]),
+                tableRow(['Total ítems en inventario', String(items.length)], [3500, 1500], true),
+                tableRow(['Herramientas en préstamo activo', String(activeLoans.length)], [3500, 1500]),
+                tableRow(['Despachos en el período', String(checkOuts)], [3500, 1500], true),
+                tableRow(['Ingresos en el período', String(checkIns)], [3500, 1500]),
+                tableRow(['Ítems con stock bajo mínimo', String(lowStock)], [3500, 1500], true),
+                tableRow(['Trabajadores con herramientas', String(personnelLoans.length)], [3500, 1500]),
             ],
         }),
     ];
@@ -380,14 +389,16 @@ export async function exportReportAsDocx(opts: {
             },
         },
         sections: [
-            // Cover page — no header/footer
+            // Fix 3: SectionType.NEXT_PAGE; Fix 2: add header/footer to cover
             {
                 properties: {
-                    type: SectionType.ODD_PAGE,
+                    type: SectionType.NEXT_PAGE,
                     page: {
                         margin: { top: 1440, bottom: 1440, left: 1800, right: 1800 },
                     },
                 },
+                headers: { default: docHeader },
+                footers: { default: coverFooter },
                 children: coverChildren,
             },
             // TOC + body — with header/footer
