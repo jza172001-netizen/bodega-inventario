@@ -611,8 +611,16 @@ const MovementRow: React.FC<{
     onSelect: (idx: number, id: string) => void;
     onCreateItem: (idx: number, name: string, unit: string, type: InventoryType) => void;
 }> = ({ pm, idx, items, sel, onSelect, onCreateItem }) => {
-    const [showCreate, setShowCreate] = useState(false);
+    const [mode, setMode] = useState<'idle' | 'browse' | 'create'>('idle');
+    const [search, setSearch] = useState('');
     const chosen = pm.matchedItem ?? (sel[idx] ? items.find(i => i.id === sel[idx]) ?? null : null);
+
+    const filteredItems = search.trim()
+        ? items.filter(i => i.name.toLowerCase().includes(search.toLowerCase()))
+        : items;
+
+    const handleSelect = (id: string) => { onSelect(idx, id); setMode('idle'); setSearch(''); };
+
     return (
         <div className="flex items-start gap-3 p-2.5 rounded-xl bg-gray-50">
             <span className={`mt-0.5 w-3 h-3 rounded-full flex-shrink-0 ${chosen ? 'bg-green-400' : pm.candidates.length ? 'bg-amber-400' : 'bg-red-300'}`} />
@@ -621,31 +629,77 @@ const MovementRow: React.FC<{
                     <span className="text-sm font-black text-gray-700">{pm.quantity}</span>
                     <span className="text-sm text-gray-500 italic truncate">"{pm.rawName}"</span>
                 </div>
+
                 {chosen ? (
-                    <p className="text-xs text-green-700 font-semibold mt-0.5">→ {chosen.name}</p>
-                ) : pm.candidates.length > 0 ? (
-                    <div className="mt-1 flex flex-wrap gap-1">
-                        <p className="text-xs text-amber-600 w-full mb-0.5">¿Cuál de estos?</p>
-                        {pm.candidates.map(c => (
-                            <button key={c.id} onClick={() => onSelect(idx, c.id)}
-                                className={`text-xs px-2 py-0.5 rounded-full border transition-all ${sel[idx] === c.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'}`}>
-                                {c.name}
-                            </button>
-                        ))}
+                    <div className="flex items-center gap-2 mt-0.5">
+                        <p className="text-xs text-green-700 font-semibold">→ {chosen.name}</p>
+                        <button onClick={() => { setMode('browse'); setSearch(''); }}
+                            className="text-[10px] text-gray-400 hover:text-blue-500 underline">cambiar</button>
                     </div>
-                ) : showCreate ? (
-                    <div className="mt-1 grid grid-cols-2 gap-1">
-                        {(Object.entries(TYPE_LABELS) as [InventoryType, string][]).map(([type, label]) => (
-                            <button key={type} onClick={() => { onCreateItem(idx, pm.rawName, pm.unit, type); setShowCreate(false); }}
-                                className="py-1 px-2 border border-gray-200 hover:border-blue-400 hover:bg-blue-50 rounded-lg text-[10px] font-semibold text-gray-600 transition-all text-left">
-                                {label}
-                            </button>
-                        ))}
+                ) : mode === 'browse' ? (
+                    <div className="mt-1 space-y-1">
+                        <input
+                            autoFocus
+                            type="text"
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            placeholder="Buscar ítem..."
+                            className="w-full text-xs border border-blue-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                        />
+                        <div className="max-h-32 overflow-y-auto space-y-0.5">
+                            {filteredItems.slice(0, 20).map(i => (
+                                <button key={i.id} onClick={() => handleSelect(i.id)}
+                                    className="w-full text-left text-xs px-2 py-1 rounded-lg hover:bg-blue-50 hover:text-blue-700 text-gray-700 transition-colors">
+                                    {i.name}
+                                    <span className="ml-1 text-gray-400">({i.quantity} {i.unit})</span>
+                                </button>
+                            ))}
+                            {filteredItems.length === 0 && <p className="text-xs text-gray-400 px-2">Sin resultados</p>}
+                        </div>
+                        <div className="flex gap-1 pt-1 border-t border-gray-100">
+                            <button onClick={() => setMode('create')}
+                                className="text-[10px] font-black text-green-600 hover:underline">+ Crear ítem nuevo</button>
+                            <span className="text-gray-300">·</span>
+                            <button onClick={() => setMode('idle')}
+                                className="text-[10px] text-gray-400 hover:underline">Cancelar</button>
+                        </div>
+                    </div>
+                ) : mode === 'create' ? (
+                    <div className="mt-1 space-y-1">
+                        <p className="text-[10px] text-gray-500">¿Qué tipo de ítem es <span className="font-bold">"{pm.rawName}"</span>?</p>
+                        <div className="grid grid-cols-2 gap-1">
+                            {(Object.entries(TYPE_LABELS) as [InventoryType, string][]).map(([type, label]) => (
+                                <button key={type} onClick={() => { onCreateItem(idx, pm.rawName, pm.unit, type); setMode('idle'); }}
+                                    className="py-1 px-2 border border-gray-200 hover:border-blue-400 hover:bg-blue-50 rounded-lg text-[10px] font-semibold text-gray-600 transition-all text-left">
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+                        <button onClick={() => setMode('browse')}
+                            className="text-[10px] text-gray-400 hover:underline">← Volver a la lista</button>
+                    </div>
+                ) : pm.candidates.length > 0 ? (
+                    <div className="mt-1 space-y-1">
+                        <div className="flex flex-wrap gap-1">
+                            <p className="text-xs text-amber-600 w-full mb-0.5">¿Cuál de estos?</p>
+                            {pm.candidates.map(c => (
+                                <button key={c.id} onClick={() => onSelect(idx, c.id)}
+                                    className={`text-xs px-2 py-0.5 rounded-full border transition-all ${sel[idx] === c.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'}`}>
+                                    {c.name}
+                                </button>
+                            ))}
+                        </div>
+                        <button onClick={() => { setMode('browse'); setSearch(''); }}
+                            className="text-[10px] text-gray-400 hover:text-blue-500 underline">Ver todos los ítems</button>
                     </div>
                 ) : (
                     <div className="flex items-center gap-2 mt-0.5">
                         <p className="text-xs text-red-500">No encontrado</p>
-                        <button onClick={() => setShowCreate(true)} className="text-xs font-black text-blue-600 hover:underline">+ Crear ítem</button>
+                        <button onClick={() => { setMode('browse'); setSearch(''); }}
+                            className="text-xs font-black text-blue-600 hover:underline">Seleccionar</button>
+                        <span className="text-gray-300 text-xs">·</span>
+                        <button onClick={() => setMode('create')}
+                            className="text-xs font-black text-green-600 hover:underline">+ Crear</button>
                     </div>
                 )}
             </div>

@@ -79,6 +79,8 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     const [wizardStep, setWizardStep] = useState<WizardStep | null>(null);
     const [wizardData, setWizardData] = useState<WizardData>(INIT_WIZARD);
     const [wizardDate, setWizardDate] = useState<string>(todayISO());
+    // For HAND_TOOL / ELECTRICAL_TOOL: checkbox-based selection (itemId → qty)
+    const [wizardToolSel, setWizardToolSel] = useState<Map<string, number>>(new Map());
 
     // Panel state
     const [activePanel, setActivePanel] = useState<ActivePanel>(null);
@@ -135,12 +137,29 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     const startWizard = () => {
         setWizardData(INIT_WIZARD);
         setWizardDate(todayISO());
+        setWizardToolSel(new Map());
         setWizardStep('select_types');
         setActivePanel(null);
         onBehaviorLog?.('BUTTON', 'Tocó botón: Registrar salida');
     };
 
-    const cancelWizard = () => { setWizardStep(null); setInput(''); };
+    const cancelWizard = () => { setWizardStep(null); setInput(''); setWizardToolSel(new Map()); };
+
+    const toggleWizardTool = (itemId: string) => {
+        setWizardToolSel(prev => {
+            const next = new Map(prev);
+            if (next.has(itemId)) next.delete(itemId); else next.set(itemId, 1);
+            return next;
+        });
+    };
+
+    const setWizardToolQty = (itemId: string, qty: number) => {
+        setWizardToolSel(prev => {
+            const next = new Map(prev);
+            if (next.has(itemId)) next.set(itemId, Math.max(1, qty));
+            return next;
+        });
+    };
 
     const handleConfirmWizard = () => {
         const worker = wizardData.worker
@@ -151,14 +170,24 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         const ts = wizardDate ? new Date(wizardDate + 'T12:00:00') : new Date();
 
         const toLog: Array<Omit<Movement, 'id'>> = [];
+        const TOOL_TYPES = new Set([InventoryType.HAND_TOOL, InventoryType.ELECTRICAL_TOOL]);
         for (const type of wizardData.selectedTypes) {
-            const parsed = parseItemList(wizardData.itemInputs[type] ?? '');
-            for (const { rawName, quantity } of parsed) {
-                if (!rawName) continue;
-                let item = items.find(i => i.inventoryType === type && i.name.toLowerCase() === rawName.toLowerCase());
-                if (!item) item = items.find(i => i.inventoryType === type && i.name.toLowerCase().includes(rawName.toLowerCase()));
-                if (!item) item = onCreateItem({ name: rawName, inventoryType: type, quantity: 0, unit: 'unidad', category: 'Sin clasificar', subCategory: 'General', minStock: 0, price: 0 });
-                toLog.push({ itemId: item.id, type: MovementType.CHECK_OUT, quantity, timestamp: ts, personnelId: worker?.id, projectId: project?.id, notes: '', isLoan: LOAN_TYPES.has(type), isReturned: false });
+            if (TOOL_TYPES.has(type)) {
+                // Use checkbox selections filtered to this type
+                for (const [itemId, quantity] of wizardToolSel.entries()) {
+                    const item = items.find(i => i.id === itemId && i.inventoryType === type);
+                    if (!item) continue;
+                    toLog.push({ itemId: item.id, type: MovementType.CHECK_OUT, quantity, timestamp: ts, personnelId: worker?.id, projectId: project?.id, notes: '', isLoan: true, isReturned: false });
+                }
+            } else {
+                const parsed = parseItemList(wizardData.itemInputs[type] ?? '');
+                for (const { rawName, quantity } of parsed) {
+                    if (!rawName) continue;
+                    let item = items.find(i => i.inventoryType === type && i.name.toLowerCase() === rawName.toLowerCase());
+                    if (!item) item = items.find(i => i.inventoryType === type && i.name.toLowerCase().includes(rawName.toLowerCase()));
+                    if (!item) item = onCreateItem({ name: rawName, inventoryType: type, quantity: 0, unit: 'unidad', category: 'Sin clasificar', subCategory: 'General', minStock: 0, price: 0 });
+                    toLog.push({ itemId: item.id, type: MovementType.CHECK_OUT, quantity, timestamp: ts, personnelId: worker?.id, projectId: project?.id, notes: '', isLoan: false, isReturned: false });
+                }
             }
         }
         if (toLog.length > 0) {
@@ -364,19 +393,68 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         if (wizardStep === 'enter_items') {
             const workerName = (wizardData.worker?.name ?? wizardData.newWorkerName) || 'Sin asignar';
             const projectName = (wizardData.project?.name ?? wizardData.newProjectName) || 'Sin proyecto';
-            const hasAnyItem = wizardData.selectedTypes.some(t => (wizardData.itemInputs[t] ?? '').trim());
+            const toolTypes = wizardData.selectedTypes.filter(t => t === InventoryType.HAND_TOOL || t === InventoryType.ELECTRICAL_TOOL);
+            const otherTypes = wizardData.selectedTypes.filter(t => t !== InventoryType.HAND_TOOL && t !== InventoryType.ELECTRICAL_TOOL);
+            const hasTools = wizardToolSel.size > 0;
+            const hasOther = otherTypes.some(t => (wizardData.itemInputs[t] ?? '').trim());
+            const hasAnyItem = hasTools || hasOther;
+
             return (
                 <div className="flex-1 overflow-y-auto px-3 py-4 space-y-3">
                     <div>
                         <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1">Paso 4 de 4</p>
                         <p className="text-sm font-bold text-gray-800 mb-0.5">Artículos a despachar</p>
                         <p className="text-[11px] text-gray-400 mb-3">Para <strong>{workerName}</strong> · {projectName}</p>
-                        {wizardData.selectedTypes.map(type => (
+
+                        {/* Herramientas: lista con checkboxes */}
+                        {toolTypes.map(type => {
+                            const available = items.filter(i => i.inventoryType === type && i.quantity > 0)
+                                .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+                            return (
+                                <div key={type} className="mb-3">
+                                    <label className="text-xs font-bold text-gray-600 block mb-1">
+                                        {TYPE_LABELS[type]}
+                                        {wizardToolSel.size > 0 && (
+                                            <span className="ml-1 font-normal text-blue-500">
+                                                ({[...wizardToolSel.entries()].filter(([id]) => items.find(i => i.id === id)?.inventoryType === type).length} selec.)
+                                            </span>
+                                        )}
+                                    </label>
+                                    {available.length === 0 ? (
+                                        <p className="text-xs text-gray-400 py-2 text-center">Sin stock disponible de este tipo.</p>
+                                    ) : (
+                                        <div className="space-y-1 max-h-36 overflow-y-auto border border-gray-200 rounded-xl p-1">
+                                            {available.map(item => {
+                                                const isSelected = wizardToolSel.has(item.id);
+                                                const qty = wizardToolSel.get(item.id) ?? 1;
+                                                return (
+                                                    <div key={item.id} onClick={() => toggleWizardTool(item.id)}
+                                                        className={`flex items-center gap-2 px-2 py-1.5 rounded-lg border cursor-pointer transition-all ${isSelected ? 'bg-blue-50 border-blue-300' : 'bg-white border-transparent hover:border-blue-200 hover:bg-blue-50'}`}>
+                                                        <input type="checkbox" checked={isSelected} readOnly className="w-4 h-4 accent-blue-600 flex-shrink-0" />
+                                                        <span className="flex-1 text-sm text-gray-800 truncate">{item.name}</span>
+                                                        <span className="text-[10px] text-gray-400 flex-shrink-0">{item.quantity} disp.</span>
+                                                        {isSelected && (
+                                                            <input type="number" value={qty} min={1} max={item.quantity}
+                                                                onChange={e => setWizardToolQty(item.id, parseInt(e.target.value) || 1)}
+                                                                onClick={e => e.stopPropagation()}
+                                                                className="w-11 text-xs text-center border border-blue-300 rounded-lg px-1 py-0.5 bg-white focus:outline-none" />
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+
+                        {/* Consumibles / EPP: textarea libre */}
+                        {otherTypes.map(type => (
                             <div key={type} className="mb-3">
                                 <label className="text-xs font-bold text-gray-600 block mb-1">{TYPE_LABELS[type]}</label>
                                 <textarea value={wizardData.itemInputs[type] ?? ''}
                                     onChange={e => setWizardData(d => ({ ...d, itemInputs: { ...d.itemInputs, [type]: e.target.value } }))}
-                                    placeholder="Ej: 2 taladros, 1 pulidora" rows={2}
+                                    placeholder="Ej: 5 cascos, 3 guantes" rows={2}
                                     className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
                             </div>
                         ))}
@@ -394,9 +472,15 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         if (wizardStep === 'confirm') {
             const workerName = (wizardData.worker?.name ?? wizardData.newWorkerName) || 'Sin asignar';
             const projectName = (wizardData.project?.name ?? wizardData.newProjectName) || 'Sin proyecto';
-            const preview = wizardData.selectedTypes.flatMap(type =>
-                parseItemList(wizardData.itemInputs[type] ?? '').map(p => ({ ...p, type }))
-            );
+            const TOOL_TYPES_SET = new Set([InventoryType.HAND_TOOL, InventoryType.ELECTRICAL_TOOL]);
+            const preview = wizardData.selectedTypes.flatMap(type => {
+                if (TOOL_TYPES_SET.has(type)) {
+                    return [...wizardToolSel.entries()]
+                        .filter(([id]) => items.find(i => i.id === id)?.inventoryType === type)
+                        .map(([id, quantity]) => ({ rawName: items.find(i => i.id === id)?.name ?? id, quantity, type }));
+                }
+                return parseItemList(wizardData.itemInputs[type] ?? '').map(p => ({ ...p, type }));
+            });
             return (
                 <div className="flex-1 overflow-y-auto px-3 py-4 space-y-3">
                     <div>
