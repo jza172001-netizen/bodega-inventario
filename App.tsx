@@ -14,6 +14,7 @@ import CopilotView from './components/CopilotView';
 import { FloatingChat } from './components/FloatingChat';
 import { OnboardingModal } from './components/OnboardingModal';
 import { HelpView } from './components/HelpView';
+import { TraceabilityView } from './components/TraceabilityView';
 import { WhatsAppView } from './components/WhatsAppView';
 import { PickupView } from './components/PickupView';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
@@ -22,6 +23,7 @@ import { SettingsModal, AppConfig, DEFAULT_CONFIG } from './components/SettingsM
 import { requestNotificationPermission, checkAndNotifyPickup } from './services/notificationService';
 
 import { mockItems, mockMovements, mockPersonnel, mockPurchaseOrders, mockProjects, mockUsers } from './mockData';
+import { realUsers as seedUsers } from './realData';
 import { Item, Movement, MovementType, Personnel, PurchaseOrder, UserRole, InventoryType, Project, AppUser, PurchaseOrderStatus, AuditLog, BehaviorLog } from './types';
 import { LoginView } from './components/LoginView';
 import { LandingPage } from './components/LandingPage';
@@ -35,29 +37,56 @@ import { MovementsIcon } from './components/icons/MovementsIcon';
 import { PersonnelIcon } from './components/icons/PersonnelIcon';
 import { WhatsAppIcon } from './components/icons/WhatsAppIcon';
 
-type View = 'dashboard' | 'kardex' | 'personnel' | 'copilot' | 'help' | 'whatsapp' | 'pickup';
+type View = 'dashboard' | 'kardex' | 'personnel' | 'copilot' | 'help' | 'whatsapp' | 'pickup' | 'traceability';
 type KardexTab = 'movements' | 'loans' | 'inventory' | 'projects';
 
 const SESSION_KEY = 'bodega_session';
 const ONBOARDING_KEY = 'bodega_onboarding_v1';
+
+// Migra datos de usuarios viejos: toma name/role del seed pero preserva credenciales.
+// Busca por ID primero; si no coincide, busca por role (para compatibilidad con datos legacy).
+const migrateUsers = (stored: AppUser[]): AppUser[] => {
+    const usedIds = new Set<string>();
+    return seedUsers.map(seed => {
+        let found = stored.find(u => u.id === seed.id);
+        if (!found) found = stored.find(u => u.role === seed.role && !usedIds.has(u.id));
+        if (found) {
+            usedIds.add(found.id);
+            return { ...seed, username: found.username, password: found.password, setupComplete: found.setupComplete ?? (!!found.username && !!found.password) };
+        }
+        return seed;
+    });
+};
 
 const App: React.FC = () => {
     const [loggedIn, setLoggedIn] = useState(() => !!localStorage.getItem(SESSION_KEY));
     const [userRole, setUserRole] = useState<UserRole>(() => {
         try { return JSON.parse(localStorage.getItem(SESSION_KEY) || '{}').role ?? UserRole.OWNER; } catch { return UserRole.OWNER; }
     });
-    const [userName, setUserName] = useState<string>(() => {
-        try { return JSON.parse(localStorage.getItem(SESSION_KEY) || '{}').name ?? ''; } catch { return ''; }
+    // Carga inicial síncrona desde localStorage, con fallback a mockData
+    const [users, setUsers] = useState<AppUser[]>(() => {
+        const s = loadFromLocalStorage();
+        return migrateUsers(s?.users ?? mockUsers);
     });
 
-    // Carga inicial síncrona desde localStorage, con fallback a mockData
-    const [users, setUsers] = useState<AppUser[]>(() => { const s = loadFromLocalStorage(); return s?.users ?? mockUsers; });
+    const [userName, setUserName] = useState<string>(() => {
+        try {
+            const session = JSON.parse(localStorage.getItem(SESSION_KEY) || '{}');
+            if (!session.name) return '';
+            if (session.role === UserRole.VISITOR) return 'Visitante';
+            // Si el nombre guardado coincide exactamente con un seed, usarlo
+            if (seedUsers.some(u => u.name === session.name)) return session.name;
+            // Nombre desactualizado (ej: 'Julio' → 'Juli', 'Administrador' → 'Juli')
+            // Para OWNER siempre hay un único seed; para EMPLOYEE buscamos por rol
+            const seed = seedUsers.find(u => u.role === session.role);
+            return seed?.name ?? session.name;
+        } catch { return ''; }
+    });
     const [items, setItems] = useState<Item[]>(() => { const s = loadFromLocalStorage(); return s?.items ?? mockItems; });
     const [movements, setMovements] = useState<Movement[]>(() => { const s = loadFromLocalStorage(); return s?.movements ?? mockMovements; });
     const [personnel, setPersonnel] = useState<Personnel[]>(() => {
         const s = loadFromLocalStorage();
         const ls = s?.personnel;
-        // Filter corrupted records: valid names are ≥ 4 chars (catches ghost entries like "Do", "mi", "PAG")
         if (ls?.length) {
             const valid = ls.filter(p => p.name?.trim().length >= 4);
             if (valid.length > 0) return valid;
@@ -66,8 +95,18 @@ const App: React.FC = () => {
     });
     const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(() => { const s = loadFromLocalStorage(); return s?.purchaseOrders ?? mockPurchaseOrders; });
     const [projects, setProjects] = useState<Project[]>(() => { const s = loadFromLocalStorage(); return s?.projects ?? mockProjects; });
-    const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => { const s = loadFromLocalStorage(); return s?.auditLogs ?? []; });
-    const [behaviorLogs, setBehaviorLogs] = useState<BehaviorLog[]>(() => { const s = loadFromLocalStorage(); return s?.behaviorLogs ?? []; });
+    const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
+        const s = loadFromLocalStorage();
+        const logs = s?.auditLogs ?? [];
+        const fix: Record<string, string> = { Administrador: 'Juli', administrador: 'Juli', Julio: 'Juli', julio: 'Juli' };
+        return logs.map(l => fix[l.actor] ? { ...l, actor: fix[l.actor] } : l);
+    });
+    const [behaviorLogs, setBehaviorLogs] = useState<BehaviorLog[]>(() => {
+        const s = loadFromLocalStorage();
+        const logs = s?.behaviorLogs ?? [];
+        const fix: Record<string, string> = { Julio: 'Juli', julio: 'Juli', Administrador: 'Juli', administrador: 'Juli' };
+        return logs.map(l => fix[l.actor] ? { ...l, actor: fix[l.actor] } : l);
+    });
 
     const addAuditLog = (action: string, description: string, actorOverride?: string) => {
         const entry: AuditLog = {
@@ -92,15 +131,17 @@ const App: React.FC = () => {
     };
 
     const handleLoginSuccess = (role: UserRole, name: string) => {
+        const nameFix: Record<string, string> = { Julio: 'Juli', julio: 'Juli', Administrador: 'Juli', administrador: 'Juli' };
+        const fixedName = nameFix[name] ?? name;
         setUserRole(role);
-        setUserName(name);
+        setUserName(fixedName);
         setLoggedIn(true);
-        localStorage.setItem(SESSION_KEY, JSON.stringify({ role, name }));
-        addAuditLog('USER_LOGIN', `Ingresó a la app: ${name} (${role})`, name);
+        localStorage.setItem(SESSION_KEY, JSON.stringify({ role, name: fixedName }));
+        addAuditLog('USER_LOGIN', `Ingresó a la app: ${fixedName} (${role})`, fixedName);
         setBehaviorLogs(prev => [{
             id: `beh-${Date.now()}-${Math.random().toString(36).slice(2)}`,
             timestamp: new Date(),
-            actor: name,
+            actor: fixedName,
             action: 'SESSION_LOGIN',
             detail: `Inició sesión`,
         }, ...prev]);
@@ -138,17 +179,19 @@ const App: React.FC = () => {
     // Sync desde Supabase en background al montar (no bloquea la UI)
     useEffect(() => {
         db.fetchUsers().then(data => {
-            if (data.length > 0) setUsers(prev => data.map(remote => {
-                const local = prev.find(p => p.id === remote.id);
-                // Supabase fetchUsers always returns password:''. Preserve local creds.
-                return local
-                    ? { ...remote, password: local.password || remote.password, setupComplete: local.setupComplete ?? !!remote.username }
-                    : remote;
-            }));
+            if (data.length > 0) {
+                setUsers(prev => migrateUsers(data).map(mu => {
+                    const local = prev.find(p => p.id === mu.id);
+                    // Si el estado local ya tiene credenciales, nunca las pisemos con datos vacíos de Supabase
+                    if (local?.setupComplete && !mu.setupComplete) return local;
+                    if (local?.username && !mu.username) return { ...mu, username: local.username, password: local.password, setupComplete: local.setupComplete };
+                    return mu;
+                }));
+            }
         }).catch(() => {});
         db.fetchItems().then(data => { if (data.length > 0) setItems(data); }).catch(() => {});
         db.fetchMovements().then(data => { if (data.length > 0) setMovements(data); }).catch(() => {});
-        db.fetchPersonnel().then(data => { if (data.length > 0) setPersonnel(data); }).catch(() => {});
+        db.fetchPersonnel().then(data => { if (data.length > 0) setPersonnel(data.filter(p => p.name?.trim().length >= 4)); }).catch(() => {});
         db.fetchPurchaseOrders().then(data => { if (data.length > 0) setPurchaseOrders(data); }).catch(() => {});
         db.fetchProjects().then(data => { if (data.length > 0) setProjects(data); }).catch(() => {});
     }, []);
@@ -169,7 +212,7 @@ const App: React.FC = () => {
     const [currentView, setCurrentView] = useState<View>('dashboard');
     const [kardexTab, setKardexTab] = useState<KardexTab>('movements');
     const EMPLOYEE_VIEWS: View[] = ['dashboard', 'kardex', 'personnel', 'help', 'whatsapp', 'pickup'];
-    const VISITOR_VIEWS: View[] = ['dashboard', 'kardex'];
+    const VISITOR_VIEWS: View[] = ['dashboard', 'kardex', 'whatsapp'];
     const effectiveView: View = (userRole === UserRole.VISITOR && !VISITOR_VIEWS.includes(currentView))
         ? 'dashboard'
         : (userRole === UserRole.EMPLOYEE && !EMPLOYEE_VIEWS.includes(currentView))
@@ -225,10 +268,37 @@ const App: React.FC = () => {
                 setPurchaseOrders([]);
                 setProjects([]);
                 addAuditLog('ITEM_DELETED', 'Se borró toda la bodega (reset completo)');
+                // También borra de Supabase (fire and forget)
+                Promise.all([
+                    db.deleteAllMovements(),
+                    db.deleteAllItems(),
+                    db.deleteAllPersonnel(),
+                    db.deleteAllProjects(),
+                    db.deleteAllPurchaseOrders(),
+                ]).catch(e => console.error('Error limpiando Supabase:', e));
                 alert('Bodega limpia. Ahora puedes empezar a registrar tus propios materiales.');
             },
             'Borrar toda la bodega',
             'Se eliminarán TODOS los productos, trabajadores y movimientos. Irreversible.',
+        );
+    };
+
+    const handleResetMaterials = () => {
+        requirePin(
+            () => {
+                setItems([]);
+                setMovements([]);
+                setPurchaseOrders([]);
+                addAuditLog('ITEM_DELETED', 'Restableció materiales (ítems, movimientos, OC). Personal conservado.');
+                Promise.all([
+                    db.deleteAllMovements(),
+                    db.deleteAllItems(),
+                    db.deleteAllPurchaseOrders(),
+                ]).catch(e => console.error('Error limpiando materiales:', e));
+                alert('Materiales limpiados. El personal se conserva.');
+            },
+            'Restablecer solo materiales',
+            'Se eliminarán ítems, movimientos y órdenes de compra. El personal permanece.',
         );
     };
 
@@ -240,6 +310,7 @@ const App: React.FC = () => {
         help: 'Ayuda',
         whatsapp: 'WhatsApp',
         pickup: 'A Recoger',
+        traceability: 'Trazabilidad',
     };
 
     const selectView = (view: View, tab?: KardexTab) => {
@@ -551,13 +622,23 @@ const App: React.FC = () => {
                     <nav className="px-2 space-y-1">
                         <NavItem icon={DashboardIcon} label="Resumen" onClick={() => selectView('dashboard')} isActive={effectiveView === 'dashboard'} />
                         <NavItem icon={MovementsIcon} label="Kardex" onClick={() => selectView('kardex')} isActive={effectiveView === 'kardex'} />
+                        <NavItem icon={WhatsAppIcon} label="WhatsApp" onClick={() => selectView('whatsapp')} isActive={effectiveView === 'whatsapp'} />
                         {userRole !== UserRole.VISITOR && (
                             <>
                                 <NavItem icon={PersonnelIcon} label="Personal" onClick={() => selectView('personnel')} isActive={effectiveView === 'personnel'} />
-                                <NavItem icon={WhatsAppIcon} label="WhatsApp" onClick={() => selectView('whatsapp')} isActive={effectiveView === 'whatsapp'} />
                                 <NavItem icon={PickupNavIcon} label="A Recoger" onClick={() => selectView('pickup')} isActive={effectiveView === 'pickup'} badge={pendingPickupCount} />
                             </>
                         )}
+                        <NavItem
+                            icon={({ className }: { className?: string }) => (
+                                <svg className={className} fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 14.25v2.25m3-4.5v4.5m3-6.75v6.75m3-9v9M6 20.25h12A2.25 2.25 0 0 0 20.25 18V6A2.25 2.25 0 0 0 18 3.75H6A2.25 2.25 0 0 0 3.75 6v12A2.25 2.25 0 0 0 6 20.25Z" />
+                                </svg>
+                            )}
+                            label="Trazabilidad"
+                            onClick={() => selectView('traceability')}
+                            isActive={effectiveView === 'traceability'}
+                        />
                     </nav>
                 </div>
 
@@ -565,24 +646,22 @@ const App: React.FC = () => {
                 <div className="flex-shrink-0 px-2 py-3 border-t border-gray-100 space-y-1">
                     <NavItem icon={QuestionMarkIcon} label="Ayuda ❓" onClick={() => selectView('help')} isActive={currentView === 'help'} />
                     <button
-                        onClick={() => setSettingsOpen(true)}
+                        onClick={() => { addBehaviorLog('BUTTON', 'Abrió: Configuración'); setSettingsOpen(true); }}
                         className="w-full flex items-center text-left px-4 py-2.5 text-xs font-semibold rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-all"
                     >
-                        <span className="mr-3 text-base">⚙️</span>
+                        <svg className="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                        </svg>
                         Configuración
-                    </button>
-                    <button
-                        onClick={() => setShowOnboarding(true)}
-                        className="w-full flex items-center text-left px-4 py-2.5 text-xs font-semibold rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-all"
-                    >
-                        <span className="mr-3 text-base">🎓</span>
-                        Ver tutorial
                     </button>
                     <button
                         onClick={handleLogout}
                         className="w-full flex items-center text-left px-4 py-2.5 text-xs font-semibold rounded-xl text-gray-400 hover:bg-red-50 hover:text-red-600 transition-all"
                     >
-                        <span className="mr-3 text-base">🚪</span>
+                        <svg className="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
+                        </svg>
                         Cerrar sesión
                     </button>
                 </div>
@@ -594,7 +673,7 @@ const App: React.FC = () => {
                     userRole={userRole}
                     userName={userName}
                     onStartNewBusiness={handleResetAllData}
-                    onOpenUserManagement={() => setUserManagementOpen(true)}
+                    onOpenUserManagement={() => { addBehaviorLog('BUTTON', 'Abrió: Gestión de usuarios'); setUserManagementOpen(true); }}
                     onLogout={handleLogout}
                     onExportData={handleExportData}
                     onImportData={handleImportData}
@@ -612,6 +691,7 @@ const App: React.FC = () => {
                                 personnel={personnel}
                                 purchaseOrders={purchaseOrders}
                                 onNavigate={(v, tab) => selectView(v as View, tab as KardexTab | undefined)}
+                                onBehaviorLog={addBehaviorLog}
                             />
                         )}
                         {effectiveView === 'kardex' && (
@@ -639,7 +719,7 @@ const App: React.FC = () => {
                                 onAddProject={handleAddProject}
                                 onDeleteProject={handleDeleteProject}
                                 showEconomicValues={appConfig.showEconomicValues}
-                                onTabChange={(tab) => addBehaviorLog('NAV', `Kardex → ${tab}`)}
+                                onBehaviorLog={addBehaviorLog}
                             />
                         )}
                         {effectiveView === 'personnel' && (
@@ -658,6 +738,7 @@ const App: React.FC = () => {
                                 onCreateProject={handleCreateProjectByName}
                                 onTransferLoan={handleTransferLoan}
                                 userRole={userRole}
+                                onBehaviorLog={addBehaviorLog}
                             />
                         )}
                         {effectiveView === 'copilot' && (
@@ -671,11 +752,25 @@ const App: React.FC = () => {
                                 onCreateItem={handleAddItemSync}
                                 onCreateProject={handleAddProjectSync}
                                 onCreatePersonnel={handleAddPersonnelSync}
+                                onEditItem={handleEditItem}
+                                onBehaviorLog={addBehaviorLog}
                             />
                         )}
                         {effectiveView === 'help' && <HelpView />}
+                        {effectiveView === 'traceability' && (
+                            <TraceabilityView
+                                movements={movements}
+                                items={items}
+                                personnel={personnel}
+                                projects={projects}
+                                auditLogs={auditLogs}
+                                behaviorLogs={behaviorLogs}
+                                users={users}
+                                onBehaviorLog={addBehaviorLog}
+                            />
+                        )}
                         {effectiveView === 'whatsapp' && (
-                            <WhatsAppView movements={movements} items={items} personnel={personnel} />
+                            <WhatsAppView movements={movements} items={items} personnel={personnel} readOnly={userRole === UserRole.VISITOR} onBehaviorLog={addBehaviorLog} />
                         )}
                         {effectiveView === 'pickup' && (
                             <PickupView
@@ -685,6 +780,7 @@ const App: React.FC = () => {
                                 projects={projects}
                                 onMarkPendingPickup={handleMarkPendingPickup}
                                 onReturnItem={handleReturnItem}
+                                onBehaviorLog={addBehaviorLog}
                             />
                         )}
                     </div>
@@ -703,6 +799,9 @@ const App: React.FC = () => {
                     config={appConfig}
                     onChange={handleConfigChange}
                     onClose={() => setSettingsOpen(false)}
+                    userRole={userRole}
+                    onResetAllData={handleResetAllData}
+                    onResetMaterials={handleResetMaterials}
                 />
             )}
             {isSearchOpen && (

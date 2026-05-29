@@ -1,5 +1,5 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { Item, InventoryType, UserRole, Movement, Personnel } from '../types';
 import { PlusIcon } from './icons/PlusIcon';
 import { EditIcon } from './icons/EditIcon';
@@ -19,21 +19,32 @@ interface InventoryViewProps {
     userRole: UserRole;
     category: string | null;
     onGoBack: () => void;
+    onBehaviorLog?: (action: string, detail: string) => void;
 }
 
-export const InventoryView: React.FC<InventoryViewProps> = ({ items, movements = [], personnel = [], openAddItemModal, onEditItem, onDeleteItem, onItemHistory, onOpenInvoiceReader, userRole, category, onGoBack }) => {
+export const InventoryView: React.FC<InventoryViewProps> = ({ items, movements = [], personnel = [], openAddItemModal, onEditItem, onDeleteItem, onItemHistory, onOpenInvoiceReader, userRole, category, onGoBack, onBehaviorLog }) => {
     const [search, setSearch] = useState('');
-
+    const bottomSentinelRef = useRef<HTMLDivElement>(null);
     const activeLoans = useMemo(() => movements.filter(m => m.isLoan && !m.isReturned), [movements]);
 
+    useEffect(() => {
+        const el = bottomSentinelRef.current;
+        if (!el) return;
+        const obs = new IntersectionObserver(([entry]) => {
+            if (entry.isIntersecting) onBehaviorLog?.('SCROLL', 'Llegó al fondo: Inventario');
+        }, { threshold: 0.5 });
+        obs.observe(el);
+        return () => obs.disconnect();
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
     const displayItems = useMemo(() => {
-        if (!search.trim()) return items;
+        const sorted = [...items].sort((a, b) => a.name.localeCompare(b.name, 'es'));
+        if (!search.trim()) return sorted;
         const q = search.toLowerCase();
-        return items.filter(i => {
+        return sorted.filter(i => {
             if (i.name.toLowerCase().includes(q)) return true;
             if (i.subCategory.toLowerCase().includes(q)) return true;
             if (i.category.toLowerCase().includes(q)) return true;
-            // C8: also match by active-loan worker name
             const loan = activeLoans.find(m => m.itemId === i.id);
             if (loan?.personnelId) {
                 const name = personnel.find(p => p.id === loan.personnelId)?.name ?? '';
@@ -78,6 +89,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, movements =
                             type="text"
                             value={search}
                             onChange={e => setSearch(e.target.value)}
+                            onBlur={e => { if (e.target.value.trim().length > 1) onBehaviorLog?.('SEARCH', `Buscó en inventario: "${e.target.value.trim()}"`); }}
                             placeholder="Buscar artículo..."
                             className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             autoComplete="off"
@@ -106,16 +118,22 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, movements =
                         <div className="min-w-0 flex-1">
                             <p className="font-semibold text-gray-900 text-sm truncate cursor-pointer" onClick={() => onItemHistory(item)}>{item.name}</p>
                             <p className="text-xs text-gray-500 truncate">{item.subCategory}</p>
+                            {item.inventoryType === InventoryType.ELECTRICAL_TOOL && (item.brand || item.color) && (
+                                <div className="flex flex-wrap gap-1 mt-0.5">
+                                    {item.brand && <span className="text-[10px] font-semibold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">{item.brand}</span>}
+                                    {item.color && <span className="text-[10px] font-semibold bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full">{item.color}</span>}
+                                </div>
+                            )}
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
                             <span className="text-sm font-bold text-gray-800">{item.quantity} <span className="text-xs font-normal text-gray-500">{item.unit}</span></span>
                             <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStockStatusColor(item)}`}>{getStockStatusText(item)}</span>
                             <div className="flex gap-1">
-                                <button onClick={() => onItemHistory(item)} className="text-blue-500 p-1" title="Historial"><HistoryIcon className="w-4 h-4"/></button>
+                                <button onClick={() => { onBehaviorLog?.('BUTTON', `Ver historial: ${item.name}`); onItemHistory(item); }} className="text-blue-500 p-1" title="Historial"><HistoryIcon className="w-4 h-4"/></button>
                                 {userRole === UserRole.OWNER && (
                                     <>
-                                        <button onClick={() => onEditItem(item)} className="text-indigo-500 p-1"><EditIcon className="w-4 h-4"/></button>
-                                        <button onClick={() => onDeleteItem(item.id)} className="text-red-400 p-1"><TrashIcon className="w-4 h-4"/></button>
+                                        <button onClick={() => { onBehaviorLog?.('BUTTON', `Editó ítem: ${item.name}`); onEditItem(item); }} className="text-indigo-500 p-1"><EditIcon className="w-4 h-4"/></button>
+                                        <button onClick={() => { onBehaviorLog?.('ACTION', `Eliminó ítem: ${item.name}`); onDeleteItem(item.id); }} className="text-red-400 p-1"><TrashIcon className="w-4 h-4"/></button>
                                     </>
                                 )}
                             </div>
@@ -143,8 +161,14 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, movements =
                     <tbody className="bg-white divide-y divide-gray-200">
                         {displayItems.map(item => (
                             <tr key={item.id} className="hover:bg-gray-50">
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 cursor-pointer" onClick={() => onItemHistory(item)}>
+                                <td className="px-6 py-4 text-sm font-medium text-gray-900 cursor-pointer" onClick={() => onItemHistory(item)}>
                                     {item.name}
+                                    {item.inventoryType === InventoryType.ELECTRICAL_TOOL && (item.brand || item.color) && (
+                                        <div className="flex flex-wrap gap-1 mt-1">
+                                            {item.brand && <span className="text-[10px] font-semibold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">{item.brand}</span>}
+                                            {item.color && <span className="text-[10px] font-semibold bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full">{item.color}</span>}
+                                        </div>
+                                    )}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.subCategory}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 font-semibold">{item.quantity}</td>
@@ -155,15 +179,15 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, movements =
                                     </span>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                                    <button onClick={() => onItemHistory(item)} className="text-blue-600 hover:text-blue-900 p-1" title="Ver Historial (Kardex)">
+                                    <button onClick={() => { onBehaviorLog?.('BUTTON', `Ver historial: ${item.name}`); onItemHistory(item); }} className="text-blue-600 hover:text-blue-900 p-1" title="Ver Historial (Kardex)">
                                         <HistoryIcon className="w-5 h-5"/>
                                     </button>
                                     {userRole === UserRole.OWNER && (
                                         <>
-                                            <button onClick={() => onEditItem(item)} className="text-indigo-600 hover:text-indigo-900 p-1" title="Editar">
+                                            <button onClick={() => { onBehaviorLog?.('BUTTON', `Editó ítem: ${item.name}`); onEditItem(item); }} className="text-indigo-600 hover:text-indigo-900 p-1" title="Editar">
                                                 <EditIcon className="w-5 h-5"/>
                                             </button>
-                                            <button onClick={() => onDeleteItem(item.id)} className="text-red-600 hover:text-red-900 p-1" title="Eliminar">
+                                            <button onClick={() => { onBehaviorLog?.('ACTION', `Eliminó ítem: ${item.name}`); onDeleteItem(item.id); }} className="text-red-600 hover:text-red-900 p-1" title="Eliminar">
                                                 <TrashIcon className="w-5 h-5"/>
                                             </button>
                                         </>
@@ -179,6 +203,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, movements =
                     </div>
                 )}
             </div>{/* end desktop table */}
+            <div ref={bottomSentinelRef} className="h-px" />
         </div>
     );
 };
