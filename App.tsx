@@ -131,15 +131,17 @@ const App: React.FC = () => {
     };
 
     const handleLoginSuccess = (role: UserRole, name: string) => {
+        const nameFix: Record<string, string> = { Julio: 'Juli', julio: 'Juli', Administrador: 'Juli', administrador: 'Juli' };
+        const fixedName = nameFix[name] ?? name;
         setUserRole(role);
-        setUserName(name);
+        setUserName(fixedName);
         setLoggedIn(true);
-        localStorage.setItem(SESSION_KEY, JSON.stringify({ role, name }));
-        addAuditLog('USER_LOGIN', `Ingresó a la app: ${name} (${role})`, name);
+        localStorage.setItem(SESSION_KEY, JSON.stringify({ role, name: fixedName }));
+        addAuditLog('USER_LOGIN', `Ingresó a la app: ${fixedName} (${role})`, fixedName);
         setBehaviorLogs(prev => [{
             id: `beh-${Date.now()}-${Math.random().toString(36).slice(2)}`,
             timestamp: new Date(),
-            actor: name,
+            actor: fixedName,
             action: 'SESSION_LOGIN',
             detail: `Inició sesión`,
         }, ...prev]);
