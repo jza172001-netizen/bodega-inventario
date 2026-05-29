@@ -870,7 +870,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                     )}
 
                     {/* Contenido principal */}
-                    {wizardStep ? renderWizard()
+                    {wizardStep ? <React.Fragment key={wizardStep}>{renderWizard()}</React.Fragment>
                         : activePanel === 'loan' ? renderLoanPanel()
                         : activePanel === 'create' ? renderCreatePanel()
                         : (
