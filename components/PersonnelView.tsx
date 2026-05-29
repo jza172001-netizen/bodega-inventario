@@ -179,7 +179,7 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
             </div>
 
             {/* Índice A-Z lateral derecho */}
-            <div className="fixed right-1 top-1/2 -translate-y-1/2 flex flex-col items-center gap-0.5 z-30">
+            <div className="fixed right-0 top-1/2 -translate-y-1/2 flex flex-col items-center gap-0.5 z-30 bg-white/90 backdrop-blur-sm rounded-l-lg py-1 px-0.5 shadow-sm">
                 {ALPHABET.map(letter => {
                     const active = activeLetters.has(letter);
                     return (
