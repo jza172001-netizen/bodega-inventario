@@ -5,9 +5,8 @@ import { MovementsView } from './MovementsView';
 import { LoansView } from './LoansView';
 import { InventoryView } from './InventoryView';
 import { ProjectsView } from './ProjectsView';
-import { TraceabilityView } from './TraceabilityView';
 
-type KardexTab = 'movements' | 'loans' | 'inventory' | 'projects' | 'traceability';
+type KardexTab = 'movements' | 'loans' | 'inventory' | 'projects';
 
 interface KardexHubProps {
     // data
@@ -44,11 +43,10 @@ interface KardexHubProps {
 }
 
 const TABS: Array<{ id: KardexTab; label: string; icon: string }> = [
-    { id: 'movements',    label: 'Historial',      icon: '📋' },
-    { id: 'loans',        label: 'Préstamos',      icon: '🔑' },
-    { id: 'inventory',    label: 'Inventario',     icon: '📦' },
-    { id: 'projects',     label: 'Proyectos',      icon: '🏗' },
-    { id: 'traceability', label: 'Trazabilidad',   icon: '🔍' },
+    { id: 'movements',  label: 'Historial',  icon: '📋' },
+    { id: 'loans',      label: 'Préstamos',  icon: '🔑' },
+    { id: 'inventory',  label: 'Inventario', icon: '📦' },
+    { id: 'projects',   label: 'Proyectos',  icon: '🏗' },
 ];
 
 const INV_TYPES: Array<{ type: InventoryType | null; label: string }> = [
@@ -92,14 +90,14 @@ export const KardexHub: React.FC<KardexHubProps> = ({
                         <button
                             key={tab.id}
                             onClick={() => handleTabClick(tab.id)}
-                            className={`flex-1 flex flex-col items-center py-3 px-1 text-xs font-bold transition-all border-b-2 ${
+                            className={`flex-1 flex flex-col items-center py-2.5 px-1 text-xs font-bold transition-all border-b-2 ${
                                 activeTab === tab.id
                                     ? 'border-blue-600 text-blue-600 bg-blue-50'
                                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
                             }`}
                         >
                             <span className="text-base mb-0.5">{tab.icon}</span>
-                            <span className="hidden sm:block">{tab.label}</span>
+                            <span className="text-[10px] leading-tight">{tab.label}</span>
                         </button>
                     ))}
                 </div>
@@ -178,19 +176,6 @@ export const KardexHub: React.FC<KardexHubProps> = ({
                     onGoBack={onGoBack}
                     userRole={userRole}
                     showEconomicValues={showEconomicValues}
-                    onBehaviorLog={onBehaviorLog}
-                />
-            )}
-
-            {activeTab === 'traceability' && (
-                <TraceabilityView
-                    movements={movements}
-                    items={items}
-                    personnel={personnel}
-                    projects={projects}
-                    auditLogs={auditLogs}
-                    behaviorLogs={behaviorLogs}
-                    users={users}
                     onBehaviorLog={onBehaviorLog}
                 />
             )}

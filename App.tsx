@@ -14,6 +14,7 @@ import CopilotView from './components/CopilotView';
 import { FloatingChat } from './components/FloatingChat';
 import { OnboardingModal } from './components/OnboardingModal';
 import { HelpView } from './components/HelpView';
+import { TraceabilityView } from './components/TraceabilityView';
 import { WhatsAppView } from './components/WhatsAppView';
 import { PickupView } from './components/PickupView';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
@@ -36,7 +37,7 @@ import { MovementsIcon } from './components/icons/MovementsIcon';
 import { PersonnelIcon } from './components/icons/PersonnelIcon';
 import { WhatsAppIcon } from './components/icons/WhatsAppIcon';
 
-type View = 'dashboard' | 'kardex' | 'personnel' | 'copilot' | 'help' | 'whatsapp' | 'pickup';
+type View = 'dashboard' | 'kardex' | 'personnel' | 'copilot' | 'help' | 'whatsapp' | 'pickup' | 'traceability';
 type KardexTab = 'movements' | 'loans' | 'inventory' | 'projects';
 
 const SESSION_KEY = 'bodega_session';
@@ -280,6 +281,7 @@ const App: React.FC = () => {
         help: 'Ayuda',
         whatsapp: 'WhatsApp',
         pickup: 'A Recoger',
+        traceability: 'Trazabilidad',
     };
 
     const selectView = (view: View, tab?: KardexTab) => {
@@ -598,6 +600,16 @@ const App: React.FC = () => {
                                 <NavItem icon={PickupNavIcon} label="A Recoger" onClick={() => selectView('pickup')} isActive={effectiveView === 'pickup'} badge={pendingPickupCount} />
                             </>
                         )}
+                        <NavItem
+                            icon={({ className }: { className?: string }) => (
+                                <svg className={className} fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 14.25v2.25m3-4.5v4.5m3-6.75v6.75m3-9v9M6 20.25h12A2.25 2.25 0 0 0 20.25 18V6A2.25 2.25 0 0 0 18 3.75H6A2.25 2.25 0 0 0 3.75 6v12A2.25 2.25 0 0 0 6 20.25Z" />
+                                </svg>
+                            )}
+                            label="Trazabilidad"
+                            onClick={() => selectView('traceability')}
+                            isActive={effectiveView === 'traceability'}
+                        />
                     </nav>
                 </div>
 
@@ -613,15 +625,6 @@ const App: React.FC = () => {
                             <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
                         </svg>
                         Configuración
-                    </button>
-                    <button
-                        onClick={() => setShowOnboarding(true)}
-                        className="w-full flex items-center text-left px-4 py-2.5 text-xs font-semibold rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-all"
-                    >
-                        <svg className="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 3.741-3.342M6.75 15a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm0 0v-3.675A55.378 55.378 0 0 1 12 8.443m-7.007 11.55A5.981 5.981 0 0 0 6.75 15.75v-1.5" />
-                        </svg>
-                        Ver tutorial
                     </button>
                     <button
                         onClick={handleLogout}
@@ -724,6 +727,18 @@ const App: React.FC = () => {
                             />
                         )}
                         {effectiveView === 'help' && <HelpView />}
+                        {effectiveView === 'traceability' && (
+                            <TraceabilityView
+                                movements={movements}
+                                items={items}
+                                personnel={personnel}
+                                projects={projects}
+                                auditLogs={auditLogs}
+                                behaviorLogs={behaviorLogs}
+                                users={users}
+                                onBehaviorLog={addBehaviorLog}
+                            />
+                        )}
                         {effectiveView === 'whatsapp' && (
                             <WhatsAppView movements={movements} items={items} personnel={personnel} readOnly={userRole === UserRole.VISITOR} onBehaviorLog={addBehaviorLog} />
                         )}
