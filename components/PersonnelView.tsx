@@ -126,7 +126,7 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
                                         <div className="min-w-0">
                                             <span className="font-medium text-gray-700 truncate block" title={p.name}>{p.name}</span>
                                             {p.phone ? (
-                                                <span className="text-[10px] text-gray-400 truncate block">{p.phone}</span>
+                                                <span className="text-[10px] text-gray-400 truncate block" translate="no">{p.phone}</span>
                                             ) : (
                                                 <span className="text-[10px] text-gray-300 block">Sin teléfono</span>
                                             )}

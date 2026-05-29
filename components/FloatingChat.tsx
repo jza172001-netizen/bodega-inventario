@@ -386,18 +386,18 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                         <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1">Paso 2 de 4 — Cuadrilla</p>
                         <p className="text-sm font-bold text-gray-800 mb-1">¿Qué trabajador de <span className="text-blue-600">{leader.name}</span> se lo llevó?</p>
                         <p className="text-[11px] text-gray-400 mb-3">Elige de la lista o crea uno nuevo</p>
-                        <div className="space-y-1 max-h-44 overflow-y-auto mb-2 pr-1">
-                            {subWorkers.length === 0 && (
-                                <p className="text-xs text-gray-400 text-center py-2">Sin trabajadores registrados aún.<br/>Usa "+ Nuevo trabajador" para agregar.</p>
-                            )}
-                            {subWorkers.map(p => (
-                                <button key={p.id} onClick={() => { setWizardData(d => ({ ...d, worker: p })); setWizardStep('select_project'); }}
-                                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all ${wizardData.worker?.id === p.id ? 'bg-blue-50 border border-blue-300' : 'bg-gray-50 hover:bg-blue-50 border border-transparent hover:border-blue-200'}`}>
-                                    <span className="w-7 h-7 rounded-full bg-green-100 text-green-700 flex items-center justify-center font-black text-xs flex-shrink-0">{p.name.charAt(0)}</span>
-                                    <span className="text-sm font-medium text-gray-800">{p.name}</span>
-                                </button>
-                            ))}
-                        </div>
+                        {subWorkers.length === 0
+                            ? <p className="text-xs text-gray-400 text-center py-2 mb-2">Sin trabajadores registrados aún.<br/>Usa "+ Nuevo trabajador" para agregar.</p>
+                            : <div className="space-y-1 max-h-44 overflow-y-auto mb-2 pr-1">
+                                {subWorkers.map(p => (
+                                    <button key={p.id} onClick={() => { setWizardData(d => ({ ...d, worker: p })); setWizardStep('select_project'); }}
+                                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all ${wizardData.worker?.id === p.id ? 'bg-blue-50 border border-blue-300' : 'bg-gray-50 hover:bg-blue-50 border border-transparent hover:border-blue-200'}`}>
+                                        <span className="w-7 h-7 rounded-full bg-green-100 text-green-700 flex items-center justify-center font-black text-xs flex-shrink-0">{p.name.charAt(0)}</span>
+                                        <span className="text-sm font-medium text-gray-800">{p.name}</span>
+                                    </button>
+                                ))}
+                              </div>
+                        }
                         <button onClick={() => { setWizardSubWorkerName(''); setWizardStep('create_sub_worker'); }}
                             className="w-full py-2 text-xs font-semibold text-blue-600 hover:text-blue-800 border border-dashed border-blue-300 rounded-xl hover:border-blue-500 transition-all">
                             + Nuevo trabajador de {leader.name}
