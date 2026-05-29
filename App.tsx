@@ -178,19 +178,13 @@ const App: React.FC = () => {
 
     // Sync desde Supabase en background al montar (no bloquea la UI)
     useEffect(() => {
-        db.fetchUsers().then(data => {
-            if (data.length > 0) {
-                setUsers(prev => migrateUsers(data).map(mu => {
-                    const local = prev.find(p => p.id === mu.id);
-                    // Si el estado local ya tiene credenciales, nunca las pisemos con datos vacíos de Supabase
-                    if (local?.setupComplete && !mu.setupComplete) return local;
-                    if (local?.username && !mu.username) return { ...mu, username: local.username, password: local.password, setupComplete: local.setupComplete };
-                    return mu;
-                }));
-            }
-        }).catch(() => {});
         // Solo usar datos de Supabase si localStorage no tiene datos propios (primera vez / dispositivo nuevo)
         const local = loadFromLocalStorage();
+        db.fetchUsers().then(data => {
+            if (data.length > 0 && !(local?.users?.length)) {
+                setUsers(migrateUsers(data));
+            }
+        }).catch(() => {});
         db.fetchItems().then(data => { if (data.length > 0 && !(local?.items?.length)) setItems(data); }).catch(() => {});
         db.fetchMovements().then(data => { if (data.length > 0 && !(local?.movements?.length)) setMovements(data); }).catch(() => {});
         db.fetchPersonnel().then(data => { if (data.length > 0 && !(local?.personnel?.length)) setPersonnel(data.filter(p => p.name?.trim().length >= 4)); }).catch(() => {});
