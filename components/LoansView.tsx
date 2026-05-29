@@ -24,14 +24,20 @@ const INV_FILTERS = [
     { key: InventoryType.SINGLE_USE,      label: '📦 Consumibles' },
 ] as const;
 
+const INV_EMOJI: Record<string, string> = {
+    [InventoryType.HAND_TOOL]:       '🔨',
+    [InventoryType.ELECTRICAL_TOOL]: '⚡',
+    [InventoryType.PPE]:             '🦺',
+    [InventoryType.SINGLE_USE]:      '📦',
+};
+
 export const LoansView: React.FC<LoansViewProps> = ({
     movements, items, personnel, onReturnItem, onMarkPendingPickup, onGoBack, userRole = UserRole.EMPLOYEE, onBehaviorLog,
 }) => {
     const isOwner = userRole === UserRole.OWNER;
-    const [search, setSearch]     = useState('');
+    const [search, setSearch]         = useState('');
     const [typeFilter, setTypeFilter] = useState<string>('');
     const [returningLoan, setReturningLoan] = useState<Movement | null>(null);
-    const scrollRef = useRef<HTMLDivElement>(null);
     const bottomSentinelRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -65,27 +71,32 @@ export const LoansView: React.FC<LoansViewProps> = ({
             );
         }
         return list;
-    }, [activeLoans, typeFilter, search]);
+    }, [activeLoans, typeFilter, search, itemMap]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const pendingPickup = useMemo(() => filteredLoans.filter(m => m.pendingPickup), [filteredLoans]);
-    const overdueLoans  = useMemo(() => filteredLoans.filter(m => !m.pendingPickup && getDays(m.timestamp) > 14), [filteredLoans]);
-    const warningLoans  = useMemo(() => filteredLoans.filter(m => !m.pendingPickup && getDays(m.timestamp) > 7 && getDays(m.timestamp) <= 14), [filteredLoans]);
-    const normalLoans   = useMemo(() => filteredLoans.filter(m => !m.pendingPickup && getDays(m.timestamp) <= 7), [filteredLoans]);
+    // Group by item (tool), sorted A-Z by tool name
+    const toolGroups = useMemo(() => {
+        const map = new Map<string, { item: Item; loans: Movement[] }>();
+        for (const m of filteredLoans) {
+            const item = itemMap.get(m.itemId);
+            if (!item) continue;
+            if (!map.has(m.itemId)) map.set(m.itemId, { item, loans: [] });
+            map.get(m.itemId)!.loans.push(m);
+        }
+        return [...map.values()].sort((a, b) => a.item.name.localeCompare(b.item.name, 'es'));
+    }, [filteredLoans, itemMap]);
 
     const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
-    // Letras que realmente tienen préstamos en la vista actual
     const activeLetters = useMemo(() => {
         const letters = new Set<string>();
-        for (const m of filteredLoans) {
-            const name = getPersonName(m.personnelId);
-            if (name) letters.add(name.charAt(0).toUpperCase());
+        for (const { item } of toolGroups) {
+            letters.add(item.name.charAt(0).toUpperCase());
         }
         return letters;
-    }, [filteredLoans]);
+    }, [toolGroups]);
 
     const jumpToLetter = useCallback((letter: string) => {
-        const el = document.querySelector(`[data-worker-letter="${letter}"]`);
+        const el = document.querySelector(`[data-tool-letter="${letter}"]`);
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, []);
 
@@ -103,103 +114,51 @@ export const LoansView: React.FC<LoansViewProps> = ({
         setReturningLoan(null);
     };
 
-    const LoanCard: React.FC<{ loan: Movement }> = ({ loan }) => {
+    const LoanRow: React.FC<{ loan: Movement }> = ({ loan }) => {
         const days = getDays(loan.timestamp);
         const isPending = !!loan.pendingPickup;
-        let cardClass = 'border border-gray-100 bg-white';
+        let rowClass = 'border-l-2 border-gray-200 pl-3';
         let daysBadge = 'bg-green-100 text-green-800';
-        if (isPending)      { cardClass = 'border border-indigo-100 bg-indigo-50'; daysBadge = 'bg-indigo-100 text-indigo-700'; }
-        else if (days > 14) { cardClass = 'border border-red-200 bg-red-50';       daysBadge = 'bg-red-100 text-red-800'; }
-        else if (days > 7)  { cardClass = 'border border-yellow-200 bg-yellow-50'; daysBadge = 'bg-yellow-100 text-yellow-800'; }
+        if (isPending)      { rowClass = 'border-l-2 border-indigo-400 pl-3'; daysBadge = 'bg-indigo-100 text-indigo-700'; }
+        else if (days > 14) { rowClass = 'border-l-2 border-red-400 pl-3';    daysBadge = 'bg-red-100 text-red-800'; }
+        else if (days > 7)  { rowClass = 'border-l-2 border-yellow-400 pl-3'; daysBadge = 'bg-yellow-100 text-yellow-800'; }
+
         return (
-            <div className={`rounded-2xl p-4 ${cardClass} flex flex-col gap-3`}>
-                <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                        <p className="font-bold text-gray-900 text-sm leading-snug">{getItemName(loan.itemId)}</p>
-                        <p className="text-xs text-gray-400 mt-0.5">{new Date(loan.timestamp).toLocaleDateString('es-CO')}</p>
-                    </div>
-                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${daysBadge}`}>{days}d</span>
-                        {isPending && <span className="text-[10px] font-black bg-indigo-600 text-white px-2 py-0.5 rounded-full">Recoger</span>}
-                    </div>
+            <div className={`py-2 ${rowClass} flex items-center gap-2`}>
+                <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-800 truncate">{getPersonName(loan.personnelId)}</p>
+                    <p className="text-xs text-gray-400">{new Date(loan.timestamp).toLocaleDateString('es-CO')}</p>
                 </div>
-                <div className="flex gap-2">
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${daysBadge}`}>{days}d</span>
+                {isPending && <span className="text-[10px] font-black bg-indigo-600 text-white px-1.5 py-0.5 rounded-full flex-shrink-0">Recoger</span>}
+                <div className="flex gap-1 flex-shrink-0">
                     {isOwner && (
                         <button onClick={() => handleReturn(loan)}
-                            className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all">
-                            ✓ Devuelta
+                            className="py-1 px-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold rounded-lg transition-all">
+                            ✓
                         </button>
                     )}
                     {!isPending ? (
-                        <button onClick={() => { onBehaviorLog?.('ACTION', `Marcó "ir a recoger": ${getItemName(loan.itemId)}`); onMarkPendingPickup(loan.id, true); }}
-                            className="flex-1 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-xl transition-all">
-                            📍 Ir a recoger
-                        </button>
-                    ) : isOwner ? (
-                        <button onClick={() => { if (window.confirm('¿Cancelar la recogida pendiente?')) { onBehaviorLog?.('ACTION', `Canceló recogida: ${getItemName(loan.itemId)}`); onMarkPendingPickup(loan.id, false); } }}
-                            className="flex-1 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-bold rounded-xl transition-all">
-                            ✕ Cancelar recogida
+                        <button onClick={() => { onBehaviorLog?.('ACTION', `Marcó recoger: ${getItemName(loan.itemId)}`); onMarkPendingPickup(loan.id, true); }}
+                            className="py-1 px-2 bg-gray-100 hover:bg-indigo-50 text-indigo-600 text-[10px] font-bold rounded-lg transition-all">
+                            📍
                         </button>
                     ) : (
-                        <span className="flex-1 py-1.5 text-center text-[10px] text-indigo-600 font-bold bg-indigo-50 rounded-xl">
-                            📍 Pendiente de recoger
-                        </span>
+                        <button onClick={() => { onMarkPendingPickup(loan.id, false); }}
+                            className="py-1 px-2 bg-indigo-50 text-indigo-400 text-[10px] font-bold rounded-lg transition-all">
+                            ✕
+                        </button>
                     )}
                 </div>
             </div>
         );
     };
 
-    const WorkerGroup: React.FC<{ loans: Movement[] }> = ({ loans }) => {
-        const byWorker = useMemo(() => {
-            const map = new Map<string, Movement[]>();
-            for (const m of loans) {
-                const key = m.personnelId ?? '__none__';
-                if (!map.has(key)) map.set(key, []);
-                map.get(key)!.push(m);
-            }
-            return [...map.entries()]
-                .map(([key, ms]) => ({ name: getPersonName(key === '__none__' ? undefined : key), loans: ms }))
-                .sort((a, b) => a.name.localeCompare(b.name, 'es'));
-        }, [loans]);
-
-        const seenLetters = new Set<string>();
-        return (
-            <div className="space-y-4">
-                {byWorker.map(({ name, loans: wLoans }) => {
-                    const letter = name.charAt(0).toUpperCase();
-                    const isFirst = !seenLetters.has(letter);
-                    if (isFirst) seenLetters.add(letter);
-                    return (
-                        <div key={name} {...(isFirst ? { 'data-worker-letter': letter } : {})}>
-
-                            <p className="text-xs font-black text-gray-500 uppercase tracking-widest mb-2 flex items-center gap-1.5">
-                                <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-black text-xs flex-shrink-0">{letter}</span>
-                                {name} <span className="font-normal text-gray-400">({wLoans.length})</span>
-                            </p>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                {wLoans.map(l => <LoanCard key={l.id} loan={l} />)}
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
-        );
-    };
-
-    const Section: React.FC<{ title: string; color: string; loans: Movement[] }> = ({ title, color, loans }) => {
-        if (loans.length === 0) return null;
-        return (
-            <div className="mb-6">
-                <p className={`text-xs font-black uppercase tracking-widest mb-3 ${color}`}>{title} ({loans.length})</p>
-                <WorkerGroup loans={loans} />
-            </div>
-        );
-    };
+    const seenLetters = new Set<string>();
 
     return (
         <div className="relative">
-            <div ref={scrollRef} className="bg-white p-4 md:p-6 rounded-2xl shadow-sm pr-8">
+            <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm pr-8">
                 <div className="flex items-center mb-4">
                     <button onClick={onGoBack} className="mr-4 p-2 rounded-full hover:bg-gray-100">
                         <ArrowLeftIcon className="w-5 h-5 text-gray-600" />
@@ -209,7 +168,7 @@ export const LoansView: React.FC<LoansViewProps> = ({
                             <ClockIcon className="w-6 h-6 text-indigo-600" />
                             Préstamos Activos
                         </h2>
-                        <p className="text-xs text-gray-500">{activeLoans.length} herramienta(s) fuera de bodega</p>
+                        <p className="text-xs text-gray-500">{activeLoans.length} herramienta(s) fuera de bodega · agrupadas por ítem</p>
                     </div>
                 </div>
 
@@ -248,17 +207,53 @@ export const LoansView: React.FC<LoansViewProps> = ({
                 ) : filteredLoans.length === 0 ? (
                     <p className="text-center py-10 text-gray-400 text-sm">Sin resultados.</p>
                 ) : (
-                    <>
-                        <Section title="📍 Pendientes de recoger" color="text-indigo-600" loans={pendingPickup} />
-                        <Section title="🔴 Más de 14 días"        color="text-red-600"    loans={overdueLoans} />
-                        <Section title="⚠️ Entre 7 y 14 días"     color="text-yellow-600" loans={warningLoans} />
-                        <Section title="✅ Al día (menos de 7 días)" color="text-green-600" loans={normalLoans} />
+                    <div className="space-y-4">
+                        {toolGroups.map(({ item, loans }) => {
+                            const letter = item.name.charAt(0).toUpperCase();
+                            const isFirst = !seenLetters.has(letter);
+                            if (isFirst) seenLetters.add(letter);
+                            const emoji = INV_EMOJI[item.inventoryType] ?? '📦';
+                            const loansOut = loans.length;
+                            const stockLeft = item.quantity;
+
+                            return (
+                                <div
+                                    key={item.id}
+                                    className="rounded-xl border border-gray-100 bg-gray-50 overflow-hidden"
+                                    {...(isFirst ? { 'data-tool-letter': letter } : {})}
+                                >
+                                    {/* Tool header */}
+                                    <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-100">
+                                        <div className="min-w-0 flex-1">
+                                            <p className="font-black text-gray-900 text-sm leading-snug">{emoji} {item.name}</p>
+                                            {item.subCategory && item.subCategory !== item.name && (
+                                                <p className="text-[10px] text-gray-400">{item.subCategory}</p>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                                            <span className="text-[10px] font-bold bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">
+                                                {loansOut} prestada{loansOut !== 1 ? 's' : ''}
+                                            </span>
+                                            <span className="text-[10px] font-bold bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                                                stock {stockLeft}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    {/* Loan rows */}
+                                    <div className="px-4 py-2 space-y-1">
+                                        {loans
+                                            .sort((a, b) => getDays(b.timestamp) - getDays(a.timestamp))
+                                            .map(loan => <LoanRow key={loan.id} loan={loan} />)}
+                                    </div>
+                                </div>
+                            );
+                        })}
                         <div ref={bottomSentinelRef} className="h-px" />
-                    </>
+                    </div>
                 )}
             </div>
 
-            {/* Índice alfabético lateral derecho — siempre A-Z completo */}
+            {/* Índice alfabético lateral derecho — A-Z por herramienta */}
             {filteredLoans.length > 0 && (
                 <div className="fixed right-1 top-1/2 -translate-y-1/2 flex flex-col items-center gap-0.5 z-30">
                     {ALPHABET.map(letter => {
