@@ -178,14 +178,14 @@ const App: React.FC = () => {
 
     // Sync desde Supabase en background al montar (no bloquea la UI)
     useEffect(() => {
-        // Solo usar datos de Supabase si localStorage no tiene datos propios (primera vez / dispositivo nuevo)
+        // Supabase como fuente de verdad — siempre gana si tiene datos
         const local = loadFromLocalStorage();
         db.fetchUsers().then(data => { if (data.length > 0 && local === null) setUsers(migrateUsers(data)); }).catch(() => {});
-        db.fetchItems().then(data => { if (data.length > 0 && local === null) setItems(data); }).catch(() => {});
-        db.fetchMovements().then(data => { if (data.length > 0 && local === null) setMovements(data); }).catch(() => {});
-        db.fetchPersonnel().then(data => { if (data.length > 0 && local === null) setPersonnel(data.filter(p => p.name?.trim().length >= 4)); }).catch(() => {});
-        db.fetchPurchaseOrders().then(data => { if (data.length > 0 && local === null) setPurchaseOrders(data); }).catch(() => {});
-        db.fetchProjects().then(data => { if (data.length > 0 && local === null) setProjects(data); }).catch(() => {});
+        db.fetchItems().then(data => { if (data.length > 0) setItems(data); }).catch(() => {});
+        db.fetchMovements().then(data => { if (data.length > 0) setMovements(data); }).catch(() => {});
+        db.fetchPersonnel().then(data => { if (data.length > 0) setPersonnel(data.filter(p => p.name?.trim().length >= 4)); }).catch(() => {});
+        db.fetchPurchaseOrders().then(data => { if (data.length > 0) setPurchaseOrders(data); }).catch(() => {});
+        db.fetchProjects().then(data => { if (data.length > 0) setProjects(data); }).catch(() => {});
     }, []);
 
     const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle');

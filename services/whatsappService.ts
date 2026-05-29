@@ -5,8 +5,8 @@ export const REMINDER_LOG_KEY = 'bodega_wa_reminders';
 export const REMINDER_INTERVAL_DAYS = 8;
 export const TEST_PHONE = '573113866341';
 export const TEST_PHONE_DISPLAY = '+57 311 386 6341';
-export const MELLO_PHONE = '573113866341'; // número de Mello — actualizar cuando lo tengas
-export const MELLO_NAME = 'Mello';
+export const MELLO_PHONE = '573113866341'; // número de Camilo — actualizar cuando lo tengas
+export const MELLO_NAME = 'Camilo';
 
 export type ReminderLog = Record<string, string>; // movementId → ISO timestamp
 

@@ -9,7 +9,7 @@ const mid = () => `rm-${String(_mid++).padStart(4, '0')}`;
 // ── USERS ────────────────────────────────────────────────────────────────────
 export const realUsers: AppUser[] = [
     { id: 'user-juli',    username: 'july',     password: '6274', role: UserRole.OWNER,    name: 'Juli',  setupComplete: true  },
-    { id: 'user-esteban', username: '',          password: '',     role: UserRole.EMPLOYEE, name: 'Mello', setupComplete: false },
+    { id: 'user-esteban', username: '',          password: '',     role: UserRole.EMPLOYEE, name: 'Camilo', setupComplete: false },
     { id: 'user-kate',    username: '',          password: '',     role: UserRole.EMPLOYEE, name: 'Kate',  setupComplete: false },
 ];
 
@@ -44,7 +44,7 @@ export const realPersonnel: Personnel[] = [
     { id: 'rp-raul',            name: 'Raúl',               phone: TEST_PHONE },
     { id: 'rp-william',         name: 'William',            phone: TEST_PHONE },
     { id: 'rp-haider',          name: 'Haider',             phone: TEST_PHONE },
-    { id: 'rp-mello',           name: 'Mello',              phone: TEST_PHONE },
+    { id: 'rp-mello',           name: 'Camilo',             phone: TEST_PHONE },
     { id: 'rp-yesid',           name: 'Yesid',              phone: TEST_PHONE },
 ];
 
