@@ -79,6 +79,8 @@ export interface Personnel {
     id: string;
     name: string;
     phone?: string;
+    isTeamLeader?: boolean;
+    teamLeaderId?: string;
 }
 
 export interface PurchaseOrderItem {

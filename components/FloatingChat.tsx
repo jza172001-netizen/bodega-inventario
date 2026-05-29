@@ -16,13 +16,14 @@ interface FloatingChatProps {
     onBehaviorLog?: (action: string, detail: string) => void;
 }
 
-type WizardStep = 'select_types' | 'select_worker' | 'create_worker' | 'select_project' | 'create_project' | 'enter_items' | 'confirm';
+type WizardStep = 'select_types' | 'select_worker' | 'create_worker' | 'select_sub_worker' | 'create_sub_worker' | 'select_project' | 'create_project' | 'enter_items' | 'confirm';
 type ActivePanel = 'loan' | 'create' | null;
 
 interface WizardData {
     selectedTypes: InventoryType[];
     worker: Personnel | null;
     newWorkerName: string;
+    teamLeaderWorker: Personnel | null;
     project: Project | null;
     newProjectName: string;
 }
@@ -49,6 +50,7 @@ const todayISO = () => new Date().toISOString().split('T')[0];
 
 const INIT_WIZARD: WizardData = {
     selectedTypes: [], worker: null, newWorkerName: '',
+    teamLeaderWorker: null,
     project: null, newProjectName: '',
 };
 
@@ -70,6 +72,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     const [wizardData, setWizardData] = useState<WizardData>(INIT_WIZARD);
     const [wizardDate, setWizardDate] = useState<string>(todayISO());
     const [wizardSel, setWizardSel] = useState<Map<string, number>>(new Map());
+    const [wizardSubWorkerName, setWizardSubWorkerName] = useState('');
     // Inline create form state for Step 4
     const [wizardCreateType, setWizardCreateType] = useState<InventoryType | null>(null);
     const [wizardCreateName, setWizardCreateName] = useState('');
@@ -143,13 +146,14 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         setWizardData(INIT_WIZARD);
         setWizardDate(todayISO());
         setWizardSel(new Map());
+        setWizardSubWorkerName('');
         resetWizardCreate();
         setWizardStep('select_types');
         setActivePanel(null);
         onBehaviorLog?.('BUTTON', 'Tocó botón: Registrar salida');
     };
 
-    const cancelWizard = () => { setWizardStep(null); setInput(''); setWizardSel(new Map()); resetWizardCreate(); };
+    const cancelWizard = () => { setWizardStep(null); setInput(''); setWizardSel(new Map()); setWizardSubWorkerName(''); resetWizardCreate(); };
 
     const toggleWizardSel = (itemId: string) => {
         setWizardSel(prev => {
@@ -320,10 +324,20 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                         <p className="text-sm font-bold text-gray-800 mb-3">¿Para quién es la salida?</p>
                         <div className="space-y-1 max-h-44 overflow-y-auto mb-2 pr-1">
                             {sortedPersonnel.map(p => (
-                                <button key={p.id} onClick={() => { setWizardData(d => ({ ...d, worker: p, newWorkerName: '' })); setWizardStep('select_project'); }}
-                                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all ${wizardData.worker?.id === p.id ? 'bg-blue-50 border border-blue-300' : 'bg-gray-50 hover:bg-blue-50 border border-transparent hover:border-blue-200'}`}>
+                                <button key={p.id} onClick={() => {
+                                    if (p.isTeamLeader) {
+                                        setWizardData(d => ({ ...d, teamLeaderWorker: p, worker: null, newWorkerName: '' }));
+                                        setWizardSubWorkerName('');
+                                        setWizardStep('select_sub_worker');
+                                    } else {
+                                        setWizardData(d => ({ ...d, worker: p, teamLeaderWorker: null, newWorkerName: '' }));
+                                        setWizardStep('select_project');
+                                    }
+                                }}
+                                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all ${wizardData.worker?.id === p.id || wizardData.teamLeaderWorker?.id === p.id ? 'bg-blue-50 border border-blue-300' : 'bg-gray-50 hover:bg-blue-50 border border-transparent hover:border-blue-200'}`}>
                                     <span className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-black text-xs flex-shrink-0">{p.name.charAt(0)}</span>
-                                    <span className="text-sm font-medium text-gray-800">{p.name}</span>
+                                    <span className="text-sm font-medium text-gray-800 flex-1">{p.name}</span>
+                                    {p.isTeamLeader && <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0">👷 Oficial</span>}
                                 </button>
                             ))}
                         </div>
@@ -356,6 +370,78 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                         <button onClick={() => setWizardStep('select_project')} disabled={!wizardData.newWorkerName.trim()}
                             className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold rounded-xl text-xs transition-all">
                             Siguiente →
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+        if (wizardStep === 'select_sub_worker') {
+            const leader = wizardData.teamLeaderWorker!;
+            const subWorkers = personnel
+                .filter(p => p.teamLeaderId === leader.id)
+                .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+            return (
+                <div className="flex-1 overflow-y-auto px-3 py-4 space-y-3">
+                    <div>
+                        <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1">Paso 2 de 4 — Cuadrilla</p>
+                        <p className="text-sm font-bold text-gray-800 mb-1">¿Qué trabajador de <span className="text-blue-600">{leader.name}</span> se lo llevó?</p>
+                        <p className="text-[11px] text-gray-400 mb-3">Elige de la lista o crea uno nuevo</p>
+                        <div className="space-y-1 max-h-44 overflow-y-auto mb-2 pr-1">
+                            {subWorkers.length === 0 && (
+                                <p className="text-xs text-gray-400 text-center py-2">Sin trabajadores registrados aún.<br/>Usa "+ Nuevo trabajador" para agregar.</p>
+                            )}
+                            {subWorkers.map(p => (
+                                <button key={p.id} onClick={() => { setWizardData(d => ({ ...d, worker: p })); setWizardStep('select_project'); }}
+                                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all ${wizardData.worker?.id === p.id ? 'bg-blue-50 border border-blue-300' : 'bg-gray-50 hover:bg-blue-50 border border-transparent hover:border-blue-200'}`}>
+                                    <span className="w-7 h-7 rounded-full bg-green-100 text-green-700 flex items-center justify-center font-black text-xs flex-shrink-0">{p.name.charAt(0)}</span>
+                                    <span className="text-sm font-medium text-gray-800">{p.name}</span>
+                                </button>
+                            ))}
+                        </div>
+                        <button onClick={() => { setWizardSubWorkerName(''); setWizardStep('create_sub_worker'); }}
+                            className="w-full py-2 text-xs font-semibold text-blue-600 hover:text-blue-800 border border-dashed border-blue-300 rounded-xl hover:border-blue-500 transition-all">
+                            + Nuevo trabajador de {leader.name}
+                        </button>
+                        <button onClick={() => { setWizardData(d => ({ ...d, worker: leader })); setWizardStep('select_project'); }}
+                            className="w-full mt-1 py-2 text-xs font-semibold text-gray-500 hover:text-gray-700 border border-dashed border-gray-300 rounded-xl hover:border-gray-400 transition-all">
+                            Continuar con {leader.name} (sin especificar) →
+                        </button>
+                    </div>
+                    <div className="flex gap-2">
+                        <button onClick={() => setWizardStep('select_worker')} className="px-3 py-2 text-xs text-gray-400 hover:text-gray-600 border border-gray-200 rounded-xl">← Atrás</button>
+                    </div>
+                </div>
+            );
+        }
+        if (wizardStep === 'create_sub_worker') {
+            const leader = wizardData.teamLeaderWorker!;
+            return (
+                <div className="flex-1 overflow-y-auto px-3 py-4 space-y-3">
+                    <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest">Paso 2 de 4 — Cuadrilla</p>
+                    <p className="text-sm font-bold text-gray-800">Nuevo trabajador de <span className="text-blue-600">{leader.name}</span>:</p>
+                    <input type="text" value={wizardSubWorkerName}
+                        onChange={e => setWizardSubWorkerName(e.target.value)}
+                        placeholder="Ej: Pedro Ramírez" autoFocus
+                        onKeyDown={e => {
+                            if (e.key === 'Enter' && wizardSubWorkerName.trim()) {
+                                const newP = onCreatePersonnel({ name: wizardSubWorkerName.trim(), teamLeaderId: leader.id });
+                                setWizardData(d => ({ ...d, worker: newP }));
+                                setWizardStep('select_project');
+                            }
+                        }}
+                        className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    <div className="flex gap-2">
+                        <button onClick={() => setWizardStep('select_sub_worker')} className="px-3 py-2 text-xs text-gray-400 hover:text-gray-600 border border-gray-200 rounded-xl">← Atrás</button>
+                        <button
+                            onClick={() => {
+                                if (!wizardSubWorkerName.trim()) return;
+                                const newP = onCreatePersonnel({ name: wizardSubWorkerName.trim(), teamLeaderId: leader.id });
+                                setWizardData(d => ({ ...d, worker: newP }));
+                                setWizardStep('select_project');
+                            }}
+                            disabled={!wizardSubWorkerName.trim()}
+                            className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold rounded-xl text-xs transition-all">
+                            Guardar y continuar →
                         </button>
                     </div>
                 </div>
@@ -532,7 +618,10 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             );
         }
         if (wizardStep === 'confirm') {
-            const workerName = (wizardData.worker?.name ?? wizardData.newWorkerName) || 'Sin asignar';
+            const baseWorkerName = (wizardData.worker?.name ?? wizardData.newWorkerName) || 'Sin asignar';
+            const workerName = wizardData.teamLeaderWorker && wizardData.worker?.id !== wizardData.teamLeaderWorker.id
+                ? `${baseWorkerName} (cuadrilla de ${wizardData.teamLeaderWorker.name})`
+                : baseWorkerName;
             const projectName = (wizardData.project?.name ?? wizardData.newProjectName) || 'Sin proyecto';
             const preview = wizardData.selectedTypes.flatMap(type =>
                 [...wizardSel.entries()]

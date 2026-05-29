@@ -13,11 +13,13 @@ interface EditPersonnelModalProps {
 export const EditPersonnelModal: React.FC<EditPersonnelModalProps> = ({ isOpen, person, onClose, onSave }) => {
     const [name, setName] = useState('');
     const [phone, setPhone] = useState('');
+    const [isTeamLeader, setIsTeamLeader] = useState(false);
 
     useEffect(() => {
         if (person) {
             setName(person.name);
             setPhone(person.phone ?? '');
+            setIsTeamLeader(person.isTeamLeader ?? false);
         }
     }, [person]);
 
@@ -26,7 +28,7 @@ export const EditPersonnelModal: React.FC<EditPersonnelModalProps> = ({ isOpen, 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!name.trim()) { alert('El nombre es requerido.'); return; }
-        onSave({ ...person, name: name.trim(), phone: phone.trim() || undefined });
+        onSave({ ...person, name: name.trim(), phone: phone.trim() || undefined, isTeamLeader: isTeamLeader || undefined });
         onClose();
     };
 
@@ -64,6 +66,26 @@ export const EditPersonnelModal: React.FC<EditPersonnelModalProps> = ({ isOpen, 
                             className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                             placeholder="Ej: 3001234567"
                         />
+                    </div>
+                    <div>
+                        <button
+                            type="button"
+                            onClick={() => setIsTeamLeader(v => !v)}
+                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all text-left ${
+                                isTeamLeader
+                                    ? 'bg-amber-50 border-amber-300 text-amber-800'
+                                    : 'bg-gray-50 border-gray-200 text-gray-500 hover:border-amber-300'
+                            }`}
+                        >
+                            <span className="text-xl">{isTeamLeader ? '👷' : '👤'}</span>
+                            <div>
+                                <p className="text-sm font-bold">{isTeamLeader ? 'Es oficial (tiene cuadrilla)' : 'Marcar como oficial'}</p>
+                                <p className="text-xs opacity-70">{isTeamLeader ? 'El chatbot pedirá elegir trabajador de su cuadrilla' : 'Activar para registrar trabajadores a su cargo'}</p>
+                            </div>
+                            <span className={`ml-auto w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isTeamLeader ? 'bg-amber-400 border-amber-400' : 'border-gray-300'}`}>
+                                {isTeamLeader && <span className="text-white text-xs">✓</span>}
+                            </span>
+                        </button>
                     </div>
                     <div className="flex justify-end space-x-3 pt-4">
                         <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Cancelar</button>
