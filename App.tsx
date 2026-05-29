@@ -180,16 +180,12 @@ const App: React.FC = () => {
     useEffect(() => {
         // Solo usar datos de Supabase si localStorage no tiene datos propios (primera vez / dispositivo nuevo)
         const local = loadFromLocalStorage();
-        db.fetchUsers().then(data => {
-            if (data.length > 0 && !(local?.users?.length)) {
-                setUsers(migrateUsers(data));
-            }
-        }).catch(() => {});
-        db.fetchItems().then(data => { if (data.length > 0 && !(local?.items?.length)) setItems(data); }).catch(() => {});
-        db.fetchMovements().then(data => { if (data.length > 0 && !(local?.movements?.length)) setMovements(data); }).catch(() => {});
-        db.fetchPersonnel().then(data => { if (data.length > 0 && !(local?.personnel?.length)) setPersonnel(data.filter(p => p.name?.trim().length >= 4)); }).catch(() => {});
-        db.fetchPurchaseOrders().then(data => { if (data.length > 0 && !(local?.purchaseOrders?.length)) setPurchaseOrders(data); }).catch(() => {});
-        db.fetchProjects().then(data => { if (data.length > 0 && !(local?.projects?.length)) setProjects(data); }).catch(() => {});
+        db.fetchUsers().then(data => { if (data.length > 0 && local === null) setUsers(migrateUsers(data)); }).catch(() => {});
+        db.fetchItems().then(data => { if (data.length > 0 && local === null) setItems(data); }).catch(() => {});
+        db.fetchMovements().then(data => { if (data.length > 0 && local === null) setMovements(data); }).catch(() => {});
+        db.fetchPersonnel().then(data => { if (data.length > 0 && local === null) setPersonnel(data.filter(p => p.name?.trim().length >= 4)); }).catch(() => {});
+        db.fetchPurchaseOrders().then(data => { if (data.length > 0 && local === null) setPurchaseOrders(data); }).catch(() => {});
+        db.fetchProjects().then(data => { if (data.length > 0 && local === null) setProjects(data); }).catch(() => {});
     }, []);
 
     const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle');

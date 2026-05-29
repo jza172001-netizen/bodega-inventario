@@ -67,7 +67,7 @@ export function loadFromLocalStorage(): Partial<AppData> | null {
         if (data.users) {
             data.users = data.users.map(u => ({
                 ...u,
-                setupComplete: u.setupComplete ?? (!!u.username && !!u.password),
+                setupComplete: u.setupComplete || (!!u.username && !!u.password),
             }));
         }
         return data;
