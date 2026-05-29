@@ -423,3 +423,30 @@ export async function deleteUser(id: string): Promise<void> {
     if (error) throw error;
 }
 
+// ─── BULK DELETE (factory reset) ─────────────────────────────────────────────
+
+export async function deleteAllMovements(): Promise<void> {
+    const { error } = await supabase.from('movements').delete().not('id', 'is', null);
+    if (error) throw error;
+}
+
+export async function deleteAllItems(): Promise<void> {
+    const { error } = await supabase.from('items').delete().not('id', 'is', null);
+    if (error) throw error;
+}
+
+export async function deleteAllPersonnel(): Promise<void> {
+    const { error } = await supabase.from('personnel').delete().not('id', 'is', null);
+    if (error) throw error;
+}
+
+export async function deleteAllProjects(): Promise<void> {
+    const { error } = await supabase.from('projects').delete().not('id', 'is', null);
+    if (error) throw error;
+}
+
+export async function deleteAllPurchaseOrders(): Promise<void> {
+    const { error } = await supabase.from('purchase_orders').delete().not('id', 'is', null);
+    if (error) throw error;
+}
+

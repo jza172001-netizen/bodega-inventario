@@ -266,6 +266,14 @@ const App: React.FC = () => {
                 setPurchaseOrders([]);
                 setProjects([]);
                 addAuditLog('ITEM_DELETED', 'Se borró toda la bodega (reset completo)');
+                // También borra de Supabase (fire and forget)
+                Promise.all([
+                    db.deleteAllMovements(),
+                    db.deleteAllItems(),
+                    db.deleteAllPersonnel(),
+                    db.deleteAllProjects(),
+                    db.deleteAllPurchaseOrders(),
+                ]).catch(e => console.error('Error limpiando Supabase:', e));
                 alert('Bodega limpia. Ahora puedes empezar a registrar tus propios materiales.');
             },
             'Borrar toda la bodega',
@@ -769,6 +777,8 @@ const App: React.FC = () => {
                     config={appConfig}
                     onChange={handleConfigChange}
                     onClose={() => setSettingsOpen(false)}
+                    userRole={userRole}
+                    onResetAllData={handleResetAllData}
                 />
             )}
             {isSearchOpen && (
