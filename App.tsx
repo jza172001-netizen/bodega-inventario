@@ -52,7 +52,7 @@ const migrateUsers = (stored: AppUser[]): AppUser[] => {
         if (!found) found = stored.find(u => u.role === seed.role && !usedIds.has(u.id));
         if (found) {
             usedIds.add(found.id);
-            return { ...seed, username: found.username, password: found.password, setupComplete: found.setupComplete ?? (!!found.username && !!found.password) };
+            return { ...seed, username: found.username, password: found.password, setupComplete: found.setupComplete || (!!found.username && !!found.password) };
         }
         return seed;
     });
