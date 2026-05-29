@@ -129,11 +129,16 @@ export const ItemHistoryModal: React.FC<ItemHistoryModalProps> = ({
                                         <option key={p.id} value={p.id}>{p.name}</option>
                                     ))}
                                 </select>
-                                <button onClick={handleTransfer} disabled={!selectedPersonId}
-                                    className="flex-shrink-0 py-2 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-xs font-black rounded-xl transition-all">
+                                <button
+                                    onClick={handleTransfer}
+                                    disabled={!selectedPersonId}
+                                    className="flex-shrink-0 py-2 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-xs font-black rounded-xl transition-all"
+                                >
                                     Confirmar
                                 </button>
-                                <button onClick={cancelAction} className="flex-shrink-0 py-2 px-3 bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-black rounded-xl transition-all">✕</button>
+                                <button onClick={cancelAction} className="flex-shrink-0 py-2 px-3 bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-black rounded-xl transition-all">
+                                    ✕
+                                </button>
                             </div>
                         ) : (
                             <div className="flex gap-2 items-center flex-wrap">
@@ -147,11 +152,16 @@ export const ItemHistoryModal: React.FC<ItemHistoryModalProps> = ({
                                         <option key={p.id} value={p.id}>{p.name}</option>
                                     ))}
                                 </select>
-                                <button onClick={handleProject} disabled={!selectedProjectId}
-                                    className="flex-shrink-0 py-2 px-4 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white text-xs font-black rounded-xl transition-all">
+                                <button
+                                    onClick={handleProject}
+                                    disabled={!selectedProjectId}
+                                    className="flex-shrink-0 py-2 px-4 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white text-xs font-black rounded-xl transition-all"
+                                >
                                     Confirmar
                                 </button>
-                                <button onClick={cancelAction} className="flex-shrink-0 py-2 px-3 bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-black rounded-xl transition-all">✕</button>
+                                <button onClick={cancelAction} className="flex-shrink-0 py-2 px-3 bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-black rounded-xl transition-all">
+                                    ✕
+                                </button>
                             </div>
                         )}
                     </div>

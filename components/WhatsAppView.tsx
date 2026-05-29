@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Movement, Item, Personnel, InventoryType } from '../types';
 import {
     ReminderLog,
@@ -8,16 +8,16 @@ import {
     isDueForReminder,
     buildPersonGroups,
     buildPersonReminderUrl,
+    buildTestReminderUrl,
     daysSince,
     REMINDER_INTERVAL_DAYS,
+    TEST_PHONE_DISPLAY,
 } from '../services/whatsappService';
 
 interface Props {
     movements: Movement[];
     items: Item[];
     personnel: Personnel[];
-    readOnly?: boolean;
-    onBehaviorLog?: (action: string, detail: string) => void;
 }
 
 interface PersonGroup {
@@ -28,13 +28,13 @@ interface PersonGroup {
 }
 
 type WeeklyLog = {
-    week: string;
-    sent: Partial<Record<string, string[]>>;
+    week: string; // Monday of week, e.g. '2026-05-25'
+    sent: Partial<Record<string, string[]>>; // inventoryType value → personId[]
 };
 
-const WEEKLY_LOG_KEY = 'wa_weekly_v1';
-const QUEUE_KEY      = 'wa_remind_queue_v1';
-const STEP_KEY       = 'wa_remind_step_v1';
+const WEEKLY_LOG_KEY  = 'wa_weekly_v1';
+const QUEUE_KEY       = 'wa_remind_queue_v1';
+const STEP_KEY        = 'wa_remind_step_v1';
 
 const getWeekKey = (): string => {
     const d = new Date();
@@ -60,16 +60,22 @@ const CATEGORY_BTNS = [
     { key: InventoryType.SINGLE_USE,      label: '📦 Consumibles', active: 'bg-purple-500 hover:bg-purple-600' },
 ] as const;
 
-export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, readOnly = false, onBehaviorLog }) => {
+export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel }) => {
     const [log, setLog] = useState<ReminderLog>(loadReminderLog);
     const [weeklyLog, setWeeklyLog] = useState<WeeklyLog>(loadWeeklyLog);
-    const bottomRef = useRef<HTMLDivElement>(null);
 
+    // C5: Persist queue/step in sessionStorage to survive mobile tab reloads
     const [queue, setQueue] = useState<PersonGroup[] | null>(() => {
-        try { const s = sessionStorage.getItem(QUEUE_KEY); return s ? JSON.parse(s) : null; } catch { return null; }
+        try {
+            const s = sessionStorage.getItem(QUEUE_KEY);
+            return s ? JSON.parse(s) : null;
+        } catch { return null; }
     });
     const [step, setStep] = useState<number>(() => {
-        try { const s = sessionStorage.getItem(STEP_KEY); return s ? parseInt(s, 10) : 0; } catch { return 0; }
+        try {
+            const s = sessionStorage.getItem(STEP_KEY);
+            return s ? parseInt(s, 10) : 0;
+        } catch { return 0; }
     });
 
     useEffect(() => {
@@ -96,39 +102,62 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
         const isDue = hasPhone && personLoans.some(m => isDueForReminder(m.id, m.timestamp, log));
         groups.push({ person, loans: personLoans, hasPhone, isDue });
     }
+
     groups.sort((a, b) => a.person.name.localeCompare(b.person.name, 'es'));
 
-    const dueGroups     = groups.filter(g => g.isDue);
-    const onTrackGroups = groups.filter(g => g.hasPhone && !g.isDue);
-    const noPhoneGroups = groups.filter(g => !g.hasPhone);
+    const dueGroups       = groups.filter(g => g.isDue);
+    const onTrackGroups   = groups.filter(g => g.hasPhone && !g.isDue);
+    const noPhoneGroups   = groups.filter(g => !g.hasPhone);
 
-    const remind = (g: PersonGroup) => {
+    const remind = (g: PersonGroup, windowDays = 7) => {
         if (!g.person.phone) return;
-        const grps = buildPersonGroups(g.person, movements, items, 7);
+        const grps = buildPersonGroups(g.person, movements, items, windowDays);
         window.open(buildPersonReminderUrl(g.person.phone, g.person.name, grps), '_blank');
         const newLog = recordReminders(g.loans.map(m => m.id));
         setLog({ ...newLog });
     };
 
-    const remindMonthly = (g: PersonGroup) => {
-        if (!g.person.phone) return;
-        const grps = buildPersonGroups(g.person, movements, items, 30);
-        window.open(buildPersonReminderUrl(g.person.phone, g.person.name, grps), '_blank');
-        const newLog = recordReminders(g.loans.map(m => m.id));
-        setLog({ ...newLog });
+    const remindMonthly = (g: PersonGroup) => remind(g, 30);
+
+    const startRemindAll = () => {
+        if (dueGroups.length === 0) return;
+        const frozen = [...dueGroups];
+        setQueue(frozen);
+        setStep(0);
+        remind(frozen[0]);
     };
 
-    // Mark a person in the weekly log for all their loan categories
-    const markSentInLog = (g: PersonGroup, currentLog: WeeklyLog): WeeklyLog => {
-        const newWL: WeeklyLog = { week: currentLog.week, sent: { ...currentLog.sent } };
-        for (const m of g.loans) {
-            const catKey = itemMap.get(m.itemId)?.inventoryType;
-            if (!catKey) continue;
-            const existing = newWL.sent[catKey] ?? [];
-            if (!existing.includes(g.person.id))
-                newWL.sent[catKey] = [...existing, g.person.id];
-        }
-        return newWL;
+    const nextStep = () => {
+        if (!queue) return;
+        const next = step + 1;
+        if (next >= queue.length) { setQueue(null); setStep(0); return; }
+        setStep(next);
+        remind(queue[next]);
+    };
+
+    const startRemindAllMonthly = () => {
+        const withPhone = groups.filter(g => g.hasPhone);
+        withPhone.forEach((g, i) => setTimeout(() => remindMonthly(g), i * 400));
+    };
+
+    // C6: Weekly category batch reminders
+    const getGroupsForCategory = (catKey: string): PersonGroup[] =>
+        groups.filter(g => g.hasPhone && g.loans.some(m => itemMap.get(m.itemId)?.inventoryType === catKey));
+
+    const pendingInCategory = (catKey: string): PersonGroup[] => {
+        const sent = weeklyLog.sent[catKey] ?? [];
+        return getGroupsForCategory(catKey).filter(g => !sent.includes(g.person.id));
+    };
+
+    const isCategoryDone = (catKey: string): boolean => {
+        const cat = getGroupsForCategory(catKey);
+        if (cat.length === 0) return false;
+        return pendingInCategory(catKey).length === 0;
+    };
+
+    const getGeneralPending = (): PersonGroup[] => {
+        const allSent = new Set(Object.values(weeklyLog.sent).flat());
+        return groups.filter(g => g.hasPhone && !allSent.has(g.person.id));
     };
 
     const saveWeekly = (updated: WeeklyLog) => {
@@ -136,109 +165,44 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
         setWeeklyLog(updated);
     };
 
-    // ── Due-queue (Recordar a todos) ──────────────────────────────────────
-    const startRemindAll = () => {
-        if (dueGroups.length === 0) return;
-        const frozen = [...dueGroups];
-        setQueue(frozen);
-        setStep(0);
-        remind(frozen[0]);
-        onBehaviorLog?.('ACTION', `Inició cola "Recordar a todos" (${frozen.length} personas)`);
-    };
-
-    // ── Batch queue — shared for category + general ───────────────────────
-    const startBatchQueue = (batch: PersonGroup[], label: string) => {
-        if (batch.length === 0) return;
-        setQueue(batch);
-        setStep(0);
-        remind(batch[0]);
-        onBehaviorLog?.('ACTION', `Inició cola ${label}: ${batch[0].person.name} (1/${batch.length})`);
-    };
-
     const remindCategory = (catKey: string) => {
-        const batch = groups.filter(g => g.hasPhone && g.loans.some(m => itemMap.get(m.itemId)?.inventoryType === catKey));
-        startBatchQueue(batch, `categoría ${catKey}`);
+        const toSend = pendingInCategory(catKey);
+        if (toSend.length === 0) return;
+        toSend.forEach((g, i) => setTimeout(() => remind(g), i * 400));
+        const newWL: WeeklyLog = { week: weeklyLog.week, sent: { ...weeklyLog.sent } };
+        const existing = newWL.sent[catKey] ?? [];
+        newWL.sent[catKey] = [...new Set([...existing, ...toSend.map(g => g.person.id)])];
+        saveWeekly(newWL);
     };
 
     const remindGeneralWeekly = () => {
-        const batch = groups.filter(g => g.hasPhone);
-        startBatchQueue(batch, 'General');
-    };
-
-    // ── Advance queue step ────────────────────────────────────────────────
-    const nextStep = () => {
-        if (!queue) return;
-        // Mark the just-sent person in weekly log
-        const justSent = queue[step];
-        if (justSent) {
-            const updated = markSentInLog(justSent, weeklyLog);
-            saveWeekly(updated);
+        const toSend = getGeneralPending();
+        if (toSend.length === 0) return;
+        toSend.forEach((g, i) => setTimeout(() => remind(g), i * 400));
+        const newWL: WeeklyLog = { week: weeklyLog.week, sent: { ...weeklyLog.sent } };
+        for (const g of toSend) {
+            for (const m of g.loans) {
+                const catKey = itemMap.get(m.itemId)?.inventoryType;
+                if (!catKey) continue;
+                const existing = newWL.sent[catKey] ?? [];
+                if (!existing.includes(g.person.id))
+                    newWL.sent[catKey] = [...existing, g.person.id];
+            }
         }
-        const next = step + 1;
-        if (next >= queue.length) {
-            setQueue(null);
-            setStep(0);
-            return;
-        }
-        setStep(next);
-        remind(queue[next]);
-        // Scroll so the next person's card is visible
-        setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }), 150);
-        onBehaviorLog?.('ACTION', `Cola paso ${next + 1}/${queue.length}: ${queue[next].person.name}`);
+        saveWeekly(newWL);
     };
 
-    // ── Category helpers ──────────────────────────────────────────────────
-    const getGroupsForCategory = (catKey: string) =>
-        groups.filter(g => g.hasPhone && g.loans.some(m => itemMap.get(m.itemId)?.inventoryType === catKey));
-
-    const isCategoryDone = (catKey: string): boolean => {
-        const cat = getGroupsForCategory(catKey);
-        if (cat.length === 0) return false;
-        const sent = weeklyLog.sent[catKey] ?? [];
-        return cat.every(g => sent.includes(g.person.id));
-    };
-
-    const generalSentCount = (): number => {
-        const allSent = new Set(Object.values(weeklyLog.sent).flat());
-        return groups.filter(g => g.hasPhone && allSent.has(g.person.id)).length;
-    };
-
+    const generalPending = getGeneralPending();
     const hasPhoneUsers = groups.some(g => g.hasPhone);
-    const totalWithPhone = groups.filter(g => g.hasPhone).length;
-    const generalDone = totalWithPhone > 0 && generalSentCount() >= totalWithPhone;
 
-    const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-    // Map: letter → first person.id that appears in render order (due → onTrack → noPhone)
-    const firstOfLetterMap = useMemo(() => {
-        const map = new Map<string, string>();
-        for (const g of [...dueGroups, ...onTrackGroups, ...noPhoneGroups]) {
-            const letter = g.person.name.charAt(0).toUpperCase();
-            if (!map.has(letter)) map.set(letter, g.person.id);
-        }
-        return map;
-    }, [dueGroups, onTrackGroups, noPhoneGroups]);
-    const activeLetters = useMemo(() => new Set(firstOfLetterMap.keys()), [firstOfLetterMap]);
-    const jumpToLetter = useCallback((letter: string) => {
-        const el = document.querySelector(`[data-person-letter="${letter}"]`);
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, []);
-
-    const wrapCard = (g: PersonGroup, node: React.ReactNode) => {
-        const letter = g.person.name.charAt(0).toUpperCase();
-        if (firstOfLetterMap.get(letter) !== g.person.id) return node;
-        return <div key={`az-${g.person.id}`} data-person-letter={letter}>{node}</div>;
-    };
-
-    const PersonCard: React.FC<{ g: PersonGroup; highlight?: boolean }> = ({ g, highlight }) => {
+    const PersonCard: React.FC<{ g: PersonGroup }> = ({ g }) => {
         const maxDays = Math.max(...g.loans.map(m => daysSince(m.timestamp)));
         const itemNames = g.loans.map(m => itemMap.get(m.itemId)?.name ?? '—').join(', ');
         const lastRemindedTs = g.loans.map(m => log[m.id]).filter(Boolean).sort().reverse()[0];
         const daysSinceReminder = lastRemindedTs ? daysSince(lastRemindedTs) : null;
 
         return (
-            <div className={`rounded-2xl p-4 border flex items-center gap-3 transition-all ${
-                highlight ? 'bg-green-50 border-green-400 ring-2 ring-green-400' : g.isDue ? 'bg-green-50 border-green-200' : 'bg-white border-gray-100'
-            }`}>
+            <div className={`rounded-2xl p-4 border flex items-center gap-3 ${g.isDue ? 'bg-green-50 border-green-200' : 'bg-white border-gray-100'}`}>
                 <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-black text-base flex-shrink-0">
                     {g.person.name.charAt(0)}
                 </div>
@@ -246,7 +210,9 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
                     <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-sm font-bold text-gray-900">{g.person.name}</p>
                         {g.isDue && (
-                            <span className="text-[10px] font-black bg-green-500 text-white px-1.5 py-0.5 rounded-full animate-pulse">recordar</span>
+                            <span className="text-[10px] font-black bg-green-500 text-white px-1.5 py-0.5 rounded-full animate-pulse">
+                                recordar
+                            </span>
                         )}
                     </div>
                     <p className="text-xs text-gray-500 truncate mt-0.5">{itemNames}</p>
@@ -254,7 +220,9 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
                         <span className={`text-[10px] font-semibold ${maxDays > 14 ? 'text-red-500' : maxDays > 7 ? 'text-yellow-600' : 'text-gray-400'}`}>
                             {maxDays}d fuera
                         </span>
-                        {g.person.phone && <span className="text-[10px] text-gray-400">{g.person.phone}</span>}
+                        {g.person.phone && (
+                            <span className="text-[10px] text-gray-400">{g.person.phone}</span>
+                        )}
                         {daysSinceReminder !== null && (
                             <span className="text-[10px] text-green-600">• recordado hace {daysSinceReminder}d</span>
                         )}
@@ -262,51 +230,36 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
                 </div>
                 {g.hasPhone ? (
                     <div className="flex flex-col gap-1 flex-shrink-0">
-                        <button onClick={() => { remind(g); onBehaviorLog?.('ACTION', `Recordatorio semana: ${g.person.name}`); }}
+                        <button
+                            onClick={() => remind(g)}
                             className={`flex items-center gap-1 px-3 py-2 text-xs font-black rounded-xl transition-all ${
-                                g.isDue ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-green-100 hover:bg-green-200 text-green-800'
-                            }`}>
+                                g.isDue
+                                    ? 'bg-green-600 hover:bg-green-700 text-white'
+                                    : 'bg-green-100 hover:bg-green-200 text-green-800'
+                            }`}
+                        >
                             📲 Semana
                         </button>
-                        <button onClick={() => { remindMonthly(g); onBehaviorLog?.('ACTION', `Recordatorio mes: ${g.person.name}`); }}
-                            className="flex items-center gap-1 px-3 py-2 text-xs font-black bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-xl transition-all">
+                        <button
+                            onClick={() => remindMonthly(g)}
+                            className="flex items-center gap-1 px-3 py-2 text-xs font-black bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-xl transition-all"
+                            title="Resumen del último mes"
+                        >
                             📅 Mes
                         </button>
                     </div>
                 ) : (
-                    <span className="flex-shrink-0 text-[10px] text-gray-300 text-right max-w-[72px] leading-tight">Sin número en Personal</span>
+                    <span className="flex-shrink-0 text-[10px] text-gray-300 text-right max-w-[72px] leading-tight">
+                        Sin número en Personal
+                    </span>
                 )}
             </div>
         );
     };
 
     return (
-        <div className="space-y-4 max-w-2xl mx-auto pr-6">
-            {readOnly && (
-                <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-xs font-semibold text-amber-700">
-                    👁️ Modo visitante — solo lectura
-                </div>
-            )}
-            <div className="relative">
-            {readOnly && <div className="absolute inset-0 z-10 cursor-not-allowed" />}
-
-            {/* ── Contador de pasos al tope (visible siempre que haya cola) ── */}
-            {queue && (
-                <div className="sticky top-0 z-20 bg-green-600 text-white px-4 py-3 rounded-2xl flex items-center justify-between gap-3 shadow-lg mb-3">
-                    <div>
-                        <p className="font-black text-sm">Paso {step + 1} de {queue.length} — {queue[step]?.person.name}</p>
-                        <p className="text-xs text-green-100">WhatsApp abierto → toca Enviar → vuelve aquí</p>
-                    </div>
-                    <button
-                        onClick={nextStep}
-                        className="flex-shrink-0 px-4 py-2 bg-white text-green-700 font-black text-xs rounded-xl hover:bg-green-50 transition-colors"
-                    >
-                        {step < queue.length - 1 ? 'Siguiente →' : '✓ Listo'}
-                    </button>
-                </div>
-            )}
-
-            {/* ── Header ── */}
+        <div className="space-y-5 max-w-2xl mx-auto">
+            {/* Page header */}
             <div className="flex items-start justify-between gap-3">
                 <div>
                     <h1 className="text-xl font-black text-gray-900">📱 WhatsApp Recordatorios</h1>
@@ -315,57 +268,73 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
                         {dueGroups.length > 0 && ` · ${dueGroups.length} persona${dueGroups.length > 1 ? 's' : ''} sin recordar`}
                     </p>
                 </div>
+                <div className="flex flex-col gap-1.5 flex-shrink-0">
+                    {hasPhoneUsers && (
+                        <button
+                            onClick={startRemindAllMonthly}
+                            className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl transition-colors"
+                            title="Enviar resumen del último mes a todos"
+                        >
+                            📅 Resumen mes a todos
+                        </button>
+                    )}
+                    <a
+                        href={buildTestReminderUrl()}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 px-3 py-2 bg-green-100 hover:bg-green-200 text-green-800 text-xs font-black rounded-xl transition-colors"
+                        title={`Enviar prueba a ${TEST_PHONE_DISPLAY}`}
+                    >
+                        🧪 Probar
+                    </a>
+                </div>
             </div>
 
-            {/* ── Botones de categoría ── */}
+            {/* C6: Category weekly batch buttons */}
             {hasPhoneUsers && activeLoans.length > 0 && (
                 <div>
                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">
                         Recordar por categoría — semana actual
                     </p>
-                    <div className="flex gap-2 overflow-x-auto pb-1">
+                    <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
                         {CATEGORY_BTNS.map(btn => {
-                            const catGroups = getGroupsForCategory(btn.key);
-                            const noData = catGroups.length === 0;
+                            const pending = pendingInCategory(btn.key);
                             const done = isCategoryDone(btn.key);
+                            const noData = getGroupsForCategory(btn.key).length === 0;
+                            const disabled = done || noData;
                             return (
                                 <button
                                     key={btn.key}
-                                    onClick={() => !noData && remindCategory(btn.key)}
-                                    disabled={noData}
+                                    onClick={() => remindCategory(btn.key)}
+                                    disabled={disabled}
                                     className={`flex-shrink-0 px-3 py-2 text-xs font-black rounded-xl transition-all ${
-                                        noData
+                                        disabled
                                             ? 'bg-gray-100 text-gray-300 cursor-not-allowed'
-                                            : done
-                                                ? `${btn.active} text-white opacity-70`
-                                                : `${btn.active} text-white`
+                                            : `${btn.active} text-white`
                                     }`}
-                                    title={noData ? 'Sin préstamos en esta categoría' : done ? 'Enviado esta semana — toca para re-enviar' : `Recordar a ${catGroups.length} persona${catGroups.length !== 1 ? 's' : ''}`}
+                                    title={done ? 'Ya enviado esta semana' : noData ? 'Sin préstamos en esta categoría' : `Recordar a ${pending.length} persona${pending.length !== 1 ? 's' : ''}`}
                                 >
-                                    {btn.label}{done ? ' ✓' : ` (${catGroups.length})`}
+                                    {btn.label}{!disabled && pending.length > 0 ? ` (${pending.length})` : done ? ' ✓' : ''}
                                 </button>
                             );
                         })}
-                        {/* General button */}
+                        {/* General smart button */}
                         <button
-                            onClick={() => !(!hasPhoneUsers) && remindGeneralWeekly()}
-                            disabled={!hasPhoneUsers}
+                            onClick={remindGeneralWeekly}
+                            disabled={generalPending.length === 0}
                             className={`flex-shrink-0 px-3 py-2 text-xs font-black rounded-xl transition-all ${
-                                !hasPhoneUsers
+                                generalPending.length === 0
                                     ? 'bg-gray-100 text-gray-300 cursor-not-allowed'
-                                    : generalDone
-                                        ? 'bg-green-600 hover:bg-green-700 text-white opacity-70'
-                                        : 'bg-green-600 hover:bg-green-700 text-white'
+                                    : 'bg-green-600 hover:bg-green-700 text-white'
                             }`}
-                            title={generalDone ? 'Todos recordados esta semana — toca para re-enviar' : `Recordar a los ${totalWithPhone} trabajadores`}
+                            title={generalPending.length === 0 ? 'Todos recordados esta semana' : `Recordar a ${generalPending.length} persona${generalPending.length !== 1 ? 's' : ''} sin contactar esta semana`}
                         >
-                            🌐 General{generalDone ? ' ✓' : ` (${totalWithPhone})`}
+                            🌐 General{generalPending.length > 0 ? ` (${generalPending.length})` : ' ✓'}
                         </button>
                     </div>
                 </div>
             )}
 
-            {/* ── Contenido ── */}
             {activeLoans.length === 0 ? (
                 <div className="text-center py-20 bg-white rounded-2xl border border-gray-100 text-gray-400">
                     <p className="text-4xl mb-3">🎉</p>
@@ -374,13 +343,15 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
                 </div>
             ) : (
                 <>
-                    {/* Pendientes */}
+                    {/* Pendientes (+8 días sin recordar) */}
                     {dueGroups.length > 0 && (
                         <div className="bg-white rounded-2xl border border-green-200 overflow-hidden shadow-sm">
                             <div className="bg-green-600 px-4 py-3 flex items-center justify-between gap-3">
                                 <div>
                                     <p className="text-sm font-black text-white">🔔 Necesitan recordatorio</p>
-                                    <p className="text-xs text-green-100">Sin contactar hace +{REMINDER_INTERVAL_DAYS} días</p>
+                                    <p className="text-xs text-green-100">
+                                        Sin contactar hace +{REMINDER_INTERVAL_DAYS} días
+                                    </p>
                                 </div>
                                 {!queue && (
                                     <button
@@ -391,14 +362,33 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
                                     </button>
                                 )}
                             </div>
+
+                            {/* Banner paso a paso */}
+                            {queue && (
+                                <div className="bg-green-50 border-b border-green-200 px-4 py-3 flex items-center justify-between gap-3">
+                                    <div>
+                                        <p className="text-sm font-black text-green-900">
+                                            Paso {step + 1} de {queue.length} — {queue[step]?.person.name}
+                                        </p>
+                                        <p className="text-xs text-green-700">
+                                            WhatsApp abierto → toca Enviar → vuelve aquí
+                                        </p>
+                                    </div>
+                                    <button
+                                        onClick={nextStep}
+                                        className="flex-shrink-0 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-xs font-black rounded-xl transition-colors"
+                                    >
+                                        {step < queue.length - 1 ? 'Siguiente →' : '✓ Listo'}
+                                    </button>
+                                </div>
+                            )}
+
                             <div className="p-3 space-y-2">
-                                {dueGroups.map(g => wrapCard(g, (
-                                    <PersonCard
-                                        key={g.person.id}
-                                        g={g}
-                                        highlight={!!queue && queue[step]?.person.id === g.person.id}
-                                    />
-                                )))}
+                                {dueGroups.map((g) => (
+                                    <div key={g.person.id} className={queue && queue[step]?.person.id === g.person.id ? 'ring-2 ring-green-400 rounded-2xl' : ''}>
+                                        <PersonCard g={g} />
+                                    </div>
+                                ))}
                             </div>
                         </div>
                     )}
@@ -413,26 +403,22 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
                         </div>
                     )}
 
+                    {/* Con teléfono, al día */}
                     {onTrackGroups.length > 0 && (
                         <div>
                             <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2">📋 Préstamos activos — al día</p>
                             <div className="space-y-2">
-                                {onTrackGroups.map(g => wrapCard(g, (
-                                    <PersonCard
-                                        key={g.person.id}
-                                        g={g}
-                                        highlight={!!queue && queue[step]?.person.id === g.person.id}
-                                    />
-                                )))}
+                                {onTrackGroups.map(g => <PersonCard key={g.person.id} g={g} />)}
                             </div>
                         </div>
                     )}
 
+                    {/* Sin teléfono */}
                     {noPhoneGroups.length > 0 && (
                         <div>
                             <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2">⚠️ Sin número de WhatsApp</p>
                             <div className="space-y-2">
-                                {noPhoneGroups.map(g => wrapCard(g, <PersonCard key={g.person.id} g={g} />))}
+                                {noPhoneGroups.map(g => <PersonCard key={g.person.id} g={g} />)}
                             </div>
                             <p className="text-[10px] text-gray-400 mt-2 text-center">
                                 Agrega el teléfono en la sección Personal → toca el nombre del trabajador → editar.
@@ -441,32 +427,6 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
                     )}
                 </>
             )}
-
-            <div ref={bottomRef} className="h-px" />
-
-            {/* Índice A-Z lateral derecho */}
-            {activeLetters.size > 0 && (
-                <div className="fixed right-1 top-1/2 -translate-y-1/2 flex flex-col items-center gap-0.5 z-30">
-                    {ALPHABET.map(letter => {
-                        const active = activeLetters.has(letter);
-                        return (
-                            <button
-                                key={letter}
-                                onClick={() => active && jumpToLetter(letter)}
-                                disabled={!active}
-                                className={`w-5 h-5 flex items-center justify-center text-[10px] font-black rounded-full transition-all ${
-                                    active
-                                        ? 'text-green-600 hover:text-white hover:bg-green-500 cursor-pointer'
-                                        : 'text-gray-300 cursor-default'
-                                }`}
-                            >
-                                {letter}
-                            </button>
-                        );
-                    })}
-                </div>
-            )}
-            </div>
         </div>
     );
 };

@@ -25,7 +25,6 @@ interface WizardData {
     newWorkerName: string;
     project: Project | null;
     newProjectName: string;
-    itemInputs: Partial<Record<InventoryType, string>>;
 }
 
 const LOAN_TYPES = new Set([InventoryType.HAND_TOOL, InventoryType.ELECTRICAL_TOOL]);
@@ -50,17 +49,8 @@ const todayISO = () => new Date().toISOString().split('T')[0];
 
 const INIT_WIZARD: WizardData = {
     selectedTypes: [], worker: null, newWorkerName: '',
-    project: null, newProjectName: '', itemInputs: {},
+    project: null, newProjectName: '',
 };
-
-const parseItemList = (text: string) =>
-    text.split(',').map(s => s.trim()).filter(Boolean).map(s => {
-        const m1 = s.match(/^(\d+)\s*[xX×]?\s+(.+)$/);
-        if (m1) return { rawName: m1[2].trim(), quantity: Number(m1[1]) };
-        const m2 = s.match(/^(.+?)\s+[xX×]\s*(\d+)$/);
-        if (m2) return { rawName: m2[1].trim(), quantity: Number(m2[2]) };
-        return { rawName: s, quantity: 1 };
-    });
 
 export const FloatingChat: React.FC<FloatingChatProps> = ({
     items, movements, personnel, purchaseOrders, projects,
@@ -79,8 +69,14 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     const [wizardStep, setWizardStep] = useState<WizardStep | null>(null);
     const [wizardData, setWizardData] = useState<WizardData>(INIT_WIZARD);
     const [wizardDate, setWizardDate] = useState<string>(todayISO());
-    // For HAND_TOOL / ELECTRICAL_TOOL: checkbox-based selection (itemId → qty)
-    const [wizardToolSel, setWizardToolSel] = useState<Map<string, number>>(new Map());
+    const [wizardSel, setWizardSel] = useState<Map<string, number>>(new Map());
+    // Inline create form state for Step 4
+    const [wizardCreateType, setWizardCreateType] = useState<InventoryType | null>(null);
+    const [wizardCreateName, setWizardCreateName] = useState('');
+    const [wizardCreateQty, setWizardCreateQty] = useState(1);
+    const [wizardCreateBrand, setWizardCreateBrand] = useState('');
+    const [wizardCreateColor, setWizardCreateColor] = useState('');
+    const [wizardCreateUnit, setWizardCreateUnit] = useState('unidades');
 
     // Panel state
     const [activePanel, setActivePanel] = useState<ActivePanel>(null);
@@ -134,31 +130,60 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
 
     // ── Wizard ──────────────────────────────────────────────────────────────
 
+    const resetWizardCreate = () => {
+        setWizardCreateType(null);
+        setWizardCreateName('');
+        setWizardCreateQty(1);
+        setWizardCreateBrand('');
+        setWizardCreateColor('');
+        setWizardCreateUnit('unidades');
+    };
+
     const startWizard = () => {
         setWizardData(INIT_WIZARD);
         setWizardDate(todayISO());
-        setWizardToolSel(new Map());
+        setWizardSel(new Map());
+        resetWizardCreate();
         setWizardStep('select_types');
         setActivePanel(null);
         onBehaviorLog?.('BUTTON', 'Tocó botón: Registrar salida');
     };
 
-    const cancelWizard = () => { setWizardStep(null); setInput(''); setWizardToolSel(new Map()); };
+    const cancelWizard = () => { setWizardStep(null); setInput(''); setWizardSel(new Map()); resetWizardCreate(); };
 
-    const toggleWizardTool = (itemId: string) => {
-        setWizardToolSel(prev => {
+    const toggleWizardSel = (itemId: string) => {
+        setWizardSel(prev => {
             const next = new Map(prev);
             if (next.has(itemId)) next.delete(itemId); else next.set(itemId, 1);
             return next;
         });
     };
 
-    const setWizardToolQty = (itemId: string, qty: number) => {
-        setWizardToolSel(prev => {
+    const setWizardSelQty = (itemId: string, qty: number) => {
+        setWizardSel(prev => {
             const next = new Map(prev);
             if (next.has(itemId)) next.set(itemId, Math.max(1, qty));
             return next;
         });
+    };
+
+    const handleWizardCreateItem = () => {
+        if (!wizardCreateType || !wizardCreateName.trim()) return;
+        if (wizardCreateType === InventoryType.ELECTRICAL_TOOL && (!wizardCreateBrand.trim() || !wizardCreateColor.trim())) return;
+        const newItem = onCreateItem({
+            name: wizardCreateName.trim(),
+            inventoryType: wizardCreateType,
+            quantity: wizardCreateQty,
+            unit: wizardCreateUnit.trim() || 'unidades',
+            category: CATEGORY_BY_TYPE[wizardCreateType],
+            subCategory: 'General',
+            minStock: 0,
+            price: 0,
+            ...(wizardCreateBrand.trim() ? { brand: wizardCreateBrand.trim() } : {}),
+            ...(wizardCreateColor.trim() ? { color: wizardCreateColor.trim() } : {}),
+        });
+        setWizardSel(prev => { const next = new Map(prev); next.set(newItem.id, wizardCreateQty); return next; });
+        resetWizardCreate();
     };
 
     const handleConfirmWizard = () => {
@@ -167,27 +192,22 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         const project = wizardData.project
             ?? (wizardData.newProjectName.trim() ? onCreateProject({ name: wizardData.newProjectName.trim(), status: 'active' }) : null);
 
+        // Validate: consumables require a project
+        const hasSingleUseItems = [...wizardSel.keys()].some(id => items.find(i => i.id === id)?.inventoryType === InventoryType.SINGLE_USE);
+        if (hasSingleUseItems && !project) {
+            addBot('⚠️ Los consumibles requieren un proyecto. Vuelve al Paso 3 y elige uno.');
+            return;
+        }
+
         const ts = wizardDate ? new Date(wizardDate + 'T12:00:00') : new Date();
 
         const toLog: Array<Omit<Movement, 'id'>> = [];
-        const TOOL_TYPES = new Set([InventoryType.HAND_TOOL, InventoryType.ELECTRICAL_TOOL]);
         for (const type of wizardData.selectedTypes) {
-            if (TOOL_TYPES.has(type)) {
-                // Use checkbox selections filtered to this type
-                for (const [itemId, quantity] of wizardToolSel.entries()) {
-                    const item = items.find(i => i.id === itemId && i.inventoryType === type);
-                    if (!item) continue;
-                    toLog.push({ itemId: item.id, type: MovementType.CHECK_OUT, quantity, timestamp: ts, personnelId: worker?.id, projectId: project?.id, notes: '', isLoan: true, isReturned: false });
-                }
-            } else {
-                const parsed = parseItemList(wizardData.itemInputs[type] ?? '');
-                for (const { rawName, quantity } of parsed) {
-                    if (!rawName) continue;
-                    let item = items.find(i => i.inventoryType === type && i.name.toLowerCase() === rawName.toLowerCase());
-                    if (!item) item = items.find(i => i.inventoryType === type && i.name.toLowerCase().includes(rawName.toLowerCase()));
-                    if (!item) item = onCreateItem({ name: rawName, inventoryType: type, quantity: 0, unit: 'unidad', category: 'Sin clasificar', subCategory: 'General', minStock: 0, price: 0 });
-                    toLog.push({ itemId: item.id, type: MovementType.CHECK_OUT, quantity, timestamp: ts, personnelId: worker?.id, projectId: project?.id, notes: '', isLoan: false, isReturned: false });
-                }
+            for (const [itemId, quantity] of wizardSel.entries()) {
+                const item = items.find(i => i.id === itemId && i.inventoryType === type);
+                if (!item) continue;
+                const isLoan = LOAN_TYPES.has(type);
+                toLog.push({ itemId: item.id, type: MovementType.CHECK_OUT, quantity, timestamp: ts, personnelId: worker?.id, projectId: project?.id, notes: '', isLoan, isReturned: false });
             }
         }
         if (toLog.length > 0) {
@@ -342,11 +362,17 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             );
         }
         if (wizardStep === 'select_project') {
+            const requiresProject = wizardData.selectedTypes.includes(InventoryType.SINGLE_USE);
             return (
                 <div className="flex-1 overflow-y-auto px-3 py-4 space-y-3">
                     <div>
                         <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1">Paso 3 de 4</p>
                         <p className="text-sm font-bold text-gray-800 mb-3">¿A qué proyecto va?</p>
+                        {requiresProject && (
+                            <p className="text-[11px] text-orange-600 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 mb-2">
+                                📦 Los consumibles requieren proyecto obligatoriamente.
+                            </p>
+                        )}
                         <div className="space-y-1 max-h-44 overflow-y-auto mb-2 pr-1">
                             {activeProjects.map(p => (
                                 <button key={p.id} onClick={() => { setWizardData(d => ({ ...d, project: p, newProjectName: '' })); setWizardStep('enter_items'); }}
@@ -360,10 +386,12 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                             className="w-full py-2 text-xs font-semibold text-blue-600 hover:text-blue-800 border border-dashed border-blue-300 rounded-xl hover:border-blue-500 transition-all">
                             + Nuevo proyecto
                         </button>
-                        <button onClick={() => { setWizardData(d => ({ ...d, project: null, newProjectName: '' })); setWizardStep('enter_items'); }}
-                            className="w-full mt-1 py-2 text-xs font-semibold text-gray-500 hover:text-gray-700 border border-dashed border-gray-300 rounded-xl hover:border-gray-400 transition-all">
-                            Sin proyecto →
-                        </button>
+                        {!requiresProject && (
+                            <button onClick={() => { setWizardData(d => ({ ...d, project: null, newProjectName: '' })); setWizardStep('enter_items'); }}
+                                className="w-full mt-1 py-2 text-xs font-semibold text-gray-500 hover:text-gray-700 border border-dashed border-gray-300 rounded-xl hover:border-gray-400 transition-all">
+                                Sin proyecto →
+                            </button>
+                        )}
                     </div>
                     <div className="flex gap-2">
                         <button onClick={() => setWizardStep('select_worker')} className="px-3 py-2 text-xs text-gray-400 hover:text-gray-600 border border-gray-200 rounded-xl">← Atrás</button>
@@ -393,11 +421,6 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         if (wizardStep === 'enter_items') {
             const workerName = (wizardData.worker?.name ?? wizardData.newWorkerName) || 'Sin asignar';
             const projectName = (wizardData.project?.name ?? wizardData.newProjectName) || 'Sin proyecto';
-            const toolTypes = wizardData.selectedTypes.filter(t => t === InventoryType.HAND_TOOL || t === InventoryType.ELECTRICAL_TOOL);
-            const otherTypes = wizardData.selectedTypes.filter(t => t !== InventoryType.HAND_TOOL && t !== InventoryType.ELECTRICAL_TOOL);
-            const hasTools = wizardToolSel.size > 0;
-            const hasOther = otherTypes.some(t => (wizardData.itemInputs[t] ?? '').trim());
-            const hasAnyItem = hasTools || hasOther;
 
             return (
                 <div className="flex-1 overflow-y-auto px-3 py-4 space-y-3">
@@ -406,36 +429,35 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                         <p className="text-sm font-bold text-gray-800 mb-0.5">Artículos a despachar</p>
                         <p className="text-[11px] text-gray-400 mb-3">Para <strong>{workerName}</strong> · {projectName}</p>
 
-                        {/* Herramientas: lista con checkboxes */}
-                        {toolTypes.map(type => {
-                            const available = items.filter(i => i.inventoryType === type && i.quantity > 0)
+                        {wizardData.selectedTypes.map(type => {
+                            const available = items
+                                .filter(i => i.inventoryType === type && i.quantity > 0)
                                 .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+                            const selectedCount = [...wizardSel.entries()]
+                                .filter(([id]) => items.find(i => i.id === id)?.inventoryType === type).length;
+                            const isCreating = wizardCreateType === type;
+
                             return (
                                 <div key={type} className="mb-3">
                                     <label className="text-xs font-bold text-gray-600 block mb-1">
                                         {TYPE_LABELS[type]}
-                                        {wizardToolSel.size > 0 && (
-                                            <span className="ml-1 font-normal text-blue-500">
-                                                ({[...wizardToolSel.entries()].filter(([id]) => items.find(i => i.id === id)?.inventoryType === type).length} selec.)
-                                            </span>
-                                        )}
+                                        {selectedCount > 0 && <span className="ml-1 font-normal text-blue-500">({selectedCount} selec.)</span>}
                                     </label>
-                                    {available.length === 0 ? (
-                                        <p className="text-xs text-gray-400 py-2 text-center">Sin stock disponible de este tipo.</p>
-                                    ) : (
-                                        <div className="space-y-1 max-h-36 overflow-y-auto border border-gray-200 rounded-xl p-1">
+
+                                    {available.length > 0 && (
+                                        <div className="space-y-1 max-h-36 overflow-y-auto border border-gray-200 rounded-xl p-1 mb-1">
                                             {available.map(item => {
-                                                const isSelected = wizardToolSel.has(item.id);
-                                                const qty = wizardToolSel.get(item.id) ?? 1;
+                                                const isSelected = wizardSel.has(item.id);
+                                                const qty = wizardSel.get(item.id) ?? 1;
                                                 return (
-                                                    <div key={item.id} onClick={() => toggleWizardTool(item.id)}
+                                                    <div key={item.id} onClick={() => toggleWizardSel(item.id)}
                                                         className={`flex items-center gap-2 px-2 py-1.5 rounded-lg border cursor-pointer transition-all ${isSelected ? 'bg-blue-50 border-blue-300' : 'bg-white border-transparent hover:border-blue-200 hover:bg-blue-50'}`}>
                                                         <input type="checkbox" checked={isSelected} readOnly className="w-4 h-4 accent-blue-600 flex-shrink-0" />
                                                         <span className="flex-1 text-sm text-gray-800 truncate">{item.name}</span>
                                                         <span className="text-[10px] text-gray-400 flex-shrink-0">{item.quantity} disp.</span>
                                                         {isSelected && (
                                                             <input type="number" value={qty} min={1} max={item.quantity}
-                                                                onChange={e => setWizardToolQty(item.id, parseInt(e.target.value) || 1)}
+                                                                onChange={e => setWizardSelQty(item.id, parseInt(e.target.value) || 1)}
                                                                 onClick={e => e.stopPropagation()}
                                                                 className="w-11 text-xs text-center border border-blue-300 rounded-lg px-1 py-0.5 bg-white focus:outline-none" />
                                                         )}
@@ -444,24 +466,64 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                             })}
                                         </div>
                                     )}
+                                    {available.length === 0 && !isCreating && (
+                                        <p className="text-xs text-gray-400 py-1 text-center mb-1">Sin stock. Usa "+ Crear nuevo".</p>
+                                    )}
+
+                                    {isCreating ? (
+                                        <div className="border border-dashed border-blue-300 rounded-xl p-3 bg-blue-50 space-y-2 mb-1">
+                                            <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Nuevo ítem</p>
+                                            <input type="text" value={wizardCreateName}
+                                                onChange={e => setWizardCreateName(e.target.value)}
+                                                placeholder="Nombre del ítem *" autoFocus
+                                                className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                                            <input type="number" value={wizardCreateQty} min={1}
+                                                onChange={e => setWizardCreateQty(parseInt(e.target.value) || 1)}
+                                                placeholder="Cantidad *"
+                                                className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                                            {type === InventoryType.ELECTRICAL_TOOL && (
+                                                <>
+                                                    <input type="text" value={wizardCreateBrand}
+                                                        onChange={e => setWizardCreateBrand(e.target.value)}
+                                                        placeholder="Marca * (ej: DeWalt, Bosch, Makita)"
+                                                        className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                                                    <input type="text" value={wizardCreateColor}
+                                                        onChange={e => setWizardCreateColor(e.target.value)}
+                                                        placeholder="Color * (ej: amarillo, azul, rojo)"
+                                                        className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                                                </>
+                                            )}
+                                            {(type === InventoryType.PPE || type === InventoryType.SINGLE_USE) && (
+                                                <input type="text" value={wizardCreateUnit}
+                                                    onChange={e => setWizardCreateUnit(e.target.value)}
+                                                    placeholder="Unidad (ej: unidades, pares, cajas)"
+                                                    className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                                            )}
+                                            <div className="flex gap-2">
+                                                <button onClick={resetWizardCreate}
+                                                    className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg bg-white">
+                                                    Cancelar
+                                                </button>
+                                                <button onClick={handleWizardCreateItem}
+                                                    disabled={!wizardCreateName.trim() || (type === InventoryType.ELECTRICAL_TOOL && (!wizardCreateBrand.trim() || !wizardCreateColor.trim()))}
+                                                    className="flex-1 py-1.5 text-xs font-black bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white rounded-lg transition-all">
+                                                    ✓ Guardar y seleccionar
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <button onClick={() => { resetWizardCreate(); setWizardCreateType(type); }}
+                                            className="w-full py-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800 border border-dashed border-blue-300 rounded-xl hover:border-blue-500 bg-white transition-all">
+                                            + Crear nuevo
+                                        </button>
+                                    )}
                                 </div>
                             );
                         })}
-
-                        {/* Consumibles / EPP: textarea libre */}
-                        {otherTypes.map(type => (
-                            <div key={type} className="mb-3">
-                                <label className="text-xs font-bold text-gray-600 block mb-1">{TYPE_LABELS[type]}</label>
-                                <textarea value={wizardData.itemInputs[type] ?? ''}
-                                    onChange={e => setWizardData(d => ({ ...d, itemInputs: { ...d.itemInputs, [type]: e.target.value } }))}
-                                    placeholder="Ej: 5 cascos, 3 guantes" rows={2}
-                                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
-                            </div>
-                        ))}
                     </div>
                     <div className="flex gap-2">
                         <button onClick={() => setWizardStep('select_project')} className="px-3 py-2 text-xs text-gray-400 hover:text-gray-600 border border-gray-200 rounded-xl">← Atrás</button>
-                        <button onClick={() => setWizardStep('confirm')} disabled={!hasAnyItem}
+                        <button onClick={() => setWizardStep('confirm')} disabled={wizardSel.size === 0}
                             className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold rounded-xl text-xs transition-all">
                             Revisar →
                         </button>
@@ -472,15 +534,11 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         if (wizardStep === 'confirm') {
             const workerName = (wizardData.worker?.name ?? wizardData.newWorkerName) || 'Sin asignar';
             const projectName = (wizardData.project?.name ?? wizardData.newProjectName) || 'Sin proyecto';
-            const TOOL_TYPES_SET = new Set([InventoryType.HAND_TOOL, InventoryType.ELECTRICAL_TOOL]);
-            const preview = wizardData.selectedTypes.flatMap(type => {
-                if (TOOL_TYPES_SET.has(type)) {
-                    return [...wizardToolSel.entries()]
-                        .filter(([id]) => items.find(i => i.id === id)?.inventoryType === type)
-                        .map(([id, quantity]) => ({ rawName: items.find(i => i.id === id)?.name ?? id, quantity, type }));
-                }
-                return parseItemList(wizardData.itemInputs[type] ?? '').map(p => ({ ...p, type }));
-            });
+            const preview = wizardData.selectedTypes.flatMap(type =>
+                [...wizardSel.entries()]
+                    .filter(([id]) => items.find(i => i.id === id)?.inventoryType === type)
+                    .map(([id, quantity]) => ({ rawName: items.find(i => i.id === id)?.name ?? id, quantity, type }))
+            );
             return (
                 <div className="flex-1 overflow-y-auto px-3 py-4 space-y-3">
                     <div>
