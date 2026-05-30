@@ -135,10 +135,33 @@ export const HelpView: React.FC = () => (
             <Tip>💡 El mensaje se abre en WhatsApp ya escrito — solo debes tocar Enviar.</Tip>
         </Section>
 
+        {/* Resumen */}
+        <Section icon="🏠" title="Resumen (pantalla principal)">
+            <p className="pt-3">Es la primera pantalla al entrar. Muestra el estado general de la bodega de un vistazo:</p>
+            <Row icon="📊" label="Indicadores de cabecera" desc="Total de ítems, movimientos del mes, préstamos activos y alertas de stock bajo. Toca cualquier cifra para ir directamente al detalle." />
+            <Row icon="⚠️" label="Alertas de stock" desc="Ítems por debajo del mínimo o agotados. Aparecen destacados para actuar rápido." />
+            <Row icon="🔑" label="Préstamos vencidos" desc="Herramientas fuera de bodega hace más de 14 días, ordenadas por urgencia." />
+            <Row icon="📦" label="Vista general del inventario" desc="Todos los ítems con su stock actual, tipo y estado (disponible / prestado / agotado)." />
+            <Row icon="📄" label="Exportar informe PDF" desc="Genera un reporte completo del período: indicadores, personal en préstamo, herramientas, consumibles y actividad por proyecto." />
+        </Section>
+
+        {/* Trazabilidad */}
+        <Section icon="🔍" title="Trazabilidad (solo Bodeguero)">
+            <p className="pt-3">
+                Registro completo de <strong>todo lo que ha pasado en la app</strong>. Solo el Bodeguero puede verla.
+                Se accede desde el menú lateral → <em>Trazabilidad</em>.
+            </p>
+            <Row icon="📋" label="Auditoría" desc="Cada vez que se crea, edita o elimina un ítem, movimiento, trabajador o proyecto, queda registrado con fecha, hora y quién lo hizo." />
+            <Row icon="👁️" label="Comportamiento" desc="Cada navegación, búsqueda, botón tocado y acción del usuario queda registrada. Útil para saber cómo se usa la app y detectar errores." />
+            <Row icon="📈" label="Estadísticas de uso" desc="Resumen de las acciones más frecuentes, usuarios más activos y búsquedas recientes." />
+            <Row icon="🔎" label="Filtros" desc="Filtra por actor (quién) y por tipo de acción para encontrar cualquier evento en el historial." />
+            <Tip>🔒 La trazabilidad no se puede borrar ni modificar desde la app. Es el registro de seguridad de la bodega.</Tip>
+        </Section>
+
         {/* Roles */}
         <Section icon="👥" title="Roles de usuario">
-            <Row icon="🔵" label="Bodeguero (Owner)" desc="Acceso completo: crear, editar y eliminar ítems y trabajadores, registrar movimientos, usar el chatbot, marcar devoluciones y recoger herramientas." />
-            <Row icon="⚪" label="Empleado" desc="Puede ver todo el inventario, historial, préstamos y proyectos. No puede modificar datos ni registrar salidas." />
+            <Row icon="🔵" label="Bodeguero" desc="Acceso completo: crear, editar y eliminar ítems y trabajadores, registrar movimientos, usar el chatbot, marcar devoluciones, recoger herramientas y ver la Trazabilidad." />
+            <Row icon="⚪" label="Visitante" desc="Solo lectura. Puede ver el inventario, historial, préstamos y proyectos. No puede modificar datos, registrar salidas ni ver la Trazabilidad." />
         </Section>
 
         {/* Configuración */}
