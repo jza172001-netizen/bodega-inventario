@@ -603,10 +603,12 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                                 onChange={e => setWizardCreateName(e.target.value)}
                                                 placeholder={type === InventoryType.ELECTRICAL_TOOL ? 'Género (ej: Pulidora, Taladro) *' : 'Nombre del ítem *'} autoFocus
                                                 className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
-                                            <input type="number" value={wizardCreateQty} min={1}
-                                                onChange={e => setWizardCreateQty(parseInt(e.target.value) || 1)}
-                                                placeholder="Cantidad *"
-                                                className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                                            {type === InventoryType.ELECTRICAL_TOOL ? null : (
+                                                <input type="number" value={wizardCreateQty} min={1}
+                                                    onChange={e => setWizardCreateQty(parseInt(e.target.value) || 1)}
+                                                    placeholder="Cantidad *"
+                                                    className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                                            )}
                                             {type === InventoryType.ELECTRICAL_TOOL && (
                                                 <div className="space-y-1.5">
                                                     <p className="text-[9px] font-black text-blue-500 uppercase tracking-wider">Especies (color + marca)</p>
@@ -630,6 +632,11 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                                         className="w-full py-1 text-[10px] text-blue-500 border border-dashed border-blue-200 rounded-lg hover:border-blue-400 bg-white">
                                                         + Agregar especie
                                                     </button>
+                                                    {wizardSpecies.filter(s => s.brand.trim() && s.color.trim()).length > 0 && (
+                                                        <p className="text-[10px] text-blue-600 font-bold text-center">
+                                                            Se crearán {wizardSpecies.filter(s => s.brand.trim() && s.color.trim()).length} ítem(s) — 1 unidad c/u
+                                                        </p>
+                                                    )}
                                                 </div>
                                             )}
                                             {(type === InventoryType.PPE || type === InventoryType.SINGLE_USE) && (
@@ -861,14 +868,25 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                         className="w-full py-1.5 text-xs text-green-600 border border-dashed border-green-300 rounded-xl hover:border-green-500 bg-white">
                         + Agregar especie
                     </button>
+                    {createSpecies.filter(s => s.brand.trim() && s.color.trim()).length > 0 && (
+                        <p className="text-[10px] text-green-700 font-bold text-center">
+                            Se crearán {createSpecies.filter(s => s.brand.trim() && s.color.trim()).length} ítem(s) — 1 unidad c/u
+                        </p>
+                    )}
                 </div>
             )}
 
             <div className="grid grid-cols-2 gap-2">
                 <div>
                     <label className="text-[10px] font-black text-green-700 uppercase tracking-wide block mb-1">Cantidad</label>
-                    <input type="number" value={createQty} min={1} onChange={e => setCreateQty(Math.max(1, parseInt(e.target.value) || 1))}
-                        className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400" />
+                    {createInvType === InventoryType.ELECTRICAL_TOOL ? (
+                        <div className="w-full text-sm border border-gray-100 bg-gray-50 rounded-xl px-3 py-2 text-gray-400 text-center">
+                            {createSpecies.filter(s => s.brand.trim() && s.color.trim()).length || 1} ítem(s)
+                        </div>
+                    ) : (
+                        <input type="number" value={createQty} min={1} onChange={e => setCreateQty(Math.max(1, parseInt(e.target.value) || 1))}
+                            className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400" />
+                    )}
                 </div>
                 <div>
                     <label className="text-[10px] font-black text-green-700 uppercase tracking-wide block mb-1">Unidad</label>
