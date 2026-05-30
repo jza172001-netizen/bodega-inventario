@@ -275,19 +275,41 @@ const App: React.FC = () => {
                 return { ...base, id };
             });
 
-            // Merge: Supabase gana para IDs coincidentes, añadir los que solo están en local
-            const mergedItems     = [...supaItems,     ...normItems.filter(i     => !supaItemIds.has(i.id))];
-            const mergedMovements = [...supaMovements, ...normMovements.filter(m => !supaMovIds.has(m.id))];
-            const mergedProjects  = [...supaProjects,  ...normProjects.filter(p  => !supaProjIds.has(p.id))];
-            const mergedPersonnel = [...supaPersonnel, ...normPersonnel.filter(p => !supaPerIds.has(p.id))];
-            const mergedPOs       = [...supaPOs,       ...normPOs.filter(o       => !supaPOIds.has(o.id))];
+            // localStorage es fuente de verdad para existencia.
+            // Si está completamente vacío (primera instalación / localStorage borrado) → Supabase gana.
+            // Si tiene datos → localStorage gana: lo que no está en local fue eliminado por el usuario.
+            const localIsEmpty =
+                localItems.length === 0 &&
+                localPersonnel.length === 0 &&
+                localProjects.length === 0;
 
-            // Actualizar estado solo si hubo cambios reales
-            if (supaItems.length > 0 || itemRemap.size > 0)        setItems(mergedItems);
-            if (supaMovements.length > 0 || movRemap.size > 0)     setMovements(mergedMovements);
-            if (supaProjects.length > 0 || projRemap.size > 0)     setProjects(mergedProjects);
-            if (supaPersonnel.length > 0 || perRemap.size > 0)     setPersonnel(mergedPersonnel);
-            if (supaPOs.length > 0 || normPOs.some(o => !supaPOIds.has(o.id))) setPurchaseOrders(mergedPOs);
+            const mergedItems:     Item[]          = localIsEmpty ? supaItems     : normItems;
+            const mergedMovements: Movement[]      = localIsEmpty ? supaMovements : normMovements;
+            const mergedProjects:  Project[]       = localIsEmpty ? supaProjects  : normProjects;
+            const mergedPersonnel: Personnel[]     = localIsEmpty ? supaPersonnel : normPersonnel;
+            const mergedPOs:       PurchaseOrder[] = localIsEmpty ? supaPOs       : normPOs;
+
+            // Limpiar Supabase: borrar filas que el usuario eliminó localmente
+            // pero que siguen en Supabase por un DELETE fallido o lento.
+            if (!localIsEmpty) {
+                const keepItems = new Set(normItems.map(i => i.id));
+                const keepMovs  = new Set(normMovements.map(m => m.id));
+                const keepProjs = new Set(normProjects.map(p => p.id));
+                const keepPers  = new Set(normPersonnel.map(p => p.id));
+                const keepPOs   = new Set(normPOs.map(o => o.id));
+                supaItems    .filter(i => !keepItems.has(i.id)).forEach(i => db.deleteItem(i.id).catch(() => {}));
+                supaMovements.filter(m => !keepMovs.has(m.id)) .forEach(m => db.deleteMovement(m.id).catch(() => {}));
+                supaProjects .filter(p => !keepProjs.has(p.id)).forEach(p => db.deleteProject(p.id).catch(() => {}));
+                supaPersonnel.filter(p => !keepPers.has(p.id)) .forEach(p => db.deletePersonnel(p.id).catch(() => {}));
+                supaPOs      .filter(o => !keepPOs.has(o.id))  .forEach(o => db.deletePurchaseOrder(o.id).catch(() => {}));
+            }
+
+            // Actualizar estado: siempre que haya datos o remapeos
+            if (mergedItems.length > 0     || itemRemap.size > 0)  setItems(mergedItems);
+            if (mergedMovements.length > 0 || movRemap.size > 0)   setMovements(mergedMovements);
+            if (mergedProjects.length > 0  || projRemap.size > 0)  setProjects(mergedProjects);
+            if (mergedPersonnel.length > 0 || perRemap.size > 0)   setPersonnel(mergedPersonnel);
+            if (mergedPOs.length > 0)                              setPurchaseOrders(mergedPOs);
 
             // Subir diferencias a Supabase en segundo plano (bulk upsert — idempotente)
             const itemsToSync = mergedItems.filter(i     => !supaItemIds.has(i.id));
