@@ -179,14 +179,53 @@ const App: React.FC = () => {
 
     // Sync desde Supabase en background al montar (no bloquea la UI)
     useEffect(() => {
-        // Supabase como fuente de verdad — siempre gana si tiene datos
         const local = loadFromLocalStorage();
+        const localItems     = (local?.items      ?? []).filter((i: Item)      => !SEED_ID.test(i.id));
+        const localMovements = (local?.movements  ?? []).filter((m: Movement)  => !SEED_ID.test(m.itemId ?? ''));
+        const localProjects  =  local?.projects   ?? [];
+        // UUID v4 válido — solo estos se pueden subir a Supabase (columna UUID)
+        const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
         db.fetchUsers().then(data => { if (data.length > 0 && local === null) setUsers(migrateUsers(data)); }).catch(() => {});
-        db.fetchItems().then(data => { if (data.length > 0) setItems(data); }).catch(() => {});
-        db.fetchMovements().then(data => { if (data.length > 0) setMovements(data); }).catch(() => {});
         db.fetchPersonnel().then(data => { if (data.length > 0) setPersonnel(data.filter(p => p.name?.trim().length >= 4)); }).catch(() => {});
         db.fetchPurchaseOrders().then(data => { if (data.length > 0) setPurchaseOrders(data); }).catch(() => {});
-        db.fetchProjects().then(data => { if (data.length > 0) setProjects(data); }).catch(() => {});
+
+        // Items: merge Supabase + localStorage para no perder datos
+        db.fetchItems().then(supaItems => {
+            if (supaItems.length === 0) {
+                // Supabase vacío — subir ítems locales con UUID válido (migración silenciosa)
+                localItems.filter(i => UUID_RE.test(i.id)).forEach(item => {
+                    const { id, ...rest } = item;
+                    db.addItem(rest, id).catch(() => {});
+                });
+                return; // Estado ya cargado desde localStorage
+            }
+            // Supabase tiene datos — hacer merge: Supabase gana, pero no tirar ítems solo en localStorage
+            const supaIds = new Set(supaItems.map(i => i.id));
+            const localOnly = localItems.filter(i => !supaIds.has(i.id));
+            // Subir al fondo los ítems locales con UUID válido
+            localOnly.filter(i => UUID_RE.test(i.id)).forEach(item => {
+                const { id, ...rest } = item;
+                db.addItem(rest, id).catch(() => {});
+            });
+            setItems([...supaItems, ...localOnly]);
+        }).catch(() => {});
+
+        // Movements: merge para no perder movimientos del localStorage
+        db.fetchMovements().then(supaMovements => {
+            if (supaMovements.length === 0) return;
+            const supaIds = new Set(supaMovements.map(m => m.id));
+            const localOnly = localMovements.filter(m => !supaIds.has(m.id));
+            setMovements([...supaMovements, ...localOnly]);
+        }).catch(() => {});
+
+        // Projects: merge para no perder proyectos del localStorage
+        db.fetchProjects().then(supaProjects => {
+            if (supaProjects.length === 0) return;
+            const supaIds = new Set(supaProjects.map(p => p.id));
+            const localOnly = localProjects.filter(p => !supaIds.has(p.id));
+            setProjects([...supaProjects, ...localOnly]);
+        }).catch(() => {});
     }, []);
 
     const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle');
