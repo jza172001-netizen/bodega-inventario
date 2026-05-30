@@ -97,6 +97,12 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     const [createName, setCreateName] = useState('');
     const [createQty, setCreateQty] = useState(1);
     const [createUnit, setCreateUnit] = useState('unidades');
+    // Loan panel: inline create states
+    const [loanIsCreating, setLoanIsCreating] = useState(false);
+    const [loanCreateName, setLoanCreateName] = useState('');
+    const [loanCreateQty, setLoanCreateQty] = useState(1);
+    const [loanCreateUnit, setLoanCreateUnit] = useState('unidades');
+    const [loanCreateSpecies, setLoanCreateSpecies] = useState<Array<{brand: string; color: string}>>([{ brand: '', color: '' }]);
 
     const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -259,6 +265,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         setLoanPersonnelId(''); setLoanSubWorkerId(''); setLoanNewSubWorkerName('');
         setLoanInvType(null); setLoanSelected(new Map()); setLoanProjectId(''); setLoanNewProjectName('');
         setLoanDate(todayISO());
+        setLoanIsCreating(false); setLoanCreateName(''); setLoanCreateQty(1); setLoanCreateUnit('unidades'); setLoanCreateSpecies([{ brand: '', color: '' }]);
         setCreateInvType(null); setCreateName(''); setCreateQty(1); setCreateUnit('unidades'); setCreateSpecies([{ brand: '', color: '' }]);
         onBehaviorLog?.('BUTTON', `Tocó panel "${p === 'loan' ? 'Asignar herramienta' : 'Agregar al inventario'}"`);
     };
@@ -268,6 +275,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         setCreateName(''); setCreateInvType(null); setCreateQty(1); setCreateUnit('unidades'); setCreateSpecies([{ brand: '', color: '' }]);
         setLoanPersonnelId(''); setLoanSubWorkerId(''); setLoanNewSubWorkerName('');
         setLoanInvType(null); setLoanSelected(new Map()); setLoanProjectId(''); setLoanNewProjectName('');
+        setLoanIsCreating(false); setLoanCreateName(''); setLoanCreateQty(1); setLoanCreateUnit('unidades'); setLoanCreateSpecies([{ brand: '', color: '' }]);
     };
 
     const toggleLoanItem = (itemId: string) => {
@@ -309,17 +317,54 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             projectId = newProj.id;
         }
 
+        const isLoan = LOAN_TYPES.has(loanInvType ?? InventoryType.HAND_TOOL);
         const movs: Array<Omit<Movement, 'id'>> = [...loanSelected.entries()].map(([itemId, qty]) => ({
             itemId, type: MovementType.CHECK_OUT, quantity: qty,
             timestamp: ts, personnelId: effectivePersonnelId,
-            projectId, notes: '', isLoan: true, isReturned: false,
+            projectId, notes: '', isLoan, isReturned: false,
         }));
         onLogMovements(movs);
         const workerName = personnel.find(p => p.id === effectivePersonnelId)?.name ?? personnel.find(p => p.id === loanPersonnelId)?.name ?? 'trabajador';
         const itemNames = [...loanSelected.keys()].map(id => items.find(i => i.id === id)?.name ?? id);
         const dateLabel = loanDate !== todayISO() ? ` (fecha: ${new Date(loanDate + 'T12:00:00').toLocaleDateString('es-CO')})` : '';
-        addBot(`✅ Préstamo registrado para ${workerName}: ${itemNames.join(', ')}${dateLabel}.`);
+        const verb = isLoan ? 'Préstamo registrado' : 'Salida registrada';
+        addBot(`✅ ${verb} para ${workerName}: ${itemNames.join(', ')}${dateLabel}.`);
         closePanel();
+    };
+
+    const handleLoanCreateItem = () => {
+        if (!loanInvType || !loanCreateName.trim()) return;
+        if (loanInvType === InventoryType.ELECTRICAL_TOOL || loanInvType === InventoryType.HAND_TOOL) {
+            const valid = loanCreateSpecies.filter(s => s.brand.trim() && s.color.trim());
+            if (valid.length === 0) return;
+            for (const sp of valid) {
+                const newItem = onCreateItem({
+                    name: `${loanCreateName.trim()} (${sp.color.trim()} · ${sp.brand.trim()})`,
+                    inventoryType: loanInvType,
+                    quantity: loanCreateQty,
+                    unit: 'unidades',
+                    category: CATEGORY_BY_TYPE[loanInvType],
+                    subCategory: 'General',
+                    minStock: 0, price: 0,
+                    brand: sp.brand.trim(), color: sp.color.trim(),
+                });
+                setLoanSelected(prev => { const next = new Map(prev); next.set(newItem.id, loanCreateQty); return next; });
+            }
+        } else {
+            const newItem = onCreateItem({
+                name: loanCreateName.trim(),
+                inventoryType: loanInvType,
+                quantity: loanCreateQty,
+                unit: loanCreateUnit.trim() || 'unidades',
+                category: CATEGORY_BY_TYPE[loanInvType],
+                subCategory: 'General',
+                minStock: 0, price: 0,
+            });
+            setLoanSelected(prev => { const next = new Map(prev); next.set(newItem.id, loanCreateQty); return next; });
+        }
+        setLoanCreateName(''); setLoanCreateQty(1); setLoanCreateUnit('unidades');
+        setLoanCreateSpecies([{ brand: '', color: '' }]);
+        setLoanIsCreating(false);
     };
 
     const confirmCreate = () => {
@@ -807,11 +852,11 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
 
             <div>
                 <label className="text-[10px] font-black text-blue-600 uppercase tracking-wide block mb-1">Tipo *</label>
-                <div className="flex gap-2">
-                    {([InventoryType.HAND_TOOL, InventoryType.ELECTRICAL_TOOL] as InventoryType[]).map(t => (
-                        <button key={t} onClick={() => { setLoanInvType(t); setLoanSelected(new Map()); }}
-                            className={`flex-1 py-2 rounded-xl text-xs font-black border transition-all ${loanInvType === t ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-400'}`}>
-                            {t === InventoryType.HAND_TOOL ? '🔨 Manual' : '⚡ Eléctrica'}
+                <div className="grid grid-cols-2 gap-1.5">
+                    {([InventoryType.HAND_TOOL, InventoryType.ELECTRICAL_TOOL, InventoryType.PPE, InventoryType.SINGLE_USE] as InventoryType[]).map(t => (
+                        <button key={t} onClick={() => { setLoanInvType(t); setLoanSelected(new Map()); setLoanIsCreating(false); setLoanCreateName(''); setLoanCreateSpecies([{ brand: '', color: '' }]); }}
+                            className={`py-2 rounded-xl text-xs font-black border transition-all ${loanInvType === t ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-400'}`}>
+                            {TYPE_LABELS[t]}
                         </button>
                     ))}
                 </div>
@@ -820,33 +865,96 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             {loanInvType && (
                 <div>
                     <label className="text-[10px] font-black text-blue-600 uppercase tracking-wide block mb-1">
-                        Herramientas disponibles *{loanSelected.size > 0 && <span className="normal-case font-normal text-blue-500 ml-1">({loanSelected.size} selec.)</span>}
+                        Ítems disponibles *{loanSelected.size > 0 && <span className="normal-case font-normal text-blue-500 ml-1">({loanSelected.size} selec.)</span>}
                     </label>
-                    {availableForLoan.length === 0
-                        ? <p className="text-xs text-gray-400 text-center py-3">Sin stock de este tipo.</p>
-                        : (
-                            <div className="space-y-1 max-h-36 overflow-y-auto">
-                                {availableForLoan.map(item => {
-                                    const isSelected = loanSelected.has(item.id);
-                                    const qty = loanSelected.get(item.id) ?? 1;
-                                    return (
-                                        <div key={item.id} onClick={() => toggleLoanItem(item.id)}
-                                            className={`flex items-center gap-2 px-3 py-2 rounded-xl border cursor-pointer transition-all ${isSelected ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-200 hover:border-blue-300'}`}>
-                                            <input type="checkbox" checked={isSelected} readOnly className="w-4 h-4 accent-blue-600 flex-shrink-0" />
-                                            <span className="flex-1 text-sm text-gray-800 truncate">{item.name}</span>
-                                            <span className="text-[10px] text-gray-400 flex-shrink-0">{item.quantity} en stock</span>
-                                            {isSelected && (
-                                                <input type="number" value={qty} min={1} max={item.quantity}
-                                                    onChange={e => setLoanItemQty(item.id, parseInt(e.target.value) || 1)}
-                                                    onClick={e => e.stopPropagation()}
-                                                    className="w-12 text-xs text-center border border-blue-300 rounded-lg px-1 py-0.5 bg-white focus:outline-none" />
+                    {availableForLoan.length === 0 && !loanIsCreating && (
+                        <p className="text-xs text-gray-400 text-center py-2">Sin stock. Usa "+ Crear nuevo".</p>
+                    )}
+                    {availableForLoan.length > 0 && (
+                        <div className="space-y-1 max-h-36 overflow-y-auto mb-1">
+                            {availableForLoan.map(item => {
+                                const isSelected = loanSelected.has(item.id);
+                                const qty = loanSelected.get(item.id) ?? 1;
+                                return (
+                                    <div key={item.id} onClick={() => toggleLoanItem(item.id)}
+                                        className={`flex items-center gap-2 px-3 py-2 rounded-xl border cursor-pointer transition-all ${isSelected ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-200 hover:border-blue-300'}`}>
+                                        <input type="checkbox" checked={isSelected} readOnly className="w-4 h-4 accent-blue-600 flex-shrink-0" />
+                                        <span className="flex-1 text-sm text-gray-800 truncate">{item.name}</span>
+                                        <span className="text-[10px] text-gray-400 flex-shrink-0">{item.quantity} disp.</span>
+                                        {isSelected && (
+                                            <input type="number" value={qty} min={1} max={item.quantity}
+                                                onChange={e => setLoanItemQty(item.id, parseInt(e.target.value) || 1)}
+                                                onClick={e => e.stopPropagation()}
+                                                className="w-12 text-xs text-center border border-blue-300 rounded-lg px-1 py-0.5 bg-white focus:outline-none" />
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                    {loanIsCreating ? (
+                        <div className="border border-dashed border-blue-300 rounded-xl p-3 bg-blue-50 space-y-2">
+                            <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Nuevo ítem</p>
+                            <input type="text" value={loanCreateName} onChange={e => setLoanCreateName(e.target.value)}
+                                placeholder={(loanInvType === InventoryType.ELECTRICAL_TOOL || loanInvType === InventoryType.HAND_TOOL) ? 'Género (ej: Pulidora, Martillo) *' : 'Nombre del ítem *'}
+                                autoFocus
+                                className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                            {(loanInvType !== InventoryType.ELECTRICAL_TOOL && loanInvType !== InventoryType.HAND_TOOL) && (
+                                <>
+                                    <input type="number" value={loanCreateQty} min={1}
+                                        onChange={e => setLoanCreateQty(parseInt(e.target.value) || 1)}
+                                        placeholder="Cantidad *"
+                                        className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                                    <input type="text" value={loanCreateUnit} onChange={e => setLoanCreateUnit(e.target.value)}
+                                        placeholder="Unidad (ej: unidades, pares, cajas)"
+                                        className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                                </>
+                            )}
+                            {(loanInvType === InventoryType.ELECTRICAL_TOOL || loanInvType === InventoryType.HAND_TOOL) && (
+                                <div className="space-y-1.5">
+                                    <p className="text-[9px] font-black text-blue-500 uppercase tracking-wider">Especies (color + marca)</p>
+                                    {loanCreateSpecies.map((sp, idx) => (
+                                        <div key={idx} className="relative pr-6">
+                                            <div className="flex flex-col gap-1">
+                                                <input value={sp.color}
+                                                    onChange={e => setLoanCreateSpecies(prev => prev.map((s, i) => i === idx ? { ...s, color: e.target.value } : s))}
+                                                    placeholder="Color *"
+                                                    className="w-full border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                                                <input value={sp.brand}
+                                                    onChange={e => setLoanCreateSpecies(prev => prev.map((s, i) => i === idx ? { ...s, brand: e.target.value } : s))}
+                                                    placeholder="Marca *"
+                                                    className="w-full border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                                            </div>
+                                            {loanCreateSpecies.length > 1 && (
+                                                <button onClick={() => setLoanCreateSpecies(prev => prev.filter((_, i) => i !== idx))}
+                                                    className="absolute top-0 right-0 text-gray-400 hover:text-red-400 text-base leading-none p-1">×</button>
                                             )}
                                         </div>
-                                    );
-                                })}
+                                    ))}
+                                    <button onClick={() => setLoanCreateSpecies(prev => [...prev, { brand: '', color: '' }])}
+                                        className="w-full py-1 text-[10px] text-blue-500 border border-dashed border-blue-200 rounded-lg hover:border-blue-400 bg-white">
+                                        + Agregar especie
+                                    </button>
+                                </div>
+                            )}
+                            <div className="flex gap-2">
+                                <button onClick={() => { setLoanIsCreating(false); setLoanCreateName(''); setLoanCreateSpecies([{ brand: '', color: '' }]); }}
+                                    className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg bg-white">
+                                    Cancelar
+                                </button>
+                                <button onClick={handleLoanCreateItem}
+                                    disabled={!loanCreateName.trim() || ((loanInvType === InventoryType.ELECTRICAL_TOOL || loanInvType === InventoryType.HAND_TOOL) && !loanCreateSpecies.some(s => s.brand.trim() && s.color.trim()))}
+                                    className="flex-1 py-1.5 text-xs font-black bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white rounded-lg transition-all">
+                                    ✓ Guardar y seleccionar
+                                </button>
                             </div>
-                        )
-                    }
+                        </div>
+                    ) : (
+                        <button onClick={() => setLoanIsCreating(true)}
+                            className="w-full py-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800 border border-dashed border-blue-300 rounded-xl hover:border-blue-500 bg-white transition-all">
+                            + Crear nuevo
+                        </button>
+                    )}
                 </div>
             )}
 
@@ -875,7 +983,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
 
             <button onClick={confirmLoan} disabled={!loanPersonnelId || loanSelected.size === 0}
                 className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-black rounded-xl text-sm transition-all">
-                ✅ Confirmar préstamo{loanSelected.size > 0 ? ` (${loanSelected.size})` : ''}
+                ✅ {loanInvType && !LOAN_TYPES.has(loanInvType) ? 'Confirmar salida' : 'Confirmar préstamo'}{loanSelected.size > 0 ? ` (${loanSelected.size})` : ''}
             </button>
         </div>
     );
