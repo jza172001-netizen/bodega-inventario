@@ -221,24 +221,26 @@ export async function fetchPersonnel(): Promise<Personnel[]> {
         id: r.id as string,
         name: r.name as string,
         phone: r.phone as string | undefined,
+        isTeamLeader: (r.is_team_leader as boolean) || undefined,
+        teamLeaderId: r.team_leader_id as string | undefined,
     }));
 }
 
 export async function addPersonnel(p: Omit<Personnel, 'id'>): Promise<Personnel> {
     const { data, error } = await supabase
         .from('personnel')
-        .insert({ name: p.name, phone: p.phone ?? null })
+        .insert({ name: p.name, phone: p.phone ?? null, is_team_leader: p.isTeamLeader ?? false, team_leader_id: p.teamLeaderId ?? null })
         .select()
         .single();
     if (error) throw error;
     const row = data as Record<string, unknown>;
-    return { id: row.id as string, name: p.name, phone: row.phone as string | undefined };
+    return { id: row.id as string, name: p.name, phone: row.phone as string | undefined, isTeamLeader: (row.is_team_leader as boolean) || undefined, teamLeaderId: row.team_leader_id as string | undefined };
 }
 
 export async function updatePersonnel(p: Personnel): Promise<void> {
     const { error } = await supabase
         .from('personnel')
-        .update({ name: p.name, phone: p.phone ?? null })
+        .update({ name: p.name, phone: p.phone ?? null, is_team_leader: p.isTeamLeader ?? false, team_leader_id: p.teamLeaderId ?? null })
         .eq('id', p.id);
     if (error) throw error;
 }
