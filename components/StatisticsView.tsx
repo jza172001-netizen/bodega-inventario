@@ -95,7 +95,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
     const kpis = useMemo(() => {
         const checkouts30d = recentMovements.filter(m => m.type === MovementType.CHECK_OUT);
         const totalSalidas = checkouts30d.reduce((s, m) => s + m.quantity, 0);
-        const totalItems = items.length;
+        const totalItems = items.filter(i => i.quantity > 0).length;
         const activeLoans = movements.filter(m => m.isLoan && !m.isReturned);
         const activeLoanCount = activeLoans.length;
         const pendingPickupCount = activeLoans.filter(m => m.pendingPickup).length;
@@ -204,6 +204,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
 
     const showInventarioListDetail = () => {
         const rows: DetailRow[] = [...items]
+            .filter(i => i.quantity > 0)
             .sort((a, b) => a.name.localeCompare(b.name, 'es'))
             .map(i => {
                 const onLoan = kpis.activeLoans.filter(m => m.itemId === i.id).reduce((s, m) => s + m.quantity, 0);
