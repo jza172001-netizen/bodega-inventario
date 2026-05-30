@@ -428,6 +428,34 @@ export async function deleteUser(id: string): Promise<void> {
     if (error) throw error;
 }
 
+// ─── BULK UPSERT (migración localStorage → Supabase) ─────────────────────────
+
+export async function bulkUpsertItems(items: Item[]): Promise<void> {
+    if (items.length === 0) return;
+    const payload = items.map(({ id, ...rest }) => ({ id, ...itemToDb(rest) }));
+    const { error } = await supabase.from('items').upsert(payload, { onConflict: 'id' });
+    if (error) throw error;
+}
+
+export async function bulkUpsertMovements(movements: Movement[]): Promise<void> {
+    if (movements.length === 0) return;
+    const payload = movements.map(({ id, ...rest }) => ({ id, ...movementToDb(rest) }));
+    const { error } = await supabase.from('movements').upsert(payload, { onConflict: 'id' });
+    if (error) throw error;
+}
+
+export async function bulkUpsertProjects(projects: Project[]): Promise<void> {
+    if (projects.length === 0) return;
+    const payload = projects.map(p => ({
+        id: p.id,
+        name: p.name,
+        description: p.description ?? null,
+        status: p.status,
+    }));
+    const { error } = await supabase.from('projects').upsert(payload, { onConflict: 'id' });
+    if (error) throw error;
+}
+
 // ─── BULK DELETE (factory reset) ─────────────────────────────────────────────
 
 export async function deleteAllMovements(): Promise<void> {

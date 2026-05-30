@@ -177,55 +177,76 @@ const App: React.FC = () => {
         checkAndNotifyPickup(movements, items);
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Sync desde Supabase en background al montar (no bloquea la UI)
+    // Sync desde Supabase al montar — migra localStorage → Supabase y hace merge
     useEffect(() => {
-        const local = loadFromLocalStorage();
-        const localItems     = (local?.items      ?? []).filter((i: Item)      => !SEED_ID.test(i.id));
-        const localMovements = (local?.movements  ?? []).filter((m: Movement)  => !SEED_ID.test(m.itemId ?? ''));
-        const localProjects  =  local?.projects   ?? [];
-        // UUID v4 válido — solo estos se pueden subir a Supabase (columna UUID)
         const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const local = loadFromLocalStorage();
+        const localItems     = (local?.items      ?? []).filter((i: Item)     => !SEED_ID.test(i.id));
+        const localMovements = (local?.movements  ?? []).filter((m: Movement) => !SEED_ID.test(m.itemId ?? ''));
+        const localProjects  =  local?.projects   ?? [];
 
         db.fetchUsers().then(data => { if (data.length > 0 && local === null) setUsers(migrateUsers(data)); }).catch(() => {});
         db.fetchPersonnel().then(data => { if (data.length > 0) setPersonnel(data.filter(p => p.name?.trim().length >= 4)); }).catch(() => {});
         db.fetchPurchaseOrders().then(data => { if (data.length > 0) setPurchaseOrders(data); }).catch(() => {});
 
-        // Items: merge Supabase + localStorage para no perder datos
-        db.fetchItems().then(supaItems => {
-            if (supaItems.length === 0) {
-                // Supabase vacío — subir ítems locales con UUID válido (migración silenciosa)
-                localItems.filter(i => UUID_RE.test(i.id)).forEach(item => {
-                    const { id, ...rest } = item;
-                    db.addItem(rest, id).catch(() => {});
-                });
-                return; // Estado ya cargado desde localStorage
-            }
-            // Supabase tiene datos — hacer merge: Supabase gana, pero no tirar ítems solo en localStorage
-            const supaIds = new Set(supaItems.map(i => i.id));
-            const localOnly = localItems.filter(i => !supaIds.has(i.id));
-            // Subir al fondo los ítems locales con UUID válido
-            localOnly.filter(i => UUID_RE.test(i.id)).forEach(item => {
-                const { id, ...rest } = item;
-                db.addItem(rest, id).catch(() => {});
+        Promise.all([
+            db.fetchItems().catch((): Item[] => []),
+            db.fetchMovements().catch((): Movement[] => []),
+            db.fetchProjects().catch((): Project[] => []),
+        ]).then(([supaItems, supaMovements, supaProjects]) => {
+            const supaItemIds = new Set(supaItems.map(i => i.id));
+            const supaMovIds  = new Set(supaMovements.map(m => m.id));
+            const supaProjIds = new Set(supaProjects.map(p => p.id));
+
+            // Reasignar UUIDs a entidades con IDs temporales (i-XXX, mov-XXX, p-XXX)
+            const itemRemap = new Map<string, string>();
+            const projRemap = new Map<string, string>();
+            const movRemap  = new Map<string, string>();
+
+            const normItems = localItems.map(item => {
+                if (supaItemIds.has(item.id) || UUID_RE.test(item.id)) return item;
+                const id = crypto.randomUUID();
+                itemRemap.set(item.id, id);
+                return { ...item, id };
             });
-            setItems([...supaItems, ...localOnly]);
-        }).catch(() => {});
 
-        // Movements: merge para no perder movimientos del localStorage
-        db.fetchMovements().then(supaMovements => {
-            if (supaMovements.length === 0) return;
-            const supaIds = new Set(supaMovements.map(m => m.id));
-            const localOnly = localMovements.filter(m => !supaIds.has(m.id));
-            setMovements([...supaMovements, ...localOnly]);
-        }).catch(() => {});
+            const normProjects = localProjects.map(p => {
+                if (supaProjIds.has(p.id) || UUID_RE.test(p.id)) return p;
+                const id = crypto.randomUUID();
+                projRemap.set(p.id, id);
+                return { ...p, id };
+            });
 
-        // Projects: merge para no perder proyectos del localStorage
-        db.fetchProjects().then(supaProjects => {
-            if (supaProjects.length === 0) return;
-            const supaIds = new Set(supaProjects.map(p => p.id));
-            const localOnly = localProjects.filter(p => !supaIds.has(p.id));
-            setProjects([...supaProjects, ...localOnly]);
-        }).catch(() => {});
+            // Aplicar remaps de items/projects a los movimientos, luego normalizar sus IDs
+            const normMovements = localMovements.map(m => {
+                const itemId    = m.itemId    ? (itemRemap.get(m.itemId)    ?? m.itemId)    : m.itemId;
+                const projectId = m.projectId ? (projRemap.get(m.projectId) ?? m.projectId) : m.projectId;
+                const base = { ...m, itemId, projectId };
+                if (supaMovIds.has(base.id) || UUID_RE.test(base.id)) return base;
+                const id = crypto.randomUUID();
+                movRemap.set(m.id, id);
+                return { ...base, id };
+            });
+
+            // Merge: Supabase gana para IDs coincidentes, añadir los que solo están en local
+            const mergedItems     = [...supaItems,     ...normItems.filter(i     => !supaItemIds.has(i.id))];
+            const mergedMovements = [...supaMovements, ...normMovements.filter(m => !supaMovIds.has(m.id))];
+            const mergedProjects  = [...supaProjects,  ...normProjects.filter(p  => !supaProjIds.has(p.id))];
+
+            // Actualizar estado solo si hubo cambios reales
+            if (supaItems.length > 0 || itemRemap.size > 0)         setItems(mergedItems);
+            if (supaMovements.length > 0 || movRemap.size > 0)      setMovements(mergedMovements);
+            if (supaProjects.length > 0 || projRemap.size > 0)      setProjects(mergedProjects);
+
+            // Subir diferencias a Supabase en segundo plano (bulk upsert — idempotente)
+            const itemsToSync = mergedItems.filter(i     => !supaItemIds.has(i.id));
+            const movsToSync  = mergedMovements.filter(m => !supaMovIds.has(m.id));
+            const projsToSync = mergedProjects.filter(p  => !supaProjIds.has(p.id));
+
+            if (itemsToSync.length > 0) db.bulkUpsertItems(itemsToSync).catch(() => {});
+            if (movsToSync.length  > 0) db.bulkUpsertMovements(movsToSync).catch(() => {});
+            if (projsToSync.length > 0) db.bulkUpsertProjects(projsToSync).catch(() => {});
+        });
     }, []);
 
     const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle');
