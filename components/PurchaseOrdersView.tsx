@@ -44,7 +44,7 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({ purchase
                     </button>
                     <h2 className="text-xl font-black text-gray-800 uppercase">Órdenes de Compra</h2>
                 </div>
-                {userRole === UserRole.OWNER && (
+                {userRole !== UserRole.VISITOR && (
                     <button onClick={() => { onBehaviorLog?.('BUTTON', 'Abrió: Nueva orden de compra'); openAddPurchaseOrderModal(); }} className="flex items-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">
                         <PlusIcon className="w-5 h-5 mr-2" />
                         Crear Orden

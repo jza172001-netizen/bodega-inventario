@@ -26,7 +26,7 @@ const INV_FILTERS = [
 export const PickupView: React.FC<Props> = ({
     movements, items, personnel, projects, userRole = UserRole.EMPLOYEE, onMarkPendingPickup, onReturnItem, onBehaviorLog,
 }) => {
-    const isOwner = userRole === UserRole.OWNER;
+    const isOwner = userRole !== UserRole.VISITOR;
     const [typeFilter, setTypeFilter] = useState<string>('');
     const [returningMovement, setReturningMovement] = useState<Movement | null>(null);
     const [selectedRecipient, setSelectedRecipient] = useState<Personnel | null>(null);

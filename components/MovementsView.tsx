@@ -43,7 +43,7 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
     openLogMovementModal, onReturnLoan, onDeleteMovement, onGoBack,
     userRole = UserRole.EMPLOYEE, onBehaviorLog,
 }) => {
-    const isOwner = userRole === UserRole.OWNER;
+    const isOwner = userRole !== UserRole.VISITOR;
     const [page, setPage] = useState(0);
     const [filter, setFilter] = useState<FilterKey>('');
     const [dateFrom, setDateFrom] = useState('');

@@ -44,7 +44,7 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
     const [detailPerson, setDetailPerson] = useState<Personnel | null>(null);
     const [editPerson, setEditPerson] = useState<Personnel | null>(null);
 
-    const isOwner = userRole === UserRole.OWNER;
+    const isOwner = userRole !== UserRole.VISITOR;
 
     const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
     const sortedPersonnel = useMemo(

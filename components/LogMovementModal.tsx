@@ -78,7 +78,7 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
         onClose();
     };
     
-    const allowedMovementTypes = userRole === UserRole.OWNER 
+    const allowedMovementTypes = userRole !== UserRole.VISITOR 
         ? Object.values(MovementType)
         : [MovementType.CHECK_IN, MovementType.CHECK_OUT];
 

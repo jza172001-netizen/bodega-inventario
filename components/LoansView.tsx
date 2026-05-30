@@ -34,7 +34,7 @@ const INV_EMOJI: Record<string, string> = {
 export const LoansView: React.FC<LoansViewProps> = ({
     movements, items, personnel, onReturnItem, onMarkPendingPickup, onGoBack, userRole = UserRole.EMPLOYEE, onBehaviorLog,
 }) => {
-    const isOwner = userRole === UserRole.OWNER;
+    const isOwner = userRole !== UserRole.VISITOR;
     const [search, setSearch]         = useState('');
     const [typeFilter, setTypeFilter] = useState<string>('');
     const [returningLoan, setReturningLoan] = useState<Movement | null>(null);

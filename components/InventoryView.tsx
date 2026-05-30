@@ -98,7 +98,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, movements =
                             spellCheck={false}
                         />
                     </div>
-                    {userRole === UserRole.OWNER && (
+                    {userRole !== UserRole.VISITOR && (
                         <>
 <button onClick={openAddItemModal} className="flex items-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm whitespace-nowrap">
                                 <PlusIcon className="w-5 h-5 mr-2" />
@@ -130,7 +130,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, movements =
                             <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStockStatusColor(item)}`}>{getStockStatusText(item)}</span>
                             <div className="flex gap-1">
                                 <button onClick={() => { onBehaviorLog?.('BUTTON', `Ver historial: ${item.name}`); onItemHistory(item); }} className="text-blue-500 p-1" title="Historial"><HistoryIcon className="w-4 h-4"/></button>
-                                {userRole === UserRole.OWNER && (
+                                {userRole !== UserRole.VISITOR && (
                                     <>
                                         <button onClick={() => { onBehaviorLog?.('BUTTON', `Editó ítem: ${item.name}`); onEditItem(item); }} className="text-indigo-500 p-1"><EditIcon className="w-4 h-4"/></button>
                                         <button onClick={() => { onBehaviorLog?.('ACTION', `Eliminó ítem: ${item.name}`); onDeleteItem(item.id); }} className="text-red-400 p-1"><TrashIcon className="w-4 h-4"/></button>
@@ -182,7 +182,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, movements =
                                     <button onClick={() => { onBehaviorLog?.('BUTTON', `Ver historial: ${item.name}`); onItemHistory(item); }} className="text-blue-600 hover:text-blue-900 p-1" title="Ver Historial (Kardex)">
                                         <HistoryIcon className="w-5 h-5"/>
                                     </button>
-                                    {userRole === UserRole.OWNER && (
+                                    {userRole !== UserRole.VISITOR && (
                                         <>
                                             <button onClick={() => { onBehaviorLog?.('BUTTON', `Editó ítem: ${item.name}`); onEditItem(item); }} className="text-indigo-600 hover:text-indigo-900 p-1" title="Editar">
                                                 <EditIcon className="w-5 h-5"/>

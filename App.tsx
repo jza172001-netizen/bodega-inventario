@@ -28,6 +28,7 @@ import { Item, Movement, MovementType, Personnel, PurchaseOrder, UserRole, Inven
 import { LoginView } from './components/LoginView';
 import { LandingPage } from './components/LandingPage';
 import { InvoiceReaderModal } from './components/InvoiceReaderModal';
+import { MultiUserConfirmModal } from './components/MultiUserConfirmModal';
 import { saveToLocalStorage, loadFromLocalStorage, exportToFile, importFromFile } from './storage';
 import * as db from './services/supabaseService';
 
@@ -344,8 +345,8 @@ const App: React.FC = () => {
 
     const [currentView, setCurrentView] = useState<View>('dashboard');
     const [kardexTab, setKardexTab] = useState<KardexTab>('movements');
-    const EMPLOYEE_VIEWS: View[] = ['dashboard', 'kardex', 'personnel', 'help', 'whatsapp', 'pickup'];
-    const VISITOR_VIEWS: View[] = ['dashboard', 'kardex', 'whatsapp'];
+    const EMPLOYEE_VIEWS: View[] = ['dashboard', 'kardex', 'personnel', 'help', 'whatsapp', 'pickup', 'traceability', 'copilot'];
+    const VISITOR_VIEWS: View[] = ['dashboard', 'kardex', 'whatsapp', 'traceability'];
     const effectiveView: View = (userRole === UserRole.VISITOR && !VISITOR_VIEWS.includes(currentView))
         ? 'dashboard'
         : (userRole === UserRole.EMPLOYEE && !EMPLOYEE_VIEWS.includes(currentView))
@@ -393,7 +394,7 @@ const App: React.FC = () => {
     };
 
     const handleResetAllData = () => {
-        requirePin(
+        requireMultiUser(
             () => {
                 setItems([]);
                 setMovements([]);
@@ -401,7 +402,6 @@ const App: React.FC = () => {
                 setPurchaseOrders([]);
                 setProjects([]);
                 addAuditLog('ITEM_DELETED', 'Se borró toda la bodega (reset completo)');
-                // También borra de Supabase (fire and forget)
                 Promise.all([
                     db.deleteAllMovements(),
                     db.deleteAllItems(),
@@ -417,7 +417,7 @@ const App: React.FC = () => {
     };
 
     const handleResetMaterials = () => {
-        requirePin(
+        requireMultiUser(
             () => {
                 setItems([]);
                 setMovements([]);
@@ -736,6 +736,8 @@ const App: React.FC = () => {
 
     // ── PIN de autorización para acciones destructivas ──
     const [pinAction, setPinAction] = useState<null | { fn: () => void; title?: string; message?: string }>(null);
+    const [multiAction, setMultiAction] = useState<null | { fn: () => void; title: string; message: string }>(null);
+    const requireMultiUser = (fn: () => void, title: string, message: string) => setMultiAction({ fn, title, message });
     const requirePin = (fn: () => void, title?: string, message?: string) => {
         setPinAction({ fn, title, message });
     };
@@ -960,6 +962,15 @@ const App: React.FC = () => {
                     message={pinAction.message}
                     onConfirm={pinAction.fn}
                     onClose={() => setPinAction(null)}
+                />
+            )}
+            {multiAction && (
+                <MultiUserConfirmModal
+                    title={multiAction.title}
+                    message={multiAction.message}
+                    users={users}
+                    onConfirm={multiAction.fn}
+                    onClose={() => setMultiAction(null)}
                 />
             )}
             {(userRole === UserRole.OWNER || userRole === UserRole.EMPLOYEE) && (

@@ -332,7 +332,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                     </button>
                     <h2 className="text-lg font-black text-gray-800 uppercase tracking-tight">Obras / Proyectos</h2>
                 </div>
-                {userRole === UserRole.OWNER && (
+                {userRole !== UserRole.VISITOR && (
                     <button onClick={() => setIsAdding(true)} className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-black py-2 px-4 rounded-xl text-xs uppercase tracking-wider transition-colors">
                         <PlusIcon className="w-4 h-4" /> Nueva
                     </button>
@@ -365,7 +365,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {projectStats.map(project => (
                         <div key={project.id} className="bg-white border border-gray-100 rounded-2xl p-5 hover:shadow-md transition-all cursor-pointer relative group">
-                            {onDeleteProject && userRole === UserRole.OWNER && (
+                            {onDeleteProject && userRole !== UserRole.VISITOR && (
                                 <button
                                     onClick={e => { e.stopPropagation(); onBehaviorLog?.('ACTION', `Eliminó proyecto: ${project.name}`); onDeleteProject(project.id); }}
                                     className="absolute top-3 right-3 p-1.5 text-gray-400 hover:text-red-500 transition-all"

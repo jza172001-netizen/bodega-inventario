@@ -39,7 +39,7 @@ const Toggle: React.FC<{ label: string; description: string; value: boolean; onT
 export const SettingsModal: React.FC<SettingsModalProps> = ({ config, onChange, onClose, userRole, onResetAllData, onResetMaterials }) => {
     const [resetStep, setResetStep] = useState(0);
     const [matResetStep, setMatResetStep] = useState(0);
-    const isOwner = userRole === UserRole.OWNER;
+    const isOwner = userRole !== UserRole.VISITOR;
 
     const handleResetClick = () => {
         if (resetStep === 0) { setResetStep(1); return; }
