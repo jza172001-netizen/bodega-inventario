@@ -598,7 +598,7 @@ const App: React.FC = () => {
     if (!loggedIn) return <LoginView users={users} onLoginSuccess={handleLoginSuccess} onFirstSetup={handleFirstSetup} />;
 
     return (
-        <div className="flex h-screen bg-gray-50 overflow-hidden font-sans">
+        <div translate="no" className="flex h-screen bg-gray-50 overflow-hidden font-sans">
             {/* Backdrop mobile: cierra el sidebar al tocar fuera */}
             {isSidebarOpen && (
                 <div
