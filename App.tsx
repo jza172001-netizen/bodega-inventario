@@ -82,8 +82,8 @@ const App: React.FC = () => {
             return seed?.name ?? session.name;
         } catch { return ''; }
     });
-    const [items, setItems] = useState<Item[]>(() => { const s = loadFromLocalStorage(); return s?.items ?? mockItems; });
-    const [movements, setMovements] = useState<Movement[]>(() => { const s = loadFromLocalStorage(); return s?.movements ?? mockMovements; });
+    const [items, setItems] = useState<Item[]>(() => { const s = loadFromLocalStorage(); return s?.items ?? []; });
+    const [movements, setMovements] = useState<Movement[]>(() => { const s = loadFromLocalStorage(); return s?.movements ?? []; });
     const [personnel, setPersonnel] = useState<Personnel[]>(() => {
         const s = loadFromLocalStorage();
         const ls = s?.personnel;
@@ -93,7 +93,7 @@ const App: React.FC = () => {
         }
         return mockPersonnel;
     });
-    const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(() => { const s = loadFromLocalStorage(); return s?.purchaseOrders ?? mockPurchaseOrders; });
+    const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(() => { const s = loadFromLocalStorage(); return s?.purchaseOrders ?? []; });
     const [projects, setProjects] = useState<Project[]>(() => { const s = loadFromLocalStorage(); return s?.projects ?? mockProjects; });
     const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
         const s = loadFromLocalStorage();
