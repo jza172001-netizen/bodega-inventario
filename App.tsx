@@ -815,12 +815,8 @@ const App: React.FC = () => {
                     toggleSidebar={() => setSidebarOpen(!isSidebarOpen)}
                     userRole={userRole}
                     userName={userName}
-                    onStartNewBusiness={handleResetAllData}
                     onOpenUserManagement={() => { addBehaviorLog('BUTTON', 'Abrió: Gestión de usuarios'); setUserManagementOpen(true); }}
                     onLogout={handleLogout}
-                    onExportData={handleExportData}
-                    onImportData={handleImportData}
-                    onResetData={handleResetAllData}
                     setUserRole={() => {}}
                     syncStatus={syncStatus}
                     onOpenSearch={() => { setSearchOpen(true); addBehaviorLog('BUTTON', 'Abrió búsqueda global'); }}

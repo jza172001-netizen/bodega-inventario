@@ -1,29 +1,21 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import { UserRole } from '../types';
 import { MenuIcon } from './icons/MenuIcon';
-import { TrashIcon } from './icons/TrashIcon';
 import { UsersIcon } from './icons/UsersIcon';
-import { DownloadIcon } from './icons/DownloadIcon';
-import { UploadIcon } from './icons/UploadIcon';
 
 interface HeaderProps {
     toggleSidebar: () => void;
     userRole: UserRole;
     userName?: string;
     setUserRole: (role: UserRole) => void;
-    onExportData: () => void;
-    onImportData: (e: React.ChangeEvent<HTMLInputElement>) => void;
-    onResetData: () => void;
     onOpenUserManagement: () => void;
     onLogout?: () => void;
-    onStartNewBusiness: () => void;
     onOpenInvoiceReader?: () => void;
     onOpenSearch?: () => void;
     syncStatus?: 'idle' | 'syncing' | 'error';
 }
 
-export const Header: React.FC<HeaderProps> = ({ toggleSidebar, userRole, userName, onExportData, onImportData, onResetData, onOpenUserManagement, onLogout, onOpenInvoiceReader, onOpenSearch, syncStatus }) => {
-    const fileInputRef = useRef<HTMLInputElement>(null);
+export const Header: React.FC<HeaderProps> = ({ toggleSidebar, userRole, userName, onOpenInvoiceReader, onOpenSearch, syncStatus }) => {
     return (
         <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 md:px-6">
             <div className="flex items-center gap-3 min-w-0">
@@ -45,32 +37,6 @@ export const Header: React.FC<HeaderProps> = ({ toggleSidebar, userRole, userNam
                 )}
             </div>
             <div className="flex items-center space-x-2 md:space-x-4 flex-shrink-0">
-                {userRole === UserRole.OWNER && (
-                    <>
-                        {/* Exportar / Importar / Vaciar — solo desktop */}
-                        <div className="hidden md:flex items-center space-x-2 border-r pr-4 border-gray-200">
-                            <button onClick={onExportData}
-                                className="flex items-center px-3 py-2 bg-green-50 text-green-700 rounded-xl hover:bg-green-100 transition-all"
-                                title="Exportar datos a JSON">
-                                <DownloadIcon className="w-4 h-4 md:mr-1.5" />
-                                <span className="hidden md:inline text-[10px] font-black uppercase tracking-widest">Exportar</span>
-                            </button>
-                            <button onClick={() => fileInputRef.current?.click()}
-                                className="flex items-center px-3 py-2 bg-blue-50 text-blue-700 rounded-xl hover:bg-blue-100 transition-all"
-                                title="Importar datos desde JSON">
-                                <UploadIcon className="w-4 h-4 md:mr-1.5" />
-                                <span className="hidden md:inline text-[10px] font-black uppercase tracking-widest">Importar</span>
-                            </button>
-                            <input ref={fileInputRef} type="file" accept=".json" onChange={onImportData} className="hidden" />
-                            <button onClick={onResetData}
-                                className="flex items-center px-3 py-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-all"
-                                title="Vaciar bodega">
-                                <TrashIcon className="w-4 h-4 md:mr-1.5" />
-                                <span className="hidden md:inline text-[10px] font-black uppercase tracking-widest">Vaciar</span>
-                            </button>
-                        </div>
-                    </>
-                )}
                 <div className="flex items-center space-x-3">
                     {onOpenSearch && (
                         <button
