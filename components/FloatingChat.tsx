@@ -68,6 +68,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     const [hasNew, setHasNew] = useState(false);
 
     // Wizard state
+    const [wizardIsAddMode, setWizardIsAddMode] = useState(false);
     const [wizardStep, setWizardStep] = useState<WizardStep | null>(null);
     const [wizardData, setWizardData] = useState<WizardData>(INIT_WIZARD);
     const [wizardDate, setWizardDate] = useState<string>(todayISO());
@@ -155,6 +156,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     };
 
     const startWizard = () => {
+        setWizardIsAddMode(false);
         setWizardData(INIT_WIZARD);
         setWizardDate(todayISO());
         setWizardSel(new Map());
@@ -165,7 +167,19 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         onBehaviorLog?.('BUTTON', 'Tocó botón: Registrar salida');
     };
 
-    const cancelWizard = () => { setWizardStep(null); setInput(''); setWizardSel(new Map()); setWizardSubWorkerName(''); resetWizardCreate(); };
+    const startAddMode = () => {
+        setWizardIsAddMode(true);
+        setWizardData(INIT_WIZARD);
+        setWizardDate(todayISO());
+        setWizardSel(new Map());
+        setWizardSubWorkerName('');
+        resetWizardCreate();
+        setWizardStep('select_types');
+        setActivePanel(null);
+        onBehaviorLog?.('BUTTON', 'Tocó botón: Agregar al inventario');
+    };
+
+    const cancelWizard = () => { setWizardIsAddMode(false); setWizardStep(null); setInput(''); setWizardSel(new Map()); setWizardSubWorkerName(''); resetWizardCreate(); };
 
     const toggleWizardSel = (itemId: string) => {
         setWizardSel(prev => {
@@ -220,6 +234,17 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     };
 
     const handleConfirmWizard = () => {
+        // Add mode: items already created via onCreateItem in step 4, just confirm
+        if (wizardIsAddMode) {
+            const count = wizardSel.size;
+            const names = [...wizardSel.keys()].map(id => items.find(i => i.id === id)?.name ?? id);
+            addBot(count > 0
+                ? `✅ ${count} ítem(s) agregados al inventario: ${names.join(', ')}.`
+                : 'No se agregó ningún ítem.');
+            cancelWizard();
+            return;
+        }
+
         const leaders = personnel.filter(p => p.isTeamLeader);
         const autoLeader = wizardData.teamLeaderWorker ?? (leaders.length === 1 ? leaders[0] : null);
         const worker = wizardData.worker
@@ -404,8 +429,8 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             return (
                 <div className="flex-1 overflow-y-auto px-3 py-4 space-y-3">
                     <div>
-                        <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1">Paso 1 de 4</p>
-                        <p className="text-sm font-bold text-gray-800 mb-3">¿Qué tipo(s) de elementos?</p>
+                        <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1">{wizardIsAddMode ? 'Paso 1 de 2' : 'Paso 1 de 4'}</p>
+                        <p className="text-sm font-bold text-gray-800 mb-3">{wizardIsAddMode ? '¿Qué tipo(s) vas a agregar?' : '¿Qué tipo(s) de elementos?'}</p>
                         <div className="grid grid-cols-2 gap-2 mb-2">
                             {([InventoryType.ELECTRICAL_TOOL, InventoryType.HAND_TOOL, InventoryType.PPE, InventoryType.SINGLE_USE] as InventoryType[]).map(type => {
                                 const sel = wizardData.selectedTypes.includes(type);
@@ -424,7 +449,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                     </div>
                     <div className="flex gap-2">
                         <button onClick={cancelWizard} className="px-3 py-2 text-xs text-gray-400 hover:text-gray-600 border border-gray-200 rounded-xl">Cancelar</button>
-                        <button onClick={() => setWizardStep('select_worker')} disabled={wizardData.selectedTypes.length === 0}
+                        <button onClick={() => setWizardStep(wizardIsAddMode ? 'enter_items' : 'select_worker')} disabled={wizardData.selectedTypes.length === 0}
                             className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold rounded-xl text-xs transition-all">
                             Siguiente →
                         </button>
@@ -627,9 +652,9 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             return (
                 <div className="flex-1 overflow-y-auto px-3 py-4 space-y-3">
                     <div>
-                        <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1">Paso 4 de 4</p>
-                        <p className="text-sm font-bold text-gray-800 mb-0.5">Artículos a despachar</p>
-                        <p className="text-[11px] text-gray-400 mb-3">Para <strong>{workerName}</strong> · {projectName}</p>
+                        <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1">{wizardIsAddMode ? 'Paso 2 de 2' : 'Paso 4 de 4'}</p>
+                        <p className="text-sm font-bold text-gray-800 mb-0.5">{wizardIsAddMode ? 'Ítems a agregar al inventario' : 'Artículos a despachar'}</p>
+                        {!wizardIsAddMode && <p className="text-[11px] text-gray-400 mb-3">Para <strong>{workerName}</strong> · {projectName}</p>}
 
                         {wizardData.selectedTypes.map(type => {
                             const available = items
@@ -646,7 +671,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                         {selectedCount > 0 && <span className="ml-1 font-normal text-blue-500">({selectedCount} selec.)</span>}
                                     </label>
 
-                                    {available.length > 0 && (
+                                    {available.length > 0 && !wizardIsAddMode && (
                                         <div className="space-y-1 max-h-36 overflow-y-auto border border-gray-200 rounded-xl p-1 mb-1">
                                             {available.map(item => {
                                                 const isSelected = wizardSel.has(item.id);
@@ -668,7 +693,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                             })}
                                         </div>
                                     )}
-                                    {available.length === 0 && !isCreating && (
+                                    {available.length === 0 && !isCreating && !wizardIsAddMode && (
                                         <p className="text-xs text-gray-400 py-1 text-center mb-1">Sin stock. Usa "+ Crear nuevo".</p>
                                     )}
 
@@ -746,10 +771,10 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                         })}
                     </div>
                     <div className="flex gap-2">
-                        <button onClick={() => setWizardStep('select_project')} className="px-3 py-2 text-xs text-gray-400 hover:text-gray-600 border border-gray-200 rounded-xl">← Atrás</button>
+                        <button onClick={() => setWizardStep(wizardIsAddMode ? 'select_types' : 'select_project')} className="px-3 py-2 text-xs text-gray-400 hover:text-gray-600 border border-gray-200 rounded-xl">← Atrás</button>
                         <button onClick={() => setWizardStep('confirm')} disabled={wizardSel.size === 0}
                             className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold rounded-xl text-xs transition-all">
-                            Revisar →
+                            {wizardIsAddMode ? 'Confirmar →' : 'Revisar →'}
                         </button>
                     </div>
                 </div>
@@ -769,35 +794,39 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             return (
                 <div className="flex-1 overflow-y-auto px-3 py-4 space-y-3">
                     <div>
-                        <p className="text-[10px] font-black text-green-600 uppercase tracking-widest mb-2">Confirmar salida</p>
-                        <div className="bg-gray-50 rounded-xl p-3 mb-3 space-y-1">
-                            <div className="flex gap-2 text-xs"><span className="text-gray-400 w-20 flex-shrink-0">Trabajador</span><span className="font-semibold text-gray-800">{workerName}</span></div>
-                            <div className="flex gap-2 text-xs"><span className="text-gray-400 w-20 flex-shrink-0">Proyecto</span><span className="font-semibold text-gray-800">{projectName}</span></div>
-                            <div className="flex gap-2 text-xs"><span className="text-gray-400 w-20 flex-shrink-0">Artículos</span><span className="font-semibold text-gray-800">{preview.length} elemento(s)</span></div>
-                        </div>
-                        <div className="space-y-1 max-h-32 overflow-y-auto mb-3">
+                        <p className="text-[10px] font-black text-green-600 uppercase tracking-widest mb-2">{wizardIsAddMode ? 'Confirmar — Agregar al inventario' : 'Confirmar salida'}</p>
+                        {!wizardIsAddMode && (
+                            <div className="bg-gray-50 rounded-xl p-3 mb-3 space-y-1">
+                                <div className="flex gap-2 text-xs"><span className="text-gray-400 w-20 flex-shrink-0">Trabajador</span><span className="font-semibold text-gray-800">{workerName}</span></div>
+                                <div className="flex gap-2 text-xs"><span className="text-gray-400 w-20 flex-shrink-0">Proyecto</span><span className="font-semibold text-gray-800">{projectName}</span></div>
+                                <div className="flex gap-2 text-xs"><span className="text-gray-400 w-20 flex-shrink-0">Artículos</span><span className="font-semibold text-gray-800">{preview.length} elemento(s)</span></div>
+                            </div>
+                        )}
+                        <div className="space-y-1 max-h-40 overflow-y-auto mb-3">
                             {preview.map((it, i) => (
                                 <div key={i} className="flex items-center gap-2 text-xs px-2 py-1.5 rounded-lg bg-white border border-gray-100">
                                     <span>{TYPE_LABELS[it.type].split(' ')[0]}</span>
                                     <span className="font-bold text-gray-700">{it.quantity}×</span>
                                     <span className="text-gray-600 truncate flex-1">{it.rawName}</span>
-                                    {LOAN_TYPES.has(it.type) && <span className="text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0">Préstamo</span>}
+                                    {!wizardIsAddMode && LOAN_TYPES.has(it.type) && <span className="text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0">Préstamo</span>}
                                 </div>
                             ))}
                         </div>
-                        {/* Fecha retroactiva */}
-                        <div>
-                            <label className="text-[10px] font-black text-blue-600 uppercase tracking-wide block mb-1">Fecha del movimiento</label>
-                            <input type="date" value={wizardDate} onChange={e => setWizardDate(e.target.value)}
-                                max={todayISO()}
-                                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                        </div>
+                        {/* Fecha retroactiva — solo en modo despacho */}
+                        {!wizardIsAddMode && (
+                            <div>
+                                <label className="text-[10px] font-black text-blue-600 uppercase tracking-wide block mb-1">Fecha del movimiento</label>
+                                <input type="date" value={wizardDate} onChange={e => setWizardDate(e.target.value)}
+                                    max={todayISO()}
+                                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                            </div>
+                        )}
                     </div>
                     <div className="flex gap-2">
                         <button onClick={() => setWizardStep('enter_items')} className="px-3 py-2 text-xs text-gray-400 hover:text-gray-600 border border-gray-200 rounded-xl">← Editar</button>
                         <button onClick={cancelWizard} className="px-3 py-2 text-xs text-red-400 hover:text-red-600 border border-red-200 rounded-xl">Cancelar</button>
                         <button onClick={handleConfirmWizard} className="flex-1 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-xs transition-all">
-                            🚀 Confirmar
+                            {wizardIsAddMode ? '✅ Agregar al inventario' : '🚀 Confirmar'}
                         </button>
                     </div>
                 </div>
@@ -1095,7 +1124,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                             <div>
                                 <p className="text-white font-bold text-sm leading-tight">Asistente de Bodega</p>
                                 <p className="text-blue-200 text-[10px]">
-                                    {wizardStep ? 'Registrando salida…' : activePanel === 'loan' ? 'Asignando herramienta…' : activePanel === 'create' ? 'Agregando al inventario…' : 'Consultar · Registrar'}
+                                    {wizardStep ? (wizardIsAddMode ? 'Agregando al inventario…' : 'Registrando salida…') : activePanel === 'loan' ? 'Asignando herramienta…' : 'Consultar · Registrar'}
                                 </p>
                             </div>
                         </div>
@@ -1126,10 +1155,10 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                 <span className="font-bold text-xs">⚡ Rápido</span>
                                 <span className="text-[9px] opacity-70 leading-tight text-center px-1">Un ítem rápido · herramienta o consumible</span>
                             </button>
-                            <button onClick={() => openPanel('create')}
+                            <button onClick={startAddMode}
                                 className="flex-1 py-2 pb-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl flex flex-col items-center justify-center gap-0.5 transition-all shadow-sm">
                                 <span className="font-bold text-xs">➕ Agregar</span>
-                                <span className="text-[9px] opacity-70 leading-tight text-center px-1">Crea un ítem nuevo en el inventario</span>
+                                <span className="text-[9px] opacity-70 leading-tight text-center px-1">Agrega ítems nuevos al inventario</span>
                             </button>
                         </div>
                     )}
