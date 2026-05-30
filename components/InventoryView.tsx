@@ -116,8 +116,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, movements =
                 {displayItems.map(item => (
                     <div key={item.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50 flex items-center justify-between gap-2">
                         <div className="min-w-0 flex-1">
-                            <p className="font-semibold text-gray-900 text-sm truncate cursor-pointer" onClick={() => onItemHistory(item)}>{item.name}</p>
-                            <p className="text-xs text-gray-500 truncate">{item.subCategory}</p>
+                            <p className="font-semibold text-gray-900 text-sm cursor-pointer leading-snug" onClick={() => onItemHistory(item)}>{item.name}</p>
+                            <p className="text-xs text-gray-500">{item.subCategory}</p>
                             {item.inventoryType === InventoryType.ELECTRICAL_TOOL && (item.brand || item.color) && (
                                 <div className="flex flex-wrap gap-1 mt-0.5">
                                     {item.brand && <span className="text-[10px] font-semibold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">{item.brand}</span>}
