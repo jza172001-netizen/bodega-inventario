@@ -64,9 +64,10 @@ const App: React.FC = () => {
         try { return JSON.parse(localStorage.getItem(SESSION_KEY) || '{}').role ?? UserRole.OWNER; } catch { return UserRole.OWNER; }
     });
     // Carga inicial síncrona desde localStorage, con fallback a mockData
+    const NAME_FIX: Record<string, string> = { Julio: 'Juli', julio: 'Juli', Administrador: 'Juli', administrador: 'Juli' };
     const [users, setUsers] = useState<AppUser[]>(() => {
         const s = loadFromLocalStorage();
-        return migrateUsers(s?.users ?? mockUsers);
+        return migrateUsers(s?.users ?? mockUsers).map(u => NAME_FIX[u.name] ? { ...u, name: NAME_FIX[u.name] } : u);
     });
 
     const [userName, setUserName] = useState<string>(() => {

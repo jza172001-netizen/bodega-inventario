@@ -64,9 +64,12 @@ export function loadFromLocalStorage(): Partial<AppData> | null {
             data.behaviorLogs = data.behaviorLogs.map(l => ({ ...l, timestamp: new Date(l.timestamp) }));
         }
         // Si un usuario ya tiene credenciales, setupComplete siempre es true
+        // Normalizar nombres legacy (Julio→Juli, Administrador→Juli)
+        const NAME_FIX: Record<string, string> = { Julio: 'Juli', julio: 'Juli', Administrador: 'Juli', administrador: 'Juli' };
         if (data.users) {
             data.users = data.users.map(u => ({
                 ...u,
+                name: NAME_FIX[u.name] ?? u.name,
                 setupComplete: u.setupComplete || (!!u.username && !!u.password),
             }));
         }
