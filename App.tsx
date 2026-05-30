@@ -336,9 +336,10 @@ const App: React.FC = () => {
     };
 
     const handleAddItemSync = (i: Omit<Item, 'id'>): Item => {
-        const newItem = { ...i, id: `i-${Date.now()}` };
+        const id = crypto.randomUUID();
+        const newItem = { ...i, id };
         setItems(prev => [...prev, newItem]);
-        withSync(db.addItem(i).then(created => setItems(prev => prev.map(x => x.id === newItem.id ? created : x))));
+        withSync(db.addItem(i, id));
         addAuditLog('ITEM_CREATED', `Se agregó "${i.name}" al inventario`);
         return newItem;
     };

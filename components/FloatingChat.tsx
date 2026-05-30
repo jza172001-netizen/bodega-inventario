@@ -910,7 +910,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     return (
         <>
             {open && (
-                <div className="fixed bottom-24 right-4 sm:right-6 z-50 w-[340px] sm:w-[390px] flex flex-col rounded-2xl shadow-2xl border border-gray-200 overflow-hidden bg-white"
+                <div className="fixed bottom-24 right-4 sm:right-6 z-[70] w-[340px] sm:w-[390px] flex flex-col rounded-2xl shadow-2xl border border-gray-200 overflow-hidden bg-white"
                     style={{ maxHeight: 'min(600px, calc(100vh - 110px))' }}>
 
                     {/* Header */}
@@ -1003,7 +1003,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
 
             {/* FAB */}
             <button onClick={() => { setOpen(v => { if (!v) onBehaviorLog?.('CHAT_OPENED', 'Abrió el chatbot'); return !v; }); }}
-                className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-700 active:scale-95 shadow-xl flex items-center justify-center transition-all duration-200"
+                className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[70] w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-700 active:scale-95 shadow-xl flex items-center justify-center transition-all duration-200"
                 aria-label="Abrir asistente">
                 {open
                     ? <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>

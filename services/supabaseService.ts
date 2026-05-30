@@ -123,10 +123,11 @@ export async function fetchItems(): Promise<Item[]> {
     return (data ?? []).map(r => dbToItem(r as Record<string, unknown>));
 }
 
-export async function addItem(item: Omit<Item, 'id'>): Promise<Item> {
+export async function addItem(item: Omit<Item, 'id'>, id?: string): Promise<Item> {
+    const payload = id ? { id, ...itemToDb(item) } : itemToDb(item);
     const { data, error } = await supabase
         .from('items')
-        .insert(itemToDb(item))
+        .insert(payload)
         .select()
         .single();
     if (error) throw error;
