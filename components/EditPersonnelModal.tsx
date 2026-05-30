@@ -28,7 +28,7 @@ export const EditPersonnelModal: React.FC<EditPersonnelModalProps> = ({ isOpen, 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!name.trim()) { alert('El nombre es requerido.'); return; }
-        onSave({ ...person, name: name.trim(), phone: phone.trim() || undefined, isTeamLeader: isTeamLeader || undefined });
+        onSave({ ...person, name: name.trim(), phone: phone.trim() || undefined, isTeamLeader: isTeamLeader ? true : undefined });
         onClose();
     };
 

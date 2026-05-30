@@ -179,6 +179,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         if (wizardCreateType === InventoryType.ELECTRICAL_TOOL) {
             const valid = wizardSpecies.filter(s => s.brand.trim() && s.color.trim());
             if (valid.length === 0) return;
+            const newEntries: [string, number][] = [];
             for (const sp of valid) {
                 const newItem = onCreateItem({
                     name: `${wizardCreateName.trim()} (${sp.color.trim()} · ${sp.brand.trim()})`,
@@ -190,8 +191,9 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                     minStock: 0, price: 0,
                     brand: sp.brand.trim(), color: sp.color.trim(),
                 });
-                setWizardSel(prev => { const next = new Map(prev); next.set(newItem.id, wizardCreateQty); return next; });
+                newEntries.push([newItem.id, wizardCreateQty]);
             }
+            setWizardSel(prev => { const next = new Map(prev); for (const [id, qty] of newEntries) next.set(id, qty); return next; });
         } else {
             const newItem = onCreateItem({
                 name: wizardCreateName.trim(),
@@ -252,7 +254,11 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         onBehaviorLog?.('BUTTON', `Tocó panel "${p === 'loan' ? 'Asignar herramienta' : 'Agregar al inventario'}"`);
     };
 
-    const closePanel = () => setActivePanel(null);
+    const closePanel = () => {
+        setActivePanel(null);
+        setCreateName(''); setCreateInvType(null); setCreateQty(1); setCreateUnit('unidades'); setCreateSpecies([{ brand: '', color: '' }]);
+        setLoanPersonnelId(''); setLoanInvType(null); setLoanSelected(new Map()); setLoanProjectId('');
+    };
 
     const toggleLoanItem = (itemId: string) => {
         setLoanSelected(prev => {

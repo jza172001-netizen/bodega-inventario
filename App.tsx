@@ -152,7 +152,7 @@ const App: React.FC = () => {
         setUsers(prev => prev.map(u => u.id === userId ? { ...u, username, password, setupComplete: true } : u));
         const user = users.find(u => u.id === userId);
         if (user) {
-            db.updateUser({ ...user, username, password, setupComplete: true }).catch(() => {});
+            db.updateUser({ ...user, username, password, setupComplete: true }).catch(() => setSyncStatus('error'));
             handleLoginSuccess(user.role, user.name);
         }
     };
@@ -199,7 +199,10 @@ const App: React.FC = () => {
                 setSyncStatus('idle');
                 syncTimer.current = setTimeout(() => setSyncStatus('idle'), 2000);
             })
-            .catch(() => setSyncStatus('error'));
+            .catch(() => {
+                setSyncStatus('error');
+                syncTimer.current = setTimeout(() => setSyncStatus('idle'), 8000);
+            });
     };
 
     const [currentView, setCurrentView] = useState<View>('dashboard');
@@ -244,7 +247,7 @@ const App: React.FC = () => {
         setPersonnel(data.personnel || []);
         setPurchaseOrders(data.purchaseOrders || []);
         if (data.projects) setProjects(data.projects);
-        if (data.users) setUsers(data.users);
+        if (data.users) setUsers(migrateUsers(data.users));
     }, (msg) => alert(msg));
 
     const handleOnboardingFinish = () => {
@@ -375,7 +378,7 @@ const App: React.FC = () => {
                 let newQty = item.quantity;
                 if (m.type === MovementType.CHECK_OUT || m.type === MovementType.WASTE) newQty -= m.quantity;
                 else newQty += m.quantity;
-                db.updateItemQuantity(item.id, newQty).catch(() => {});
+                db.updateItemQuantity(item.id, newQty).catch(() => setSyncStatus('error'));
                 return { ...item, quantity: newQty };
             }
             return item;
@@ -559,8 +562,10 @@ const App: React.FC = () => {
     };
 
     const handleEditUser = (u: AppUser) => {
-        setUsers(prev => prev.map(user => user.id === u.id ? u : user));
-        withSync(db.updateUser(u));
+        const seed = seedUsers.find(s => s.id === u.id);
+        const normalized = seed ? { ...u, name: seed.name } : u;
+        setUsers(prev => prev.map(user => user.id === u.id ? normalized : user));
+        withSync(db.updateUser(normalized));
         addAuditLog('PERSONNEL_EDITED', `Se editó usuario: "${u.username}"`);
     };
 
@@ -569,7 +574,7 @@ const App: React.FC = () => {
         requirePin(
             () => {
                 setUsers(prev => prev.filter(u => u.id !== id));
-                db.deleteUser(id).catch(() => {});
+                db.deleteUser(id).catch(() => setSyncStatus('error'));
                 addAuditLog('USER_DELETED', `Se eliminó usuario: "${user?.username ?? id}"`);
             },
             `Eliminar usuario "${user?.username ?? 'usuario'}"`,

@@ -185,6 +185,7 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
                     return (
                         <button
                             key={letter}
+                            data-nosnippet
                             onClick={() => active && jumpToLetter(letter)}
                             disabled={!active}
                             className={`w-5 h-5 flex items-center justify-center text-[10px] font-black rounded-full transition-all ${
