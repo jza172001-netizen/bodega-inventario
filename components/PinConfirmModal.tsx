@@ -16,13 +16,16 @@ export const PinConfirmModal: React.FC<PinConfirmModalProps> = ({
     onConfirm,
     onClose,
 }) => {
+    const [step, setStep] = useState<1 | 2>(1);
     const [user, setUser] = useState('');
     const [pin, setPin]   = useState('');
     const [error, setError] = useState('');
     const [shake, setShake] = useState(false);
     const userRef = useRef<HTMLInputElement>(null);
 
-    useEffect(() => { userRef.current?.focus(); }, []);
+    useEffect(() => {
+        if (step === 2) setTimeout(() => userRef.current?.focus(), 50);
+    }, [step]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -45,54 +48,73 @@ export const PinConfirmModal: React.FC<PinConfirmModalProps> = ({
             >
                 {/* Header */}
                 <div className="bg-red-600 px-5 py-4 flex items-center gap-3">
-                    <span className="text-2xl">🔐</span>
+                    <span className="text-2xl">{step === 1 ? '⚠️' : '🔐'}</span>
                     <div>
                         <p className="text-white font-black text-sm">{title}</p>
                         {message && <p className="text-red-100 text-xs mt-0.5">{message}</p>}
                     </div>
                 </div>
 
-                <form onSubmit={handleSubmit} className="p-5 space-y-4">
-                    <div>
-                        <label className="block text-xs font-bold text-gray-600 mb-1">Usuario</label>
-                        <input
-                            ref={userRef}
-                            type="text"
-                            value={user}
-                            onChange={e => { setUser(e.target.value); setError(''); }}
-                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-400"
-                            autoComplete="off"
-                            autoCorrect="off"
-                            autoCapitalize="off"
-                            spellCheck={false}
-                        />
+                {step === 1 ? (
+                    <div className="p-5 space-y-4">
+                        <p className="text-sm text-gray-700 text-center font-medium">
+                            Esta acción no se puede deshacer.<br />¿Estás seguro de continuar?
+                        </p>
+                        <div className="flex gap-2 pt-1">
+                            <button type="button" onClick={onClose}
+                                className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-bold rounded-xl transition-all">
+                                Cancelar
+                            </button>
+                            <button type="button" onClick={() => setStep(2)}
+                                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white text-sm font-black rounded-xl transition-all">
+                                Sí, continuar
+                            </button>
+                        </div>
                     </div>
-                    <div>
-                        <label className="block text-xs font-bold text-gray-600 mb-1">Contraseña</label>
-                        <input
-                            type="password"
-                            value={pin}
-                            onChange={e => { setPin(e.target.value); setError(''); }}
-                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-400"
-                            autoComplete="off"
-                        />
-                    </div>
+                ) : (
+                    <form onSubmit={handleSubmit} className="p-5 space-y-4">
+                        <p className="text-xs text-gray-500 text-center">Ingresa tus credenciales para confirmar</p>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-600 mb-1">Usuario</label>
+                            <input
+                                ref={userRef}
+                                type="text"
+                                value={user}
+                                onChange={e => { setUser(e.target.value); setError(''); }}
+                                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-400"
+                                autoComplete="off"
+                                autoCorrect="off"
+                                autoCapitalize="off"
+                                spellCheck={false}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-600 mb-1">Contraseña</label>
+                            <input
+                                type="password"
+                                value={pin}
+                                onChange={e => { setPin(e.target.value); setError(''); }}
+                                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-400"
+                                autoComplete="off"
+                            />
+                        </div>
 
-                    {error && (
-                        <p className="text-xs text-red-600 font-semibold text-center">{error}</p>
-                    )}
+                        {error && (
+                            <p className="text-xs text-red-600 font-semibold text-center">{error}</p>
+                        )}
 
-                    <div className="flex gap-2 pt-1">
-                        <button type="button" onClick={onClose}
-                            className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-bold rounded-xl transition-all">
-                            Cancelar
-                        </button>
-                        <button type="submit"
-                            className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white text-sm font-black rounded-xl transition-all">
-                            Autorizar
-                        </button>
-                    </div>
-                </form>
+                        <div className="flex gap-2 pt-1">
+                            <button type="button" onClick={() => { setStep(1); setUser(''); setPin(''); setError(''); }}
+                                className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-bold rounded-xl transition-all">
+                                Atrás
+                            </button>
+                            <button type="submit"
+                                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white text-sm font-black rounded-xl transition-all">
+                                Autorizar
+                            </button>
+                        </div>
+                    </form>
+                )}
             </div>
         </div>
     );

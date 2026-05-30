@@ -367,7 +367,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                         <div key={project.id} className="bg-white border border-gray-100 rounded-2xl p-5 hover:shadow-md transition-all cursor-pointer relative group">
                             {onDeleteProject && userRole === UserRole.OWNER && (
                                 <button
-                                    onClick={e => { e.stopPropagation(); if (window.confirm('¿Borrar obra?')) { onBehaviorLog?.('ACTION', `Eliminó proyecto: ${project.name}`); onDeleteProject(project.id); } }}
+                                    onClick={e => { e.stopPropagation(); onBehaviorLog?.('ACTION', `Eliminó proyecto: ${project.name}`); onDeleteProject(project.id); }}
                                     className="absolute top-3 right-3 p-1.5 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
                                 >
                                     <TrashIcon className="w-4 h-4" />
