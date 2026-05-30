@@ -110,6 +110,7 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
                         const activeItems = activeLoans.map(m => items.find(i => i.id === m.itemId)).filter(Boolean) as Item[];
                         const visibleChips = activeItems.slice(0, 3);
                         const extra = activeItems.length - visibleChips.length;
+                        const subWorkers = p.isTeamLeader ? personnel.filter(w => w.teamLeaderId === p.id) : [];
 
                         return (
                             <div
@@ -156,6 +157,17 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
                                     </div>
                                 </div>
 
+                                {subWorkers.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 mt-2">
+                                        <span className="text-[9px] font-bold bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-full">
+                                            Oficial · {subWorkers.length} trabajador{subWorkers.length !== 1 ? 'es' : ''}
+                                        </span>
+                                        {subWorkers.slice(0, 2).map(w => (
+                                            <span key={w.id} className="text-[9px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full truncate max-w-[80px]">{w.name.split(' ')[0]}</span>
+                                        ))}
+                                        {subWorkers.length > 2 && <span className="text-[9px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full">+{subWorkers.length - 2}</span>}
+                                    </div>
+                                )}
                                 {activeItems.length > 0 && (
                                     <div className="flex flex-wrap gap-1 mt-2">
                                         {visibleChips.map((item, i) => (

@@ -233,26 +233,26 @@ const App: React.FC = () => {
             });
 
             const normProjects = localProjects.map(p => {
-                if (supaProjIds.has(p.id) || UUID_RE.test(p.id)) return p;
-                // Si Supabase ya tiene el mismo proyecto por nombre, usar su ID (evita duplicados)
+                // Nombre primero: si Supabase ya tiene este proyecto por nombre, usar su ID
                 const supaMatch = supaProjects.find(sp => sp.name.trim().toLowerCase() === p.name.trim().toLowerCase());
                 if (supaMatch) {
-                    projRemap.set(p.id, supaMatch.id);
+                    if (p.id !== supaMatch.id) projRemap.set(p.id, supaMatch.id);
                     return supaMatch;
                 }
+                if (supaProjIds.has(p.id) || UUID_RE.test(p.id)) return p;
                 const id = crypto.randomUUID();
                 projRemap.set(p.id, id);
                 return { ...p, id };
             });
 
             const normPersonnel = localPersonnel.map(p => {
-                if (supaPerIds.has(p.id) || UUID_RE.test(p.id)) return p;
-                // Si Supabase ya tiene la misma persona por nombre, usar su ID (evita duplicados)
+                // Nombre primero: si Supabase ya tiene esta persona por nombre, usar su ID
                 const supaMatch = supaPersonnel.find(sp => sp.name.trim().toLowerCase() === p.name.trim().toLowerCase());
                 if (supaMatch) {
-                    perRemap.set(p.id, supaMatch.id);
+                    if (p.id !== supaMatch.id) perRemap.set(p.id, supaMatch.id);
                     return supaMatch;
                 }
+                if (supaPerIds.has(p.id) || UUID_RE.test(p.id)) return p;
                 const id = crypto.randomUUID();
                 perRemap.set(p.id, id);
                 return { ...p, id };
