@@ -182,26 +182,31 @@ const App: React.FC = () => {
     useEffect(() => {
         const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         const local = loadFromLocalStorage();
-        const localItems     = (local?.items      ?? []).filter((i: Item)     => !SEED_ID.test(i.id));
-        const localMovements = (local?.movements  ?? []).filter((m: Movement) => !SEED_ID.test(m.itemId ?? ''));
-        const localProjects  =  local?.projects   ?? [];
+        const localItems      = (local?.items      ?? []).filter((i: Item)     => !SEED_ID.test(i.id));
+        const localMovements  = (local?.movements  ?? []).filter((m: Movement) => !SEED_ID.test(m.itemId ?? ''));
+        const localProjects   =  local?.projects   ?? [];
+        const localPersonnel  = (local?.personnel  ?? []).filter(p => p.name?.trim().length >= 4);
+        const localPOs        =  local?.purchaseOrders ?? [];
 
         db.fetchUsers().then(data => { if (data.length > 0 && local === null) setUsers(migrateUsers(data)); }).catch(() => {});
-        db.fetchPersonnel().then(data => { if (data.length > 0) setPersonnel(data.filter(p => p.name?.trim().length >= 4)); }).catch(() => {});
-        db.fetchPurchaseOrders().then(data => { if (data.length > 0) setPurchaseOrders(data); }).catch(() => {});
 
         Promise.all([
             db.fetchItems().catch((): Item[] => []),
             db.fetchMovements().catch((): Movement[] => []),
             db.fetchProjects().catch((): Project[] => []),
-        ]).then(([supaItems, supaMovements, supaProjects]) => {
+            db.fetchPersonnel().catch((): Personnel[] => []),
+            db.fetchPurchaseOrders().catch((): PurchaseOrder[] => []),
+        ]).then(([supaItems, supaMovements, supaProjects, supaPersonnel, supaPOs]) => {
             const supaItemIds = new Set(supaItems.map(i => i.id));
             const supaMovIds  = new Set(supaMovements.map(m => m.id));
             const supaProjIds = new Set(supaProjects.map(p => p.id));
+            const supaPerIds  = new Set(supaPersonnel.map(p => p.id));
+            const supaPOIds   = new Set(supaPOs.map(o => o.id));
 
-            // Reasignar UUIDs a entidades con IDs temporales (i-XXX, mov-XXX, p-XXX)
+            // Reasignar UUIDs a entidades con IDs temporales (per-XXX, i-XXX, mov-XXX, p-XXX, po-XXX)
             const itemRemap = new Map<string, string>();
             const projRemap = new Map<string, string>();
+            const perRemap  = new Map<string, string>();
             const movRemap  = new Map<string, string>();
 
             const normItems = localItems.map(item => {
@@ -218,11 +223,24 @@ const App: React.FC = () => {
                 return { ...p, id };
             });
 
-            // Aplicar remaps de items/projects a los movimientos, luego normalizar sus IDs
+            const normPersonnel = localPersonnel.map(p => {
+                if (supaPerIds.has(p.id) || UUID_RE.test(p.id)) return p;
+                const id = crypto.randomUUID();
+                perRemap.set(p.id, id);
+                return { ...p, id };
+            });
+
+            const normPOs = localPOs.map(o => {
+                if (supaPOIds.has(o.id) || UUID_RE.test(o.id)) return o;
+                return { ...o, id: crypto.randomUUID() };
+            });
+
+            // Aplicar remaps de items/projects/personnel a los movimientos, luego normalizar sus IDs
             const normMovements = localMovements.map(m => {
-                const itemId    = m.itemId    ? (itemRemap.get(m.itemId)    ?? m.itemId)    : m.itemId;
-                const projectId = m.projectId ? (projRemap.get(m.projectId) ?? m.projectId) : m.projectId;
-                const base = { ...m, itemId, projectId };
+                const itemId      = m.itemId      ? (itemRemap.get(m.itemId)      ?? m.itemId)      : m.itemId;
+                const projectId   = m.projectId   ? (projRemap.get(m.projectId)   ?? m.projectId)   : m.projectId;
+                const personnelId = m.personnelId ? (perRemap.get(m.personnelId)  ?? m.personnelId) : m.personnelId;
+                const base = { ...m, itemId, projectId, personnelId };
                 if (supaMovIds.has(base.id) || UUID_RE.test(base.id)) return base;
                 const id = crypto.randomUUID();
                 movRemap.set(m.id, id);
@@ -233,20 +251,28 @@ const App: React.FC = () => {
             const mergedItems     = [...supaItems,     ...normItems.filter(i     => !supaItemIds.has(i.id))];
             const mergedMovements = [...supaMovements, ...normMovements.filter(m => !supaMovIds.has(m.id))];
             const mergedProjects  = [...supaProjects,  ...normProjects.filter(p  => !supaProjIds.has(p.id))];
+            const mergedPersonnel = [...supaPersonnel, ...normPersonnel.filter(p => !supaPerIds.has(p.id))];
+            const mergedPOs       = [...supaPOs,       ...normPOs.filter(o       => !supaPOIds.has(o.id))];
 
             // Actualizar estado solo si hubo cambios reales
-            if (supaItems.length > 0 || itemRemap.size > 0)         setItems(mergedItems);
-            if (supaMovements.length > 0 || movRemap.size > 0)      setMovements(mergedMovements);
-            if (supaProjects.length > 0 || projRemap.size > 0)      setProjects(mergedProjects);
+            if (supaItems.length > 0 || itemRemap.size > 0)        setItems(mergedItems);
+            if (supaMovements.length > 0 || movRemap.size > 0)     setMovements(mergedMovements);
+            if (supaProjects.length > 0 || projRemap.size > 0)     setProjects(mergedProjects);
+            if (supaPersonnel.length > 0 || perRemap.size > 0)     setPersonnel(mergedPersonnel);
+            if (supaPOs.length > 0 || normPOs.some(o => !supaPOIds.has(o.id))) setPurchaseOrders(mergedPOs);
 
             // Subir diferencias a Supabase en segundo plano (bulk upsert — idempotente)
             const itemsToSync = mergedItems.filter(i     => !supaItemIds.has(i.id));
             const movsToSync  = mergedMovements.filter(m => !supaMovIds.has(m.id));
             const projsToSync = mergedProjects.filter(p  => !supaProjIds.has(p.id));
+            const perToSync   = mergedPersonnel.filter(p => !supaPerIds.has(p.id));
+            const posToSync   = mergedPOs.filter(o       => !supaPOIds.has(o.id));
 
             if (itemsToSync.length > 0) db.bulkUpsertItems(itemsToSync).catch(() => {});
             if (movsToSync.length  > 0) db.bulkUpsertMovements(movsToSync).catch(() => {});
             if (projsToSync.length > 0) db.bulkUpsertProjects(projsToSync).catch(() => {});
+            if (perToSync.length   > 0) db.bulkUpsertPersonnel(perToSync).catch(() => {});
+            if (posToSync.length   > 0) db.bulkUpsertPurchaseOrders(posToSync).catch(() => {});
         });
     }, []);
 
@@ -382,17 +408,18 @@ const App: React.FC = () => {
     const handleImportItems = (newItems: Array<Omit<Item, 'id'>>, inventoryType?: InventoryType) => {
         const created = newItems.map(i => ({
             ...i,
-            id: `i-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            id: crypto.randomUUID(),
             inventoryType: inventoryType ?? i.inventoryType,
         }));
         setItems(prev => [...prev, ...created]);
-        created.forEach(i => withSync(db.addItem(i)));
+        created.forEach(({ id, ...rest }) => withSync(db.addItem(rest, id)));
     };
 
     const handleAddItem = (i: Omit<Item, 'id'>) => {
-        const newItem = { ...i, id: `i-${Date.now()}` };
+        const id = crypto.randomUUID();
+        const newItem = { ...i, id };
         setItems(prev => [...prev, newItem]);
-        withSync(db.addItem(i).then(created => setItems(prev => prev.map(x => x.id === newItem.id ? created : x))));
+        withSync(db.addItem(i, id));
         addAuditLog('ITEM_CREATED', `Se agregó "${i.name}" al inventario`);
     };
 
@@ -433,7 +460,8 @@ const App: React.FC = () => {
 
     const handleLogMovement = (m: Omit<Movement, 'id'>) => {
         const ts = m.timestamp instanceof Date ? m.timestamp : new Date(m.timestamp ?? Date.now());
-        const newMov = { ...m, id: `mov-${Date.now()}`, timestamp: ts };
+        const id = crypto.randomUUID();
+        const newMov = { ...m, id, timestamp: ts };
         setMovements(prev => [newMov, ...prev]);
         setItems(prev => prev.map(item => {
             if (item.id === m.itemId) {
@@ -445,8 +473,7 @@ const App: React.FC = () => {
             }
             return item;
         }));
-        withSync(db.addMovement({ ...m, timestamp: ts })
-            .then(created => setMovements(prev => prev.map(x => x.id === newMov.id ? created : x))));
+        withSync(db.addMovement({ ...m, timestamp: ts }, id));
         const itemName   = items.find(i => i.id === m.itemId)?.name ?? 'herramienta';
         const personName = m.personnelId ? personnel.find(p => p.id === m.personnelId)?.name : undefined;
         if (m.isLoan) {
@@ -514,9 +541,10 @@ const App: React.FC = () => {
         withSync(db.markMovementReturned(movementId));
 
         // Crea nuevo préstamo al trabajador destino, sin ajustar cantidad de inventario
+        const newMovId = crypto.randomUUID();
         const newMov: Movement = {
             ...original,
-            id: `mov-${Date.now()}`,
+            id: newMovId,
             timestamp: new Date(),
             personnelId: newPersonnelId,
             isReturned: false,
@@ -524,21 +552,23 @@ const App: React.FC = () => {
             notes: `Traspaso desde ${fromName}`,
         };
         setMovements(prev => [newMov, ...prev]);
-        withSync(db.addMovement(newMov));
+        withSync(db.addMovement(newMov, newMovId));
         addAuditLog('LOAN_TRANSFERRED', `Traspaso: "${itemName}" de ${fromName} → ${toName}`);
     };
 
     const handleAddPersonnel = (p: Omit<Personnel, 'id'>) => {
-        const newP = { ...p, id: `per-${Date.now()}` };
+        const id = crypto.randomUUID();
+        const newP = { ...p, id };
         setPersonnel(prev => [...prev, newP]);
-        withSync(db.addPersonnel(p).then(created => setPersonnel(prev => prev.map(x => x.id === newP.id ? created : x))));
+        withSync(db.addPersonnel(p, id));
         addAuditLog('PERSONNEL_CREATED', `Se agregó trabajador: "${p.name}"`);
     };
 
     const handleAddPersonnelSync = (p: Omit<Personnel, 'id'>): Personnel => {
-        const newP = { ...p, id: `per-${Date.now()}` };
+        const id = crypto.randomUUID();
+        const newP = { ...p, id };
         setPersonnel(prev => [...prev, newP]);
-        withSync(db.addPersonnel(p).then(created => setPersonnel(prev => prev.map(x => x.id === newP.id ? created : x))));
+        withSync(db.addPersonnel(p, id));
         addAuditLog('PERSONNEL_CREATED', `Se agregó trabajador: "${p.name}"`);
         return newP;
     };
@@ -570,16 +600,18 @@ const App: React.FC = () => {
     };
 
     const handleAddProject = (p: Omit<Project, 'id'>) => {
-        const newP = { ...p, id: `p-${Date.now()}` };
+        const id = crypto.randomUUID();
+        const newP = { ...p, id };
         setProjects(prev => [...prev, newP]);
-        withSync(db.addProject(p).then(created => setProjects(prev => prev.map(x => x.id === newP.id ? created : x))));
+        withSync(db.addProject(p, id));
         addAuditLog('PROJECT_CREATED', `Se creó proyecto: "${p.name}"`);
     };
 
     const handleAddProjectSync = (p: Omit<Project, 'id'>): Project => {
-        const newP = { ...p, id: `p-${Date.now()}` };
+        const id = crypto.randomUUID();
+        const newP = { ...p, id };
         setProjects(prev => [...prev, newP]);
-        withSync(db.addProject(p).then(created => setProjects(prev => prev.map(x => x.id === newP.id ? created : x))));
+        withSync(db.addProject(p, id));
         addAuditLog('PROJECT_CREATED', `Se creó proyecto: "${p.name}"`);
         return newP;
     };
@@ -599,9 +631,10 @@ const App: React.FC = () => {
     };
 
     const handleAddPurchaseOrder = (o: Omit<PurchaseOrder, 'id'>) => {
-        const newO = { ...o, id: `po-${Date.now()}` };
+        const id = crypto.randomUUID();
+        const newO = { ...o, id };
         setPurchaseOrders(prev => [newO, ...prev]);
-        withSync(db.addPurchaseOrder(o).then(created => setPurchaseOrders(prev => prev.map(x => x.id === newO.id ? created : x))));
+        withSync(db.addPurchaseOrder(o).then(created => setPurchaseOrders(prev => prev.map(x => x.id === id ? created : x))));
     };
 
     const handleUpdatePOStatus = (id: string, status: PurchaseOrderStatus) => {

@@ -166,10 +166,11 @@ export async function fetchMovements(): Promise<Movement[]> {
     return (data ?? []).map(r => dbToMovement(r as Record<string, unknown>));
 }
 
-export async function addMovement(m: Omit<Movement, 'id'>): Promise<Movement> {
+export async function addMovement(m: Omit<Movement, 'id'>, id?: string): Promise<Movement> {
+    const payload = id ? { id, ...movementToDb(m) } : movementToDb(m);
     const { data, error } = await supabase
         .from('movements')
-        .insert(movementToDb(m))
+        .insert(payload)
         .select()
         .single();
     if (error) throw error;
@@ -227,10 +228,16 @@ export async function fetchPersonnel(): Promise<Personnel[]> {
     }));
 }
 
-export async function addPersonnel(p: Omit<Personnel, 'id'>): Promise<Personnel> {
+export async function addPersonnel(p: Omit<Personnel, 'id'>, id?: string): Promise<Personnel> {
+    const payload: Record<string, unknown> = {
+        name: p.name, phone: p.phone ?? null,
+        is_team_leader: p.isTeamLeader ?? false,
+        team_leader_id: p.teamLeaderId ?? null,
+    };
+    if (id) payload.id = id;
     const { data, error } = await supabase
         .from('personnel')
-        .insert({ name: p.name, phone: p.phone ?? null, is_team_leader: p.isTeamLeader ?? false, team_leader_id: p.teamLeaderId ?? null })
+        .insert(payload)
         .select()
         .single();
     if (error) throw error;
@@ -264,10 +271,14 @@ export async function fetchProjects(): Promise<Project[]> {
     }));
 }
 
-export async function addProject(p: Omit<Project, 'id'>): Promise<Project> {
+export async function addProject(p: Omit<Project, 'id'>, id?: string): Promise<Project> {
+    const payload: Record<string, unknown> = {
+        name: p.name, description: p.description ?? null, status: p.status,
+    };
+    if (id) payload.id = id;
     const { data, error } = await supabase
         .from('projects')
-        .insert({ name: p.name, description: p.description ?? null, status: p.status })
+        .insert(payload)
         .select()
         .single();
     if (error) throw error;
@@ -442,6 +453,49 @@ export async function bulkUpsertMovements(movements: Movement[]): Promise<void> 
     const payload = movements.map(({ id, ...rest }) => ({ id, ...movementToDb(rest) }));
     const { error } = await supabase.from('movements').upsert(payload, { onConflict: 'id' });
     if (error) throw error;
+}
+
+export async function bulkUpsertPersonnel(personnel: Personnel[]): Promise<void> {
+    if (personnel.length === 0) return;
+    const payload = personnel.map(p => ({
+        id: p.id,
+        name: p.name,
+        phone: p.phone ?? null,
+        is_team_leader: p.isTeamLeader ?? false,
+        team_leader_id: p.teamLeaderId ?? null,
+    }));
+    const { error } = await supabase.from('personnel').upsert(payload, { onConflict: 'id' });
+    if (error) throw error;
+}
+
+export async function bulkUpsertPurchaseOrders(orders: PurchaseOrder[]): Promise<void> {
+    if (orders.length === 0) return;
+    const orderPayload = orders.map(o => ({
+        id: o.id,
+        supplier: o.supplier,
+        status: o.status,
+        order_date: o.orderDate instanceof Date ? o.orderDate.toISOString() : o.orderDate,
+        expected_delivery_date: o.expectedDeliveryDate
+            ? (o.expectedDeliveryDate instanceof Date ? o.expectedDeliveryDate.toISOString() : o.expectedDeliveryDate)
+            : null,
+        received_date: o.receivedDate
+            ? (o.receivedDate instanceof Date ? o.receivedDate.toISOString() : o.receivedDate)
+            : null,
+        notes: o.notes ?? null,
+    }));
+    const { error: oErr } = await supabase.from('purchase_orders').upsert(orderPayload, { onConflict: 'id' });
+    if (oErr) throw oErr;
+    const itemPayload = orders.flatMap(o =>
+        o.items.map(i => ({
+            purchase_order_id: o.id,
+            item_id: i.itemId,
+            quantity: i.quantity,
+            price: i.price,
+        }))
+    );
+    if (itemPayload.length > 0) {
+        await supabase.from('purchase_order_items').upsert(itemPayload, { onConflict: 'purchase_order_id,item_id' });
+    }
 }
 
 export async function bulkUpsertProjects(projects: Project[]): Promise<void> {
