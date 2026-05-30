@@ -811,7 +811,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     const renderLoanPanel = () => (
         <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
             <div className="flex items-center justify-between">
-                <p className="text-xs font-black text-blue-700 uppercase tracking-wide">📦 Asignar herramienta</p>
+                <p className="text-xs font-black text-blue-700 uppercase tracking-wide">⚡ Salida rápida</p>
                 <button onClick={closePanel} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
             </div>
 
@@ -1118,13 +1118,13 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                         <div className="px-3 pt-3 pb-1 flex gap-2 flex-shrink-0">
                             <button onClick={startWizard}
                                 className="flex-1 py-2 pb-2.5 bg-gray-800 hover:bg-gray-900 text-white rounded-xl flex flex-col items-center justify-center gap-0.5 transition-all shadow-sm">
-                                <span className="font-bold text-xs">🚀 Registrar salida</span>
-                                <span className="text-[9px] opacity-70 leading-tight text-center px-1">Despacha, presta — crea ítems y proyectos</span>
+                                <span className="font-bold text-xs">🚀 Despacho</span>
+                                <span className="text-[9px] opacity-70 leading-tight text-center px-1">Salidas grandes · varios tipos a la vez</span>
                             </button>
                             <button onClick={() => openPanel('loan')}
                                 className="flex-1 py-2 pb-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl flex flex-col items-center justify-center gap-0.5 transition-all shadow-sm">
-                                <span className="font-bold text-xs">📦 Asignar</span>
-                                <span className="text-[9px] opacity-70 leading-tight text-center px-1">Asigna ítem a trabajador y/o proyecto</span>
+                                <span className="font-bold text-xs">⚡ Rápido</span>
+                                <span className="text-[9px] opacity-70 leading-tight text-center px-1">Un ítem rápido · herramienta o consumible</span>
                             </button>
                             <button onClick={() => openPanel('create')}
                                 className="flex-1 py-2 pb-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl flex flex-col items-center justify-center gap-0.5 transition-all shadow-sm">
