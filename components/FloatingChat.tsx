@@ -176,7 +176,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
 
     const handleWizardCreateItem = () => {
         if (!wizardCreateType || !wizardCreateName.trim()) return;
-        if (wizardCreateType === InventoryType.ELECTRICAL_TOOL) {
+        if (wizardCreateType === InventoryType.ELECTRICAL_TOOL || wizardCreateType === InventoryType.HAND_TOOL) {
             const valid = wizardSpecies.filter(s => s.brand.trim() && s.color.trim());
             if (valid.length === 0) return;
             const newEntries: [string, number][] = [];
@@ -298,7 +298,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
 
     const confirmCreate = () => {
         if (!createInvType || !createName.trim()) return;
-        if (createInvType === InventoryType.ELECTRICAL_TOOL) {
+        if (createInvType === InventoryType.ELECTRICAL_TOOL || createInvType === InventoryType.HAND_TOOL) {
             const valid = createSpecies.filter(s => s.brand.trim() && s.color.trim());
             if (valid.length === 0) return;
             const names: string[] = [];
@@ -605,15 +605,15 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                             <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Nuevo ítem</p>
                                             <input type="text" value={wizardCreateName}
                                                 onChange={e => setWizardCreateName(e.target.value)}
-                                                placeholder={type === InventoryType.ELECTRICAL_TOOL ? 'Género (ej: Pulidora, Taladro) *' : 'Nombre del ítem *'} autoFocus
+                                                placeholder={(type === InventoryType.ELECTRICAL_TOOL || type === InventoryType.HAND_TOOL) ? 'Género (ej: Pulidora, Martillo) *' : 'Nombre del ítem *'} autoFocus
                                                 className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
-                                            {type === InventoryType.ELECTRICAL_TOOL ? null : (
+                                            {(type === InventoryType.ELECTRICAL_TOOL || type === InventoryType.HAND_TOOL) ? null : (
                                                 <input type="number" value={wizardCreateQty} min={1}
                                                     onChange={e => setWizardCreateQty(parseInt(e.target.value) || 1)}
                                                     placeholder="Cantidad *"
                                                     className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
                                             )}
-                                            {type === InventoryType.ELECTRICAL_TOOL && (
+                                            {(type === InventoryType.ELECTRICAL_TOOL || type === InventoryType.HAND_TOOL) && (
                                                 <div className="space-y-1.5">
                                                     <p className="text-[9px] font-black text-blue-500 uppercase tracking-wider">Especies (color + marca)</p>
                                                     {wizardSpecies.map((sp, idx) => (
@@ -657,7 +657,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                                     Cancelar
                                                 </button>
                                                 <button onClick={handleWizardCreateItem}
-                                                    disabled={!wizardCreateName.trim() || (type === InventoryType.ELECTRICAL_TOOL && !wizardSpecies.some(s => s.brand.trim() && s.color.trim()))}
+                                                    disabled={!wizardCreateName.trim() || ((type === InventoryType.ELECTRICAL_TOOL || type === InventoryType.HAND_TOOL) && !wizardSpecies.some(s => s.brand.trim() && s.color.trim()))}
                                                     className="flex-1 py-1.5 text-xs font-black bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white rounded-lg transition-all">
                                                     ✓ Guardar y seleccionar
                                                 </button>
@@ -844,14 +844,14 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
 
             <div>
                 <label className="text-[10px] font-black text-green-700 uppercase tracking-wide block mb-1">
-                    {createInvType === InventoryType.ELECTRICAL_TOOL ? 'Género (nombre base) *' : 'Nombre *'}
+                    {(createInvType === InventoryType.ELECTRICAL_TOOL || createInvType === InventoryType.HAND_TOOL) ? 'Género (nombre base) *' : 'Nombre *'}
                 </label>
                 <input type="text" value={createName} onChange={e => setCreateName(e.target.value)}
-                    placeholder={createInvType === InventoryType.ELECTRICAL_TOOL ? 'Ej: Pulidora, Taladro, Rotomartillo' : 'Ej: Palustres, Cascos...'}
+                    placeholder={(createInvType === InventoryType.ELECTRICAL_TOOL || createInvType === InventoryType.HAND_TOOL) ? 'Ej: Pulidora, Martillo, Pala' : 'Ej: Palustres, Cascos...'}
                     className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400" />
             </div>
 
-            {createInvType === InventoryType.ELECTRICAL_TOOL && (
+            {(createInvType === InventoryType.ELECTRICAL_TOOL || createInvType === InventoryType.HAND_TOOL) && (
                 <div className="space-y-2">
                     <label className="text-[10px] font-black text-green-700 uppercase tracking-wide block">Especies (color + marca) *</label>
                     {createSpecies.map((sp, idx) => (
@@ -887,7 +887,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             <div className="grid grid-cols-2 gap-2">
                 <div>
                     <label className="text-[10px] font-black text-green-700 uppercase tracking-wide block mb-1">Cantidad</label>
-                    {createInvType === InventoryType.ELECTRICAL_TOOL ? (
+                    {(createInvType === InventoryType.ELECTRICAL_TOOL || createInvType === InventoryType.HAND_TOOL) ? (
                         <div className="w-full text-sm border border-gray-100 bg-gray-50 rounded-xl px-3 py-2 text-gray-400 text-center">
                             {createSpecies.filter(s => s.brand.trim() && s.color.trim()).length || 1} ítem(s)
                         </div>
@@ -904,9 +904,9 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             </div>
 
             <button onClick={confirmCreate}
-                disabled={!createInvType || !createName.trim() || (createInvType === InventoryType.ELECTRICAL_TOOL && !createSpecies.some(s => s.brand.trim() && s.color.trim()))}
+                disabled={!createInvType || !createName.trim() || ((createInvType === InventoryType.ELECTRICAL_TOOL || createInvType === InventoryType.HAND_TOOL) && !createSpecies.some(s => s.brand.trim() && s.color.trim()))}
                 className="w-full py-2.5 bg-green-600 hover:bg-green-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-black rounded-xl text-sm transition-all">
-                ✅ {createInvType === InventoryType.ELECTRICAL_TOOL ? `Guardar ${createSpecies.filter(s => s.brand.trim() && s.color.trim()).length} ítem(s)` : 'Guardar ítem'}
+                ✅ {(createInvType === InventoryType.ELECTRICAL_TOOL || createInvType === InventoryType.HAND_TOOL) ? `Guardar ${createSpecies.filter(s => s.brand.trim() && s.color.trim()).length} ítem(s)` : 'Guardar ítem'}
             </button>
         </div>
     );
