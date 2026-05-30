@@ -82,8 +82,9 @@ const App: React.FC = () => {
             return seed?.name ?? session.name;
         } catch { return ''; }
     });
-    const [items, setItems] = useState<Item[]>(() => { const s = loadFromLocalStorage(); return s?.items ?? []; });
-    const [movements, setMovements] = useState<Movement[]>(() => { const s = loadFromLocalStorage(); return s?.movements ?? []; });
+    const SEED_ID = /^(ht|et|ppe|su)-/;
+    const [items, setItems] = useState<Item[]>(() => { const s = loadFromLocalStorage(); return (s?.items ?? []).filter(i => !SEED_ID.test(i.id)); });
+    const [movements, setMovements] = useState<Movement[]>(() => { const s = loadFromLocalStorage(); return (s?.movements ?? []).filter(m => !SEED_ID.test(m.itemId ?? '')); });
     const [personnel, setPersonnel] = useState<Personnel[]>(() => {
         const s = loadFromLocalStorage();
         const ls = s?.personnel;
