@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { Movement, Item, Personnel, Project, InventoryType, ReturnCondition, UserRole } from '../types';
-import { buildConsolidatedPickupUrl, MELLO_NAME } from '../services/whatsappService';
+import { buildConsolidatedPickupUrl } from '../services/whatsappService';
 import { ReturnToolModal } from './ReturnToolModal';
 
 interface Props {
@@ -29,6 +29,7 @@ export const PickupView: React.FC<Props> = ({
     const isOwner = userRole === UserRole.OWNER;
     const [typeFilter, setTypeFilter] = useState<string>('');
     const [returningMovement, setReturningMovement] = useState<Movement | null>(null);
+    const [selectedRecipient, setSelectedRecipient] = useState<Personnel | null>(null);
 
     const itemMap    = useMemo(() => new Map(items.map(i => [i.id, i])), [items]);
     const personMap  = useMemo(() => new Map(personnel.map(p => [p.id, p])), [personnel]);
@@ -59,15 +60,17 @@ export const PickupView: React.FC<Props> = ({
             .sort((a, b) => a.name.localeCompare(b.name, 'es'));
     }, [filtered, personMap]);
 
+    const pendingItems = useMemo(() => pending.map(m => ({
+        itemName:    itemMap.get(m.itemId)?.name    ?? 'Herramienta',
+        qty:         m.quantity,
+        workerName:  personMap.get(m.personnelId ?? '')?.name ?? 'Sin asignar',
+        projectName: m.projectId ? projectMap.get(m.projectId)?.name : undefined,
+    })), [pending, itemMap, personMap, projectMap]);
+
     const waUrl = useMemo(() => {
-        if (pending.length === 0) return null;
-        return buildConsolidatedPickupUrl(pending.map(m => ({
-            itemName:    itemMap.get(m.itemId)?.name    ?? 'Herramienta',
-            qty:         m.quantity,
-            workerName:  personMap.get(m.personnelId ?? '')?.name ?? 'Sin asignar',
-            projectName: m.projectId ? projectMap.get(m.projectId)?.name : undefined,
-        })));
-    }, [pending, itemMap, personMap, projectMap]);
+        if (!selectedRecipient?.phone || pending.length === 0) return null;
+        return buildConsolidatedPickupUrl(pendingItems, selectedRecipient.phone, selectedRecipient.name);
+    }, [pendingItems, selectedRecipient, pending.length]);
 
     const getDays = (ts: Date | string) =>
         Math.ceil(Math.abs(Date.now() - new Date(ts).getTime()) / 86400000);
@@ -85,19 +88,47 @@ export const PickupView: React.FC<Props> = ({
     return (
         <div className="space-y-5 max-w-2xl mx-auto">
             {/* Header */}
-            <div className="flex items-start justify-between gap-3">
+            <div className="space-y-3">
                 <div>
                     <h1 className="text-xl font-black text-gray-900">📍 A Recoger</h1>
                     <p className="text-xs text-gray-400 mt-0.5">
                         {pending.length} herramienta{pending.length !== 1 ? 's' : ''} marcada{pending.length !== 1 ? 's' : ''} para recoger
                     </p>
                 </div>
-                {waUrl && (
-                    <a href={waUrl} target="_blank" rel="noopener noreferrer"
-                        className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white text-sm font-black rounded-xl transition-colors shadow-sm">
-                        📲 Avisar a {MELLO_NAME}
+                <div className="bg-green-50 border border-green-100 rounded-2xl p-3 space-y-2">
+                    <p className="text-[10px] font-black text-green-700 uppercase tracking-widest">¿Quién va a recoger?</p>
+                    <select
+                        value={selectedRecipient?.id ?? ''}
+                        onChange={e => {
+                            const p = personnel.find(p => p.id === e.target.value) ?? null;
+                            setSelectedRecipient(p);
+                        }}
+                        className="w-full text-sm border border-green-200 rounded-xl px-3 py-2 bg-white focus:ring-2 focus:ring-green-400 outline-none text-gray-700 font-semibold"
+                    >
+                        <option value="">— Elegir trabajador —</option>
+                        {[...personnel]
+                            .sort((a, b) => (b.phone ? 1 : 0) - (a.phone ? 1 : 0) || a.name.localeCompare(b.name, 'es'))
+                            .map(p => (
+                                <option key={p.id} value={p.id} disabled={!p.phone}>
+                                    {p.name}{!p.phone ? ' (sin tel)' : ''}
+                                </option>
+                            ))
+                        }
+                    </select>
+                    <a
+                        href={waUrl ?? '#'}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={e => { if (!waUrl) e.preventDefault(); }}
+                        className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-black text-sm transition-all w-full ${
+                            waUrl
+                                ? 'bg-green-600 hover:bg-green-700 text-white shadow-sm'
+                                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        }`}
+                    >
+                        📲 {selectedRecipient ? `Avisar a ${selectedRecipient.name.split(' ')[0]}` : 'Selecciona un trabajador'}
                     </a>
-                )}
+                </div>
             </div>
 
             {/* Chips de tipo */}
@@ -167,7 +198,7 @@ export const PickupView: React.FC<Props> = ({
             )}
 
             <p className="text-[10px] text-gray-400 text-center">
-                Toca "📲 Avisar a {MELLO_NAME}" para enviar la lista completa por WhatsApp.
+                Elige el trabajador y toca "📲 Avisar" para enviar la lista por WhatsApp.
             </p>
 
             {returningMovement && (() => {

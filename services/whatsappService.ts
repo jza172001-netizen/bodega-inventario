@@ -122,20 +122,23 @@ export const buildPersonReminderUrl = (
     return `https://wa.me/${formatPhone(phone)}?text=${text}`;
 };
 
-/** Mensaje consolidado a Mello con todos los ítems pendientes de recoger. */
+/** Mensaje consolidado con todos los ítems pendientes de recoger, enviado al destinatario elegido. */
 export const buildConsolidatedPickupUrl = (
-    loans: { itemName: string; qty: number; workerName: string; projectName?: string }[]
+    loans: { itemName: string; qty: number; workerName: string; projectName?: string }[],
+    recipientPhone: string,
+    recipientName: string
 ): string => {
     const lines = loans.map(l => {
         const proj = l.projectName ? ` (${l.projectName})` : '';
         return `• ${l.itemName} x${l.qty} — con ${l.workerName}${proj}`;
     });
     const text = encodeURIComponent(
-        `📍 *Herramientas a recoger:*\n\n` +
+        `📍 *Herramientas a recoger — Bodega Grupo Montecielo*\n\n` +
+        `Hola ${recipientName} 👋, estas herramientas están pendientes de recogida:\n\n` +
         `${lines.join('\n')}\n\n` +
         `Por favor pásalas a buscar cuando puedas. Gracias 🙏`
     );
-    return `https://wa.me/${MELLO_PHONE}?text=${text}`;
+    return `https://wa.me/${formatPhone(recipientPhone)}?text=${text}`;
 };
 
 export const buildTestReminderUrl = (): string => {
