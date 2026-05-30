@@ -196,13 +196,20 @@ const App: React.FC = () => {
             db.fetchProjects().catch((): Project[] => []),
             db.fetchPersonnel().catch((): Personnel[] => []),
             db.fetchPurchaseOrders().catch((): PurchaseOrder[] => []),
-        ]).then(([supaItems, supaMovements, supaProjects, supaPersonnelRaw, supaPOs]) => {
-            // Deduplicar personal de Supabase por nombre (defensa contra duplicados en DB)
+        ]).then(([supaItems, supaMovements, supaProjectsRaw, supaPersonnelRaw, supaPOs]) => {
+            // Deduplicar personal y proyectos de Supabase por nombre (defensa contra duplicados en DB)
             const seenPNames = new Set<string>();
             const supaPersonnel = supaPersonnelRaw.filter(p => {
                 const key = p.name.trim().toLowerCase();
                 if (seenPNames.has(key)) return false;
                 seenPNames.add(key);
+                return true;
+            });
+            const seenProjNames = new Set<string>();
+            const supaProjects = supaProjectsRaw.filter(p => {
+                const key = p.name.trim().toLowerCase();
+                if (seenProjNames.has(key)) return false;
+                seenProjNames.add(key);
                 return true;
             });
 

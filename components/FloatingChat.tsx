@@ -210,8 +210,12 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     };
 
     const handleConfirmWizard = () => {
+        const leaders = personnel.filter(p => p.isTeamLeader);
+        const autoLeader = wizardData.teamLeaderWorker ?? (leaders.length === 1 ? leaders[0] : null);
         const worker = wizardData.worker
-            ?? (wizardData.newWorkerName.trim() ? onCreatePersonnel({ name: wizardData.newWorkerName.trim() }) : null);
+            ?? (wizardData.newWorkerName.trim()
+                ? onCreatePersonnel({ name: wizardData.newWorkerName.trim(), ...(autoLeader ? { teamLeaderId: autoLeader.id } : {}) })
+                : null);
         const project = wizardData.project
             ?? (wizardData.newProjectName.trim() ? onCreateProject({ name: wizardData.newProjectName.trim(), status: 'active' }) : null);
 
@@ -613,18 +617,20 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                                 <div className="space-y-1.5">
                                                     <p className="text-[9px] font-black text-blue-500 uppercase tracking-wider">Especies (color + marca)</p>
                                                     {wizardSpecies.map((sp, idx) => (
-                                                        <div key={idx} className="flex gap-1 items-center">
-                                                            <input value={sp.color}
-                                                                onChange={e => setWizardSpecies(prev => prev.map((s, i) => i === idx ? { ...s, color: e.target.value } : s))}
-                                                                placeholder="Color *"
-                                                                className="flex-1 border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
-                                                            <input value={sp.brand}
-                                                                onChange={e => setWizardSpecies(prev => prev.map((s, i) => i === idx ? { ...s, brand: e.target.value } : s))}
-                                                                placeholder="Marca *"
-                                                                className="flex-1 border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                                                        <div key={idx} className="relative pr-6">
+                                                            <div className="flex flex-col gap-1">
+                                                                <input value={sp.color}
+                                                                    onChange={e => setWizardSpecies(prev => prev.map((s, i) => i === idx ? { ...s, color: e.target.value } : s))}
+                                                                    placeholder="Color *"
+                                                                    className="w-full border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                                                                <input value={sp.brand}
+                                                                    onChange={e => setWizardSpecies(prev => prev.map((s, i) => i === idx ? { ...s, brand: e.target.value } : s))}
+                                                                    placeholder="Marca *"
+                                                                    className="w-full border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                                                            </div>
                                                             {wizardSpecies.length > 1 && (
                                                                 <button onClick={() => setWizardSpecies(prev => prev.filter((_, i) => i !== idx))}
-                                                                    className="text-gray-400 hover:text-red-400 text-base leading-none flex-shrink-0 px-0.5">×</button>
+                                                                    className="absolute top-0 right-0 text-gray-400 hover:text-red-400 text-base leading-none p-1">×</button>
                                                             )}
                                                         </div>
                                                     ))}
@@ -849,18 +855,20 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                 <div className="space-y-2">
                     <label className="text-[10px] font-black text-green-700 uppercase tracking-wide block">Especies (color + marca) *</label>
                     {createSpecies.map((sp, idx) => (
-                        <div key={idx} className="flex gap-1.5 items-center">
-                            <input value={sp.color}
-                                onChange={e => setCreateSpecies(prev => prev.map((s, i) => i === idx ? { ...s, color: e.target.value } : s))}
-                                placeholder="Color (ej: roja)"
-                                className="flex-1 text-xs border border-gray-200 rounded-xl px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-green-400" />
-                            <input value={sp.brand}
-                                onChange={e => setCreateSpecies(prev => prev.map((s, i) => i === idx ? { ...s, brand: e.target.value } : s))}
-                                placeholder="Marca (ej: Bosch)"
-                                className="flex-1 text-xs border border-gray-200 rounded-xl px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-green-400" />
+                        <div key={idx} className="relative pr-7">
+                            <div className="flex flex-col gap-1">
+                                <input value={sp.color}
+                                    onChange={e => setCreateSpecies(prev => prev.map((s, i) => i === idx ? { ...s, color: e.target.value } : s))}
+                                    placeholder="Color (ej: roja)"
+                                    className="w-full text-xs border border-gray-200 rounded-xl px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-green-400" />
+                                <input value={sp.brand}
+                                    onChange={e => setCreateSpecies(prev => prev.map((s, i) => i === idx ? { ...s, brand: e.target.value } : s))}
+                                    placeholder="Marca (ej: Bosch)"
+                                    className="w-full text-xs border border-gray-200 rounded-xl px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-green-400" />
+                            </div>
                             {createSpecies.length > 1 && (
                                 <button onClick={() => setCreateSpecies(prev => prev.filter((_, i) => i !== idx))}
-                                    className="text-gray-400 hover:text-red-500 text-lg leading-none flex-shrink-0">×</button>
+                                    className="absolute top-0 right-0 text-gray-400 hover:text-red-500 text-lg leading-none p-1">×</button>
                             )}
                         </div>
                     ))}
