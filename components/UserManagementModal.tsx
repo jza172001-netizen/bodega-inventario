@@ -48,7 +48,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
             setEditingUserId(null);
         } else {
             const newUser: AppUser = {
-                id: `user-${Date.now()}`,
+                id: crypto.randomUUID(),
                 username: newUsername.trim(),
                 password: newPassword,
                 name: newName.trim(),

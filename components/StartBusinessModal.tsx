@@ -19,7 +19,7 @@ export const StartBusinessModal: React.FC<StartBusinessModalProps> = ({ isOpen, 
         if (!workerName.trim()) return;
 
         const firstWorker: Personnel = {
-            id: `person-${Date.now()}`,
+            id: crypto.randomUUID(),
             name: workerName.trim()
         };
 

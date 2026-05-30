@@ -167,7 +167,9 @@ const CopilotView: React.FC<CopilotViewProps> = ({
                 const p = onCreateProject({ name: creation.name, status: 'active' });
                 addBot(`✅ Proyecto **${p.name}** creado.`);
             } else if (creation.type === 'personnel') {
-                const p = onCreatePersonnel({ name: creation.name });
+                const leaders = personnel.filter(p => p.isTeamLeader);
+                const autoLeader = leaders.length === 1 ? leaders[0] : null;
+                const p = onCreatePersonnel({ name: creation.name, ...(autoLeader ? { teamLeaderId: autoLeader.id } : {}) });
                 addBot(`✅ Trabajador **${p.name}** registrado.`);
             } else if (creation.type === 'item') {
                 if (creation.inventoryType) {
@@ -260,7 +262,9 @@ const CopilotView: React.FC<CopilotViewProps> = ({
     };
 
     const handleInlinePersonnelCreate = (msgId: string, name: string) => {
-        const p = onCreatePersonnel({ name });
+        const leaders = personnel.filter(p => p.isTeamLeader);
+        const autoLeader = leaders.length === 1 ? leaders[0] : null;
+        const p = onCreatePersonnel({ name, ...(autoLeader ? { teamLeaderId: autoLeader.id } : {}) });
         setMessages(prev => prev.map(m => m.id === msgId && m.parsedExit ? { ...m, parsedExit: { ...m.parsedExit!, matchedPersonnel: p } } : m));
     };
 

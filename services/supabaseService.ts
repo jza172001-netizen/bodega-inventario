@@ -419,7 +419,7 @@ export async function authenticateUser(
 export async function addUser(u: AppUser): Promise<AppUser> {
     const { data, error } = await supabase
         .from('app_users')
-        .insert({ username: u.username, password: u.password, role: u.role, name: u.name })
+        .insert({ id: u.id, username: u.username, password: u.password, role: u.role, name: u.name })
         .select()
         .single();
     if (error) throw error;
