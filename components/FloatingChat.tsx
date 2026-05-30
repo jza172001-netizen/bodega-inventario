@@ -86,9 +86,12 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     // Panel state
     const [activePanel, setActivePanel] = useState<ActivePanel>(null);
     const [loanPersonnelId, setLoanPersonnelId] = useState('');
+    const [loanSubWorkerId, setLoanSubWorkerId] = useState('');
+    const [loanNewSubWorkerName, setLoanNewSubWorkerName] = useState('');
     const [loanInvType, setLoanInvType] = useState<InventoryType | null>(null);
     const [loanSelected, setLoanSelected] = useState<Map<string, number>>(new Map());
     const [loanProjectId, setLoanProjectId] = useState('');
+    const [loanNewProjectName, setLoanNewProjectName] = useState('');
     const [loanDate, setLoanDate] = useState<string>(todayISO());
     const [createInvType, setCreateInvType] = useState<InventoryType | null>(null);
     const [createName, setCreateName] = useState('');
@@ -206,7 +209,8 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             });
             setWizardSel(prev => { const next = new Map(prev); next.set(newItem.id, wizardCreateQty); return next; });
         }
-        resetWizardCreate();
+        // Mantener el tipo seleccionado para que el usuario pueda crear otro género inmediatamente
+        setWizardCreateName(''); setWizardCreateQty(1); setWizardCreateUnit('unidades'); setWizardSpecies([{ brand: '', color: '' }]);
     };
 
     const handleConfirmWizard = () => {
@@ -252,7 +256,8 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     const openPanel = (p: 'loan' | 'create') => {
         setActivePanel(p);
         setWizardStep(null);
-        setLoanPersonnelId(''); setLoanInvType(null); setLoanSelected(new Map()); setLoanProjectId('');
+        setLoanPersonnelId(''); setLoanSubWorkerId(''); setLoanNewSubWorkerName('');
+        setLoanInvType(null); setLoanSelected(new Map()); setLoanProjectId(''); setLoanNewProjectName('');
         setLoanDate(todayISO());
         setCreateInvType(null); setCreateName(''); setCreateQty(1); setCreateUnit('unidades'); setCreateSpecies([{ brand: '', color: '' }]);
         onBehaviorLog?.('BUTTON', `Tocó panel "${p === 'loan' ? 'Asignar herramienta' : 'Agregar al inventario'}"`);
@@ -261,7 +266,8 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     const closePanel = () => {
         setActivePanel(null);
         setCreateName(''); setCreateInvType(null); setCreateQty(1); setCreateUnit('unidades'); setCreateSpecies([{ brand: '', color: '' }]);
-        setLoanPersonnelId(''); setLoanInvType(null); setLoanSelected(new Map()); setLoanProjectId('');
+        setLoanPersonnelId(''); setLoanSubWorkerId(''); setLoanNewSubWorkerName('');
+        setLoanInvType(null); setLoanSelected(new Map()); setLoanProjectId(''); setLoanNewProjectName('');
     };
 
     const toggleLoanItem = (itemId: string) => {
@@ -283,13 +289,33 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     const confirmLoan = () => {
         if (!loanPersonnelId || loanSelected.size === 0) return;
         const ts = loanDate ? new Date(loanDate + 'T12:00:00') : new Date();
+
+        // Sub-trabajador: si el elegido es oficial, usar el sub-trabajador seleccionado/creado
+        const leader = personnel.find(p => p.id === loanPersonnelId);
+        let effectivePersonnelId = loanPersonnelId;
+        if (leader?.isTeamLeader) {
+            if (loanSubWorkerId === '__new__' && loanNewSubWorkerName.trim()) {
+                const newWorker = onCreatePersonnel({ name: loanNewSubWorkerName.trim(), teamLeaderId: loanPersonnelId });
+                effectivePersonnelId = newWorker.id;
+            } else if (loanSubWorkerId && loanSubWorkerId !== '__new__') {
+                effectivePersonnelId = loanSubWorkerId;
+            }
+        }
+
+        // Proyecto: crear si eligió "nuevo"
+        let projectId = loanProjectId === '__new__' ? undefined : (loanProjectId || undefined);
+        if (loanProjectId === '__new__' && loanNewProjectName.trim()) {
+            const newProj = onCreateProject({ name: loanNewProjectName.trim(), status: 'active' });
+            projectId = newProj.id;
+        }
+
         const movs: Array<Omit<Movement, 'id'>> = [...loanSelected.entries()].map(([itemId, qty]) => ({
             itemId, type: MovementType.CHECK_OUT, quantity: qty,
-            timestamp: ts, personnelId: loanPersonnelId,
-            projectId: loanProjectId || undefined, notes: '', isLoan: true, isReturned: false,
+            timestamp: ts, personnelId: effectivePersonnelId,
+            projectId, notes: '', isLoan: true, isReturned: false,
         }));
         onLogMovements(movs);
-        const workerName = personnel.find(p => p.id === loanPersonnelId)?.name ?? 'trabajador';
+        const workerName = personnel.find(p => p.id === effectivePersonnelId)?.name ?? personnel.find(p => p.id === loanPersonnelId)?.name ?? 'trabajador';
         const itemNames = [...loanSelected.keys()].map(id => items.find(i => i.id === id)?.name ?? id);
         const dateLabel = loanDate !== todayISO() ? ` (fecha: ${new Date(loanDate + 'T12:00:00').toLocaleDateString('es-CO')})` : '';
         addBot(`✅ Préstamo registrado para ${workerName}: ${itemNames.join(', ')}${dateLabel}.`);
@@ -321,7 +347,8 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             });
             addBot(`✅ ${it.name} agregado al inventario (${createQty} ${createUnit}).`);
         }
-        closePanel();
+        // Mantener el tipo para crear otro ítem sin re-seleccionar
+        setCreateName(''); setCreateQty(1); setCreateUnit('unidades'); setCreateSpecies([{ brand: '', color: '' }]);
     };
 
     // ── Wizard render ────────────────────────────────────────────────────────
@@ -745,12 +772,38 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
 
             <div>
                 <label className="text-[10px] font-black text-blue-600 uppercase tracking-wide block mb-1">Trabajador *</label>
-                <select value={loanPersonnelId} onChange={e => setLoanPersonnelId(e.target.value)}
+                <select value={loanPersonnelId} onChange={e => { setLoanPersonnelId(e.target.value); setLoanSubWorkerId(''); setLoanNewSubWorkerName(''); }}
                     className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400">
                     <option value="">— Elegir trabajador —</option>
-                    {sortedPersonnel.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    {sortedPersonnel.map(p => <option key={p.id} value={p.id}>{p.name}{p.isTeamLeader ? ' 👷 (oficial)' : ''}</option>)}
                 </select>
             </div>
+
+            {/* Sub-trabajador: solo si el elegido es oficial */}
+            {(() => {
+                const leader = personnel.find(p => p.id === loanPersonnelId);
+                if (!leader?.isTeamLeader) return null;
+                const subWorkers = personnel.filter(p => p.teamLeaderId === loanPersonnelId);
+                return (
+                    <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-blue-600 uppercase tracking-wide block">
+                            Trabajador de la cuadrilla de {leader.name.split(' ')[0]}
+                        </label>
+                        <select value={loanSubWorkerId} onChange={e => { setLoanSubWorkerId(e.target.value); setLoanNewSubWorkerName(''); }}
+                            className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400">
+                            <option value="">— Sin sub-trabajador (asignar al oficial) —</option>
+                            {subWorkers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                            <option value="__new__">➕ Crear nuevo trabajador...</option>
+                        </select>
+                        {loanSubWorkerId === '__new__' && (
+                            <input type="text" value={loanNewSubWorkerName}
+                                onChange={e => setLoanNewSubWorkerName(e.target.value)}
+                                placeholder={`Nombre del trabajador de ${leader.name.split(' ')[0]} *`}
+                                className="w-full text-sm border border-blue-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                        )}
+                    </div>
+                );
+            })()}
 
             <div>
                 <label className="text-[10px] font-black text-blue-600 uppercase tracking-wide block mb-1">Tipo *</label>
@@ -799,11 +852,17 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
 
             <div>
                 <label className="text-[10px] font-black text-blue-600 uppercase tracking-wide block mb-1">Proyecto (opcional)</label>
-                <select value={loanProjectId} onChange={e => setLoanProjectId(e.target.value)}
+                <select value={loanProjectId} onChange={e => { setLoanProjectId(e.target.value); setLoanNewProjectName(''); }}
                     className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400">
                     <option value="">— Sin proyecto —</option>
                     {activeProjects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    <option value="__new__">➕ Crear nuevo proyecto...</option>
                 </select>
+                {loanProjectId === '__new__' && (
+                    <input type="text" value={loanNewProjectName} onChange={e => setLoanNewProjectName(e.target.value)}
+                        placeholder="Nombre del proyecto *"
+                        className="mt-1.5 w-full text-sm border border-blue-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                )}
             </div>
 
             {/* Fecha retroactiva */}
