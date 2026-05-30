@@ -84,9 +84,8 @@ const App: React.FC = () => {
             return seed?.name ?? session.name;
         } catch { return ''; }
     });
-    const SEED_ID = /^(ht|et|ppe|su)-/;
-    const [items, setItems] = useState<Item[]>(() => { const s = loadFromLocalStorage(); return (s?.items ?? []).filter(i => !SEED_ID.test(i.id)); });
-    const [movements, setMovements] = useState<Movement[]>(() => { const s = loadFromLocalStorage(); return (s?.movements ?? []).filter(m => !SEED_ID.test(m.itemId ?? '')); });
+    const [items, setItems] = useState<Item[]>(() => { const s = loadFromLocalStorage(); return s?.items ?? []; });
+    const [movements, setMovements] = useState<Movement[]>(() => { const s = loadFromLocalStorage(); return s?.movements ?? []; });
     const [personnel, setPersonnel] = useState<Personnel[]>(() => {
         const s = loadFromLocalStorage();
         const ls = s?.personnel;
@@ -120,6 +119,7 @@ const App: React.FC = () => {
             description,
         };
         setAuditLogs(prev => [entry, ...prev]);
+        db.addAuditLog(entry).catch(() => {});
     };
 
     const addBehaviorLog = (action: string, detail: string) => {
@@ -183,11 +183,12 @@ const App: React.FC = () => {
     useEffect(() => {
         const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         const local = loadFromLocalStorage();
-        const localItems      = (local?.items      ?? []).filter((i: Item)     => !SEED_ID.test(i.id));
-        const localMovements  = (local?.movements  ?? []).filter((m: Movement) => !SEED_ID.test(m.itemId ?? ''));
-        const localProjects   =  local?.projects   ?? [];
-        const localPersonnel  = (local?.personnel  ?? []).filter(p => p.name?.trim().length >= 4);
-        const localPOs        =  local?.purchaseOrders ?? [];
+        const localItems     = local?.items      ?? [];
+        const localMovements = local?.movements  ?? [];
+        const localProjects  = local?.projects   ?? [];
+        const localPersonnel = (local?.personnel ?? []).filter(p => p.name?.trim().length >= 4);
+        const localPOs       = local?.purchaseOrders ?? [];
+        const localAuditLogs = local?.auditLogs  ?? [];
 
         db.fetchUsers().then(data => { if (data.length > 0 && local === null) setUsers(migrateUsers(data)); }).catch(() => {});
 
@@ -197,7 +198,8 @@ const App: React.FC = () => {
             db.fetchProjects().catch((): Project[] => []),
             db.fetchPersonnel().catch((): Personnel[] => []),
             db.fetchPurchaseOrders().catch((): PurchaseOrder[] => []),
-        ]).then(([supaItems, supaMovements, supaProjectsRaw, supaPersonnelRaw, supaPOs]) => {
+            db.fetchAuditLogs().catch((): AuditLog[] => []),
+        ]).then(([supaItems, supaMovements, supaProjectsRaw, supaPersonnelRaw, supaPOs, supaAuditLogs]) => {
             // Deduplicar personal y proyectos de Supabase por nombre (defensa contra duplicados en DB)
             const seenPNames = new Set<string>();
             const supaPersonnel = supaPersonnelRaw.filter(p => {
@@ -227,6 +229,15 @@ const App: React.FC = () => {
             const movRemap  = new Map<string, string>();
 
             const normItems = localItems.map(item => {
+                // Nombre+tipo primero: si Supabase ya tiene este ítem, usar su UUID
+                const supaMatch = supaItems.find(si =>
+                    si.name.trim().toLowerCase() === item.name.trim().toLowerCase() &&
+                    si.inventoryType === item.inventoryType
+                );
+                if (supaMatch) {
+                    if (item.id !== supaMatch.id) itemRemap.set(item.id, supaMatch.id);
+                    return supaMatch;
+                }
                 if (supaItemIds.has(item.id) || UUID_RE.test(item.id)) return item;
                 const id = crypto.randomUUID();
                 itemRemap.set(item.id, id);
@@ -305,25 +316,35 @@ const App: React.FC = () => {
                 supaPOs      .filter(o => !keepPOs.has(o.id))  .forEach(o => db.deletePurchaseOrder(o.id).catch(() => {}));
             }
 
+            // Audit logs: unir local + Supabase (acumulativo — nunca se borra)
+            const supaAuditIds = new Set(supaAuditLogs.map(a => a.id));
+            const mergedAuditLogs: AuditLog[] = [
+                ...localAuditLogs,
+                ...supaAuditLogs.filter(a => !localAuditLogs.some(l => l.id === a.id)),
+            ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
             // Actualizar estado: siempre que haya datos o remapeos
             if (mergedItems.length > 0     || itemRemap.size > 0)  setItems(mergedItems);
             if (mergedMovements.length > 0 || movRemap.size > 0)   setMovements(mergedMovements);
             if (mergedProjects.length > 0  || projRemap.size > 0)  setProjects(mergedProjects);
             if (mergedPersonnel.length > 0 || perRemap.size > 0)   setPersonnel(mergedPersonnel);
             if (mergedPOs.length > 0)                              setPurchaseOrders(mergedPOs);
+            if (mergedAuditLogs.length > 0)                        setAuditLogs(mergedAuditLogs);
 
             // Subir diferencias a Supabase en segundo plano (bulk upsert — idempotente)
-            const itemsToSync = mergedItems.filter(i     => !supaItemIds.has(i.id));
-            const movsToSync  = mergedMovements.filter(m => !supaMovIds.has(m.id));
-            const projsToSync = mergedProjects.filter(p  => !supaProjIds.has(p.id));
-            const perToSync   = mergedPersonnel.filter(p => !supaPerIds.has(p.id));
-            const posToSync   = mergedPOs.filter(o       => !supaPOIds.has(o.id));
+            const itemsToSync  = mergedItems.filter(i     => !supaItemIds.has(i.id));
+            const movsToSync   = mergedMovements.filter(m => !supaMovIds.has(m.id));
+            const projsToSync  = mergedProjects.filter(p  => !supaProjIds.has(p.id));
+            const perToSync    = mergedPersonnel.filter(p => !supaPerIds.has(p.id));
+            const posToSync    = mergedPOs.filter(o       => !supaPOIds.has(o.id));
+            const auditToSync  = localAuditLogs.filter(a  => !supaAuditIds.has(a.id));
 
-            if (itemsToSync.length > 0) db.bulkUpsertItems(itemsToSync).catch(() => {});
-            if (movsToSync.length  > 0) db.bulkUpsertMovements(movsToSync).catch(() => {});
-            if (projsToSync.length > 0) db.bulkUpsertProjects(projsToSync).catch(() => {});
-            if (perToSync.length   > 0) db.bulkUpsertPersonnel(perToSync).catch(() => {});
-            if (posToSync.length   > 0) db.bulkUpsertPurchaseOrders(posToSync).catch(() => {});
+            if (itemsToSync.length  > 0) db.bulkUpsertItems(itemsToSync).catch(e => console.error('[Supabase] items:', e));
+            if (movsToSync.length   > 0) db.bulkUpsertMovements(movsToSync).catch(e => console.error('[Supabase] movements:', e));
+            if (projsToSync.length  > 0) db.bulkUpsertProjects(projsToSync).catch(e => console.error('[Supabase] projects:', e));
+            if (perToSync.length    > 0) db.bulkUpsertPersonnel(perToSync).catch(e => console.error('[Supabase] personnel:', e));
+            if (posToSync.length    > 0) db.bulkUpsertPurchaseOrders(posToSync).catch(e => console.error('[Supabase] POs:', e));
+            if (auditToSync.length  > 0) db.bulkUpsertAuditLogs(auditToSync).catch(e => console.error('[Supabase] auditLogs:', e));
         });
     }, []);
 

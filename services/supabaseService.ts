@@ -7,7 +7,7 @@
 import { supabase } from '../lib/supabase';
 import {
     Item, Movement, Personnel, Project, PurchaseOrder,
-    PurchaseOrderItem, AppUser, InventoryType, MovementType,
+    PurchaseOrderItem, AppUser, AuditLog, InventoryType, MovementType,
     PurchaseOrderStatus, UserRole, ReturnCondition,
 } from '../types';
 
@@ -534,6 +534,48 @@ export async function deleteAllProjects(): Promise<void> {
 
 export async function deleteAllPurchaseOrders(): Promise<void> {
     const { error } = await supabase.from('purchase_orders').delete().not('id', 'is', null);
+    if (error) throw error;
+}
+
+// ─── AUDIT LOGS ──────────────────────────────────────────────────────────────
+
+export async function fetchAuditLogs(): Promise<AuditLog[]> {
+    const { data, error } = await supabase
+        .from('audit_logs')
+        .select('*')
+        .order('timestamp', { ascending: false })
+        .limit(1000);
+    if (error) throw error;
+    return (data ?? []).map(r => ({
+        id: r.id as string,
+        timestamp: new Date(r.timestamp as string),
+        actor: r.actor as string,
+        action: r.action as string,
+        description: r.description as string,
+    }));
+}
+
+export async function addAuditLog(log: AuditLog): Promise<void> {
+    const { error } = await supabase.from('audit_logs').insert({
+        id: log.id,
+        timestamp: log.timestamp instanceof Date ? log.timestamp.toISOString() : log.timestamp,
+        actor: log.actor,
+        action: log.action,
+        description: log.description,
+    });
+    if (error) throw error;
+}
+
+export async function bulkUpsertAuditLogs(logs: AuditLog[]): Promise<void> {
+    if (logs.length === 0) return;
+    const payload = logs.map(log => ({
+        id: log.id,
+        timestamp: log.timestamp instanceof Date ? log.timestamp.toISOString() : log.timestamp,
+        actor: log.actor,
+        action: log.action,
+        description: log.description,
+    }));
+    const { error } = await supabase.from('audit_logs').upsert(payload, { onConflict: 'id' });
     if (error) throw error;
 }
 
