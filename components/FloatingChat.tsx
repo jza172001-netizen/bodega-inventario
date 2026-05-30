@@ -61,7 +61,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
 }) => {
     const [open, setOpen] = useState(false);
     const [messages, setMessages] = useState<ChatMsg[]>([
-        { id: uid(), role: 'bot', text: '¡Hola! Usa los botones de abajo para registrar salidas, asignar herramientas o agregar ítems al inventario.' },
+        { id: uid(), role: 'bot', text: '¡Hola! Usa los botones de arriba para registrar salidas, asignar herramientas o agregar ítems al inventario.' },
     ]);
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
