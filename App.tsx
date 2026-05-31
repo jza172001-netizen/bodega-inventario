@@ -229,16 +229,9 @@ const App: React.FC = () => {
             const movRemap  = new Map<string, string>();
 
             const normItems = localItems.map(item => {
-                // Nombre+tipo primero: si Supabase ya tiene este ítem, usar su UUID
-                const supaMatch = supaItems.find(si =>
-                    si.name.trim().toLowerCase() === item.name.trim().toLowerCase() &&
-                    si.inventoryType === item.inventoryType
-                );
-                if (supaMatch) {
-                    if (item.id !== supaMatch.id) itemRemap.set(item.id, supaMatch.id);
-                    return supaMatch;
-                }
+                // Si ya tiene UUID válido (en Supabase o propio) → conservar tal cual
                 if (supaItemIds.has(item.id) || UUID_RE.test(item.id)) return item;
+                // ID temporal heredado (et-xxx, ht-xxx) → asignar UUID nuevo
                 const id = crypto.randomUUID();
                 itemRemap.set(item.id, id);
                 return { ...item, id };
@@ -295,22 +288,29 @@ const App: React.FC = () => {
                 localPersonnel.length === 0 &&
                 localProjects.length === 0;
 
-            const mergedItems:     Item[]          = localIsEmpty ? supaItems     : normItems;
-            const mergedMovements: Movement[]      = localIsEmpty ? supaMovements : normMovements;
+            // Ítems: merge aditivo — Supabase + local (los ítems de Supabase que no están
+            // en local se RESTAURAN, no se borran). Esto recupera ítems perdidos por sync.
+            const normItemIds = new Set(normItems.map(i => i.id));
+            const mergedItems: Item[] = localIsEmpty
+                ? supaItems
+                : [...normItems, ...supaItems.filter(i => !normItemIds.has(i.id))];
+
+            // Movimientos: merge aditivo (registros inmutables — nunca se borran en startup)
+            const normMovIds = new Set(normMovements.map(m => m.id));
+            const mergedMovements: Movement[] = localIsEmpty
+                ? supaMovements
+                : [...normMovements, ...supaMovements.filter(m => !normMovIds.has(m.id))];
+
+            // Proyectos, personal y OC: local gana (evita que ítems borrados resuciten)
             const mergedProjects:  Project[]       = localIsEmpty ? supaProjects  : normProjects;
             const mergedPersonnel: Personnel[]     = localIsEmpty ? supaPersonnel : normPersonnel;
             const mergedPOs:       PurchaseOrder[] = localIsEmpty ? supaPOs       : normPOs;
 
-            // Limpiar Supabase: borrar filas que el usuario eliminó localmente
-            // pero que siguen en Supabase por un DELETE fallido o lento.
+            // Limpiar Supabase solo para proyectos/personal/OC (no para ítems)
             if (!localIsEmpty) {
-                const keepItems = new Set(normItems.map(i => i.id));
-                const keepMovs  = new Set(normMovements.map(m => m.id));
                 const keepProjs = new Set(normProjects.map(p => p.id));
                 const keepPers  = new Set(normPersonnel.map(p => p.id));
                 const keepPOs   = new Set(normPOs.map(o => o.id));
-                supaItems    .filter(i => !keepItems.has(i.id)).forEach(i => db.deleteItem(i.id).catch(() => {}));
-                supaMovements.filter(m => !keepMovs.has(m.id)) .forEach(m => db.deleteMovement(m.id).catch(() => {}));
                 supaProjects .filter(p => !keepProjs.has(p.id)).forEach(p => db.deleteProject(p.id).catch(() => {}));
                 supaPersonnel.filter(p => !keepPers.has(p.id)) .forEach(p => db.deletePersonnel(p.id).catch(() => {}));
                 supaPOs      .filter(o => !keepPOs.has(o.id))  .forEach(o => db.deletePurchaseOrder(o.id).catch(() => {}));
