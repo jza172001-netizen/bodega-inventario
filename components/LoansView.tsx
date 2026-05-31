@@ -4,6 +4,7 @@ import { Movement, Item, Personnel, UserRole, InventoryType, ReturnCondition } f
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
 import { ClockIcon } from './icons/ClockIcon';
 import { ReturnToolModal } from './ReturnToolModal';
+import { getGenus } from '../utils/genus';
 
 interface LoansViewProps {
     movements: Movement[];
@@ -73,27 +74,32 @@ export const LoansView: React.FC<LoansViewProps> = ({
         return list;
     }, [activeLoans, typeFilter, search, itemMap]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Group by item (tool), sorted A-Z by tool name
-    const toolGroups = useMemo(() => {
-        const map = new Map<string, { item: Item; loans: Movement[] }>();
+    // Group by genus → species → loans
+    const genusGroups = useMemo(() => {
+        const genusMap = new Map<string, { genus: string; speciesMap: Map<string, { item: Item; loans: Movement[] }> }>();
         for (const m of filteredLoans) {
             const item = itemMap.get(m.itemId);
             if (!item) continue;
-            if (!map.has(m.itemId)) map.set(m.itemId, { item, loans: [] });
-            map.get(m.itemId)!.loans.push(m);
+            const g = getGenus(item.name);
+            if (!genusMap.has(g)) genusMap.set(g, { genus: g, speciesMap: new Map() });
+            const entry = genusMap.get(g)!;
+            if (!entry.speciesMap.has(item.id)) entry.speciesMap.set(item.id, { item, loans: [] });
+            entry.speciesMap.get(item.id)!.loans.push(m);
         }
-        return [...map.values()].sort((a, b) => a.item.name.localeCompare(b.item.name, 'es'));
+        return [...genusMap.values()]
+            .map(({ genus, speciesMap }) => ({ genus, species: [...speciesMap.values()] }))
+            .sort((a, b) => a.genus.localeCompare(b.genus, 'es'));
     }, [filteredLoans, itemMap]);
 
     const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
     const activeLetters = useMemo(() => {
         const letters = new Set<string>();
-        for (const { item } of toolGroups) {
-            letters.add(item.name.charAt(0).toUpperCase());
+        for (const { genus } of genusGroups) {
+            letters.add(genus.charAt(0).toUpperCase());
         }
         return letters;
-    }, [toolGroups]);
+    }, [genusGroups]);
 
     const jumpToLetter = useCallback((letter: string) => {
         const el = document.querySelector(`[data-tool-letter="${letter}"]`);
@@ -154,7 +160,7 @@ export const LoansView: React.FC<LoansViewProps> = ({
         );
     };
 
-    const seenLetters = new Set<string>();
+    const seenGenusLetters = new Set<string>();
 
     return (
         <div className="relative">
@@ -208,42 +214,50 @@ export const LoansView: React.FC<LoansViewProps> = ({
                     <p className="text-center py-10 text-gray-400 text-sm">Sin resultados.</p>
                 ) : (
                     <div className="space-y-4">
-                        {toolGroups.map(({ item, loans }) => {
-                            const letter = item.name.charAt(0).toUpperCase();
-                            const isFirst = !seenLetters.has(letter);
-                            if (isFirst) seenLetters.add(letter);
-                            const emoji = INV_EMOJI[item.inventoryType] ?? '📦';
-                            const loansOut = loans.length;
-                            const stockLeft = item.quantity;
+                        {genusGroups.map(({ genus, species }) => {
+                            const letter = genus.charAt(0).toUpperCase();
+                            const isFirst = !seenGenusLetters.has(letter);
+                            if (isFirst) seenGenusLetters.add(letter);
+                            const totalLoans = species.reduce((s, sp) => s + sp.loans.length, 0);
+                            const emoji = INV_EMOJI[species[0]?.item.inventoryType] ?? '📦';
 
                             return (
                                 <div
-                                    key={item.id}
+                                    key={genus}
                                     className="rounded-xl border border-gray-100 bg-gray-50 overflow-hidden"
                                     {...(isFirst ? { 'data-tool-letter': letter } : {})}
                                 >
-                                    {/* Tool header */}
+                                    {/* Genus header */}
                                     <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-100">
                                         <div className="min-w-0 flex-1">
-                                            <p className="font-black text-gray-900 text-sm leading-snug">{emoji} {item.name}</p>
-                                            {item.subCategory && item.subCategory !== item.name && (
-                                                <p className="text-[10px] text-gray-400">{item.subCategory}</p>
+                                            <p className="font-black text-gray-900 text-sm leading-snug">{emoji} {genus}</p>
+                                            {species.length > 1 && (
+                                                <p className="text-[10px] text-gray-400">{species.length} especies</p>
                                             )}
                                         </div>
                                         <div className="flex items-center gap-2 flex-shrink-0 ml-2">
                                             <span className="text-[10px] font-bold bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">
-                                                {loansOut} prestada{loansOut !== 1 ? 's' : ''}
-                                            </span>
-                                            <span className="text-[10px] font-bold bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-                                                stock {stockLeft}
+                                                {totalLoans} prestada{totalLoans !== 1 ? 's' : ''}
                                             </span>
                                         </div>
                                     </div>
-                                    {/* Loan rows */}
-                                    <div className="px-4 py-2 space-y-1">
-                                        {loans
-                                            .sort((a, b) => getDays(b.timestamp) - getDays(a.timestamp))
-                                            .map(loan => <LoanRow key={loan.id} loan={loan} />)}
+                                    {/* Species → Loan rows */}
+                                    <div className="px-4 py-2 space-y-3">
+                                        {species.map(({ item, loans }) => (
+                                            <div key={item.id}>
+                                                {species.length > 1 && (
+                                                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-wide mb-1">
+                                                        {item.name.match(/\(([^)]+)\)/)?.[1] ?? item.name}
+                                                        <span className="ml-1 font-normal text-gray-400">· stock {item.quantity}</span>
+                                                    </p>
+                                                )}
+                                                <div className="space-y-1">
+                                                    {loans
+                                                        .sort((a, b) => getDays(b.timestamp) - getDays(a.timestamp))
+                                                        .map(loan => <LoanRow key={loan.id} loan={loan} />)}
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>
                                 </div>
                             );

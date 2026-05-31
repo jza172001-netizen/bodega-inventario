@@ -399,6 +399,16 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                     <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Salidas (30 días)</span>
                     <span className="text-2xl font-black text-gray-800">{kpis.totalSalidas}</span>
                     <span className="text-xs text-gray-400">unidades despachadas</span>
+                    {typeBreakdown.length > 0 && (
+                        <div className="mt-2 space-y-0.5 w-full">
+                            {typeBreakdown.map(c => (
+                                <div key={c.type} className="flex items-center justify-between text-[10px]">
+                                    <span className="text-gray-500">{c.label}</span>
+                                    <span className="font-black text-gray-700">{c.qty}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                     <div className="mt-2 flex items-center gap-1 text-[10px] text-blue-400 font-semibold">
                         <span>Ver lista →</span>
                     </div>

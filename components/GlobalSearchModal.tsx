@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Item, Movement, Personnel, InventoryType } from '../types';
+import { getGenus, normStr } from '../utils/genus';
 
 interface GlobalSearchModalProps {
     items: Item[];
@@ -29,14 +30,27 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
     const itemMap      = useMemo(() => new Map(items.map(i => [i.id, i])), [items]);
     const personnelMap = useMemo(() => new Map(personnel.map(p => [p.id, p])), [personnel]);
 
-    const norm = (s: string) =>
-        s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const fuzzy = (target: string, q: string) => {
+        let ti = 0;
+        for (let qi = 0; qi < q.length; qi++) {
+            while (ti < target.length && target[ti] !== q[qi]) ti++;
+            if (ti >= target.length) return false;
+            ti++;
+        }
+        return true;
+    };
+
+    const matchesItem = (name: string, q: string) => {
+        const n = normStr(name);
+        const g = normStr(getGenus(name));
+        return n.includes(q) || g.includes(q) || (q.length >= 3 && (fuzzy(g, q) || fuzzy(n, q)));
+    };
 
     const itemResults = useMemo(() => {
-        const q = norm(query.trim());
+        const q = normStr(query.trim());
         if (q.length < 2) return [];
         return items
-            .filter(i => norm(i.name).includes(q) || norm(i.subCategory).includes(q))
+            .filter(i => matchesItem(i.name, q) || normStr(i.subCategory).includes(q))
             .slice(0, 8)
             .map(item => {
                 const activeLoan = movements.find(m => m.itemId === item.id && m.isLoan && !m.isReturned);
@@ -49,10 +63,10 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
     }, [query, items, movements, personnelMap]);
 
     const personnelResults = useMemo(() => {
-        const q = norm(query.trim());
+        const q = normStr(query.trim());
         if (q.length < 2) return [];
         return personnel
-            .filter(p => norm(p.name).includes(q))
+            .filter(p => normStr(p.name).includes(q))
             .slice(0, 4)
             .map(person => {
                 const activeLoans = movements.filter(m => m.personnelId === person.id && m.isLoan && !m.isReturned);
