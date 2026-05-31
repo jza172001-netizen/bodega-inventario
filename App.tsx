@@ -288,12 +288,22 @@ const App: React.FC = () => {
                 localPersonnel.length === 0 &&
                 localProjects.length === 0;
 
-            // Ítems: merge aditivo — Supabase + local (los ítems de Supabase que no están
-            // en local se RESTAURAN, no se borran). Esto recupera ítems perdidos por sync.
+            // Ítems: merge aditivo con dedup por nombre+tipo.
+            // Supabase puede tener ítems con diferente UUID pero mismo nombre+tipo
+            // (duplicados-fantasma creados por syncs fallidos). Preferir la versión local.
             const normItemIds = new Set(normItems.map(i => i.id));
+            const localNameTypeKeys = new Set(
+                normItems.map(i => `${i.name.trim().toLowerCase()}::${i.inventoryType}`)
+            );
             const mergedItems: Item[] = localIsEmpty
                 ? supaItems
-                : [...normItems, ...supaItems.filter(i => !normItemIds.has(i.id))];
+                : [
+                    ...normItems,
+                    ...supaItems.filter(i =>
+                        !normItemIds.has(i.id) &&
+                        !localNameTypeKeys.has(`${i.name.trim().toLowerCase()}::${i.inventoryType}`)
+                    ),
+                ];
 
             // Movimientos: merge aditivo (registros inmutables — nunca se borran en startup)
             const normMovIds = new Set(normMovements.map(m => m.id));

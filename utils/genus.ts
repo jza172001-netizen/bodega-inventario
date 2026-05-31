@@ -23,9 +23,8 @@ const editDistance = (a: string, b: string): number => {
 export const sameGenus = (a: string, b: string): boolean => {
     const na = normStr(a), nb = normStr(b);
     if (na === nb) return true;
-    const maxLen = Math.max(na.length, nb.length);
-    if (maxLen === 0) return true;
-    return editDistance(na, nb) / maxLen <= 0.30;
+    if (Math.abs(na.length - nb.length) > 2) return false;
+    return editDistance(na, nb) === 1;
 };
 
 export interface GenusCluster {

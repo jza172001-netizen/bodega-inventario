@@ -18,6 +18,25 @@ interface DetailRow {
     value?: string;
     badge?: string;
     badgeColor?: string;
+    isHeader?: boolean;
+}
+
+const TYPE_ORDER: Array<{ type: InventoryType; label: string }> = [
+    { type: InventoryType.ELECTRICAL_TOOL, label: '⚡ H. Eléctrica' },
+    { type: InventoryType.HAND_TOOL,       label: '🔨 H. Manual' },
+    { type: InventoryType.PPE,             label: '🦺 Seguridad / EPP' },
+    { type: InventoryType.SINGLE_USE,      label: '📦 Consumibles' },
+];
+
+function groupByType<T>(items: T[], getType: (t: T) => InventoryType, toRow: (t: T) => DetailRow): DetailRow[] {
+    const rows: DetailRow[] = [];
+    for (const { type, label } of TYPE_ORDER) {
+        const group = items.filter(t => getType(t) === type).map(toRow);
+        if (group.length === 0) continue;
+        rows.push({ label, isHeader: true });
+        rows.push(...group);
+    }
+    return rows;
 }
 
 const timeAgo = (date: Date): string => {
@@ -189,47 +208,58 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
 
     // ── DETAIL PANEL HELPERS ──────────────────────────────────────────────────
     const showSalidasDetail = () => {
-        const rows: DetailRow[] = kpis.checkouts30d
+        const sorted = [...kpis.checkouts30d]
             .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-            .slice(0, 40)
-            .map(m => ({
+            .slice(0, 60);
+        const rows = groupByType(
+            sorted,
+            m => itemMap.get(m.itemId)?.inventoryType ?? InventoryType.SINGLE_USE,
+            m => ({
                 label: itemMap.get(m.itemId)?.name ?? '—',
                 sub: `${personnelMap.get(m.personnelId ?? '')?.name ?? 'Sin asignar'} · ${new Date(m.timestamp).toLocaleDateString('es-CO')}`,
                 value: `${m.quantity} ${itemMap.get(m.itemId)?.unit ?? ''}`,
                 badge: m.isLoan ? 'Préstamo' : undefined,
                 badgeColor: 'bg-yellow-100 text-yellow-700',
-            }));
+            })
+        );
         setActiveDetail({ title: 'Salidas últimos 30 días', rows, navigateTo: { view: 'kardex', tab: 'movements' } });
     };
 
     const showInventarioListDetail = () => {
-        const rows: DetailRow[] = [...items]
+        const sorted = [...items]
             .filter(i => i.quantity > 0)
-            .sort((a, b) => a.name.localeCompare(b.name, 'es'))
-            .map(i => {
+            .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+        const rows = groupByType(
+            sorted,
+            i => i.inventoryType,
+            i => {
                 const onLoan = kpis.activeLoans.filter(m => m.itemId === i.id).reduce((s, m) => s + m.quantity, 0);
                 return {
                     label: i.name,
-                    sub: INV_TYPE_LABEL[i.inventoryType],
                     value: `${i.quantity} ${i.unit}`,
                     badge: onLoan > 0 ? `${onLoan} prestado` : undefined,
                     badgeColor: 'bg-yellow-100 text-yellow-700',
                 };
-            });
+            }
+        );
         setActiveDetail({ title: 'Ítems en inventario', rows, navigateTo: { view: 'kardex', tab: 'inventory' } });
     };
 
     const showPrestamosDetail = () => {
-        const rows: DetailRow[] = kpis.activeLoans.map(m => {
-            const days = Math.floor((Date.now() - new Date(m.timestamp).getTime()) / 86400000);
-            return {
-                label: itemMap.get(m.itemId)?.name ?? '—',
-                sub: personnelMap.get(m.personnelId ?? '')?.name ?? 'Sin asignar',
-                value: `${days} día${days !== 1 ? 's' : ''}`,
-                badge: days > 14 ? '+14d' : days > 7 ? '+7d' : 'Reciente',
-                badgeColor: days > 14 ? 'bg-red-100 text-red-600' : days > 7 ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700',
-            };
-        });
+        const rows = groupByType(
+            kpis.activeLoans,
+            m => itemMap.get(m.itemId)?.inventoryType ?? InventoryType.ELECTRICAL_TOOL,
+            m => {
+                const days = Math.floor((Date.now() - new Date(m.timestamp).getTime()) / 86400000);
+                return {
+                    label: itemMap.get(m.itemId)?.name ?? '—',
+                    sub: personnelMap.get(m.personnelId ?? '')?.name ?? 'Sin asignar',
+                    value: `${days}d`,
+                    badge: days > 14 ? '+14d' : days > 7 ? '+7d' : 'Reciente',
+                    badgeColor: days > 14 ? 'bg-red-100 text-red-600' : days > 7 ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700',
+                };
+            }
+        );
         setActiveDetail({ title: 'Préstamos activos', rows, navigateTo: { view: 'kardex', tab: 'loans' } });
     };
 
@@ -329,7 +359,12 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                         <div className="overflow-y-auto flex-1">
                             {activeDetail.rows.length === 0 ? (
                                 <p className="text-center py-10 text-gray-400 text-sm">Sin datos para mostrar.</p>
-                            ) : activeDetail.rows.map((row, i) => (
+                            ) : activeDetail.rows.map((row, i) =>
+                                row.isHeader ? (
+                                    <div key={i} className="px-5 py-1.5 bg-gray-50 border-b border-gray-100">
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{row.label}</p>
+                                    </div>
+                                ) : (
                                 <div key={i} className="flex items-center justify-between px-5 py-3 border-b border-gray-50">
                                     <div className="min-w-0 flex-1">
                                         <p className="text-sm font-semibold text-gray-800 truncate">{row.label}</p>
