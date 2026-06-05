@@ -47,6 +47,7 @@ const detectIntent = (msg: string): string => {
 };
 
 const algorithmicResponse = (message: string, ctx: WarehouseContext): string => {
+    if (!ctx?.items || !ctx?.movements) return 'Cargando datos, intenta de nuevo en un momento.';
     const intent = detectIntent(message);
     if (intent === 'stock_bajo') {
         const bajos = ctx.items.filter(i => i.quantity <= i.minStock);

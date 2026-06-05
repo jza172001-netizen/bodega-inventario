@@ -1,6 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { AppUser, UserRole } from '../types';
+import * as db from '../services/supabaseService';
 
 interface LoginViewProps {
     users: AppUser[];
@@ -19,6 +20,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ users, onLoginSuccess, onF
     const [setupConfirm, setSetupConfirm] = useState('');
     const [error, setError] = useState('');
     const [shake, setShake] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
     const passwordRef = useRef<HTMLInputElement>(null);
     const setupUsernameRef = useRef<HTMLInputElement>(null);
 
@@ -49,14 +51,35 @@ export const LoginView: React.FC<LoginViewProps> = ({ users, onLoginSuccess, onF
         }
     };
 
-    const handlePasswordSubmit = (e: React.FormEvent) => {
+    const handlePasswordSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!selectedUser) return;
-        if (password === selectedUser.password) {
-            onLoginSuccess(selectedUser.role, selectedUser.name);
-        } else {
-            setPassword('');
-            triggerShake('Contraseña incorrecta');
+        if (!selectedUser || isLoading) return;
+        setIsLoading(true);
+        try {
+            if (selectedUser.username) {
+                const result = await db.authenticateUser(selectedUser.username, password);
+                if (result) {
+                    onLoginSuccess(result.role, result.name);
+                    return;
+                }
+            }
+            // Fallback offline: contraseña local solo si Supabase no responde
+            if (selectedUser.password && password === selectedUser.password) {
+                onLoginSuccess(selectedUser.role, selectedUser.name);
+            } else {
+                setPassword('');
+                triggerShake('Contraseña incorrecta');
+            }
+        } catch {
+            // Supabase no disponible — usar credencial local como respaldo
+            if (selectedUser.password && password === selectedUser.password) {
+                onLoginSuccess(selectedUser.role, selectedUser.name);
+            } else {
+                setPassword('');
+                triggerShake('Sin conexión y contraseña incorrecta');
+            }
+        } finally {
+            setIsLoading(false);
         }
     };
 

@@ -31,6 +31,7 @@ export function saveToLocalStorage(data: Omit<AppData, 'version' | 'savedAt'>): 
             version: STORAGE_VERSION,
             savedAt: new Date().toISOString(),
             ...data,
+            users: data.users.map(u => ({ ...u, password: '' })),
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch (e) {

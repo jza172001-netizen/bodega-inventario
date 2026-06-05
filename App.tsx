@@ -288,22 +288,28 @@ const App: React.FC = () => {
                 localPersonnel.length === 0 &&
                 localProjects.length === 0;
 
-            // Ítems: merge aditivo con dedup por nombre+tipo.
-            // Supabase puede tener ítems con diferente UUID pero mismo nombre+tipo
-            // (duplicados-fantasma creados por syncs fallidos). Preferir la versión local.
+            // Ítems: cuando Supabase está disponible es fuente de verdad para existencia.
+            // Esto evita que ítems eliminados en Supabase "resuciten" desde localStorage.
+            // Solo se agregan ítems locales con ID temporal (creados offline, nunca sincronizados).
+            // Si Supabase no responde (supaItems vacío por error), se conserva todo lo local.
             const normItemIds = new Set(normItems.map(i => i.id));
             const localNameTypeKeys = new Set(
                 normItems.map(i => `${i.name.trim().toLowerCase()}::${i.inventoryType}`)
             );
             const mergedItems: Item[] = localIsEmpty
                 ? supaItems
-                : [
-                    ...normItems,
-                    ...supaItems.filter(i =>
-                        !normItemIds.has(i.id) &&
-                        !localNameTypeKeys.has(`${i.name.trim().toLowerCase()}::${i.inventoryType}`)
-                    ),
-                ];
+                : supaItems.length > 0
+                    ? [
+                        ...supaItems,
+                        ...normItems.filter(i => !UUID_RE.test(i.id) && !supaItemIds.has(i.id)),
+                    ]
+                    : [
+                        ...normItems,
+                        ...supaItems.filter(i =>
+                            !normItemIds.has(i.id) &&
+                            !localNameTypeKeys.has(`${i.name.trim().toLowerCase()}::${i.inventoryType}`)
+                        ),
+                    ];
 
             // Movimientos: merge aditivo (registros inmutables — nunca se borran en startup)
             const normMovIds = new Set(normMovements.map(m => m.id));
@@ -715,7 +721,7 @@ const App: React.FC = () => {
         const id = crypto.randomUUID();
         const newO = { ...o, id };
         setPurchaseOrders(prev => [newO, ...prev]);
-        withSync(db.addPurchaseOrder(o).then(created => setPurchaseOrders(prev => prev.map(x => x.id === id ? created : x))));
+        withSync(db.addPurchaseOrder(o, id).then(created => setPurchaseOrders(prev => prev.map(x => x.id === id ? created : x))));
     };
 
     const handleUpdatePOStatus = (id: string, status: PurchaseOrderStatus) => {

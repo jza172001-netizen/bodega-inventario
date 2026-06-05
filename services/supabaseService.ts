@@ -321,10 +321,11 @@ export async function fetchPurchaseOrders(): Promise<PurchaseOrder[]> {
     });
 }
 
-export async function addPurchaseOrder(o: Omit<PurchaseOrder, 'id'>): Promise<PurchaseOrder> {
+export async function addPurchaseOrder(o: Omit<PurchaseOrder, 'id'>, id?: string): Promise<PurchaseOrder> {
     const { data: orderRow, error: oErr } = await supabase
         .from('purchase_orders')
         .insert({
+            ...(id ? { id } : {}),
             supplier: o.supplier,
             status: o.status,
             order_date: o.orderDate instanceof Date ? o.orderDate.toISOString() : o.orderDate,
