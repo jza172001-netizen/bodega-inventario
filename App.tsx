@@ -151,12 +151,12 @@ const App: React.FC = () => {
     };
 
     const handleFirstSetup = (userId: string, username: string, password: string) => {
-        setUsers(prev => prev.map(u => u.id === userId ? { ...u, username, password, setupComplete: true } : u));
         const user = users.find(u => u.id === userId);
-        if (user) {
-            db.updateUser({ ...user, username, password, setupComplete: true }).catch(() => setSyncStatus('error'));
-            handleLoginSuccess(user.role, user.name);
-        }
+        if (!user) return;
+        const updated = { ...user, username, password, setupComplete: true };
+        setUsers(prev => prev.map(u => u.id === userId ? updated : u));
+        db.updateUser(updated).catch(() => setSyncStatus('error'));
+        handleLoginSuccess(user.role, user.name);
     };
 
     const handleLogout = () => {
@@ -544,16 +544,16 @@ const App: React.FC = () => {
         const id = crypto.randomUUID();
         const newMov = { ...m, id, timestamp: ts };
         setMovements(prev => [newMov, ...prev]);
-        setItems(prev => prev.map(item => {
-            if (item.id === m.itemId) {
-                let newQty = item.quantity;
-                if (m.type === MovementType.CHECK_OUT || m.type === MovementType.WASTE) newQty -= m.quantity;
-                else newQty += m.quantity;
-                db.updateItemQuantity(item.id, newQty).catch(() => setSyncStatus('error'));
-                return { ...item, quantity: newQty };
-            }
-            return item;
-        }));
+        const currentItem = items.find(i => i.id === m.itemId);
+        if (currentItem) {
+            const newQty = Math.max(0, (m.type === MovementType.CHECK_OUT || m.type === MovementType.WASTE)
+                ? currentItem.quantity - m.quantity
+                : currentItem.quantity + m.quantity);
+            setItems(prev => prev.map(item =>
+                item.id === m.itemId ? { ...item, quantity: newQty } : item
+            ));
+            db.updateItemQuantity(m.itemId, newQty).catch(() => setSyncStatus('error'));
+        }
         withSync(db.addMovement({ ...m, timestamp: ts }, id));
         const itemName   = items.find(i => i.id === m.itemId)?.name ?? 'herramienta';
         const personName = m.personnelId ? personnel.find(p => p.id === m.personnelId)?.name : undefined;

@@ -207,13 +207,13 @@ function extractProductLines(text: string): ParsedRow[] {
         if (SKIP_PATTERNS.some(p => p.test(line))) continue;
         if (/^[\d\s.,$/€]+$/.test(line)) continue;
 
-        const p1 = line.match(new RegExp(`^(\\d+(?:[.,]\\d+)?)\\s+(.{3,50?})(?:\\s+(${UNIT_WORDS}))?$`, 'i'));
+        const p1 = line.match(new RegExp(`^(\\d+(?:[.,]\\d+)?)\\s+(.{3,50}?)(?:\\s+(${UNIT_WORDS}))?$`, 'i'));
         if (p1) {
             results.push({ name: cleanName(p1[2]), quantity: toNum(p1[1]), unit: (p1[3] ?? 'und').toLowerCase() });
             continue;
         }
 
-        const p2 = line.match(new RegExp(`^(.{3,50?})\\s+(\\d+(?:[.,]\\d+)?)\\s*(${UNIT_WORDS})?$`, 'i'));
+        const p2 = line.match(new RegExp(`^(.{3,50}?)\\s+(\\d+(?:[.,]\\d+)?)\\s*(${UNIT_WORDS})?$`, 'i'));
         if (p2) {
             results.push({ name: cleanName(p2[1]), quantity: toNum(p2[2]), unit: (p2[3] ?? 'und').toLowerCase() });
             continue;
