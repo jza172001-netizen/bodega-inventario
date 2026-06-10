@@ -574,12 +574,20 @@ const App: React.FC = () => {
 
     const handleDeleteMovement = (id: string) => {
         const mov = movements.find(m => m.id === id);
-        const itemName = mov ? items.find(i => i.id === mov.itemId)?.name ?? mov.itemId : id;
+        const item = mov ? items.find(i => i.id === mov.itemId) : undefined;
+        const itemName = item?.name ?? mov?.itemId ?? id;
         requirePin(
             () => {
                 setMovements(prev => prev.filter(m => m.id !== id));
                 withSync(db.deleteMovement(id));
-                addAuditLog('MOVEMENT_DELETED', `Se eliminó registro de movimiento: "${itemName}"`);
+                // Revert the movement's stock effect. Skip already-returned loans (net effect is zero).
+                if (mov && item && !(mov.isLoan && mov.isReturned)) {
+                    const wasOut = mov.type === MovementType.CHECK_OUT || mov.type === MovementType.WASTE;
+                    const newQty = Math.max(0, wasOut ? item.quantity + mov.quantity : item.quantity - mov.quantity);
+                    setItems(prev => prev.map(i => i.id === mov.itemId ? { ...i, quantity: newQty } : i));
+                    db.updateItemQuantity(mov.itemId, newQty).catch(() => setSyncStatus('error'));
+                }
+                addAuditLog('MOVEMENT_DELETED', `Se eliminó registro de movimiento: "${itemName}" (stock ajustado)`);
             },
             `Eliminar registro de "${itemName}"`,
             'Esta acción no se puede deshacer.',
@@ -588,10 +596,18 @@ const App: React.FC = () => {
 
     const handleReturnItem = (id: string, condition?: string, notes?: string) => {
         const mov = movements.find(m => m.id === id);
-        const itemName = mov ? items.find(i => i.id === mov.itemId)?.name ?? 'herramienta' : 'herramienta';
-        const personName = mov?.personnelId ? personnel.find(p => p.id === mov.personnelId)?.name : undefined;
+        if (!mov || mov.isReturned) return;
+        const item = items.find(i => i.id === mov.itemId);
+        const itemName = item?.name ?? 'herramienta';
+        const personName = mov.personnelId ? personnel.find(p => p.id === mov.personnelId)?.name : undefined;
         setMovements(prev => prev.map(m => m.id === id ? { ...m, isReturned: true, returnCondition: condition as import('./types').ReturnCondition | undefined, returnNotes: notes } : m));
         withSync(db.markMovementReturned(id, condition as import('./types').ReturnCondition | undefined, notes));
+        // Restore stock: the tool returns to the warehouse
+        if (item) {
+            const newQty = item.quantity + mov.quantity;
+            setItems(prev => prev.map(i => i.id === mov.itemId ? { ...i, quantity: newQty } : i));
+            db.updateItemQuantity(mov.itemId, newQty).catch(() => setSyncStatus('error'));
+        }
         addAuditLog('LOAN_RETURNED', `Devuelta: "${itemName}"${personName ? ` de ${personName}` : ''}${condition ? ` — estado: ${condition}` : ''}`);
     };
 
@@ -725,11 +741,33 @@ const App: React.FC = () => {
     };
 
     const handleUpdatePOStatus = (id: string, status: PurchaseOrderStatus) => {
+        const order = purchaseOrders.find(o => o.id === id);
         setPurchaseOrders(prev => prev.map(o => o.id === id
             ? { ...o, status, ...(status === PurchaseOrderStatus.RECEIVED ? { receivedDate: new Date() } : {}) }
             : o
         ));
         withSync(db.updatePurchaseOrderStatus(id, status));
+        if (status === PurchaseOrderStatus.RECEIVED && order && order.status !== PurchaseOrderStatus.RECEIVED) {
+            const addedByItem = new Map<string, number>();
+            for (const line of order.items) {
+                if (line.quantity > 0) addedByItem.set(line.itemId, (addedByItem.get(line.itemId) ?? 0) + line.quantity);
+            }
+            for (const [itemId, added] of addedByItem) {
+                const item = items.find(i => i.id === itemId);
+                if (!item) continue;
+                const newQty = item.quantity + added;
+                setItems(prev => prev.map(i => i.id === itemId ? { ...i, quantity: newQty } : i));
+                db.updateItemQuantity(itemId, newQty).catch(() => setSyncStatus('error'));
+                const movId = crypto.randomUUID();
+                const mov: Movement = {
+                    id: movId, itemId, type: MovementType.PURCHASE, quantity: added,
+                    timestamp: new Date(), notes: `Orden de compra recibida — ${order.supplier}`,
+                };
+                setMovements(prev => [mov, ...prev]);
+                withSync(db.addMovement(mov, movId));
+            }
+            addAuditLog('ITEM_CREATED', `📦 Orden recibida de ${order.supplier}: ${addedByItem.size} ítem(s) entraron al inventario`);
+        }
     };
 
     const handleDeletePO = (id: string) => {
