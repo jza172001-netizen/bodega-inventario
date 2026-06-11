@@ -1,18 +1,20 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { AppUser, UserRole } from '../types';
+import * as db from '../services/supabaseService';
+import { sha256Hex } from '../utils/hash';
 
 interface PinConfirmModalProps {
     title?: string;
     message?: string;
+    users: AppUser[];
     onConfirm: () => void;
     onClose: () => void;
 }
 
-const ADMIN_USER = 'Juli';
-const ADMIN_PIN  = '6274';
-
 export const PinConfirmModal: React.FC<PinConfirmModalProps> = ({
     title = 'Autorización requerida',
     message,
+    users,
     onConfirm,
     onClose,
 }) => {
@@ -21,22 +23,50 @@ export const PinConfirmModal: React.FC<PinConfirmModalProps> = ({
     const [pin, setPin]   = useState('');
     const [error, setError] = useState('');
     const [shake, setShake] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
     const userRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         if (step === 2) setTimeout(() => userRef.current?.focus(), 50);
     }, [step]);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const fail = (msg: string) => {
+        setError(msg);
+        setShake(true);
+        setPin('');
+        setTimeout(() => setShake(false), 500);
+    };
+
+    // Solo un OWNER puede autorizar acciones destructivas.
+    // Valida contra Supabase; si no hay conexión, compara el hash local.
+    const verifyOwner = async (username: string, password: string): Promise<boolean> => {
+        try {
+            const result = await db.authenticateUser(username, password);
+            if (result) return result.role === UserRole.OWNER;
+        } catch {
+            // Sin conexión — usar respaldo local por hash
+        }
+        const candidate = users.find(u =>
+            u.role === UserRole.OWNER &&
+            (u.username.toLowerCase() === username.toLowerCase() || u.name.toLowerCase() === username.toLowerCase())
+        );
+        if (!candidate?.passwordHash) return false;
+        return (await sha256Hex(password)) === candidate.passwordHash;
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (user.trim().toLowerCase() === ADMIN_USER.toLowerCase() && pin === ADMIN_PIN) {
-            onConfirm();
-            onClose();
-        } else {
-            setError('Usuario o contraseña incorrectos');
-            setShake(true);
-            setPin('');
-            setTimeout(() => setShake(false), 500);
+        if (isLoading) return;
+        setIsLoading(true);
+        try {
+            if (await verifyOwner(user.trim(), pin)) {
+                onConfirm();
+                onClose();
+            } else {
+                fail('Usuario o contraseña incorrectos');
+            }
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -73,7 +103,7 @@ export const PinConfirmModal: React.FC<PinConfirmModalProps> = ({
                     </div>
                 ) : (
                     <form onSubmit={handleSubmit} className="p-5 space-y-4">
-                        <p className="text-xs text-gray-500 text-center">Ingresa tus credenciales para confirmar</p>
+                        <p className="text-xs text-gray-500 text-center">Ingresa credenciales de administrador para confirmar</p>
                         <div>
                             <label className="block text-xs font-bold text-gray-600 mb-1">Usuario</label>
                             <input
@@ -108,9 +138,9 @@ export const PinConfirmModal: React.FC<PinConfirmModalProps> = ({
                                 className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-bold rounded-xl transition-all">
                                 Atrás
                             </button>
-                            <button type="submit"
-                                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white text-sm font-black rounded-xl transition-all">
-                                Autorizar
+                            <button type="submit" disabled={isLoading}
+                                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 disabled:bg-gray-300 text-white text-sm font-black rounded-xl transition-all">
+                                {isLoading ? 'Verificando…' : 'Autorizar'}
                             </button>
                         </div>
                     </form>

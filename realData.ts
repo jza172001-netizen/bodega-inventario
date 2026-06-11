@@ -8,7 +8,8 @@ const mid = () => `rm-${String(_mid++).padStart(4, '0')}`;
 
 // ── USERS ────────────────────────────────────────────────────────────────────
 export const realUsers: AppUser[] = [
-    { id: 'user-juli',    username: 'july',     password: '6274', role: UserRole.OWNER,    name: 'Juli',  setupComplete: true  },
+    // La contraseña vive solo en Supabase (RPC authenticate_user) — nunca en el código fuente
+    { id: 'user-juli',    username: 'july',     password: '', role: UserRole.OWNER,    name: 'Juli',  setupComplete: true  },
     { id: 'user-esteban', username: '',          password: '',     role: UserRole.EMPLOYEE, name: 'Camilo', setupComplete: false },
     { id: 'user-kate',    username: '',          password: '',     role: UserRole.EMPLOYEE, name: 'Kate',  setupComplete: false },
 ];

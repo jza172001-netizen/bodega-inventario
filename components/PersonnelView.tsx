@@ -68,10 +68,9 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
             alert(`${p.name} tiene herramientas activas en préstamo. Márcalas como devueltas antes de eliminar.`);
             return;
         }
-        if (window.confirm(`¿Eliminar a ${p.name}? Su historial de movimientos se conserva.`)) {
-            onBehaviorLog?.('ACTION', `Eliminó trabajador: ${p.name}`);
-            onDeletePersonnel?.(p.id);
-        }
+        // La confirmación + credenciales las pide el PinConfirmModal (App.handleDeletePersonnel)
+        onBehaviorLog?.('ACTION', `Eliminó trabajador: ${p.name}`);
+        onDeletePersonnel?.(p.id);
     };
 
     const openEdit = (e: React.MouseEvent, p: Personnel) => {

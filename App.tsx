@@ -29,8 +29,10 @@ import { LoginView } from './components/LoginView';
 import { LandingPage } from './components/LandingPage';
 import { InvoiceReaderModal } from './components/InvoiceReaderModal';
 import { MultiUserConfirmModal } from './components/MultiUserConfirmModal';
-import { saveToLocalStorage, loadFromLocalStorage, exportToFile, importFromFile } from './storage';
+import { saveToLocalStorage, loadFromLocalStorage, loadInitialData, exportToFile, importFromFile } from './storage';
 import * as db from './services/supabaseService';
+import { ConfirmDialog } from './components/ConfirmDialog';
+import { sha256Hex } from './utils/hash';
 
 // Icons
 import { DashboardIcon } from './components/icons/DashboardIcon';
@@ -53,7 +55,7 @@ const migrateUsers = (stored: AppUser[]): AppUser[] => {
         if (!found) found = stored.find(u => u.role === seed.role && !usedIds.has(u.id));
         if (found) {
             usedIds.add(found.id);
-            return { ...seed, username: found.username, password: found.password, setupComplete: found.setupComplete || (!!found.username && !!found.password) };
+            return { ...seed, username: found.username, password: found.password, passwordHash: found.passwordHash, setupComplete: found.setupComplete || !!found.username };
         }
         return seed;
     });
@@ -67,7 +69,7 @@ const App: React.FC = () => {
     // Carga inicial síncrona desde localStorage, con fallback a mockData
     const NAME_FIX: Record<string, string> = { Julio: 'Juli', julio: 'Juli', Administrador: 'Juli', administrador: 'Juli' };
     const [users, setUsers] = useState<AppUser[]>(() => {
-        const s = loadFromLocalStorage();
+        const s = loadInitialData();
         return migrateUsers(s?.users ?? mockUsers).map(u => NAME_FIX[u.name] ? { ...u, name: NAME_FIX[u.name] } : u);
     });
 
@@ -84,10 +86,10 @@ const App: React.FC = () => {
             return seed?.name ?? session.name;
         } catch { return ''; }
     });
-    const [items, setItems] = useState<Item[]>(() => { const s = loadFromLocalStorage(); return s?.items ?? []; });
-    const [movements, setMovements] = useState<Movement[]>(() => { const s = loadFromLocalStorage(); return s?.movements ?? []; });
+    const [items, setItems] = useState<Item[]>(() => { const s = loadInitialData(); return s?.items ?? []; });
+    const [movements, setMovements] = useState<Movement[]>(() => { const s = loadInitialData(); return s?.movements ?? []; });
     const [personnel, setPersonnel] = useState<Personnel[]>(() => {
-        const s = loadFromLocalStorage();
+        const s = loadInitialData();
         const ls = s?.personnel;
         if (ls?.length) {
             const valid = ls.filter(p => p.name?.trim().length >= 4);
@@ -95,16 +97,16 @@ const App: React.FC = () => {
         }
         return mockPersonnel;
     });
-    const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(() => { const s = loadFromLocalStorage(); return s?.purchaseOrders ?? []; });
-    const [projects, setProjects] = useState<Project[]>(() => { const s = loadFromLocalStorage(); return s?.projects ?? mockProjects; });
+    const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(() => { const s = loadInitialData(); return s?.purchaseOrders ?? []; });
+    const [projects, setProjects] = useState<Project[]>(() => { const s = loadInitialData(); return s?.projects ?? mockProjects; });
     const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
-        const s = loadFromLocalStorage();
+        const s = loadInitialData();
         const logs = s?.auditLogs ?? [];
         const fix: Record<string, string> = { Administrador: 'Juli', administrador: 'Juli', Julio: 'Juli', julio: 'Juli' };
         return logs.map(l => fix[l.actor] ? { ...l, actor: fix[l.actor] } : l);
     });
     const [behaviorLogs, setBehaviorLogs] = useState<BehaviorLog[]>(() => {
-        const s = loadFromLocalStorage();
+        const s = loadInitialData();
         const logs = s?.behaviorLogs ?? [];
         const fix: Record<string, string> = { Julio: 'Juli', julio: 'Juli', Administrador: 'Juli', administrador: 'Juli' };
         return logs.map(l => fix[l.actor] ? { ...l, actor: fix[l.actor] } : l);
@@ -119,7 +121,7 @@ const App: React.FC = () => {
             description,
         };
         setAuditLogs(prev => [entry, ...prev]);
-        db.addAuditLog(entry).catch(() => {});
+        db.addAuditLog(entry).catch(e => console.error('[Supabase] auditLog:', e));
     };
 
     const addBehaviorLog = (action: string, detail: string) => {
@@ -155,8 +157,17 @@ const App: React.FC = () => {
         if (!user) return;
         const updated = { ...user, username, password, setupComplete: true };
         setUsers(prev => prev.map(u => u.id === userId ? updated : u));
-        db.updateUser(updated).catch(() => setSyncStatus('error'));
+        // Hash para login offline (localStorage nunca guarda la contraseña en claro)
+        sha256Hex(password).then(hash =>
+            setUsers(prev => prev.map(u => u.id === userId ? { ...u, passwordHash: hash } : u))
+        );
+        db.updateUser(updated).catch(e => { console.error('[Supabase] user:', e); setSyncStatus('error'); });
         handleLoginSuccess(user.role, user.name);
+    };
+
+    // Tras un login online exitoso, guarda el hash para habilitar el respaldo offline
+    const handleCredentialVerified = (userId: string, passwordHash: string) => {
+        setUsers(prev => prev.map(u => u.id === userId ? { ...u, passwordHash } : u));
     };
 
     const handleLogout = () => {
@@ -190,7 +201,7 @@ const App: React.FC = () => {
         const localPOs       = local?.purchaseOrders ?? [];
         const localAuditLogs = local?.auditLogs  ?? [];
 
-        db.fetchUsers().then(data => { if (data.length > 0 && local === null) setUsers(migrateUsers(data)); }).catch(() => {});
+        db.fetchUsers().then(data => { if (data.length > 0 && local === null) setUsers(migrateUsers(data)); }).catch(e => console.error('[Supabase] users:', e));
 
         Promise.all([
             db.fetchItems().catch((): Item[] => []),
@@ -317,20 +328,16 @@ const App: React.FC = () => {
                 ? supaMovements
                 : [...normMovements, ...supaMovements.filter(m => !normMovIds.has(m.id))];
 
-            // Proyectos, personal y OC: local gana (evita que ítems borrados resuciten)
-            const mergedProjects:  Project[]       = localIsEmpty ? supaProjects  : normProjects;
-            const mergedPersonnel: Personnel[]     = localIsEmpty ? supaPersonnel : normPersonnel;
-            const mergedPOs:       PurchaseOrder[] = localIsEmpty ? supaPOs       : normPOs;
-
-            // Limpiar Supabase solo para proyectos/personal/OC (no para ítems)
-            if (!localIsEmpty) {
-                const keepProjs = new Set(normProjects.map(p => p.id));
-                const keepPers  = new Set(normPersonnel.map(p => p.id));
-                const keepPOs   = new Set(normPOs.map(o => o.id));
-                supaProjects .filter(p => !keepProjs.has(p.id)).forEach(p => db.deleteProject(p.id).catch(() => {}));
-                supaPersonnel.filter(p => !keepPers.has(p.id)) .forEach(p => db.deletePersonnel(p.id).catch(() => {}));
-                supaPOs      .filter(o => !keepPOs.has(o.id))  .forEach(o => db.deletePurchaseOrder(o.id).catch(() => {}));
-            }
+            // Proyectos, personal y OC: merge aditivo. Supabase es la fuente compartida
+            // entre dispositivos — un localStorage desactualizado NO debe borrar nada.
+            // Las eliminaciones solo ocurren por acción explícita del usuario (handlers).
+            const mergeById = <T extends { id: string }>(local: T[], remote: T[]): T[] => {
+                const localIds = new Set(local.map(x => x.id));
+                return [...local, ...remote.filter(x => !localIds.has(x.id))];
+            };
+            const mergedProjects:  Project[]       = localIsEmpty ? supaProjects  : mergeById(normProjects, supaProjects);
+            const mergedPersonnel: Personnel[]     = localIsEmpty ? supaPersonnel : mergeById(normPersonnel, supaPersonnel);
+            const mergedPOs:       PurchaseOrder[] = localIsEmpty ? supaPOs       : mergeById(normPOs, supaPOs);
 
             // Audit logs: unir local + Supabase (acumulativo — nunca se borra)
             const supaAuditIds = new Set(supaAuditLogs.map(a => a.id));
@@ -547,20 +554,29 @@ const App: React.FC = () => {
 
     const handleLogMovement = (m: Omit<Movement, 'id'>) => {
         const ts = m.timestamp instanceof Date ? m.timestamp : new Date(m.timestamp ?? Date.now());
+        const currentItem = items.find(i => i.id === m.itemId);
+        const isWithdrawal = m.type === MovementType.CHECK_OUT || m.type === MovementType.WASTE;
+        // Validación central de stock: el kardex debe cuadrar siempre con el inventario.
+        // Sin esto, una salida mayor al stock registraría más de lo que descuenta.
+        if (currentItem && isWithdrawal && m.quantity > currentItem.quantity) {
+            alert(`Stock insuficiente de "${currentItem.name}": hay ${currentItem.quantity} ${currentItem.unit} y se intentó sacar ${m.quantity}. El movimiento NO se registró.`);
+            return;
+        }
         const id = crypto.randomUUID();
         const newMov = { ...m, id, timestamp: ts };
         setMovements(prev => [newMov, ...prev]);
-        const currentItem = items.find(i => i.id === m.itemId);
         if (currentItem) {
-            const newQty = Math.max(0, (m.type === MovementType.CHECK_OUT || m.type === MovementType.WASTE)
+            const newQty = Math.max(0, isWithdrawal
                 ? currentItem.quantity - m.quantity
                 : currentItem.quantity + m.quantity);
             setItems(prev => prev.map(item =>
                 item.id === m.itemId ? { ...item, quantity: newQty } : item
             ));
-            db.updateItemQuantity(m.itemId, newQty).catch(() => setSyncStatus('error'));
+            // Una sola transacción en el servidor: movimiento + stock, a prueba de race conditions
+            withSync(db.logMovementWithStock({ ...m, timestamp: ts }, id, newQty));
+        } else {
+            withSync(db.addMovement({ ...m, timestamp: ts }, id));
         }
-        withSync(db.addMovement({ ...m, timestamp: ts }, id));
         const itemName   = items.find(i => i.id === m.itemId)?.name ?? 'herramienta';
         const personName = m.personnelId ? personnel.find(p => p.id === m.personnelId)?.name : undefined;
         if (m.isLoan) {
@@ -577,12 +593,22 @@ const App: React.FC = () => {
         const itemName = mov ? items.find(i => i.id === mov.itemId)?.name ?? mov.itemId : id;
         requirePin(
             () => {
+                // Revertir el efecto del movimiento sobre el stock antes de borrarlo:
+                // borrar una salida devuelve unidades; borrar una entrada las quita.
+                const item = mov ? items.find(i => i.id === mov.itemId) : undefined;
+                let newQty: number | undefined;
+                if (mov && item) {
+                    const wasWithdrawal = mov.type === MovementType.CHECK_OUT || mov.type === MovementType.WASTE;
+                    newQty = Math.max(0, wasWithdrawal ? item.quantity + mov.quantity : item.quantity - mov.quantity);
+                    const qty = newQty;
+                    setItems(prev => prev.map(i => i.id === item.id ? { ...i, quantity: qty } : i));
+                }
                 setMovements(prev => prev.filter(m => m.id !== id));
-                withSync(db.deleteMovement(id));
-                addAuditLog('MOVEMENT_DELETED', `Se eliminó registro de movimiento: "${itemName}"`);
+                withSync(db.deleteMovementWithRevert(id, item?.id, newQty));
+                addAuditLog('MOVEMENT_DELETED', `Se eliminó registro de movimiento: "${itemName}" (stock revertido)`);
             },
             `Eliminar registro de "${itemName}"`,
-            'Esta acción no se puede deshacer.',
+            'Se revertirá su efecto en el stock. Esta acción no se puede deshacer.',
         );
     };
 
@@ -621,26 +647,26 @@ const App: React.FC = () => {
         const toName   = personnel.find(p => p.id === newPersonnelId)?.name ?? 'trabajador destino';
         const itemName = items.find(i => i.id === original.itemId)?.name ?? 'herramienta';
 
-        if (!window.confirm(`¿Traspasar "${itemName}" de ${fromName} a ${toName}?`)) return;
+        requireConfirm(`¿Traspasar "${itemName}" de ${fromName} a ${toName}?`, () => {
+            // Cierra el préstamo original sin tocar el stock (la herramienta no regresó a bodega)
+            setMovements(prev => prev.map(m => m.id === movementId ? { ...m, isReturned: true, pendingPickup: false } : m));
+            withSync(db.markMovementReturned(movementId));
 
-        // Cierra el préstamo original sin tocar el stock (la herramienta no regresó a bodega)
-        setMovements(prev => prev.map(m => m.id === movementId ? { ...m, isReturned: true, pendingPickup: false } : m));
-        withSync(db.markMovementReturned(movementId));
-
-        // Crea nuevo préstamo al trabajador destino, sin ajustar cantidad de inventario
-        const newMovId = crypto.randomUUID();
-        const newMov: Movement = {
-            ...original,
-            id: newMovId,
-            timestamp: new Date(),
-            personnelId: newPersonnelId,
-            isReturned: false,
-            pendingPickup: false,
-            notes: `Traspaso desde ${fromName}`,
-        };
-        setMovements(prev => [newMov, ...prev]);
-        withSync(db.addMovement(newMov, newMovId));
-        addAuditLog('LOAN_TRANSFERRED', `Traspaso: "${itemName}" de ${fromName} → ${toName}`);
+            // Crea nuevo préstamo al trabajador destino, sin ajustar cantidad de inventario
+            const newMovId = crypto.randomUUID();
+            const newMov: Movement = {
+                ...original,
+                id: newMovId,
+                timestamp: new Date(),
+                personnelId: newPersonnelId,
+                isReturned: false,
+                pendingPickup: false,
+                notes: `Traspaso desde ${fromName}`,
+            };
+            setMovements(prev => [newMov, ...prev]);
+            withSync(db.addMovement(newMov, newMovId));
+            addAuditLog('LOAN_TRANSFERRED', `Traspaso: "${itemName}" de ${fromName} → ${toName}`);
+        });
     };
 
     const handleAddPersonnel = (p: Omit<Personnel, 'id'>) => {
@@ -774,12 +800,14 @@ const App: React.FC = () => {
     // ── PIN de autorización para acciones destructivas ──
     const [pinAction, setPinAction] = useState<null | { fn: () => void; title?: string; message?: string }>(null);
     const [multiAction, setMultiAction] = useState<null | { fn: () => void; title: string; message: string }>(null);
+    const [confirmAction, setConfirmAction] = useState<null | { fn: () => void; message: string }>(null);
     const requireMultiUser = (fn: () => void, title: string, message: string) => setMultiAction({ fn, title, message });
     const requirePin = (fn: () => void, title?: string, message?: string) => {
         setPinAction({ fn, title, message });
     };
+    const requireConfirm = (message: string, fn: () => void) => setConfirmAction({ fn, message });
 
-    if (!loggedIn) return <LoginView users={users} onLoginSuccess={handleLoginSuccess} onFirstSetup={handleFirstSetup} />;
+    if (!loggedIn) return <LoginView users={users} onLoginSuccess={handleLoginSuccess} onFirstSetup={handleFirstSetup} onCredentialVerified={handleCredentialVerified} />;
 
     return (
         <div translate="no" className="flex h-screen bg-gray-50 overflow-hidden font-sans">
@@ -997,8 +1025,16 @@ const App: React.FC = () => {
                 <PinConfirmModal
                     title={pinAction.title}
                     message={pinAction.message}
+                    users={users}
                     onConfirm={pinAction.fn}
                     onClose={() => setPinAction(null)}
+                />
+            )}
+            {confirmAction && (
+                <ConfirmDialog
+                    message={confirmAction.message}
+                    onConfirm={confirmAction.fn}
+                    onClose={() => setConfirmAction(null)}
                 />
             )}
             {multiAction && (

@@ -182,6 +182,53 @@ export async function deleteMovement(id: string): Promise<void> {
     if (error) throw error;
 }
 
+// PGRST202 = la función RPC no existe aún en el proyecto (migración sin aplicar)
+const isMissingRpc = (error: { code?: string }) =>
+    error.code === 'PGRST202' || error.code === '42883';
+
+/**
+ * Movimiento + stock en una sola transacción (RPC log_movement_and_update_stock).
+ * El UPDATE condicional del servidor evita race conditions y stock negativo.
+ * Fallback no atómico si la migración aún no se aplicó.
+ */
+export async function logMovementWithStock(
+    m: Omit<Movement, 'id'>,
+    id: string,
+    fallbackQty: number
+): Promise<void> {
+    const { error } = await supabase.rpc('log_movement_and_update_stock', {
+        p_id: id,
+        p_item_id: m.itemId,
+        p_type: m.type,
+        p_quantity: m.quantity,
+        p_timestamp: m.timestamp instanceof Date ? m.timestamp.toISOString() : m.timestamp,
+        p_personnel_id: m.personnelId ?? null,
+        p_notes: m.notes ?? null,
+        p_project_id: m.projectId ?? null,
+        p_is_loan: m.isLoan ?? false,
+        p_is_returned: m.isReturned ?? false,
+        p_pending_pickup: m.pendingPickup ?? false,
+    });
+    if (!error) return;
+    if (!isMissingRpc(error)) throw error;
+    await addMovement(m, id);
+    await updateItemQuantity(m.itemId, fallbackQty);
+}
+
+/**
+ * Borra un movimiento revirtiendo su efecto en el stock (RPC transaccional).
+ * Fallback no atómico si la migración aún no se aplicó.
+ */
+export async function deleteMovementWithRevert(id: string, fallbackItemId?: string, fallbackQty?: number): Promise<void> {
+    const { error } = await supabase.rpc('delete_movement_and_revert_stock', { p_movement_id: id });
+    if (!error) return;
+    if (!isMissingRpc(error)) throw error;
+    await deleteMovement(id);
+    if (fallbackItemId !== undefined && fallbackQty !== undefined) {
+        await updateItemQuantity(fallbackItemId, fallbackQty);
+    }
+}
+
 export async function markMovementReturned(id: string, condition?: ReturnCondition, notes?: string): Promise<void> {
     const update: Record<string, unknown> = { is_returned: true };
     if (condition) update.return_condition = condition;
