@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Item, Movement, Personnel, UserRole, InventoryType, Project } from '../types';
 import { MovementType } from '../types';
 import { XIcon } from './icons/XIcon';
+import { ConfirmDialog } from './ConfirmDialog';
 
 interface LogMovementModalProps {
     isOpen: boolean;
@@ -24,6 +25,7 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
     const [isLoan, setIsLoan] = useState(false);
     const [notes, setNotes] = useState('');
     const [movDate, setMovDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
+    const [loanWarning, setLoanWarning] = useState<string | null>(null);
 
     const filteredItems = useMemo(() => {
         return filterInventoryType ? items.filter(i => i.inventoryType === filterInventoryType) : items;
@@ -34,32 +36,16 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
     const selectedItem = items.find(i => i.id === itemId);
     const isWithdrawal = type === MovementType.CHECK_OUT || type === MovementType.WASTE;
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!itemId || quantity <= 0) {
-            alert('Por favor, seleccione un artículo y una cantidad válida.');
-            return;
-        }
-        if (isWithdrawal && selectedItem && quantity > selectedItem.quantity) {
-            alert(`Stock insuficiente. Disponible: ${selectedItem.quantity} ${selectedItem.unit}`);
-            return;
-        }
-        if (type === MovementType.CHECK_OUT && isLoan && movements) {
-            const activeLoan = movements.find(m => m.itemId === itemId && m.isLoan && !m.isReturned);
-            if (activeLoan) {
-                const owner = personnel.find(p => p.id === activeLoan.personnelId)?.name ?? 'alguien';
-                const date = new Date(activeLoan.timestamp).toLocaleDateString('es-CO');
-                const ok = window.confirm(
-                    `⚠️ Esta herramienta ya está con ${owner} desde el ${date}.\n\nRegistrar un nuevo préstamo NO cancela el anterior — la herramienta quedará asignada a dos personas a la vez.\n\n¿Continuar de todas formas?`
-                );
-                if (!ok) return;
-            }
-        }
+    const doLogMovement = () => {
+        // Si la fecha es hoy, usar hora real para preservar el orden intradiario del kardex;
+        // para fechas pasadas, mediodía (evita saltos de día por zona horaria).
+        const today = new Date().toISOString().slice(0, 10);
+        const timestamp = movDate === today ? new Date() : new Date(movDate + 'T12:00:00');
         onLogMovement({
             itemId,
             type,
             quantity,
-            timestamp: new Date(movDate + 'T00:00:00'),
+            timestamp,
             personnelId: personnelId || undefined,
             projectId: projectId || undefined,
             isLoan: type === MovementType.CHECK_OUT ? isLoan : false,
@@ -76,6 +62,30 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
         setNotes('');
         setMovDate(new Date().toISOString().slice(0, 10));
         onClose();
+    };
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!itemId || quantity <= 0) {
+            alert('Por favor, seleccione un artículo y una cantidad válida.');
+            return;
+        }
+        if (isWithdrawal && selectedItem && quantity > selectedItem.quantity) {
+            alert(`Stock insuficiente. Disponible: ${selectedItem.quantity} ${selectedItem.unit}`);
+            return;
+        }
+        if (type === MovementType.CHECK_OUT && isLoan && movements) {
+            const activeLoan = movements.find(m => m.itemId === itemId && m.isLoan && !m.isReturned);
+            if (activeLoan) {
+                const owner = personnel.find(p => p.id === activeLoan.personnelId)?.name ?? 'alguien';
+                const date = new Date(activeLoan.timestamp).toLocaleDateString('es-CO');
+                setLoanWarning(
+                    `Esta herramienta ya está con ${owner} desde el ${date}.\n\nRegistrar un nuevo préstamo NO cancela el anterior — la herramienta quedará asignada a dos personas a la vez.\n\n¿Continuar de todas formas?`
+                );
+                return;
+            }
+        }
+        doLogMovement();
     };
     
     const allowedMovementTypes = userRole !== UserRole.VISITOR 
@@ -170,6 +180,14 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
                     </div>
                 </form>
             </div>
+            {loanWarning && (
+                <ConfirmDialog
+                    title="Préstamo duplicado"
+                    message={loanWarning}
+                    onConfirm={doLogMovement}
+                    onClose={() => setLoanWarning(null)}
+                />
+            )}
         </div>
     );
 };

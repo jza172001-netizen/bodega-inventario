@@ -188,9 +188,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                                         {/* El usuario juli es el maestro y no se puede borrar */}
                                         {user.username !== 'juli' && (
                                             <button 
-                                                onClick={() => {
-                                                    if(window.confirm(`¿Seguro que desea ELIMINAR el acceso de "${user.name}"?`)) onDeleteUser(user.id);
-                                                }}
+                                                onClick={() => onDeleteUser(user.id)}
                                                 className="p-2 text-red-500 hover:bg-red-100 rounded-full transition-colors"
                                                 title="Eliminar Acceso"
                                             >

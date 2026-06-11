@@ -9,6 +9,8 @@ export interface AppUser {
     id: string;
     username: string;
     password: string;
+    /** SHA-256 de la contraseña — único dato de credencial que se persiste localmente (login offline) */
+    passwordHash?: string;
     role: UserRole;
     name: string;
     setupComplete?: boolean;

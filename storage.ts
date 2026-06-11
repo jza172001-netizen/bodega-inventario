@@ -71,7 +71,8 @@ export function loadFromLocalStorage(): Partial<AppData> | null {
             data.users = data.users.map(u => ({
                 ...u,
                 name: NAME_FIX[u.name] ?? u.name,
-                setupComplete: u.setupComplete || (!!u.username && !!u.password),
+                // La contraseña no se persiste (solo su hash); basta el username para saber que hubo setup
+                setupComplete: u.setupComplete || !!u.username,
             }));
         }
         return data;
@@ -79,6 +80,15 @@ export function loadFromLocalStorage(): Partial<AppData> | null {
         console.warn('Error cargando desde localStorage:', e);
         return null;
     }
+}
+
+// ── Carga inicial cacheada: un solo parse del JSON al montar ──
+// Los inicializadores de useState en App.tsx la llaman varias veces;
+// sin cache cada llamada re-parsea todo el localStorage.
+let _initialCache: Partial<AppData> | null | undefined;
+export function loadInitialData(): Partial<AppData> | null {
+    if (_initialCache === undefined) _initialCache = loadFromLocalStorage();
+    return _initialCache;
 }
 
 // ── EXPORT: descarga archivo JSON ──────────────────────────

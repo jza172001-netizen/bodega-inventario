@@ -2,16 +2,18 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { AppUser, UserRole } from '../types';
 import * as db from '../services/supabaseService';
+import { sha256Hex } from '../utils/hash';
 
 interface LoginViewProps {
     users: AppUser[];
     onLoginSuccess: (role: UserRole, name: string) => void;
     onFirstSetup: (userId: string, username: string, password: string) => void;
+    onCredentialVerified?: (userId: string, passwordHash: string) => void;
 }
 
 type Screen = 'main' | 'users' | 'password' | 'setup';
 
-export const LoginView: React.FC<LoginViewProps> = ({ users, onLoginSuccess, onFirstSetup }) => {
+export const LoginView: React.FC<LoginViewProps> = ({ users, onLoginSuccess, onFirstSetup, onCredentialVerified }) => {
     const [screen, setScreen] = useState<Screen>('main');
     const [selectedUser, setSelectedUser] = useState<AppUser | null>(null);
     const [password, setPassword] = useState('');
@@ -59,12 +61,14 @@ export const LoginView: React.FC<LoginViewProps> = ({ users, onLoginSuccess, onF
             if (selectedUser.username) {
                 const result = await db.authenticateUser(selectedUser.username, password);
                 if (result) {
+                    // Guardar hash para que el respaldo offline funcione tras recargar
+                    onCredentialVerified?.(selectedUser.id, await sha256Hex(password));
                     onLoginSuccess(result.role, result.name);
                     return;
                 }
             }
-            // Fallback offline: contraseña local solo si Supabase no responde
-            if (selectedUser.password && password === selectedUser.password) {
+            // Fallback offline: hash local (las contraseñas no se persisten en texto plano)
+            if (await offlineMatch(selectedUser, password)) {
                 onLoginSuccess(selectedUser.role, selectedUser.name);
             } else {
                 setPassword('');
@@ -72,7 +76,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ users, onLoginSuccess, onF
             }
         } catch {
             // Supabase no disponible — usar credencial local como respaldo
-            if (selectedUser.password && password === selectedUser.password) {
+            if (await offlineMatch(selectedUser, password)) {
                 onLoginSuccess(selectedUser.role, selectedUser.name);
             } else {
                 setPassword('');
@@ -81,6 +85,12 @@ export const LoginView: React.FC<LoginViewProps> = ({ users, onLoginSuccess, onF
         } finally {
             setIsLoading(false);
         }
+    };
+
+    const offlineMatch = async (user: AppUser, password: string): Promise<boolean> => {
+        if (user.passwordHash) return (await sha256Hex(password)) === user.passwordHash;
+        // Compatibilidad con sesiones antiguas que aún tengan la contraseña en memoria
+        return !!user.password && password === user.password;
     };
 
     const handleSetupSubmit = (e: React.FormEvent) => {

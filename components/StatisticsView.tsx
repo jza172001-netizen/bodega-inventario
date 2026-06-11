@@ -2,7 +2,7 @@
 import React, { useMemo, useEffect, useState, useRef, useCallback } from 'react';
 import { Item, Movement, MovementType, InventoryType, Personnel, Project } from '../types';
 import { generateRotationAnalysis } from '../services/geminiService';
-import { exportReportAsDocx } from '../services/docxExportService';
+// docxExportService se carga bajo demanda (import dinámico) para no inflar el bundle inicial
 
 interface StatisticsViewProps {
     items: Item[];
@@ -88,6 +88,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
         setDocxExporting(true);
         setShowDocxModal(false);
         const range = getPeriodRange(period);
+        const { exportReportAsDocx } = await import('../services/docxExportService');
         await exportReportAsDocx({
             items, movements, personnel, projects,
             periodLabel: range.label,

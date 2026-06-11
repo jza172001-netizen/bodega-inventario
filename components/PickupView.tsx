@@ -3,6 +3,7 @@ import React, { useMemo, useState } from 'react';
 import { Movement, Item, Personnel, Project, InventoryType, ReturnCondition, UserRole } from '../types';
 import { buildConsolidatedPickupUrl } from '../services/whatsappService';
 import { ReturnToolModal } from './ReturnToolModal';
+import { ConfirmDialog } from './ConfirmDialog';
 
 interface Props {
     movements: Movement[];
@@ -29,6 +30,7 @@ export const PickupView: React.FC<Props> = ({
     const isOwner = userRole !== UserRole.VISITOR;
     const [typeFilter, setTypeFilter] = useState<string>('');
     const [returningMovement, setReturningMovement] = useState<Movement | null>(null);
+    const [cancelingPickup, setCancelingPickup] = useState<{ movementId: string; itemName: string } | null>(null);
     const [selectedRecipient, setSelectedRecipient] = useState<Personnel | null>(null);
 
     const itemMap    = useMemo(() => new Map(items.map(i => [i.id, i])), [items]);
@@ -173,12 +175,7 @@ export const PickupView: React.FC<Props> = ({
                                         <div className="flex gap-2 flex-shrink-0">
                                             {isOwner && (
                                                 <button
-                                                    onClick={() => {
-                                                        if (window.confirm(`¿Cancelar "a recoger" para ${it?.name ?? 'esta herramienta'}? Se quitará de la lista.`)) {
-                                                            onBehaviorLog?.('ACTION', `Canceló recogida (Vista Recoger): ${it?.name ?? 'herramienta'}`);
-                                                            onMarkPendingPickup(m.id, false);
-                                                        }
-                                                    }}
+                                                    onClick={() => setCancelingPickup({ movementId: m.id, itemName: it?.name ?? 'esta herramienta' })}
                                                     className="text-xs px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold rounded-xl transition-all"
                                                     title="Quitar de la lista">
                                                     ✕
@@ -217,6 +214,17 @@ export const PickupView: React.FC<Props> = ({
                     />
                 );
             })()}
+            {cancelingPickup && (
+                <ConfirmDialog
+                    title="Cancelar recogida"
+                    message={`¿Cancelar "a recoger" para ${cancelingPickup.itemName}? Se quitará de la lista.`}
+                    onConfirm={() => {
+                        onBehaviorLog?.('ACTION', `Canceló recogida (Vista Recoger): ${cancelingPickup.itemName}`);
+                        onMarkPendingPickup(cancelingPickup.movementId, false);
+                    }}
+                    onClose={() => setCancelingPickup(null)}
+                />
+            )}
         </div>
     );
 };

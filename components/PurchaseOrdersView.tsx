@@ -4,6 +4,7 @@ import { PurchaseOrder, Item, UserRole, PurchaseOrderStatus } from '../types';
 import { PlusIcon } from './icons/PlusIcon';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
 import { TrashIcon } from './icons/TrashIcon';
+import { ConfirmDialog } from './ConfirmDialog';
 
 interface PurchaseOrdersViewProps {
     purchaseOrders: PurchaseOrder[];
@@ -18,6 +19,7 @@ interface PurchaseOrdersViewProps {
 
 export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({ purchaseOrders, items, openAddPurchaseOrderModal, onUpdateStatus, userRole, onGoBack, onDeleteOrder, onBehaviorLog }) => {
     const [statusFilter, setStatusFilter] = useState<PurchaseOrderStatus | ''>('');
+    const [orderToDelete, setOrderToDelete] = useState<PurchaseOrder | null>(null);
 
     const filtered = statusFilter
         ? purchaseOrders.filter(o => o.status === statusFilter)
@@ -66,7 +68,7 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({ purchase
                 {filtered.map(order => (
                     <div key={order.id} className="bg-white p-5 rounded-xl shadow-md relative">
                          <button
-                            onClick={() => { if(window.confirm('¿Borrar orden?')) { onBehaviorLog?.('ACTION', `Eliminó OC: ${order.supplier}`); onDeleteOrder?.(order.id); }}}
+                            onClick={() => setOrderToDelete(order)}
                             className="absolute top-4 right-4 text-gray-300 hover:text-red-500"
                         >
                             <TrashIcon className="w-5 h-5" />
@@ -93,6 +95,15 @@ export const PurchaseOrdersView: React.FC<PurchaseOrdersViewProps> = ({ purchase
                     </div>
                 ))}
             </div>
+            {orderToDelete && (
+                <ConfirmDialog
+                    title="Borrar orden"
+                    message={`¿Borrar la orden de ${orderToDelete.supplier}?`}
+                    confirmLabel="Sí, borrar"
+                    onConfirm={() => { onBehaviorLog?.('ACTION', `Eliminó OC: ${orderToDelete.supplier}`); onDeleteOrder?.(orderToDelete.id); }}
+                    onClose={() => setOrderToDelete(null)}
+                />
+            )}
         </div>
     );
 };
