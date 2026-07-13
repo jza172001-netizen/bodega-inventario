@@ -6,6 +6,12 @@
 
 ---
 
+> **ADENDA (2026-07-10, mismo día):** B-1 y B-2 fueron **corregidos y verificados** después de emitir este informe.
+> - B-1: nueva migración `20260710200000_fix_movement_type_cast.sql` (cast `p_type::movement_type` + `search_path` fijo), aplicada a la BD real. Re-ejecutada la prueba e2e T3: el movimiento ahora **sí persiste** (SQL: `quantity=6`, 1 movimiento `Salida x4`).
+> - B-2: `migrateUsers` reescrito y el fetch de usuarios ya no depende de `local === null` (`App.tsx`); el `passwordHash` local se preserva para el respaldo offline. Re-ejecutada la prueba e2e T1 **sin workaround**: el usuario creado en la BD aparece con su propia tarjeta y autentica.
+> - T6 re-verificada (cero DELETEs en arranque limpio) y datos de prueba eliminados (BD final: 33 ítems, 3 usuarios, 0 movimientos).
+> Con esto, los bloqueantes del veredicto quedan resueltos; siguen pendientes H-1 (rotar contraseñas — lo hace el dueño), H-2 (RLS) y H-3 (feedback de sync).
+
 ## VEREDICTO DE ENTREGABILIDAD
 
 **🔴 NO ENTREGABLE HOY.** Las pruebas con la app corriendo contra la base de datos real encontraron dos defectos que las auditorías de código no podían ver:
