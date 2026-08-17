@@ -46,19 +46,13 @@ type KardexTab = 'movements' | 'loans' | 'inventory' | 'projects';
 const SESSION_KEY = 'bodega_session';
 const ONBOARDING_KEY = 'bodega_onboarding_v1';
 
-// Migra datos de usuarios viejos: toma name/role del seed pero preserva credenciales.
-// Busca por ID primero; si no coincide, busca por role (para compatibilidad con datos legacy).
+// La lista almacenada (Supabase o localStorage) es la fuente de verdad del login.
+// El seed solo aplica cuando no hay ningún usuario (instalación nueva sin conexión).
+// Antes esta función colapsaba cualquier lista sobre los 3 seedUsers: los usuarios
+// creados en la BD nunca aparecían y sus credenciales quedaban bajo otra tarjeta (B-2).
 const migrateUsers = (stored: AppUser[]): AppUser[] => {
-    const usedIds = new Set<string>();
-    return seedUsers.map(seed => {
-        let found = stored.find(u => u.id === seed.id);
-        if (!found) found = stored.find(u => u.role === seed.role && !usedIds.has(u.id));
-        if (found) {
-            usedIds.add(found.id);
-            return { ...seed, username: found.username, password: found.password, passwordHash: found.passwordHash, setupComplete: found.setupComplete || !!found.username };
-        }
-        return seed;
-    });
+    if (stored.length === 0) return seedUsers;
+    return stored.map(u => ({ ...u, setupComplete: u.setupComplete || !!u.username }));
 };
 
 const App: React.FC = () => {
@@ -201,7 +195,17 @@ const App: React.FC = () => {
         const localPOs       = local?.purchaseOrders ?? [];
         const localAuditLogs = local?.auditLogs  ?? [];
 
-        db.fetchUsers().then(data => { if (data.length > 0 && local === null) setUsers(migrateUsers(data)); }).catch(e => console.error('[Supabase] users:', e));
+        // Los usuarios de Supabase siempre reemplazan la lista local (fuente de verdad
+        // del login), preservando el passwordHash guardado en este dispositivo para que
+        // el respaldo offline siga funcionando.
+        db.fetchUsers().then(data => {
+            if (data.length === 0) return;
+            setUsers(prev => migrateUsers(data).map(u => {
+                const known = prev.find(p => p.id === u.id)
+                    ?? prev.find(p => p.username && p.username === u.username);
+                return known?.passwordHash ? { ...u, passwordHash: known.passwordHash } : u;
+            }));
+        }).catch(e => console.error('[Supabase] users:', e));
 
         Promise.all([
             db.fetchItems().catch((): Item[] => []),
