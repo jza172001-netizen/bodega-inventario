@@ -127,6 +127,7 @@ const App: React.FC = () => {
             detail,
         };
         setBehaviorLogs(prev => [entry, ...prev]);
+        db.addBehaviorLog(entry).catch(e => console.error('[Supabase] behaviorLog:', e));
     };
 
     const handleLoginSuccess = (role: UserRole, name: string) => {
@@ -194,6 +195,7 @@ const App: React.FC = () => {
         const localPersonnel = (local?.personnel ?? []).filter(p => p.name?.trim().length >= 4);
         const localPOs       = local?.purchaseOrders ?? [];
         const localAuditLogs = local?.auditLogs  ?? [];
+        const localBehaviorLogs = local?.behaviorLogs ?? [];
 
         // Los usuarios de Supabase siempre reemplazan la lista local (fuente de verdad
         // del login), preservando el passwordHash guardado en este dispositivo para que
@@ -214,7 +216,8 @@ const App: React.FC = () => {
             db.fetchPersonnel().catch((): Personnel[] => []),
             db.fetchPurchaseOrders().catch((): PurchaseOrder[] => []),
             db.fetchAuditLogs().catch((): AuditLog[] => []),
-        ]).then(([supaItems, supaMovements, supaProjectsRaw, supaPersonnelRaw, supaPOs, supaAuditLogs]) => {
+            db.fetchBehaviorLogs().catch((): BehaviorLog[] => []),
+        ]).then(([supaItems, supaMovements, supaProjectsRaw, supaPersonnelRaw, supaPOs, supaAuditLogs, supaBehaviorLogs]) => {
             // Deduplicar personal y proyectos de Supabase por nombre (defensa contra duplicados en DB)
             const seenPNames = new Set<string>();
             const supaPersonnel = supaPersonnelRaw.filter(p => {
@@ -350,6 +353,13 @@ const App: React.FC = () => {
                 ...supaAuditLogs.filter(a => !localAuditLogs.some(l => l.id === a.id)),
             ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
+            // Behavior logs: mismo criterio acumulativo que la bitácora
+            const supaBehaviorIds = new Set(supaBehaviorLogs.map(b => b.id));
+            const mergedBehaviorLogs: BehaviorLog[] = [
+                ...localBehaviorLogs,
+                ...supaBehaviorLogs.filter(b => !localBehaviorLogs.some(l => l.id === b.id)),
+            ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
             // Actualizar estado: siempre que haya datos o remapeos
             if (mergedItems.length > 0     || itemRemap.size > 0)  setItems(mergedItems);
             if (mergedMovements.length > 0 || movRemap.size > 0)   setMovements(mergedMovements);
@@ -357,6 +367,7 @@ const App: React.FC = () => {
             if (mergedPersonnel.length > 0 || perRemap.size > 0)   setPersonnel(mergedPersonnel);
             if (mergedPOs.length > 0)                              setPurchaseOrders(mergedPOs);
             if (mergedAuditLogs.length > 0)                        setAuditLogs(mergedAuditLogs);
+            if (mergedBehaviorLogs.length > 0)                     setBehaviorLogs(mergedBehaviorLogs);
 
             // Subir diferencias a Supabase en segundo plano (bulk upsert — idempotente)
             const itemsToSync  = mergedItems.filter(i     => !supaItemIds.has(i.id));
@@ -365,6 +376,7 @@ const App: React.FC = () => {
             const perToSync    = mergedPersonnel.filter(p => !supaPerIds.has(p.id));
             const posToSync    = mergedPOs.filter(o       => !supaPOIds.has(o.id));
             const auditToSync  = localAuditLogs.filter(a  => !supaAuditIds.has(a.id));
+            const behaviorToSync = localBehaviorLogs.filter(b => !supaBehaviorIds.has(b.id));
 
             if (itemsToSync.length  > 0) db.bulkUpsertItems(itemsToSync).catch(e => console.error('[Supabase] items:', e));
             if (movsToSync.length   > 0) db.bulkUpsertMovements(movsToSync).catch(e => console.error('[Supabase] movements:', e));
@@ -372,6 +384,7 @@ const App: React.FC = () => {
             if (perToSync.length    > 0) db.bulkUpsertPersonnel(perToSync).catch(e => console.error('[Supabase] personnel:', e));
             if (posToSync.length    > 0) db.bulkUpsertPurchaseOrders(posToSync).catch(e => console.error('[Supabase] POs:', e));
             if (auditToSync.length  > 0) db.bulkUpsertAuditLogs(auditToSync).catch(e => console.error('[Supabase] auditLogs:', e));
+            if (behaviorToSync.length > 0) db.bulkUpsertBehaviorLogs(behaviorToSync).catch(e => console.error('[Supabase] behaviorLogs:', e));
         });
     }, []);
 

@@ -7,7 +7,7 @@
 import { supabase } from '../lib/supabase';
 import {
     Item, Movement, Personnel, Project, PurchaseOrder,
-    PurchaseOrderItem, AppUser, AuditLog, InventoryType, MovementType,
+    PurchaseOrderItem, AppUser, AuditLog, BehaviorLog, InventoryType, MovementType,
     PurchaseOrderStatus, UserRole, ReturnCondition,
 } from '../types';
 
@@ -627,3 +627,47 @@ export async function bulkUpsertAuditLogs(logs: AuditLog[]): Promise<void> {
     if (error) throw error;
 }
 
+
+// ─── BEHAVIOR LOGS ───────────────────────────────────────────────────────────
+// Registro de navegación/uso que alimenta la vista de Trazabilidad.
+// Antes vivía solo en localStorage y se perdía al limpiarse el navegador.
+
+export async function fetchBehaviorLogs(): Promise<BehaviorLog[]> {
+    const { data, error } = await supabase
+        .from('behavior_logs')
+        .select('*')
+        .order('timestamp', { ascending: false })
+        .limit(1000);
+    if (error) throw error;
+    return (data ?? []).map(r => ({
+        id: r.id as string,
+        timestamp: new Date(r.timestamp as string),
+        actor: r.actor as string,
+        action: r.action as string,
+        detail: r.detail as string,
+    }));
+}
+
+export async function addBehaviorLog(log: BehaviorLog): Promise<void> {
+    const { error } = await supabase.from('behavior_logs').insert({
+        id: log.id,
+        timestamp: log.timestamp instanceof Date ? log.timestamp.toISOString() : log.timestamp,
+        actor: log.actor,
+        action: log.action,
+        detail: log.detail,
+    });
+    if (error) throw error;
+}
+
+export async function bulkUpsertBehaviorLogs(logs: BehaviorLog[]): Promise<void> {
+    if (logs.length === 0) return;
+    const payload = logs.map(log => ({
+        id: log.id,
+        timestamp: log.timestamp instanceof Date ? log.timestamp.toISOString() : log.timestamp,
+        actor: log.actor,
+        action: log.action,
+        detail: log.detail,
+    }));
+    const { error } = await supabase.from('behavior_logs').upsert(payload, { onConflict: 'id' });
+    if (error) throw error;
+}
