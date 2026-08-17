@@ -454,8 +454,16 @@ const App: React.FC = () => {
         setShowOnboarding(false);
     };
 
+    // El dueño ejecuta los reset directamente: la escalera de 3 toques del modal de
+    // Configuración ya es la confirmación. Los empleados sí requieren que todos los
+    // usuarios con cuenta confirmen con su contraseña.
+    const requireResetAuth = (fn: () => void, title: string, message: string) => {
+        if (userRole === UserRole.OWNER) fn();
+        else requireMultiUser(fn, title, message);
+    };
+
     const handleResetAllData = () => {
-        requireMultiUser(
+        requireResetAuth(
             () => {
                 setItems([]);
                 setMovements([]);
@@ -478,7 +486,7 @@ const App: React.FC = () => {
     };
 
     const handleResetMaterials = () => {
-        requireMultiUser(
+        requireResetAuth(
             () => {
                 setItems([]);
                 setMovements([]);
