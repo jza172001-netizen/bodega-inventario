@@ -237,6 +237,33 @@ export async function markMovementReturned(id: string, condition?: ReturnConditi
     if (error) throw error;
 }
 
+/**
+ * Devolución de préstamo: marca el movimiento como devuelto Y repone la unidad
+ * al inventario, en una sola transacción. Es idempotente — devolver dos veces
+ * no suma stock dos veces.
+ * Ojo: NO usar en traspasos entre trabajadores; ahí la herramienta no vuelve
+ * a la bodega y debe usarse markMovementReturned.
+ */
+export async function returnLoanAndRestoreStock(
+    id: string,
+    condition?: ReturnCondition,
+    notes?: string,
+    fallbackItemId?: string,
+    fallbackQty?: number
+): Promise<void> {
+    const { error } = await supabase.rpc('return_loan_and_restore_stock', {
+        p_movement_id: id,
+        p_condition: condition ?? null,
+        p_notes: notes ?? null,
+    });
+    if (!error) return;
+    if (!isMissingRpc(error)) throw error;
+    await markMovementReturned(id, condition, notes);
+    if (fallbackItemId !== undefined && fallbackQty !== undefined) {
+        await updateItemQuantity(fallbackItemId, fallbackQty);
+    }
+}
+
 export async function markMovementPendingPickup(id: string, pending: boolean): Promise<void> {
     const { error } = await supabase
         .from('movements')
