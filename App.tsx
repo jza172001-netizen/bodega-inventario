@@ -620,9 +620,12 @@ const App: React.FC = () => {
             () => {
                 // Revertir el efecto del movimiento sobre el stock antes de borrarlo:
                 // borrar una salida devuelve unidades; borrar una entrada las quita.
+                // Excepción: un préstamo ya devuelto tiene efecto neto cero (salió y
+                // volvió), así que revertirlo sumaría una segunda vez e inflaría el stock.
                 const item = mov ? items.find(i => i.id === mov.itemId) : undefined;
                 let newQty: number | undefined;
-                if (mov && item) {
+                const netZero = !!mov?.isLoan && !!mov?.isReturned;
+                if (mov && item && !netZero) {
                     const wasWithdrawal = mov.type === MovementType.CHECK_OUT || mov.type === MovementType.WASTE;
                     newQty = Math.max(0, wasWithdrawal ? item.quantity + mov.quantity : item.quantity - mov.quantity);
                     const qty = newQty;
@@ -639,10 +642,31 @@ const App: React.FC = () => {
 
     const handleReturnItem = (id: string, condition?: string, notes?: string) => {
         const mov = movements.find(m => m.id === id);
-        const itemName = mov ? items.find(i => i.id === mov.itemId)?.name ?? 'herramienta' : 'herramienta';
+        // Guarda contra doble devolución: si ya estaba devuelta, no se repone stock otra vez
+        if (mov?.isReturned) return;
+        const item = mov ? items.find(i => i.id === mov.itemId) : undefined;
+        const itemName = item?.name ?? 'herramienta';
         const personName = mov?.personnelId ? personnel.find(p => p.id === mov.personnelId)?.name : undefined;
-        setMovements(prev => prev.map(m => m.id === id ? { ...m, isReturned: true, returnCondition: condition as import('./types').ReturnCondition | undefined, returnNotes: notes } : m));
-        withSync(db.markMovementReturned(id, condition as import('./types').ReturnCondition | undefined, notes));
+
+        setMovements(prev => prev.map(m => m.id === id
+            ? { ...m, isReturned: true, pendingPickup: false, returnCondition: condition as import('./types').ReturnCondition | undefined, returnNotes: notes }
+            : m));
+
+        // La herramienta vuelve a la bodega: hay que reponer la unidad al inventario.
+        // Sin esto el stock quedaba descontado para siempre (causa del "AGOTADO" falso).
+        let restoredQty: number | undefined;
+        if (mov && item && mov.type === MovementType.CHECK_OUT) {
+            restoredQty = item.quantity + mov.quantity;
+            const qty = restoredQty;
+            setItems(prev => prev.map(i => i.id === item.id ? { ...i, quantity: qty } : i));
+        }
+        withSync(db.returnLoanAndRestoreStock(
+            id,
+            condition as import('./types').ReturnCondition | undefined,
+            notes,
+            item?.id,
+            restoredQty,
+        ));
         addAuditLog('LOAN_RETURNED', `Devuelta: "${itemName}"${personName ? ` de ${personName}` : ''}${condition ? ` — estado: ${condition}` : ''}`);
     };
 
