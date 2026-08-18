@@ -524,6 +524,27 @@ const App: React.FC = () => {
 
     // ── Handlers síncronos + sync Supabase en background ──
 
+    // Asiento de apertura: deja constancia en el Kardex de con cuánto entró un ítem
+    // y quién lo cargó. Antes el stock inicial aparecía de la nada, sin quién ni cuándo.
+    // Usa addMovement directo (NO el RPC de stock): el ítem ya se creó con su cantidad,
+    // volver a sumarla duplicaría el inventario.
+    const registrarApertura = (item: Item) => {
+        if (!item.quantity || item.quantity <= 0) return;
+        const movId = crypto.randomUUID();
+        const apertura: Movement = {
+            id: movId,
+            itemId: item.id,
+            type: MovementType.CHECK_IN,
+            quantity: item.quantity,
+            timestamp: new Date(),
+            notes: `Carga inicial: ${item.quantity} ${item.unit} registrados por ${userName || 'la bodega'}`,
+            isLoan: false,
+            isReturned: false,
+        };
+        setMovements(prev => [apertura, ...prev]);
+        db.addMovement(apertura, movId).catch(e => console.error('[Supabase] apertura:', e));
+    };
+
     const handleImportItems = (newItems: Array<Omit<Item, 'id'>>, inventoryType?: InventoryType) => {
         const created = newItems.map(i => ({
             ...i,
@@ -532,6 +553,7 @@ const App: React.FC = () => {
         }));
         setItems(prev => [...prev, ...created]);
         created.forEach(({ id, ...rest }) => withSync(db.addItem(rest, id)));
+        created.forEach(registrarApertura);
     };
 
     const handleAddItem = (i: Omit<Item, 'id'>) => {
@@ -539,6 +561,7 @@ const App: React.FC = () => {
         const newItem = { ...i, id };
         setItems(prev => [...prev, newItem]);
         withSync(db.addItem(i, id));
+        registrarApertura(newItem);
         addAuditLog('ITEM_CREATED', `Se agregó "${i.name}" al inventario`);
     };
 
@@ -547,6 +570,7 @@ const App: React.FC = () => {
         const newItem = { ...i, id };
         setItems(prev => [...prev, newItem]);
         withSync(db.addItem(i, id));
+        registrarApertura(newItem);
         addAuditLog('ITEM_CREATED', `Se agregó "${i.name}" al inventario`);
         return newItem;
     };
