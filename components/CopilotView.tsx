@@ -47,6 +47,11 @@ const uid = () => Math.random().toString(36).slice(2);
 
 const WELCOME = 'Hola 👋 Puedo registrar salidas, **crear proyectos, trabajadores e ítems** directamente desde aquí.\n\nEjemplos:\n• "saqué 5 cascos para proyecto Torre 5, trabajador Pedro"\n• "crea el proyecto Edificio Centro"\n• "añade al trabajador Miguel Torres"\n• "añade el ítem Tornillo M8"';
 
+// Misma regla que el chat flotante y el modal: una herramienta vuelve,
+// un consumible/EPP es gasto definitivo. Antes acá isLoan iba fijo y un
+// taladro despachado por texto quedaba como gasto: no entraba a Préstamos.
+const LOAN_TYPES = new Set([InventoryType.HAND_TOOL, InventoryType.ELECTRICAL_TOOL]);
+
 const CopilotView: React.FC<CopilotViewProps> = ({
     items, movements, personnel, purchaseOrders, projects,
     onLogMovements, onCreateItem, onCreateProject, onCreatePersonnel, onEditItem, onBehaviorLog,
@@ -122,7 +127,9 @@ const CopilotView: React.FC<CopilotViewProps> = ({
         const movs: Array<Omit<Movement, 'id'>> = [...loanSelected.entries()].map(([itemId, qty]) => ({
             itemId, type: MovementType.CHECK_OUT, quantity: qty,
             timestamp: new Date(), personnelId: loanPersonnelId,
-            projectId: loanProjectId || undefined, notes: '', isLoan: true, isReturned: false,
+            projectId: loanProjectId || undefined, notes: '',
+            isLoan: LOAN_TYPES.has(items.find(i => i.id === itemId)?.inventoryType ?? InventoryType.HAND_TOOL),
+            isReturned: false,
         }));
         onLogMovements(movs);
         const workerName = sortedPersonnel.find(p => p.id === loanPersonnelId)?.name ?? 'trabajador';
@@ -221,7 +228,7 @@ const CopilotView: React.FC<CopilotViewProps> = ({
         const toLog: Array<Omit<Movement, 'id'>> = exit.movements.map((pm, idx) => {
             const item = pm.matchedItem ?? (sel[idx] ? items.find(i => i.id === sel[idx]) ?? null : null);
             if (!item) return null;
-            return { itemId: item.id, type: MovementType.CHECK_OUT, quantity: pm.quantity, timestamp: new Date(), personnelId: exit.matchedPersonnel?.id, projectId: exit.matchedProject?.id, notes: '', isLoan: false, isReturned: false };
+            return { itemId: item.id, type: MovementType.CHECK_OUT, quantity: pm.quantity, timestamp: new Date(), personnelId: exit.matchedPersonnel?.id, projectId: exit.matchedProject?.id, notes: '', isLoan: LOAN_TYPES.has(item.inventoryType), isReturned: false };
         }).filter(Boolean) as Array<Omit<Movement, 'id'>>;
         if (!toLog.length) { addBot('No hay materiales confirmados para registrar.'); return; }
         onLogMovements(toLog);
