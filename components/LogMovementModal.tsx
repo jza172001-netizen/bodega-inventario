@@ -23,9 +23,21 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
     const [personnelId, setPersonnelId] = useState('');
     const [projectId, setProjectId] = useState('');
     const [isLoan, setIsLoan] = useState(false);
+    // El usuario puede forzar el valor (ej: prestar un arnés caro, que es EPP pero vuelve).
+    // Mientras no lo toque, manda el default por tipo.
+    const [isLoanTocado, setIsLoanTocado] = useState(false);
     const [notes, setNotes] = useState('');
     const [movDate, setMovDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
     const [loanWarning, setLoanWarning] = useState<string | null>(null);
+
+    // Regla de negocio en el sistema, no en la memoria del bodeguero:
+    // una herramienta se presta (vuelve) y un consumible/EPP es gasto definitivo.
+    // Antes el checkbox arrancaba SIEMPRE apagado, así que un martillo se
+    // despachaba como gasto y nadie lo reclamaba: sin error, sin alerta.
+    const VUELVE_POR_DEFECTO = new Set<InventoryType>([
+        InventoryType.HAND_TOOL,
+        InventoryType.ELECTRICAL_TOOL,
+    ]);
 
     const filteredItems = useMemo(() => {
         return filterInventoryType ? items.filter(i => i.inventoryType === filterInventoryType) : items;
@@ -35,6 +47,8 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
 
     const selectedItem = items.find(i => i.id === itemId);
     const isWithdrawal = type === MovementType.CHECK_OUT || type === MovementType.WASTE;
+    const vuelvePorTipo = selectedItem ? VUELVE_POR_DEFECTO.has(selectedItem.inventoryType) : false;
+    const esPrestamo = isLoanTocado ? isLoan : vuelvePorTipo;
 
     const doLogMovement = () => {
         // Si la fecha es hoy, usar hora real para preservar el orden intradiario del kardex;
@@ -48,7 +62,7 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
             timestamp,
             personnelId: personnelId || undefined,
             projectId: projectId || undefined,
-            isLoan: type === MovementType.CHECK_OUT ? isLoan : false,
+            isLoan: type === MovementType.CHECK_OUT ? esPrestamo : false,
             isReturned: false,
             notes
         });
@@ -59,6 +73,7 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
         setPersonnelId('');
         setProjectId('');
         setIsLoan(false);
+        setIsLoanTocado(false);
         setNotes('');
         setMovDate(new Date().toISOString().slice(0, 10));
         onClose();
@@ -74,7 +89,7 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
             alert(`Stock insuficiente. Disponible: ${selectedItem.quantity} ${selectedItem.unit}`);
             return;
         }
-        if (type === MovementType.CHECK_OUT && isLoan && movements) {
+        if (type === MovementType.CHECK_OUT && esPrestamo && movements) {
             const activeLoan = movements.find(m => m.itemId === itemId && m.isLoan && !m.isReturned);
             if (activeLoan) {
                 const owner = personnel.find(p => p.id === activeLoan.personnelId)?.name ?? 'alguien';
@@ -112,7 +127,7 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Artículo</label>
-                            <select value={itemId} onChange={e => setItemId(e.target.value)} required className="w-full input-style">
+                            <select value={itemId} onChange={e => { setItemId(e.target.value); setIsLoanTocado(false); }} required className="w-full input-style">
                                 <option value="" disabled>Seleccionar artículo...</option>
                                 {filteredItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
                             </select>
@@ -154,17 +169,31 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
                                 </select>
                             </div>
                             {type === MovementType.CHECK_OUT && (
-                                <div className="flex items-center mt-6">
-                                    <input
-                                        id="isLoan"
-                                        type="checkbox"
-                                        checked={isLoan}
-                                        onChange={e => setIsLoan(e.target.checked)}
-                                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                                    />
-                                    <label htmlFor="isLoan" className="ml-2 block text-sm text-gray-900">
-                                        ¿Es un préstamo? (Requiere devolución)
-                                    </label>
+                                <div className="mt-6">
+                                    <div className="flex items-center">
+                                        <input
+                                            id="isLoan"
+                                            type="checkbox"
+                                            checked={esPrestamo}
+                                            onChange={e => { setIsLoan(e.target.checked); setIsLoanTocado(true); }}
+                                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                        />
+                                        <label htmlFor="isLoan" className="ml-2 block text-sm text-gray-900">
+                                            ¿Es un préstamo? (Requiere devolución)
+                                        </label>
+                                    </div>
+                                    {selectedItem && !isLoanTocado && (
+                                        <p className="text-[11px] text-gray-500 mt-1 ml-6">
+                                            {vuelvePorTipo
+                                                ? '🔧 Es herramienta: se marca como préstamo y debe volver. Desmárcalo si se entrega definitivamente.'
+                                                : '📦 Es consumible/EPP: sale como gasto definitivo. Márcalo si sí debe devolverse (ej: arnés, careta).'}
+                                        </p>
+                                    )}
+                                    {selectedItem && isLoanTocado && (
+                                        <p className="text-[11px] text-amber-600 font-semibold mt-1 ml-6">
+                                            ⚠️ Cambiaste el valor por defecto de este tipo de ítem.
+                                        </p>
+                                    )}
                                 </div>
                             )}
                         </div>

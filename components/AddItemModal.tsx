@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Item, UserRole, InventoryType } from '../types';
 import { CATEGORIES } from '../constants';
 import { XIcon } from './icons/XIcon';
@@ -22,8 +22,25 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onA
     const [brand, setBrand] = useState('');
     const [requiresReturnNote, setRequiresReturnNote] = useState(false);
 
+    const resetForm = () => {
+        setName('');
+        setCategory(CATEGORIES[0]);
+        setSubCategory('');
+        setInventoryType(InventoryType.HAND_TOOL);
+        setQuantity(0);
+        setMinStock(10);
+        setUnit('unidades');
+        setColor('');
+        setBrand('');
+        setRequiresReturnNote(false);
+    };
+
     const UNIT_OPTIONS = ['unidades', 'pares', 'caja', 'bolsa', 'rollo', 'pliego', 'litro', 'ml', 'galón', 'kg', 'g', 'ton', 'm', 'cm', 'mm', 'km', 'm²', 'm³', 'yarda'];
 
+
+    // Limpieza también al abrir: cubre el caso de haber cerrado a medias
+    // (Cancelar, la X o tocar fuera), que si no dejaba el formulario a medio llenar.
+    useEffect(() => { if (isOpen) resetForm(); }, [isOpen]);
 
     if (!isOpen) return null;
     
@@ -61,7 +78,10 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onA
             requiresReturnNote: requiresReturnNote || undefined,
         });
         
-        // The form state will reset automatically when the modal is closed and re-opened.
+        // El modal no se desmonta al cerrar (solo retorna null), así que el estado
+        // sobrevive: sin este reset el siguiente ítem arrastraba el texto anterior
+        // y quedaban nombres pegados como "MartilloPala".
+        resetForm();
         onClose();
     };
 
