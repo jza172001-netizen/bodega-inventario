@@ -104,8 +104,9 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
     const fourteenDaysAgo = useMemo(() => { const d = new Date(); d.setDate(d.getDate() - 14); return d; }, []);
 
     const recentMovements   = useMemo(() => movements.filter(m => new Date(m.timestamp) > thirtyDaysAgo), [movements, thirtyDaysAgo]);
-    const thisWeekCheckouts = useMemo(() => movements.filter(m => new Date(m.timestamp) > sevenDaysAgo && m.type === MovementType.CHECK_OUT), [movements, sevenDaysAgo]);
-    const lastWeekCheckouts = useMemo(() => movements.filter(m => new Date(m.timestamp) > fourteenDaysAgo && new Date(m.timestamp) <= sevenDaysAgo && m.type === MovementType.CHECK_OUT), [movements, sevenDaysAgo, fourteenDaysAgo]);
+    // Solo gasto definitivo (!isLoan): un préstamo vuelve, así que no es consumo.
+    const thisWeekCheckouts = useMemo(() => movements.filter(m => new Date(m.timestamp) > sevenDaysAgo && m.type === MovementType.CHECK_OUT && !m.isLoan), [movements, sevenDaysAgo]);
+    const lastWeekCheckouts = useMemo(() => movements.filter(m => new Date(m.timestamp) > fourteenDaysAgo && new Date(m.timestamp) <= sevenDaysAgo && m.type === MovementType.CHECK_OUT && !m.isLoan), [movements, sevenDaysAgo, fourteenDaysAgo]);
 
     // Maps
     const itemMap      = useMemo(() => new Map(items.map(i => [i.id, i])), [items]);
@@ -122,6 +123,37 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
         const lowStockItems = items.filter(i => i.quantity <= i.minStock && i.minStock > 0).length;
         return { totalSalidas, totalItems, activeLoanCount, pendingPickupCount, lowStockItems, activeLoans, checkouts30d };
     }, [items, movements, recentMovements]);
+
+    // ── PRÉSTAMOS: quién tiene qué ───────────────────────────────────────────
+    // El Resumen solo mostraba el número de préstamos activos. Para reclamar una
+    // herramienta hay que saber quién la tiene y cuánto lleva afuera.
+    const loansByPerson = useMemo(() => {
+        const porPersona = new Map<string, { nombre: string; unidades: number; movs: Movement[] }>();
+        for (const m of kpis.activeLoans) {
+            const key = m.personnelId ?? '__sin_asignar__';
+            const nombre = m.personnelId ? (personnelMap.get(m.personnelId)?.name ?? 'Desconocido') : 'Sin asignar';
+            if (!porPersona.has(key)) porPersona.set(key, { nombre, unidades: 0, movs: [] });
+            const reg = porPersona.get(key)!;
+            reg.unidades += m.quantity;
+            reg.movs.push(m);
+        }
+        return [...porPersona.values()].sort((a, b) => b.unidades - a.unidades);
+    }, [kpis.activeLoans, personnelMap]);
+
+    // ── PRÉSTAMOS: las más demoradas ─────────────────────────────────────────
+    const DIAS_VENCIDO = 14; // mismo umbral que usa PrintReportView para "VENCIDO"
+    const loansOldest = useMemo(() => {
+        return kpis.activeLoans
+            .map(m => ({
+                mov: m,
+                item: itemMap.get(m.itemId),
+                persona: m.personnelId ? (personnelMap.get(m.personnelId)?.name ?? 'Desconocido') : 'Sin asignar',
+                dias: Math.floor((Date.now() - new Date(m.timestamp).getTime()) / 86400000),
+            }))
+            .filter(x => x.item)
+            .sort((a, b) => b.dias - a.dias)
+            .slice(0, 8);
+    }, [kpis.activeLoans, itemMap, personnelMap]);
 
     // ── TOP 8 CONSUMIDOS ─────────────────────────────────────────────────────
     const topConsumed = useMemo(() => {
@@ -155,14 +187,17 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
             { type: InventoryType.PPE, label: 'Elementos de seguridad' },
             { type: InventoryType.SINGLE_USE, label: 'Consumibles' },
         ];
-        const insights: Array<{ label: string; pct: number; thisQty: number; lastQty: number; recommend: boolean }> = [];
+        const insights: Array<{ label: string; pct: number; thisQty: number; lastQty: number; recommend: boolean; isNew: boolean }> = [];
         for (const { type, label } of types) {
             const thisQty = thisWeekCheckouts.filter(m => itemMap.get(m.itemId)?.inventoryType === type).reduce((s, m) => s + m.quantity, 0);
             const lastQty = lastWeekCheckouts.filter(m => itemMap.get(m.itemId)?.inventoryType === type).reduce((s, m) => s + m.quantity, 0);
             if (thisQty === 0 && lastQty === 0) continue;
-            const pct = lastQty > 0 ? Math.round(((thisQty - lastQty) / lastQty) * 100) : (thisQty > 0 ? 100 : 0);
-            if (Math.abs(pct) >= 15 || (thisQty > 0 && lastQty === 0)) {
-                insights.push({ label, pct, thisQty, lastQty, recommend: pct >= 30 });
+            // Sin semana previa no hay variación que calcular: "100% más que 0" no significa nada.
+            // Se reporta como primera actividad y sin recomendación, porque no hay base de comparación.
+            const isNew = lastQty === 0;
+            const pct = isNew ? 0 : Math.round(((thisQty - lastQty) / lastQty) * 100);
+            if (isNew || Math.abs(pct) >= 15) {
+                insights.push({ label, pct, thisQty, lastQty, recommend: !isNew && pct >= 30, isNew });
             }
         }
         // Top item spikes
@@ -246,6 +281,23 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
             }
         );
         setActiveDetail({ title: 'Ítems en inventario', rows, navigateTo: { view: 'kardex', tab: 'inventory' } });
+    };
+
+    // Detalle de un trabajador: qué herramientas tiene y hace cuánto
+    const showPersonaLoansDetail = (nombre: string, movs: Movement[]) => {
+        const rows: DetailRow[] = [...movs]
+            .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+            .map(m => {
+                const dias = Math.floor((Date.now() - new Date(m.timestamp).getTime()) / 86400000);
+                return {
+                    label: itemMap.get(m.itemId)?.name ?? '—',
+                    sub: `×${m.quantity} · ${timeAgo(m.timestamp)}`,
+                    value: `${dias}d`,
+                    badge: dias > DIAS_VENCIDO ? 'VENCIDO' : dias > 7 ? '+7d' : 'Reciente',
+                    badgeColor: dias > DIAS_VENCIDO ? 'bg-red-100 text-red-600' : dias > 7 ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700',
+                };
+            });
+        setActiveDetail({ title: `Herramientas con ${nombre}`, rows, navigateTo: { view: 'kardex', tab: 'loans' } });
     };
 
     const showPrestamosDetail = () => {
@@ -553,20 +605,75 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                 )}
             </div>
 
+            {/* ── PRÉSTAMOS: quién tiene qué · las más demoradas ── */}
+            {kpis.activeLoanCount > 0 && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Quién tiene herramientas */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                        <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4">
+                            Quién tiene herramientas
+                        </h2>
+                        <div className="space-y-2">
+                            {loansByPerson.map((p, i) => (
+                                <button key={i} onClick={() => showPersonaLoansDetail(p.nombre, p.movs)}
+                                    className="w-full flex items-center justify-between gap-3 p-2.5 rounded-xl hover:bg-yellow-50 transition-colors text-left">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <span className="w-7 h-7 rounded-full bg-yellow-100 text-yellow-700 text-xs font-black flex items-center justify-center flex-shrink-0">
+                                            {p.nombre.charAt(0).toUpperCase()}
+                                        </span>
+                                        <span className="text-sm font-bold text-gray-800 truncate">{p.nombre}</span>
+                                    </div>
+                                    <span className="text-xs font-black text-gray-500 flex-shrink-0">
+                                        {p.unidades} <span className="font-normal text-gray-400">{p.unidades === 1 ? 'herramienta' : 'herramientas'} →</span>
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Las más demoradas */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                        <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4">
+                            Las más demoradas
+                        </h2>
+                        <div className="space-y-2">
+                            {loansOldest.map((l, i) => {
+                                const vencido = l.dias > DIAS_VENCIDO;
+                                return (
+                                    <div key={i} className={`flex items-center justify-between gap-3 p-2.5 rounded-xl ${vencido ? 'bg-red-50 border border-red-100' : 'bg-gray-50'}`}>
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-bold text-gray-800 truncate">{l.item!.name}</p>
+                                            <p className="text-xs text-gray-500 truncate">{l.persona}</p>
+                                        </div>
+                                        <span className={`text-[10px] font-black px-2 py-1 rounded-full flex-shrink-0 ${vencido ? 'bg-red-100 text-red-600' : l.dias > 7 ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}>
+                                            {l.dias === 0 ? 'HOY' : `${l.dias}d`}{vencido ? ' · VENCIDO' : ''}
+                                        </span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* ── ALERTAS DE CONSUMO (reemplaza "salud del stock") ── */}
             {(consumptionInsights.insights.length > 0 || consumptionInsights.itemSpikes.length > 0) && (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
                     <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4">Alertas de consumo esta semana</h2>
                     <div className="space-y-3">
                         {consumptionInsights.insights.map((ins, i) => (
-                            <div key={i} className={`flex items-start gap-3 p-3 rounded-xl ${ins.pct >= 0 ? 'bg-orange-50 border border-orange-100' : 'bg-blue-50 border border-blue-100'}`}>
-                                <span className="text-lg flex-shrink-0">{ins.pct >= 0 ? '📈' : '📉'}</span>
+                            <div key={i} className={`flex items-start gap-3 p-3 rounded-xl ${ins.isNew ? 'bg-gray-50 border border-gray-200' : ins.pct >= 0 ? 'bg-orange-50 border border-orange-100' : 'bg-blue-50 border border-blue-100'}`}>
+                                <span className="text-lg flex-shrink-0">{ins.isNew ? '🆕' : ins.pct >= 0 ? '📈' : '📉'}</span>
                                 <div>
                                     <p className="text-sm font-bold text-gray-800">
-                                        {ins.pct >= 0 ? `↑ ${ins.pct}% más` : `↓ ${Math.abs(ins.pct)}% menos`} en {ins.label}
+                                        {ins.isNew
+                                            ? `Primer consumo de ${ins.label.toLowerCase()} en 2 semanas`
+                                            : `${ins.pct >= 0 ? `↑ ${ins.pct}% más` : `↓ ${Math.abs(ins.pct)}% menos`} en ${ins.label}`}
                                     </p>
                                     <p className="text-xs text-gray-500 mt-0.5">
-                                        {ins.thisQty} und esta semana vs {ins.lastQty} und la semana pasada
+                                        {ins.isNew
+                                            ? `${ins.thisQty} und esta semana — sin consumo la semana pasada, no hay con qué comparar`
+                                            : `${ins.thisQty} und esta semana vs ${ins.lastQty} und la semana pasada`}
                                         {ins.recommend && ' — se recomienda revisar inventario'}
                                     </p>
                                 </div>
