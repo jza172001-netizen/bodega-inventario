@@ -126,14 +126,16 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
     // ── TOP 8 CONSUMIDOS ─────────────────────────────────────────────────────
     const topConsumed = useMemo(() => {
         const totals: Record<string, number> = {};
-        recentMovements.filter(m => m.type === MovementType.CHECK_OUT).forEach(m => { totals[m.itemId] = (totals[m.itemId] || 0) + m.quantity; });
+        // Solo gasto definitivo: un préstamo no se consumió, vuelve a la bodega.
+        recentMovements.filter(m => m.type === MovementType.CHECK_OUT && !m.isLoan).forEach(m => { totals[m.itemId] = (totals[m.itemId] || 0) + m.quantity; });
         return Object.entries(totals).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([id, qty]) => ({ item: itemMap.get(id), qty })).filter(x => x.item);
     }, [recentMovements, itemMap]);
 
     // ── TORTA: salidas por tipo ───────────────────────────────────────────────
     const typeBreakdown = useMemo(() => {
         const counts: Record<string, number> = { [InventoryType.HAND_TOOL]: 0, [InventoryType.ELECTRICAL_TOOL]: 0, [InventoryType.PPE]: 0, [InventoryType.SINGLE_USE]: 0 };
-        recentMovements.filter(m => m.type === MovementType.CHECK_OUT).forEach(m => { const item = itemMap.get(m.itemId); if (item) counts[item.inventoryType] = (counts[item.inventoryType] || 0) + m.quantity; });
+        // Solo gasto definitivo, para que el reporte sirva para decidir compras.
+        recentMovements.filter(m => m.type === MovementType.CHECK_OUT && !m.isLoan).forEach(m => { const item = itemMap.get(m.itemId); if (item) counts[item.inventoryType] = (counts[item.inventoryType] || 0) + m.quantity; });
         const total = Object.values(counts).reduce((s, v) => s + v, 0);
         const COLORS = [
             { type: InventoryType.HAND_TOOL, color: '#3b82f6', label: 'H. Manual' },
@@ -475,9 +477,9 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Torta */}
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-                    <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4">Salidas por tipo — últimos 30 días</h2>
+                    <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4">Consumo por tipo — últimos 30 días</h2>
                     {typeBreakdown.length === 0 ? (
-                        <p className="text-sm text-gray-400 py-6 text-center">Sin salidas registradas.</p>
+                        <p className="text-sm text-gray-400 py-6 text-center">Sin consumos registrados.</p>
                     ) : (
                         <div className="flex items-center gap-6">
                             <div className="flex-shrink-0 w-32 h-32 rounded-full" style={{ background: `conic-gradient(${typeBreakdown.map(c => `${c.color} ${c.from}% ${c.from + c.pct}%`).join(', ')})` }} />
@@ -629,8 +631,11 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                                                         const ok = item.minStock === 0 || item.quantity > item.minStock;
                                                         const low = item.minStock > 0 && item.quantity > 0 && item.quantity <= item.minStock;
                                                         const empty = item.quantity === 0;
-                                                        const badge = empty ? 'AGOTADO' : low ? 'BAJO' : loans.length > 0 ? 'PRESTADO' : 'OK';
-                                                        const badgeClass = empty ? 'bg-red-100 text-red-600' : low ? 'bg-orange-100 text-orange-600' : loans.length > 0 ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700';
+                                                        // Stock 0 con préstamos activos NO es agotado: está afuera y vuelve.
+                                                        // AGOTADO (rojo, "hay que comprar") se reserva para cuando no existe ninguno.
+                                                        const todoPrestado = empty && loans.length > 0;
+                                                        const badge = todoPrestado ? 'TODO PRESTADO' : empty ? 'AGOTADO' : low ? 'BAJO' : loans.length > 0 ? 'PRESTADO' : 'OK';
+                                                        const badgeClass = todoPrestado ? 'bg-yellow-100 text-yellow-700' : empty ? 'bg-red-100 text-red-600' : low ? 'bg-orange-100 text-orange-600' : loans.length > 0 ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700';
                                                         return (
                                                             <tr key={item.id} onClick={() => showInventarioDetail(item)} className="hover:bg-blue-50 cursor-pointer transition-colors">
                                                                 <td className="py-2 text-sm font-medium text-gray-800">{item.name}</td>
