@@ -8,6 +8,10 @@ import {
     FileChild,
 } from 'docx';
 import { Item, Movement, MovementType, InventoryType } from '../types';
+import {
+    getActiveLoans, getActiveLoansByItem, getLoansByPerson,
+    summarizeLoanItems, daysSince, getConsumption, isAsset,
+} from '../utils/inventory';
 
 // ── Palette matching the MONTECIELO VERDE template ────────────────────
 const NAVY   = '1F3864'; // dark navy — main headings
@@ -127,55 +131,70 @@ export async function exportReportAsDocx(opts: {
     const pMap    = new Map(personnel.map(p => [p.id, p]));
     const pjMap   = new Map((projects ?? []).map(p => [p.id, p.name]));
     const filtered = movements.filter(m => { const t = new Date(m.timestamp); return t >= fromDate && t <= toDate; });
-    const activeLoans = movements.filter(m => m.isLoan && !m.isReturned);
+    const activeLoans = getActiveLoans(movements);
     const checkOuts = filtered.filter(m => m.type === MovementType.CHECK_OUT).reduce((s, m) => s + m.quantity, 0);
     const checkIns  = filtered.filter(m => m.type === MovementType.CHECK_IN || m.type === MovementType.PURCHASE).reduce((s, m) => s + m.quantity, 0);
     const lowStock  = items.filter(i => i.quantity <= i.minStock && i.minStock > 0).length;
+    const itemNameOf   = (id: string)  => itemMap.get(id)?.name ?? '—';
+    const personNameOf = (id?: string) => pMap.get(id ?? '')?.name ?? 'Desconocido';
 
-    // Personnel loans
-    const pLoansMap = new Map<string, { name: string; loans: Movement[] }>();
-    activeLoans.forEach(m => {
-        if (!m.personnelId) return;
-        const p = pMap.get(m.personnelId);
-        if (!p) return;
-        if (!pLoansMap.has(m.personnelId)) pLoansMap.set(m.personnelId, { name: p.name, loans: [] });
-        pLoansMap.get(m.personnelId)!.loans.push(m);
-    });
-    const personnelLoans = [...pLoansMap.values()].sort((a, b) => b.loans.length - a.loans.length);
+    // Un préstamo de 2 martillos son 2 unidades fuera de bodega, no 1.
+    // Contar movimientos era lo que hacía que el informe reportara menos de lo que había afuera.
+    const activeLoanUnits = activeLoans.reduce((s, m) => s + m.quantity, 0);
 
-    // Capital items
+    // Personnel loans — se descartan los préstamos sin persona o de personas ya borradas
+    const personnelLoans = getLoansByPerson(movements, personNameOf)
+        .filter(p => p.personnelId && pMap.has(p.personnelId));
+
+    // Capital items — TODOS los tenedores de cada herramienta, no solo el primero
+    const loansByItem = getActiveLoansByItem(movements);
     const capitalItems = items
-        .filter(i => i.inventoryType === InventoryType.HAND_TOOL || i.inventoryType === InventoryType.ELECTRICAL_TOOL)
+        .filter(i => isAsset(i))
         .sort((a, b) => a.name.localeCompare(b.name))
         .map(item => {
-            const loan = activeLoans.find(m => m.itemId === item.id);
-            const holder = loan ? pMap.get(loan.personnelId ?? '')?.name : null;
-            const days = loan ? Math.floor((Date.now() - new Date(loan.timestamp).getTime()) / 86400000) : 0;
-            return { item, holder, days };
+            const loans = loansByItem.get(item.id) ?? [];
+            const unidadesFuera = loans.reduce((s, m) => s + m.quantity, 0);
+            // "Abel ×2 (5d), Alexander ×1 (3d)" — un palustre repartido ya no esconde al segundo
+            const holders = loans
+                .map(l => `${personNameOf(l.personnelId)} ×${l.quantity} (${daysSince(l.timestamp)}d)`)
+                .join(', ');
+            const maxDays = loans.length > 0 ? Math.max(...loans.map(l => daysSince(l.timestamp))) : 0;
+            return { item, loans, unidadesFuera, holders, maxDays };
         });
 
-    // Consumables
-    const consMap = new Map<string, number>();
-    filtered.filter(m => m.type === MovementType.CHECK_OUT || m.type === MovementType.WASTE).forEach(m => {
-        const item = itemMap.get(m.itemId);
-        if (item && (item.inventoryType === InventoryType.SINGLE_USE || item.inventoryType === InventoryType.PPE))
-            consMap.set(m.itemId, (consMap.get(m.itemId) ?? 0) + m.quantity);
-    });
-    const consumables = [...consMap.entries()]
-        .map(([id, qty]) => ({ item: itemMap.get(id)!, qty }))
-        .filter(x => x.item)
-        .sort((a, b) => b.qty - a.qty);
+    // Consumo del período — la lente que le faltaba al informe
+    const consumption = getConsumption(movements, itemMap, { from: fromDate, to: toDate }, personNameOf);
+    const consumables = consumption.porItem.map(r => ({ item: r.key, qty: r.unidades }));
+
+    // Ventana previa del mismo largo, para saber si el gasto subió o bajó
+    const periodDays = Math.max(1, Math.round((toDate.getTime() - fromDate.getTime()) / 86400000));
+    const prevFrom = new Date(fromDate.getTime() - periodDays * 86400000);
+    const prevConsumption = getConsumption(movements, itemMap, { from: prevFrom, to: fromDate }, personNameOf);
+    // Sin período previo no hay variación que calcular: "100% más que 0" no significa nada.
+    const consumoVarPct = prevConsumption.totalUnidades > 0
+        ? Math.round(((consumption.totalUnidades - prevConsumption.totalUnidades) / prevConsumption.totalUnidades) * 100)
+        : null;
 
     // Prose summary
     const topWorker = personnelLoans[0];
     let prose = `Durante ${periodLabel.toLowerCase()}, la bodega registró ${filtered.length} movimiento${filtered.length !== 1 ? 's' : ''}: `;
     prose += `${checkOuts} unidade${checkOuts !== 1 ? 's' : ''} despachadas y ${checkIns} ingresadas. `;
-    if (activeLoans.length > 0) {
-        prose += `Al cierre del período, ${activeLoans.length} herramienta${activeLoans.length !== 1 ? 's se encuentran' : ' se encuentra'} en préstamo activo`;
-        if (topWorker) prose += `, siendo ${topWorker.name} quien cuenta con el mayor número de ítems (${topWorker.loans.length})`;
+    if (activeLoanUnits > 0) {
+        prose += `Al cierre del período, ${activeLoanUnits} herramienta${activeLoanUnits !== 1 ? 's se encuentran' : ' se encuentra'} en préstamo activo`;
+        if (topWorker) prose += `, siendo ${topWorker.nombre} quien tiene la mayor cantidad de unidades (${topWorker.unidades})`;
         prose += '. ';
     } else {
         prose += 'No hay herramientas en préstamo activo. ';
+    }
+    if (consumption.totalUnidades > 0) {
+        prose += `Se consumieron ${consumption.totalUnidades} unidades de EPP y material de consumo `;
+        prose += `(promedio de ${consumption.promedioSemanal} por semana)`;
+        if (consumoVarPct !== null) {
+            prose += consumoVarPct >= 0
+                ? `, ${consumoVarPct}% más que el período anterior`
+                : `, ${Math.abs(consumoVarPct)}% menos que el período anterior`;
+        }
+        prose += '. ';
     }
     prose += lowStock > 0
         ? `Se detectaron ${lowStock} ítem${lowStock !== 1 ? 's' : ''} con stock por debajo del mínimo — se recomienda reposición prioritaria.`
@@ -248,8 +267,8 @@ export async function exportReportAsDocx(opts: {
         ['2.', 'Personal con Herramientas Asignadas'],
         ['3.', 'Inventario de Herramientas (Capital)'],
         ['4.', 'Materiales de Consumo del Período'],
-        ...(consumables.length > 0 ? [] : []),
-        ['5.', 'Indicadores Generales'],
+        ['5.', 'Análisis de Consumo'],
+        ['6.', 'Indicadores Generales'],
     ];
 
     const tocChildren = [
@@ -271,10 +290,12 @@ export async function exportReportAsDocx(opts: {
     // KPI: 4×2340  Personal: [2808,5148,1404]  Capital: [2995,1404,936,1123,2059,843]
     // Consumables: [4212,2340,1872,936]  Indicators: [6552,2808]
     const KPI_W  = [2340, 2340, 2340, 2340] as const;
-    const PER_W  = [2808, 5148, 1404]       as const;
-    const CAP_W  = [2700, 900, 1200, 700, 900, 1700, 1260] as const;
+    const PER_W  = [2400, 4700, 900, 1360]  as const;
+    const CAP_W  = [2100, 800, 900, 700, 800, 900, 2360, 800] as const;
     const CONS_W = [4212, 2340, 1872, 936]  as const;
     const IND_W  = [6552, 2808]             as const;
+    // Análisis de consumo: [ítem/persona, tipo, unidades] y [métrica, valor]
+    const ANC_W  = [4680, 2340, 2340]       as const;
 
     const execChildren: FileChild[] = [
         sectionHeading('1. Resumen Ejecutivo'),
@@ -285,11 +306,11 @@ export async function exportReportAsDocx(opts: {
             width: { size: 9360, type: WidthType.DXA },
             columnWidths: [...KPI_W],
             rows: [
-                tableHeader(['Ítems en inventario', 'Despachos (ud)', 'Préstamos activos', 'Stock bajo mínimo'], [...KPI_W]),
+                tableHeader(['Ítems en inventario', 'Despachos (ud)', 'Prestado afuera (ud)', 'Stock bajo mínimo'], [...KPI_W]),
                 tableRow([
                     String(items.length),
                     String(checkOuts),
-                    String(activeLoans.length),
+                    String(activeLoanUnits),
                     String(lowStock),
                 ], [...KPI_W]),
             ],
@@ -305,16 +326,17 @@ export async function exportReportAsDocx(opts: {
     if (personnelLoans.length === 0) {
         personnelChildren.push(para(run('No hay herramientas en préstamo activo.', { size: 10, color: GRAY })));
     } else {
-        const pRows = personnelLoans.map(({ name, loans }, idx) => {
-            const toolNames = loans.map(l => itemMap.get(l.itemId)?.name ?? '—').join(', ');
-            const maxDays = Math.max(...loans.map(l => Math.floor((Date.now() - new Date(l.timestamp).getTime()) / 86400000)));
-            return tableRow([name, toolNames, `${maxDays}d`], [...PER_W], idx % 2 === 1);
+        const pRows = personnelLoans.map(({ nombre, unidades, movs }, idx) => {
+            // Con la cantidad: "Martillo ×2", no "Martillo, Martillo".
+            const toolNames = summarizeLoanItems(movs, itemNameOf);
+            const maxDays = Math.max(...movs.map(l => daysSince(l.timestamp)));
+            return tableRow([nombre, toolNames, String(unidades), `${maxDays}d`], [...PER_W], idx % 2 === 1);
         });
         personnelChildren.push(
             new Table({
                 width: { size: 9360, type: WidthType.DXA },
                 columnWidths: [...PER_W],
-                rows: [tableHeader(['Trabajador', 'Herramientas asignadas', 'Días max'], [...PER_W]), ...pRows],
+                rows: [tableHeader(['Trabajador', 'Herramientas asignadas', 'Unidades', 'Días max'], [...PER_W]), ...pRows],
             })
         );
     }
@@ -328,15 +350,18 @@ export async function exportReportAsDocx(opts: {
             width: { size: 9360, type: WidthType.DXA },
             columnWidths: [...CAP_W],
             rows: [
-                tableHeader(['Herramienta', 'Tipo', 'Marca', 'Cantidad', 'Estado', 'Responsable', 'Días'], [...CAP_W]),
+                // "En bodega" es el stock; "Prestado" son las unidades afuera. Antes solo
+                // se imprimía el stock, así que no había forma de leer cuánto estaba fuera.
+                tableHeader(['Herramienta', 'Tipo', 'Marca', 'En bodega', 'Prestado', 'Estado', 'Responsable(s)', 'Días max'], [...CAP_W]),
                 ...capitalItems.map((ci, idx) => tableRow([
                     ci.item.name,
                     ci.item.inventoryType === InventoryType.HAND_TOOL ? 'Manual' : 'Eléctrica',
                     ci.item.inventoryType === InventoryType.ELECTRICAL_TOOL ? (ci.item.brand ?? '—') : '—',
                     String(ci.item.quantity),
-                    ci.holder ? 'Prestado' : ci.item.quantity <= 0 ? 'Agotado' : 'Disponible',
-                    ci.holder ?? '—',
-                    ci.holder ? `${ci.days}d` : '—',
+                    ci.unidadesFuera > 0 ? String(ci.unidadesFuera) : '—',
+                    ci.loans.length > 0 ? 'Prestado' : ci.item.quantity <= 0 ? 'Agotado' : 'Disponible',
+                    ci.holders || '—',
+                    ci.loans.length > 0 ? `${ci.maxDays}d` : '—',
                 ], [...CAP_W], idx % 2 === 1)),
             ],
         }),
@@ -363,15 +388,97 @@ export async function exportReportAsDocx(opts: {
                         String(c.qty),
                         c.item.unit,
                     ], [...CONS_W], i % 2 === 1)),
+                    tableRow(['TOTAL DEL PERÍODO', '', String(consumption.totalUnidades), 'ud'], [...CONS_W], true),
                 ],
             })
         );
     }
     consChildren.push(new Paragraph({ children: [new PageBreak()], spacing: { before: 600, after: 0 } }));
 
-    // ── 5. Indicators ─────────────────────────────────────────────────
+    // ── 5. Análisis de consumo ────────────────────────────────────────
+    // Una herramienta se rastrea ("¿dónde está?"); un consumible se analiza
+    // ("¿cuánto se gastó y en qué se va?"). El informe solo respondía la primera.
+    const TIPO_LABEL: Partial<Record<InventoryType, string>> = {
+        [InventoryType.PPE]: 'EPP / Seguridad',
+        [InventoryType.SINGLE_USE]: 'Consumible',
+    };
+
+    const analysisChildren: FileChild[] = [
+        sectionHeading('5. Análisis de Consumo'),
+    ];
+
+    if (consumption.totalUnidades === 0) {
+        analysisChildren.push(para(run('Sin consumo de EPP ni material en el período seleccionado.', { size: 10, color: GRAY })));
+    } else {
+        const varLabel = consumoVarPct === null
+            ? 'Sin período previo para comparar'
+            : consumoVarPct >= 0
+                ? `+${consumoVarPct}% vs. período anterior (${prevConsumption.totalUnidades} ud)`
+                : `${consumoVarPct}% vs. período anterior (${prevConsumption.totalUnidades} ud)`;
+
+        analysisChildren.push(
+            para(run('Resumen del gasto', { bold: true, size: 11, color: NAVY }), { spaceBefore: 120, spaceAfter: 100 }),
+            new Table({
+                width: { size: 9360, type: WidthType.DXA },
+                columnWidths: [...IND_W],
+                rows: [
+                    tableHeader(['Métrica de consumo', 'Valor'], [...IND_W]),
+                    tableRow(['Total consumido en el período', `${consumption.totalUnidades} ud`], [...IND_W]),
+                    tableRow(['Promedio semanal', `${consumption.promedioSemanal} ud/semana`], [...IND_W], true),
+                    tableRow(['Variación', varLabel], [...IND_W]),
+                    tableRow(['Referencias distintas consumidas', String(consumption.porItem.length)], [...IND_W], true),
+                    tableRow(['Trabajadores que consumieron', String(consumption.porPersona.length)], [...IND_W]),
+                ],
+            }),
+
+            para(run('Más consumidos', { bold: true, size: 11, color: NAVY }), { spaceBefore: 300, spaceAfter: 100 }),
+            new Table({
+                width: { size: 9360, type: WidthType.DXA },
+                columnWidths: [...ANC_W],
+                rows: [
+                    tableHeader(['Material', 'Categoría', 'Consumido'], [...ANC_W]),
+                    ...consumption.porItem.slice(0, 10).map((r, i) => tableRow([
+                        r.key.name,
+                        TIPO_LABEL[r.key.inventoryType] ?? '—',
+                        `${r.unidades} ${r.key.unit}`,
+                    ], [...ANC_W], i % 2 === 1)),
+                ],
+            }),
+
+            para(run('Consumo por trabajador', { bold: true, size: 11, color: NAVY }), { spaceBefore: 300, spaceAfter: 100 }),
+            new Table({
+                width: { size: 9360, type: WidthType.DXA },
+                columnWidths: [...ANC_W],
+                rows: [
+                    tableHeader(['Trabajador', 'Movimientos', 'Unidades consumidas'], [...ANC_W]),
+                    ...consumption.porPersona.map((r, i) => tableRow([
+                        r.key,
+                        String(r.movs.length),
+                        String(r.unidades),
+                    ], [...ANC_W], i % 2 === 1)),
+                ],
+            }),
+
+            para(run('Consumo por categoría', { bold: true, size: 11, color: NAVY }), { spaceBefore: 300, spaceAfter: 100 }),
+            new Table({
+                width: { size: 9360, type: WidthType.DXA },
+                columnWidths: [...ANC_W],
+                rows: [
+                    tableHeader(['Categoría', 'Participación', 'Unidades'], [...ANC_W]),
+                    ...consumption.porTipo.map((r, i) => tableRow([
+                        TIPO_LABEL[r.key] ?? String(r.key),
+                        `${Math.round((r.unidades / consumption.totalUnidades) * 100)}%`,
+                        String(r.unidades),
+                    ], [...ANC_W], i % 2 === 1)),
+                ],
+            }),
+        );
+    }
+    analysisChildren.push(new Paragraph({ children: [new PageBreak()], spacing: { before: 600, after: 0 } }));
+
+    // ── 6. Indicators ─────────────────────────────────────────────────
     const indChildren: FileChild[] = [
-        sectionHeading('5. Indicadores Generales'),
+        sectionHeading('6. Indicadores Generales'),
         new Table({
             width: { size: 9360, type: WidthType.DXA },
             columnWidths: [...IND_W],
@@ -379,11 +486,13 @@ export async function exportReportAsDocx(opts: {
                 tableHeader(['Indicador', 'Valor'], [...IND_W]),
                 tableRow(['Período analizado', `${fmtLong(fromDate)} al ${fmtLong(toDate)}`], [...IND_W]),
                 tableRow(['Total ítems en inventario', String(items.length)], [...IND_W], true),
-                tableRow(['Herramientas en préstamo activo', String(activeLoans.length)], [...IND_W]),
+                tableRow(['Unidades en préstamo activo', String(activeLoanUnits)], [...IND_W]),
                 tableRow(['Despachos en el período', String(checkOuts)], [...IND_W], true),
                 tableRow(['Ingresos en el período', String(checkIns)], [...IND_W]),
                 tableRow(['Ítems con stock bajo mínimo', String(lowStock)], [...IND_W], true),
                 tableRow(['Trabajadores con herramientas', String(personnelLoans.length)], [...IND_W]),
+                tableRow(['Consumo del período (EPP + material)', `${consumption.totalUnidades} ud`], [...IND_W], true),
+                tableRow(['Promedio semanal de consumo', `${consumption.promedioSemanal} ud`], [...IND_W]),
             ],
         }),
     ];
@@ -426,6 +535,7 @@ export async function exportReportAsDocx(opts: {
                     ...personnelChildren,
                     ...capitalChildren,
                     ...consChildren,
+                    ...analysisChildren,
                     ...indChildren,
                 ],
             },
