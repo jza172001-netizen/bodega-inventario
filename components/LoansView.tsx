@@ -5,6 +5,16 @@ import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
 import { ClockIcon } from './icons/ClockIcon';
 import { ReturnToolModal } from './ReturnToolModal';
 import { getGenus } from '../utils/genus';
+import { getActiveToolLoans, getConsumedMovements } from '../utils/inventory';
+
+/**
+ * Dos lentes sobre la misma pantalla, porque son dos preguntas distintas:
+ *   préstamo → "¿dónde está y cuándo vuelve?"   (herramienta, vuelve)
+ *   consumo  → "¿cuánto se gastó y en qué se va?" (EPP/consumible, no vuelve)
+ * Meter todo por la primera era lo que hacía aparecer los guantes de Abel en
+ * "Préstamos Activos", como si un guante se prestara.
+ */
+export type LoansLens = 'loans' | 'consumed';
 
 interface LoansViewProps {
     movements: Movement[];
@@ -12,15 +22,23 @@ interface LoansViewProps {
     personnel: Personnel[];
     onReturnItem: (movementId: string, condition?: string, notes?: string) => void;
     onMarkPendingPickup: (movementId: string, pending: boolean) => void;
+    /** Con qué lente abre la vista. El deep-link desde el Resumen decide cuál. */
+    initialLens?: LoansLens;
     onGoBack: () => void;
     userRole?: UserRole;
     onBehaviorLog?: (action: string, detail: string) => void;
 }
 
-const INV_FILTERS = [
-    { key: '', label: 'Todos' },
+// Los chips se recortan por lente: no tiene sentido ofrecer "EPP" filtrando
+// préstamos de herramienta, ni "Manual" filtrando consumo.
+const LOAN_FILTERS = [
+    { key: '', label: 'Todas' },
     { key: InventoryType.HAND_TOOL,       label: '🔨 Manual' },
     { key: InventoryType.ELECTRICAL_TOOL, label: '⚡ Eléctrica' },
+] as const;
+
+const CONSUMED_FILTERS = [
+    { key: '', label: 'Todos' },
     { key: InventoryType.PPE,             label: '🦺 EPP' },
     { key: InventoryType.SINGLE_USE,      label: '📦 Consumibles' },
 ] as const;
@@ -34,8 +52,10 @@ const INV_EMOJI: Record<string, string> = {
 
 export const LoansView: React.FC<LoansViewProps> = ({
     movements, items, personnel, onReturnItem, onMarkPendingPickup, onGoBack, userRole = UserRole.EMPLOYEE, onBehaviorLog,
+    initialLens = 'loans',
 }) => {
     const isOwner = userRole !== UserRole.VISITOR;
+    const [lens, setLens]             = useState<LoansLens>(initialLens);
     const [search, setSearch]         = useState('');
     const [typeFilter, setTypeFilter] = useState<string>('');
     const [returningLoan, setReturningLoan] = useState<Movement | null>(null);
@@ -59,7 +79,21 @@ export const LoansView: React.FC<LoansViewProps> = ({
     const getDays       = (d: Date | string) =>
         Math.ceil(Math.abs(Date.now() - new Date(d).getTime()) / 86400000);
 
-    const activeLoans = useMemo(() => movements.filter(m => m.isLoan && !m.isReturned), [movements]);
+    const isConsumedLens = lens === 'consumed';
+    const INV_FILTERS = isConsumedLens ? CONSUMED_FILTERS : LOAN_FILTERS;
+
+    // Préstamos: solo herramienta — un guante no se presta, se gasta.
+    // Consumidos: todo lo entregado que no vuelve, INCLUIDO lo que quedó marcado
+    // como préstamo (los EPP viejos de antes del arreglo del default por tipo, y
+    // el arnés que el bodeguero fuerza a propósito). Si los escondiéramos acá
+    // quedarían en el limbo: fuera del lente de préstamos por ser consumibles, y
+    // fuera de este por estar marcados.
+    const activeLoans = useMemo(
+        () => isConsumedLens ? getConsumedMovements(movements, itemMap) : getActiveToolLoans(movements, itemMap),
+        [movements, itemMap, isConsumedLens]
+    );
+
+    const totalUnidades = useMemo(() => activeLoans.reduce((s, m) => s + m.quantity, 0), [activeLoans]);
 
     const filteredLoans = useMemo(() => {
         let list = activeLoans;
@@ -120,7 +154,44 @@ export const LoansView: React.FC<LoansViewProps> = ({
         setReturningLoan(null);
     };
 
+    // Lente de consumo: un consumible ya se gastó, así que no hay días de mora ni
+    // nada que ir a recoger. Solo queda registrar cuánto se fue y con quién.
+    const ConsumedRow: React.FC<{ mov: Movement }> = ({ mov }) => {
+        const item = itemMap.get(mov.itemId);
+        // Marcado como préstamo: es un EPP/consumible con isLoan pegado. Se muestra
+        // acá (donde corresponde) pero conserva su botón de devolución para poder
+        // cerrarlo, sin tener que tocar los datos históricos.
+        const marcadoPrestamo = !!mov.isLoan && !mov.isReturned;
+
+        return (
+            <div className="py-2 border-l-2 border-gray-200 pl-3 flex items-center gap-2">
+                <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-800 truncate">{getPersonName(mov.personnelId)}</p>
+                    <p className="text-xs text-gray-400">{new Date(mov.timestamp).toLocaleDateString('es-CO')}</p>
+                </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 bg-emerald-100 text-emerald-800">
+                    ×{mov.quantity} {item?.unit ?? 'ud'}
+                </span>
+                {marcadoPrestamo && (
+                    <>
+                        <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full flex-shrink-0">
+                            marcado como préstamo
+                        </span>
+                        {isOwner && (
+                            <button onClick={() => handleReturn(mov)}
+                                className="py-1 px-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold rounded-lg transition-all flex-shrink-0">
+                                ✓
+                            </button>
+                        )}
+                    </>
+                )}
+            </div>
+        );
+    };
+
     const LoanRow: React.FC<{ loan: Movement }> = ({ loan }) => {
+        if (isConsumedLens) return <ConsumedRow mov={loan} />;
+
         const days = getDays(loan.timestamp);
         const isPending = !!loan.pendingPickup;
         let rowClass = 'border-l-2 border-gray-200 pl-3';
@@ -135,6 +206,7 @@ export const LoansView: React.FC<LoansViewProps> = ({
                     <p className="text-sm font-semibold text-gray-800 truncate">{getPersonName(loan.personnelId)}</p>
                     <p className="text-xs text-gray-400">{new Date(loan.timestamp).toLocaleDateString('es-CO')}</p>
                 </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 bg-gray-100 text-gray-600">×{loan.quantity}</span>
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${daysBadge}`}>{days}d</span>
                 {isPending && <span className="text-[10px] font-black bg-indigo-600 text-white px-1.5 py-0.5 rounded-full flex-shrink-0">Recoger</span>}
                 <div className="flex gap-1 flex-shrink-0">
@@ -170,11 +242,33 @@ export const LoansView: React.FC<LoansViewProps> = ({
                         <ArrowLeftIcon className="w-5 h-5 text-gray-600" />
                     </button>
                     <div className="flex-1 min-w-0">
-                        <h2 className="text-xl font-black text-gray-900 flex items-center gap-2">
-                            <ClockIcon className="w-6 h-6 text-indigo-600" />
-                            Préstamos Activos
-                        </h2>
-                        <p className="text-xs text-gray-500">{activeLoans.length} herramienta(s) fuera de bodega · agrupadas por ítem</p>
+                        {/* El toggle de lente. Ojo: NO es la flecha de la izquierda,
+                            que es el "volver" (onGoBack). */}
+                        <button
+                            onClick={() => {
+                                const next: LoansLens = isConsumedLens ? 'loans' : 'consumed';
+                                setLens(next);
+                                setTypeFilter('');
+                                onBehaviorLog?.('BUTTON', `Cambió lente: ${next === 'consumed' ? 'Elementos Consumidos' : 'Préstamos Activos'}`);
+                            }}
+                            className="group flex items-center gap-2 text-left"
+                            title="Cambiar entre préstamos y consumo"
+                        >
+                            <h2 className="text-xl font-black text-gray-900 flex items-center gap-2">
+                                {isConsumedLens
+                                    ? <span className="text-2xl leading-none">📦</span>
+                                    : <ClockIcon className="w-6 h-6 text-indigo-600" />}
+                                {isConsumedLens ? 'Elementos Consumidos' : 'Préstamos Activos'}
+                            </h2>
+                            <span className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-gray-100 text-gray-500 text-xs font-black group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors">
+                                ›
+                            </span>
+                        </button>
+                        <p className="text-xs text-gray-500">
+                            {isConsumedLens
+                                ? `${totalUnidades} unidad(es) consumidas · no vuelven a bodega`
+                                : `${totalUnidades} herramienta(s) fuera de bodega · agrupadas por ítem`}
+                        </p>
                     </div>
                 </div>
 
@@ -199,7 +293,7 @@ export const LoansView: React.FC<LoansViewProps> = ({
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                         </svg>
                         <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-                            placeholder="Buscar herramienta o persona..."
+                            placeholder={isConsumedLens ? 'Buscar material o persona...' : 'Buscar herramienta o persona...'}
                             className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400"
                             autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} />
                     </div>
@@ -207,8 +301,8 @@ export const LoansView: React.FC<LoansViewProps> = ({
 
                 {activeLoans.length === 0 ? (
                     <div className="text-center py-16 text-gray-400">
-                        <p className="text-4xl mb-3">🎉</p>
-                        <p className="font-semibold">¡Todo está en bodega!</p>
+                        <p className="text-4xl mb-3">{isConsumedLens ? '📦' : '🎉'}</p>
+                        <p className="font-semibold">{isConsumedLens ? 'Sin consumo registrado' : '¡Todo está en bodega!'}</p>
                     </div>
                 ) : filteredLoans.length === 0 ? (
                     <p className="text-center py-10 text-gray-400 text-sm">Sin resultados.</p>
@@ -218,7 +312,7 @@ export const LoansView: React.FC<LoansViewProps> = ({
                             const letter = genus.charAt(0).toUpperCase();
                             const isFirst = !seenGenusLetters.has(letter);
                             if (isFirst) seenGenusLetters.add(letter);
-                            const totalLoans = species.reduce((s, sp) => s + sp.loans.length, 0);
+                            const totalLoans = species.reduce((s, sp) => s + sp.loans.reduce((n, l) => n + l.quantity, 0), 0);
                             const emoji = INV_EMOJI[species[0]?.item.inventoryType] ?? '📦';
 
                             return (
@@ -236,8 +330,10 @@ export const LoansView: React.FC<LoansViewProps> = ({
                                             )}
                                         </div>
                                         <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                                            <span className="text-[10px] font-bold bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">
-                                                {totalLoans} prestada{totalLoans !== 1 ? 's' : ''}
+                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isConsumedLens ? 'bg-emerald-100 text-emerald-700' : 'bg-indigo-100 text-indigo-700'}`}>
+                                                {totalLoans} {isConsumedLens
+                                                    ? `consumida${totalLoans !== 1 ? 's' : ''}`
+                                                    : `prestada${totalLoans !== 1 ? 's' : ''}`}
                                             </span>
                                         </div>
                                     </div>
