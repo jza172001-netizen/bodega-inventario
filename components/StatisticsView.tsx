@@ -10,6 +10,8 @@ interface StatisticsViewProps {
     personnel?: Personnel[];
     projects?: Project[];
     onNavigate?: (view: string, tab?: string) => void;
+    /** Sacar el informe es una acción hacia afuera: se registra en la bitácora. */
+    onAuditLog?: (action: string, description: string) => void;
 }
 
 interface DetailRow {
@@ -69,7 +71,7 @@ const INV_TYPE_LABEL: Record<string, string> = {
     [InventoryType.SINGLE_USE]: '📦 Consumibles',
 };
 
-const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, personnel = [], projects = [], onNavigate }) => {
+const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, personnel = [], projects = [], onNavigate, onAuditLog }) => {
     const [rotationRecs, setRotationRecs] = useState<Record<string, { recommendation: string; severity: string }>>({});
     const [showDocxModal, setShowDocxModal] = useState(false);
     const [docxExporting, setDocxExporting] = useState(false);
@@ -88,6 +90,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
         setDocxExporting(true);
         setShowDocxModal(false);
         const range = getPeriodRange(period);
+        onAuditLog?.('REPORT_EXPORTED', `Exportó el informe en Word — ${range.label}`);
         const { exportReportAsDocx } = await import('../services/docxExportService');
         await exportReportAsDocx({
             items, movements, personnel, projects,
@@ -96,7 +99,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
             toDate: range.toDate,
         });
         setDocxExporting(false);
-    }, [getPeriodRange, items, movements, personnel, projects]);
+    }, [getPeriodRange, items, movements, personnel, projects, onAuditLog]);
 
     // Date boundaries
     const thirtyDaysAgo = useMemo(() => { const d = new Date(); d.setDate(d.getDate() - 30); return d; }, []);

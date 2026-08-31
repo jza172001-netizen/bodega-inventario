@@ -64,6 +64,18 @@ const AUDIT_CATEGORY: Record<string, { icon: string; color: string; bg: string }
     USER_LOGIN:         { icon: '🔐', color: 'text-indigo-700', bg: 'bg-indigo-50' },
     USER_LOGOUT:        { icon: '🔓', color: 'text-gray-700',   bg: 'bg-gray-50'   },
     MOVEMENT_DELETED:   { icon: '⚠️', color: 'text-red-700',    bg: 'bg-red-50'    },
+    USER_SETUP:         { icon: '🔑', color: 'text-indigo-700', bg: 'bg-indigo-50' },
+    CONFIG_CHANGED:     { icon: '⚙️', color: 'text-blue-700',   bg: 'bg-blue-50'   },
+    DATA_EXPORTED:      { icon: '⬇️', color: 'text-amber-700',  bg: 'bg-amber-50'  },
+    DATA_IMPORTED:      { icon: '⬆️', color: 'text-amber-700',  bg: 'bg-amber-50'  },
+    LOAN_PROJECT_ASSIGNED: { icon: '🏗️', color: 'text-purple-700', bg: 'bg-purple-50' },
+    PO_CREATED:         { icon: '🛒', color: 'text-green-700',  bg: 'bg-green-50'  },
+    PO_STATUS_CHANGED:  { icon: '🚚', color: 'text-blue-700',   bg: 'bg-blue-50'   },
+    PO_DELETED:         { icon: '🗑️', color: 'text-red-700',    bg: 'bg-red-50'    },
+    WHATSAPP_SENT:      { icon: '📲', color: 'text-green-700',  bg: 'bg-green-50'  },
+    PICKUP_NOTIFIED:    { icon: '📲', color: 'text-orange-700', bg: 'bg-orange-50' },
+    REPORT_EXPORTED:    { icon: '📄', color: 'text-blue-700',   bg: 'bg-blue-50'   },
+    AUDIT_CLEARED:      { icon: '🧹', color: 'text-red-700',    bg: 'bg-red-50'    },
 };
 
 type CombinedEntry =

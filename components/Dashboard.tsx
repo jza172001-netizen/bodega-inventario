@@ -9,9 +9,10 @@ interface DashboardProps {
     personnel?: Personnel[];
     onNavigate?: (view: string, tab?: string) => void;
     onBehaviorLog?: (action: string, detail: string) => void;
+    onAuditLog?: (action: string, description: string) => void;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ items, movements, purchaseOrders, personnel = [], onNavigate, onBehaviorLog }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ items, movements, purchaseOrders, personnel = [], onNavigate, onBehaviorLog, onAuditLog }) => {
     const alerts = useMemo(() => {
         const daysElapsed = (d: Date) => Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
         const overdueLoans = movements.filter(m => m.isLoan && !m.isReturned && daysElapsed(m.timestamp) > 7).length;
@@ -46,7 +47,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ items, movements, purchase
                 </div>
             )}
 
-            <StatisticsView items={items} movements={movements} personnel={personnel} onNavigate={onNavigate} />
+            <StatisticsView items={items} movements={movements} personnel={personnel} onNavigate={onNavigate} onAuditLog={onAuditLog} />
         </div>
     );
 };
