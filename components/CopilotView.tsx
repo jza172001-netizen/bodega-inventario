@@ -219,7 +219,7 @@ const CopilotView: React.FC<CopilotViewProps> = ({
                 try { const txt = await generateInventoryAnalysis(items, movements); addBot(txt); }
                 catch { addBot('Error generando el informe.'); }
             } else {
-                const resp = await askCopilot(trimmed, { items, movements, personnel, purchaseOrders });
+                const resp = await askCopilot(trimmed, { items, movements, personnel, purchaseOrders, projects });
                 addBot(resp);
             }
         }
