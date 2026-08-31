@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Item, Movement, Personnel, InventoryType } from '../types';
-import { getGenus, normStr } from '../utils/genus';
+import { getGenus, normStr, looseMatch } from '../utils/genus';
 
 interface GlobalSearchModalProps {
     items: Item[];
@@ -40,10 +40,15 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
         return true;
     };
 
+    // Dos tolerancias distintas que se suman: `fuzzy` es subsecuencia (aguanta
+    // letras OMITIDAS: "plda" → "pulidora") y `looseMatch` es distancia de
+    // edición (aguanta letras CAMBIADAS: "bulidora" → "pulidora").
     const matchesItem = (name: string, q: string) => {
         const n = normStr(name);
         const g = normStr(getGenus(name));
-        return n.includes(q) || g.includes(q) || (q.length >= 3 && (fuzzy(g, q) || fuzzy(n, q)));
+        return n.includes(q) || g.includes(q)
+            || (q.length >= 3 && (fuzzy(g, q) || fuzzy(n, q)))
+            || looseMatch(name, q) || looseMatch(getGenus(name), q);
     };
 
     const itemResults = useMemo(() => {
@@ -66,7 +71,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
         const q = normStr(query.trim());
         if (q.length < 2) return [];
         return personnel
-            .filter(p => normStr(p.name).includes(q))
+            // Antes era `includes`, exacto: "hektor" no encontraba a Héctor.
+            .filter(p => looseMatch(p.name, q))
             .slice(0, 4)
             .map(person => {
                 const activeLoans = movements.filter(m => m.personnelId === person.id && m.isLoan && !m.isReturned);

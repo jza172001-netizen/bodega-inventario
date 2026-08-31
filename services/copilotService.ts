@@ -197,7 +197,19 @@ function fuzzyMatchList<T extends { name: string }>(query: string, list: T[]): {
     const q = normalize(query);
     const exact = list.find(x => normalize(x.name) === q);
     if (exact) return { matched: exact, candidates: [] };
-    const hits = list.filter(x => normalize(x.name).includes(q) || q.includes(normalize(x.name)));
+    // Antes solo `includes`, exacto: un nombre con una letra cambiada ("hektor")
+    // no encontraba a nadie. `fuzzyMatchItems` ya toleraba eso para los ítems;
+    // las personas y los proyectos se habían quedado atrás.
+    const maxEdits = q.length >= 7 ? 2 : 1;
+    const hits = list.filter(x => {
+        const n = normalize(x.name);
+        if (n.includes(q) || q.includes(n)) return true;
+        if (q.length < 3) return false;
+        return n.split(' ').some(w =>
+            (Math.abs(w.length - q.length) <= maxEdits && levenshtein(w, q) <= maxEdits) ||
+            (q.length >= 5 && w.length > q.length && levenshtein(w.slice(0, q.length), q) <= maxEdits)
+        );
+    });
     if (hits.length === 1) return { matched: hits[0], candidates: [] };
     if (hits.length > 1) return { matched: null, candidates: hits.slice(0, 3) };
     return { matched: null, candidates: [] };
