@@ -157,6 +157,7 @@ const App: React.FC = () => {
             setUsers(prev => prev.map(u => u.id === userId ? { ...u, passwordHash: hash } : u))
         );
         db.updateUser(updated).catch(e => { console.error('[Supabase] user:', e); setSyncStatus('error'); });
+        addAuditLog('USER_SETUP', `Configuró sus credenciales por primera vez: "${username}"`, user.name);
         handleLoginSuccess(user.role, user.name);
     };
 
@@ -166,6 +167,10 @@ const App: React.FC = () => {
     };
 
     const handleLogout = () => {
+        // El ingreso queda en la bitácora de auditoría; la salida también debe
+        // quedar, si no la sesión no tiene cierre y no se sabe hasta cuándo
+        // alguien estuvo adentro.
+        addAuditLog('USER_LOGOUT', `Cerró sesión: ${userName}`);
         setBehaviorLogs(prev => [{
             id: `beh-${Date.now()}-${Math.random().toString(36).slice(2)}`,
             timestamp: new Date(),
@@ -423,6 +428,7 @@ const App: React.FC = () => {
     const handleConfigChange = (cfg: AppConfig) => {
         setAppConfig(cfg);
         localStorage.setItem(CONFIG_KEY, JSON.stringify(cfg));
+        addAuditLog('CONFIG_CHANGED', 'Cambió la configuración de la app');
     };
 
     const [isInvoiceReaderOpen, setInvoiceReaderOpen] = useState(false);
@@ -439,8 +445,14 @@ const App: React.FC = () => {
     const [itemForHistory, setItemForHistory] = useState<Item | null>(null);
     const [showOnboarding, setShowOnboarding] = useState(false);
 
-    const handleExportData = () => exportToFile({ items, movements, personnel, purchaseOrders, projects, users });
+    // Sacar o meter un respaldo mueve TODA la bodega de una vez: es la acción de
+    // mayor alcance de la app y era la única sin registro.
+    const handleExportData = () => {
+        exportToFile({ items, movements, personnel, purchaseOrders, projects, users });
+        addAuditLog('DATA_EXPORTED', `Descargó respaldo completo (${items.length} ítems, ${movements.length} movimientos, ${personnel.length} personas)`);
+    };
     const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => importFromFile(e, (data) => {
+        addAuditLog('DATA_IMPORTED', `Importó respaldo y reemplazó los datos (${(data.items || []).length} ítems, ${(data.movements || []).length} movimientos)`);
         setItems(data.items || []);
         setMovements(data.movements || []);
         setPersonnel(data.personnel || []);
@@ -554,6 +566,7 @@ const App: React.FC = () => {
         setItems(prev => [...prev, ...created]);
         created.forEach(({ id, ...rest }) => withSync(db.addItem(rest, id)));
         created.forEach(registrarApertura);
+        addAuditLog('ITEM_CREATED', `Carga masiva: ${created.length} ítem(s) agregados de una vez${created.length <= 5 ? ` — ${created.map(i => i.name).join(', ')}` : ''}`);
     };
 
     const handleAddItem = (i: Omit<Item, 'id'>) => {
@@ -712,8 +725,12 @@ const App: React.FC = () => {
     };
 
     const handleAssignProjectToLoan = (movementId: string, projectId: string) => {
+        const mov = movements.find(m => m.id === movementId);
+        const itemName = mov ? items.find(i => i.id === mov.itemId)?.name ?? 'ítem' : 'ítem';
+        const projName = projects.find(p => p.id === projectId)?.name ?? projectId;
         setMovements(prev => prev.map(m => m.id === movementId ? { ...m, projectId } : m));
         withSync(db.updateMovementProject(movementId, projectId));
+        addAuditLog('LOAN_PROJECT_ASSIGNED', `Asignó "${itemName}" al proyecto "${projName}"`);
     };
 
     const handleTransferLoan = (movementId: string, newPersonnelId: string) => {
@@ -825,9 +842,12 @@ const App: React.FC = () => {
         const newO = { ...o, id };
         setPurchaseOrders(prev => [newO, ...prev]);
         withSync(db.addPurchaseOrder(o, id).then(created => setPurchaseOrders(prev => prev.map(x => x.id === id ? created : x))));
+        addAuditLog('PO_CREATED', `Creó orden de compra a "${o.supplier}" (${o.items.length} ítem(s))`);
     };
 
     const handleUpdatePOStatus = (id: string, status: PurchaseOrderStatus) => {
+        const orden = purchaseOrders.find(o => o.id === id);
+        addAuditLog('PO_STATUS_CHANGED', `Orden de "${orden?.supplier ?? id}": ${orden?.status ?? '?'} → ${status}`);
         setPurchaseOrders(prev => prev.map(o => o.id === id
             ? { ...o, status, ...(status === PurchaseOrderStatus.RECEIVED ? { receivedDate: new Date() } : {}) }
             : o
@@ -836,8 +856,10 @@ const App: React.FC = () => {
     };
 
     const handleDeletePO = (id: string) => {
+        const orden = purchaseOrders.find(o => o.id === id);
         setPurchaseOrders(prev => prev.filter(o => o.id !== id));
         withSync(db.deletePurchaseOrder(id));
+        addAuditLog('PO_DELETED', `Eliminó orden de compra de "${orden?.supplier ?? id}"`);
     };
 
     const handleAddUser = (u: AppUser) => {
@@ -868,9 +890,21 @@ const App: React.FC = () => {
 
     const handleClearAuditLogs = () => {
         requirePin(
-            () => setAuditLogs([]),
+            () => {
+                // Se deja una entrada que sobrevive al borrado: si no, quien limpia
+                // la bitácora borra también la prueba de que la limpió, y el
+                // registro deja de servir como registro.
+                const cuantos = auditLogs.length;
+                setAuditLogs([{
+                    id: `aud-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                    timestamp: new Date(),
+                    action: 'AUDIT_CLEARED',
+                    actor: userName,
+                    description: `Limpió la bitácora de auditoría (${cuantos} registro(s) eliminados)`,
+                }]);
+            },
             'Limpiar bitácora',
-            'Se borrarán todos los registros de auditoría.',
+            'Se borrarán todos los registros de auditoría. Quedará constancia de esta limpieza.',
         );
     };
 
@@ -975,6 +1009,7 @@ const App: React.FC = () => {
                                 purchaseOrders={purchaseOrders}
                                 onNavigate={(v, tab) => selectView(v as View, tab as KardexTab | undefined)}
                                 onBehaviorLog={addBehaviorLog}
+                                onAuditLog={addAuditLog}
                             />
                         )}
                         {effectiveView === 'kardex' && (
@@ -1053,7 +1088,7 @@ const App: React.FC = () => {
                             />
                         )}
                         {effectiveView === 'whatsapp' && (
-                            <WhatsAppView movements={movements} items={items} personnel={personnel} readOnly={userRole === UserRole.VISITOR} onBehaviorLog={addBehaviorLog} />
+                            <WhatsAppView movements={movements} items={items} personnel={personnel} readOnly={userRole === UserRole.VISITOR} onBehaviorLog={addBehaviorLog} onAuditLog={addAuditLog} />
                         )}
                         {effectiveView === 'pickup' && (
                             <PickupView
@@ -1064,6 +1099,7 @@ const App: React.FC = () => {
                                 onMarkPendingPickup={handleMarkPendingPickup}
                                 onReturnItem={handleReturnItem}
                                 onBehaviorLog={addBehaviorLog}
+                                onAuditLog={addAuditLog}
                             />
                         )}
                     </div>

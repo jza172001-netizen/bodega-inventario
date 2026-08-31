@@ -20,6 +20,8 @@ interface Props {
     personnel: Personnel[];
     readOnly?: boolean;
     onBehaviorLog?: (action: string, detail: string) => void;
+    /** Mandarle un mensaje a un trabajador sale de la app: va a la bitácora. */
+    onAuditLog?: (action: string, description: string) => void;
 }
 
 interface PersonGroup {
@@ -81,7 +83,7 @@ const CATEGORY_BTNS = [
     { key: InventoryType.SINGLE_USE,      label: '📦 Consumibles', active: 'bg-purple-500 hover:bg-purple-600' },
 ] as const;
 
-export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, readOnly = false, onBehaviorLog }) => {
+export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, readOnly = false, onBehaviorLog, onAuditLog }) => {
     const [log, setLog] = useState<ReminderLog>(loadReminderLog);
     const [weeklyLog, setWeeklyLog] = useState<WeeklyLog>(loadWeeklyLog);
     const bottomRef = useRef<HTMLDivElement>(null);
@@ -172,6 +174,8 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
         if (grps.every(x => x.items.length === 0)) return false;
 
         window.open(buildPersonReminderUrl(g.person.phone, g.person.name, grps, kind), '_blank');
+        const queReporta = kind === 'consumo' ? 'consumo' : kind === 'loan' ? 'préstamos' : 'préstamos y consumo';
+        onAuditLog?.('WHATSAPP_SENT', `Abrió WhatsApp para ${g.person.name} (${g.person.phone}) — reporte de ${queReporta}, ventana de ${windowDays} días`);
 
         const covered = kind === 'consumo' ? [] : g.loans;
         if (covered.length > 0) setLog({ ...recordReminders(covered.map(m => m.id)) });

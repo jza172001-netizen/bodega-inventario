@@ -140,7 +140,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         setInput('');
         setLoading(true);
         onBehaviorLog?.('CHAT_MESSAGE', `Escribió en chatbot: ${trimmed}`);
-        const resp = await askCopilot(trimmed, { items, movements, personnel, purchaseOrders });
+        const resp = await askCopilot(trimmed, { items, movements, personnel, purchaseOrders, projects });
         addBot(resp);
         setLoading(false);
     };

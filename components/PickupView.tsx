@@ -14,6 +14,7 @@ interface Props {
     onMarkPendingPickup: (movementId: string, pending: boolean) => void;
     onReturnItem: (movementId: string, condition?: string, notes?: string) => void;
     onBehaviorLog?: (action: string, detail: string) => void;
+    onAuditLog?: (action: string, description: string) => void;
 }
 
 const INV_FILTERS = [
@@ -25,7 +26,7 @@ const INV_FILTERS = [
 ] as const;
 
 export const PickupView: React.FC<Props> = ({
-    movements, items, personnel, projects, userRole = UserRole.EMPLOYEE, onMarkPendingPickup, onReturnItem, onBehaviorLog,
+    movements, items, personnel, projects, userRole = UserRole.EMPLOYEE, onMarkPendingPickup, onReturnItem, onBehaviorLog, onAuditLog,
 }) => {
     const isOwner = userRole !== UserRole.VISITOR;
     const [typeFilter, setTypeFilter] = useState<string>('');
@@ -130,7 +131,10 @@ export const PickupView: React.FC<Props> = ({
                         href={waUrl ?? '#'}
                         target="_blank"
                         rel="noopener noreferrer"
-                        onClick={e => { if (!waUrl) e.preventDefault(); }}
+                        onClick={e => {
+                            if (!waUrl) { e.preventDefault(); return; }
+                            onAuditLog?.('PICKUP_NOTIFIED', `Avisó a ${selectedRecipient?.name} para recoger ${pending.length} herramienta(s)`);
+                        }}
                         className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-black text-sm transition-all w-full ${
                             waUrl
                                 ? 'bg-green-600 hover:bg-green-700 text-white shadow-sm'
