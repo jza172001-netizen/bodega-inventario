@@ -9,7 +9,9 @@ interface FloatingChatProps {
     personnel: Personnel[];
     purchaseOrders: PurchaseOrder[];
     projects: Project[];
-    onLogMovements: (ms: Array<Omit<Movement, 'id'>>) => void;
+    /** Devuelve cuántos movimientos quedaron realmente registrados: la app puede
+     *  rechazar una salida por stock insuficiente y el bot no debe cantar éxito. */
+    onLogMovements: (ms: Array<Omit<Movement, 'id'>>) => number;
     onCreateItem: (item: Omit<Item, 'id'>) => Item;
     onCreateProject: (p: Omit<Project, 'id'>) => Project;
     onCreatePersonnel: (p: Omit<Personnel, 'id'>) => Personnel;
@@ -273,9 +275,15 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             }
         }
         if (toLog.length > 0) {
-            onLogMovements(toLog);
+            const ok = onLogMovements(toLog);
             const dateLabel = wizardDate !== todayISO() ? ` (fecha: ${new Date(wizardDate + 'T12:00:00').toLocaleDateString('es-CO')})` : '';
-            addBot(`✅ ${toLog.length} salida(s) registradas${worker ? ` para ${worker.name}` : ''}${project ? ` · ${project.name}` : ''}${dateLabel}.`);
+            if (ok === 0) {
+                addBot(`❌ No se registró ninguna salida: la bodega rechazó las ${toLog.length} por falta de stock.`);
+            } else if (ok < toLog.length) {
+                addBot(`⚠️ Solo ${ok} de ${toLog.length} salida(s) quedaron registradas${worker ? ` para ${worker.name}` : ''}${dateLabel}. Las demás se rechazaron por falta de stock.`);
+            } else {
+                addBot(`✅ ${ok} salida(s) registradas${worker ? ` para ${worker.name}` : ''}${project ? ` · ${project.name}` : ''}${dateLabel}.`);
+            }
         } else {
             addBot('No se registraron salidas (sin artículos válidos).');
         }
@@ -348,12 +356,18 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             timestamp: ts, personnelId: effectivePersonnelId,
             projectId, notes: '', isLoan, isReturned: false,
         }));
-        onLogMovements(movs);
+        const ok = onLogMovements(movs);
         const workerName = personnel.find(p => p.id === effectivePersonnelId)?.name ?? personnel.find(p => p.id === loanPersonnelId)?.name ?? 'trabajador';
         const itemNames = [...loanSelected.keys()].map(id => items.find(i => i.id === id)?.name ?? id);
         const dateLabel = loanDate !== todayISO() ? ` (fecha: ${new Date(loanDate + 'T12:00:00').toLocaleDateString('es-CO')})` : '';
         const verb = isLoan ? 'Préstamo registrado' : 'Salida registrada';
-        addBot(`✅ ${verb} para ${workerName}: ${itemNames.join(', ')}${dateLabel}.`);
+        if (ok === 0) {
+            addBot(`❌ No se registró nada: la bodega rechazó ${movs.length === 1 ? 'el movimiento' : `los ${movs.length} movimientos`} por falta de stock.`);
+        } else if (ok < movs.length) {
+            addBot(`⚠️ Solo ${ok} de ${movs.length} quedaron registrados para ${workerName}${dateLabel}. El resto se rechazó por falta de stock.`);
+        } else {
+            addBot(`✅ ${verb} para ${workerName}: ${itemNames.join(', ')}${dateLabel}.`);
+        }
         closePanel();
     };
 

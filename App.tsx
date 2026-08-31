@@ -601,7 +601,10 @@ const App: React.FC = () => {
         );
     };
 
-    const handleLogMovement = (m: Omit<Movement, 'id'>) => {
+    /** Devuelve true si el movimiento quedó registrado. Quien lo llama debe
+     *  reportar lo que de verdad pasó: el chatbot decía "✅ registrado" incluso
+     *  cuando esta validación había rechazado la salida. */
+    const handleLogMovement = (m: Omit<Movement, 'id'>): boolean => {
         const ts = m.timestamp instanceof Date ? m.timestamp : new Date(m.timestamp ?? Date.now());
         const currentItem = items.find(i => i.id === m.itemId);
         const isWithdrawal = m.type === MovementType.CHECK_OUT || m.type === MovementType.WASTE;
@@ -609,7 +612,7 @@ const App: React.FC = () => {
         // Sin esto, una salida mayor al stock registraría más de lo que descuenta.
         if (currentItem && isWithdrawal && m.quantity > currentItem.quantity) {
             alert(`Stock insuficiente de "${currentItem.name}": hay ${currentItem.quantity} ${currentItem.unit} y se intentó sacar ${m.quantity}. El movimiento NO se registró.`);
-            return;
+            return false;
         }
         const id = crypto.randomUUID();
         const newMov = { ...m, id, timestamp: ts };
@@ -635,6 +638,7 @@ const App: React.FC = () => {
         } else if (m.type === MovementType.CHECK_IN) {
             addAuditLog('ITEM_CREATED', `📥 Entrada: "${itemName}" ×${m.quantity}${personName ? ` — ${personName}` : ''}`);
         }
+        return true;
     };
 
     const handleDeleteMovement = (id: string) => {
@@ -1027,7 +1031,7 @@ const App: React.FC = () => {
                                 personnel={personnel}
                                 purchaseOrders={purchaseOrders}
                                 projects={projects}
-                                onLogMovements={batch => batch.forEach(m => handleLogMovement(m))}
+                                onLogMovements={batch => batch.reduce((ok, m) => handleLogMovement(m) ? ok + 1 : ok, 0)}
                                 onCreateItem={handleAddItemSync}
                                 onCreateProject={handleAddProjectSync}
                                 onCreatePersonnel={handleAddPersonnelSync}
@@ -1126,7 +1130,7 @@ const App: React.FC = () => {
                     personnel={personnel}
                     purchaseOrders={purchaseOrders}
                     projects={projects}
-                    onLogMovements={batch => batch.forEach(m => handleLogMovement(m))}
+                    onLogMovements={batch => batch.reduce((ok, m) => handleLogMovement(m) ? ok + 1 : ok, 0)}
                     onCreateItem={handleAddItemSync}
                     onCreateProject={handleAddProjectSync}
                     onCreatePersonnel={handleAddPersonnelSync}

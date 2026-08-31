@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Item, Movement, Personnel, Project, InventoryType, UserRole, AuditLog, BehaviorLog, AppUser } from '../types';
 import { MovementsView } from './MovementsView';
-import { LoansView } from './LoansView';
+import { LoansView, LoansLens } from './LoansView';
 import { InventoryView } from './InventoryView';
 import { ProjectsView } from './ProjectsView';
 
@@ -20,6 +20,8 @@ interface KardexHubProps {
     userRole: UserRole;
     initialTab?: KardexTab;
     initialInventoryType?: InventoryType | null;
+    /** Lente con el que abre la pestaña Préstamos: préstamo activo o consumo. */
+    initialLoansLens?: LoansLens;
     onGoBack: () => void;
     // movements handlers
     openLogMovementModal: () => void;
@@ -59,7 +61,7 @@ const INV_TYPES: Array<{ type: InventoryType | null; label: string }> = [
 
 export const KardexHub: React.FC<KardexHubProps> = ({
     items, movements, personnel, projects, auditLogs, behaviorLogs, users, userRole,
-    initialTab = 'movements', initialInventoryType = null,
+    initialTab = 'movements', initialInventoryType = null, initialLoansLens = 'loans',
     onGoBack, onTabChange, onBehaviorLog,
     openLogMovementModal, onDeleteMovement, onReturnLoan,
     onReturnItem, onMarkPendingPickup,
@@ -145,6 +147,7 @@ export const KardexHub: React.FC<KardexHubProps> = ({
                     onGoBack={onGoBack}
                     userRole={userRole}
                     onBehaviorLog={onBehaviorLog}
+                    initialLens={initialLoansLens}
                 />
             )}
 

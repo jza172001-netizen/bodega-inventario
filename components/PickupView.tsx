@@ -31,7 +31,15 @@ export const PickupView: React.FC<Props> = ({
     const [typeFilter, setTypeFilter] = useState<string>('');
     const [returningMovement, setReturningMovement] = useState<Movement | null>(null);
     const [cancelingPickup, setCancelingPickup] = useState<{ movementId: string; itemName: string } | null>(null);
-    const [selectedRecipient, setSelectedRecipient] = useState<Personnel | null>(null);
+    // Quién recoge lo elige el bodeguero en cada recogida — nadie viene
+    // preseleccionado, para no mandarle el aviso a la persona equivocada.
+    const [recipientId, setRecipientId] = useState<string>('');
+    // Se resuelve contra la lista viva: si a esa persona la borran o le quitan el
+    // teléfono, el select vuelve a quedar vacío en vez de apuntar a un fantasma.
+    const selectedRecipient = useMemo(
+        () => personnel.find(p => p.id === recipientId && p.phone) ?? null,
+        [personnel, recipientId]
+    );
 
     const itemMap    = useMemo(() => new Map(items.map(i => [i.id, i])), [items]);
     const personMap  = useMemo(() => new Map(personnel.map(p => [p.id, p])), [personnel]);
@@ -102,8 +110,9 @@ export const PickupView: React.FC<Props> = ({
                     <select
                         value={selectedRecipient?.id ?? ''}
                         onChange={e => {
-                            const p = personnel.find(p => p.id === e.target.value) ?? null;
-                            setSelectedRecipient(p);
+                            setRecipientId(e.target.value);
+                            const p = personnel.find(x => x.id === e.target.value);
+                            if (p) onBehaviorLog?.('ACTION', `Destinatario de recogida: ${p.name}`);
                         }}
                         className="w-full text-sm border border-green-200 rounded-xl px-3 py-2 bg-white focus:ring-2 focus:ring-green-400 outline-none text-gray-700 font-semibold"
                     >

@@ -47,12 +47,22 @@ const formatPhone = (phone: string): string => {
     return raw.startsWith('57') ? raw : `57${raw}`;
 };
 
+/**
+ * Qué se le reporta al trabajador. Un préstamo y un consumo son mensajes
+ * distintos porque son lógicas distintas: al préstamo se le pide devolución,
+ * al consumo se le pide cuenta de en qué se usó. Antes se mandaban siempre los
+ * tres bloques juntos, así que tocar "📦 Consumibles" igual le enviaba a la
+ * persona el listado de herramientas.
+ */
+export type ReminderKind = 'loan' | 'consumo' | 'all';
+
 /** Builds categorized reminder groups for a person: loans by type + recent consumable/EPP usage. */
 export const buildPersonGroups = (
     person: Personnel,
     movements: Movement[],
     items: Item[],
-    windowDays = 7
+    windowDays = 7,
+    kind: ReminderKind = 'all'
 ): ReminderGroup[] => {
     const itemMap = new Map(items.map(i => [i.id, i]));
     const sevenDaysAgo = new Date(Date.now() - windowDays * 86400000);
@@ -80,7 +90,9 @@ export const buildPersonGroups = (
             .map(m => {
                 const item = itemMap.get(m.itemId);
                 const days = daysSince(m.timestamp);
-                return `${item?.name ?? 'Herramienta'} — ${days} día${days !== 1 ? 's' : ''}`;
+                // Con la cantidad: si se llevó 2 martillos, el mensaje debe pedir 2.
+                const qty = m.quantity > 1 ? ` x${m.quantity}` : '';
+                return `${item?.name ?? 'Herramienta'}${qty} — ${days} día${days !== 1 ? 's' : ''}`;
             });
 
     const consumableLines = [...checkoutTotals.entries()]
@@ -95,18 +107,32 @@ export const buildPersonGroups = (
 
     const consumableLabel = windowDays <= 7 ? 'Consumibles y EPP esta semana' : 'Consumibles y EPP este mes';
 
-    return [
-        { emoji: '🔨', label: 'Herramientas manuales (devolver)',   items: loanGroup(InventoryType.HAND_TOOL) },
-        { emoji: '⚡', label: 'Herramientas eléctricas (devolver)', items: loanGroup(InventoryType.ELECTRICAL_TOOL) },
-        { emoji: '📦', label: consumableLabel,                       items: consumableLines },
-    ];
+    const groups: ReminderGroup[] = [];
+    if (kind === 'loan' || kind === 'all') {
+        groups.push(
+            { emoji: '🔨', label: 'Herramientas manuales (devolver)',   items: loanGroup(InventoryType.HAND_TOOL) },
+            { emoji: '⚡', label: 'Herramientas eléctricas (devolver)', items: loanGroup(InventoryType.ELECTRICAL_TOOL) },
+        );
+    }
+    if (kind === 'consumo' || kind === 'all') {
+        groups.push({ emoji: '📦', label: consumableLabel, items: consumableLines });
+    }
+    return groups;
+};
+
+/** Cierre del mensaje según lo que se está reportando. */
+const CLOSING: Record<ReminderKind, string> = {
+    loan:    '📸 Envíanos una foto del estado de las herramientas y coordina la devolución.',
+    consumo: '¿En qué se usaron estos materiales? Cuéntanos para cuadrar el consumo de la obra.',
+    all:     '📸 Envíanos una foto del estado de las herramientas y coordina la devolución.',
 };
 
 /** Builds the wa.me URL for a person using categorized groups. */
 export const buildPersonReminderUrl = (
     phone: string,
     personName: string,
-    groups: ReminderGroup[]
+    groups: ReminderGroup[],
+    kind: ReminderKind = 'all'
 ): string => {
     const nonempty = groups.filter(g => g.items.length > 0);
     if (nonempty.length === 0) return `https://wa.me/${formatPhone(phone)}`;
@@ -116,7 +142,7 @@ export const buildPersonReminderUrl = (
     const text = encodeURIComponent(
         `Hola ${personName} 👋, aquí tu resumen de la bodega de Grupo Montecielo:\n\n` +
         `${body}\n\n` +
-        `📸 Envíanos una foto del estado de las herramientas y coordina la devolución.\n\n` +
+        `${CLOSING[kind]}\n\n` +
         `Gracias 🙏`
     );
     return `https://wa.me/${formatPhone(phone)}?text=${text}`;

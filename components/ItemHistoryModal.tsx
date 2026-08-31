@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { Item, Movement, Personnel, MovementType, Project } from '../types';
 import { XIcon } from './icons/XIcon';
+import { isAsset, daysSince } from '../utils/inventory';
 
 interface ItemHistoryModalProps {
     isOpen: boolean;
@@ -19,7 +20,9 @@ export const ItemHistoryModal: React.FC<ItemHistoryModalProps> = ({
     isOpen, onClose, item, movements, personnel,
     projects = [], onReturnItem, onTransferLoan, onAssignProject,
 }) => {
-    const [activeAction, setActiveAction] = useState<'transfer' | 'project' | null>(null);
+    // La acción es por préstamo, no global: un ítem puede estar con dos personas
+    // a la vez y cada una se devuelve o reasigna por separado.
+    const [activeAction, setActiveAction] = useState<{ movId: string; kind: 'transfer' | 'project' } | null>(null);
     const [selectedPersonId, setSelectedPersonId] = useState('');
     const [selectedProjectId, setSelectedProjectId] = useState('');
 
@@ -29,9 +32,34 @@ export const ItemHistoryModal: React.FC<ItemHistoryModalProps> = ({
         .filter(m => m.itemId === item.id)
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
-    const activeLoan = history.find(m => m.isLoan && !m.isReturned);
-    const loanPerson = activeLoan?.personnelId ? personnel.find(p => p.id === activeLoan.personnelId) : null;
+    // filter, no find: con find(), un martillo que tienen Adrián y Abel mostraba
+    // un solo tenedor y el otro desaparecía de la pantalla.
+    const activeLoans = history.filter(m => m.isLoan && !m.isReturned);
+    const unidadesFuera = activeLoans.reduce((s, m) => s + m.quantity, 0);
     const activeProjects = projects.filter(p => p.status === 'active');
+    const esHerramienta = isAsset(item);
+
+    // Para un consumible la pregunta no es "¿quién lo tiene?" sino "¿quién lo gastó?".
+    const consumos = esHerramienta ? [] : (() => {
+        const porPersona = new Map<string, { nombre: string; unidades: number; ultima: Date }>();
+        for (const m of history) {
+            if (m.type !== MovementType.CHECK_OUT || m.isLoan) continue;
+            const key = m.personnelId ?? '__sin__';
+            const ts = new Date(m.timestamp);
+            const reg = porPersona.get(key);
+            if (!reg) {
+                porPersona.set(key, {
+                    nombre: m.personnelId ? (personnel.find(p => p.id === m.personnelId)?.name ?? 'Desconocido') : 'Sin asignar',
+                    unidades: m.quantity,
+                    ultima: ts,
+                });
+            } else {
+                reg.unidades += m.quantity;
+                if (ts > reg.ultima) reg.ultima = ts;
+            }
+        }
+        return [...porPersona.values()].sort((a, b) => b.unidades - a.unidades);
+    })();
 
     const getPersonnelName = (id?: string) => personnel.find(p => p.id === id)?.name || '-';
 
@@ -48,22 +76,22 @@ export const ItemHistoryModal: React.FC<ItemHistoryModalProps> = ({
     const totalIn  = history.filter(m => m.type === MovementType.PURCHASE || m.type === MovementType.CHECK_IN).reduce((acc, m) => acc + m.quantity, 0);
     const totalOut = history.filter(m => m.type === MovementType.CHECK_OUT || m.type === MovementType.WASTE).reduce((acc, m) => acc + m.quantity, 0);
 
-    const handleReturn = () => {
-        if (!activeLoan || !onReturnItem) return;
-        onReturnItem(activeLoan.id);
+    const handleReturn = (loan: Movement) => {
+        if (!onReturnItem) return;
+        onReturnItem(loan.id);
         setActiveAction(null);
     };
 
-    const handleTransfer = () => {
-        if (!activeLoan || !onTransferLoan || !selectedPersonId) return;
-        onTransferLoan(activeLoan.id, selectedPersonId);
+    const handleTransfer = (loan: Movement) => {
+        if (!onTransferLoan || !selectedPersonId) return;
+        onTransferLoan(loan.id, selectedPersonId);
         setActiveAction(null);
         setSelectedPersonId('');
     };
 
-    const handleProject = () => {
-        if (!activeLoan || !onAssignProject || !selectedProjectId) return;
-        onAssignProject(activeLoan.id, selectedProjectId);
+    const handleProject = (loan: Movement) => {
+        if (!onAssignProject || !selectedProjectId) return;
+        onAssignProject(loan.id, selectedProjectId);
         setActiveAction(null);
         setSelectedProjectId('');
     };
@@ -85,75 +113,118 @@ export const ItemHistoryModal: React.FC<ItemHistoryModalProps> = ({
                     <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><XIcon className="w-6 h-6" /></button>
                 </div>
 
-                {/* Active loan action panel */}
-                {activeLoan && onReturnItem && (
+                {/* Préstamos activos — uno por tenedor */}
+                {activeLoans.length > 0 && onReturnItem && (
                     <div className="mb-4 bg-indigo-50 border border-indigo-200 rounded-xl p-3">
                         <p className="text-xs font-black text-indigo-700 mb-2">
-                            ⚡ Préstamo activo — {loanPerson?.name ?? 'Sin asignar'} tiene esta herramienta
+                            {activeLoans.length === 1
+                                ? `⚡ Préstamo activo — ${unidadesFuera} unidad(es) ${esHerramienta ? 'fuera de bodega' : 'entregadas y sin devolver'}`
+                                : `⚡ ${activeLoans.length} préstamos activos — ${unidadesFuera} unidad(es) repartidas entre ${activeLoans.length} personas`}
                         </p>
 
-                        {!activeAction ? (
-                            <div className="flex gap-2 flex-wrap">
-                                <button
-                                    onClick={handleReturn}
-                                    className="flex-1 min-w-[100px] py-2 bg-green-600 hover:bg-green-700 text-white text-xs font-black rounded-xl transition-all"
-                                >
-                                    ✓ Devolver
-                                </button>
-                                {onTransferLoan && (
-                                    <button
-                                        onClick={() => setActiveAction('transfer')}
-                                        className="flex-1 min-w-[100px] py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl transition-all"
-                                    >
-                                        👤 Reasignar
-                                    </button>
-                                )}
-                                {onAssignProject && activeProjects.length > 0 && (
-                                    <button
-                                        onClick={() => setActiveAction('project')}
-                                        className="flex-1 min-w-[100px] py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-black rounded-xl transition-all"
-                                    >
-                                        📁 Proyecto
-                                    </button>
-                                )}
-                            </div>
-                        ) : activeAction === 'transfer' ? (
-                            <div className="flex gap-2 items-center flex-wrap">
-                                <select
-                                    value={selectedPersonId}
-                                    onChange={e => setSelectedPersonId(e.target.value)}
-                                    className="flex-1 min-w-0 text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
-                                >
-                                    <option value="">— Selecciona trabajador —</option>
-                                    {personnel.filter(p => p.id !== activeLoan.personnelId).map(p => (
-                                        <option key={p.id} value={p.id}>{p.name}</option>
-                                    ))}
-                                </select>
-                                <button onClick={handleTransfer} disabled={!selectedPersonId}
-                                    className="flex-shrink-0 py-2 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-xs font-black rounded-xl transition-all">
-                                    Confirmar
-                                </button>
-                                <button onClick={cancelAction} className="flex-shrink-0 py-2 px-3 bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-black rounded-xl transition-all">✕</button>
-                            </div>
-                        ) : (
-                            <div className="flex gap-2 items-center flex-wrap">
-                                <select
-                                    value={selectedProjectId}
-                                    onChange={e => setSelectedProjectId(e.target.value)}
-                                    className="flex-1 min-w-0 text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-400"
-                                >
-                                    <option value="">— Selecciona proyecto —</option>
-                                    {activeProjects.map(p => (
-                                        <option key={p.id} value={p.id}>{p.name}</option>
-                                    ))}
-                                </select>
-                                <button onClick={handleProject} disabled={!selectedProjectId}
-                                    className="flex-shrink-0 py-2 px-4 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white text-xs font-black rounded-xl transition-all">
-                                    Confirmar
-                                </button>
-                                <button onClick={cancelAction} className="flex-shrink-0 py-2 px-3 bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-black rounded-xl transition-all">✕</button>
-                            </div>
-                        )}
+                        <div className="space-y-2">
+                            {activeLoans.map(loan => {
+                                const person = loan.personnelId ? personnel.find(p => p.id === loan.personnelId) : null;
+                                const open = activeAction?.movId === loan.id ? activeAction.kind : null;
+                                return (
+                                    <div key={loan.id} className="bg-white border border-indigo-100 rounded-lg p-2">
+                                        <p className="text-xs font-bold text-gray-700 mb-2">
+                                            {person?.name ?? 'Sin asignar'}
+                                            <span className="ml-2 font-black text-indigo-600">×{loan.quantity}</span>
+                                            <span className="ml-2 font-normal text-gray-400">{daysSince(loan.timestamp)}d</span>
+                                            {!esHerramienta && (
+                                                <span className="ml-2 text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">
+                                                    marcado como préstamo
+                                                </span>
+                                            )}
+                                        </p>
+
+                                        {!open ? (
+                                            <div className="flex gap-2 flex-wrap">
+                                                <button
+                                                    onClick={() => handleReturn(loan)}
+                                                    className="flex-1 min-w-[100px] py-2 bg-green-600 hover:bg-green-700 text-white text-xs font-black rounded-xl transition-all"
+                                                >
+                                                    ✓ Devolver
+                                                </button>
+                                                {onTransferLoan && (
+                                                    <button
+                                                        onClick={() => setActiveAction({ movId: loan.id, kind: 'transfer' })}
+                                                        className="flex-1 min-w-[100px] py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl transition-all"
+                                                    >
+                                                        👤 Reasignar
+                                                    </button>
+                                                )}
+                                                {onAssignProject && activeProjects.length > 0 && (
+                                                    <button
+                                                        onClick={() => setActiveAction({ movId: loan.id, kind: 'project' })}
+                                                        className="flex-1 min-w-[100px] py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-black rounded-xl transition-all"
+                                                    >
+                                                        📁 Proyecto
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ) : open === 'transfer' ? (
+                                            <div className="flex gap-2 items-center flex-wrap">
+                                                <select
+                                                    value={selectedPersonId}
+                                                    onChange={e => setSelectedPersonId(e.target.value)}
+                                                    className="flex-1 min-w-0 text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                                                >
+                                                    <option value="">— Selecciona trabajador —</option>
+                                                    {personnel.filter(p => p.id !== loan.personnelId).map(p => (
+                                                        <option key={p.id} value={p.id}>{p.name}</option>
+                                                    ))}
+                                                </select>
+                                                <button onClick={() => handleTransfer(loan)} disabled={!selectedPersonId}
+                                                    className="flex-shrink-0 py-2 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-xs font-black rounded-xl transition-all">
+                                                    Confirmar
+                                                </button>
+                                                <button onClick={cancelAction} className="flex-shrink-0 py-2 px-3 bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-black rounded-xl transition-all">✕</button>
+                                            </div>
+                                        ) : (
+                                            <div className="flex gap-2 items-center flex-wrap">
+                                                <select
+                                                    value={selectedProjectId}
+                                                    onChange={e => setSelectedProjectId(e.target.value)}
+                                                    className="flex-1 min-w-0 text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                                                >
+                                                    <option value="">— Selecciona proyecto —</option>
+                                                    {activeProjects.map(p => (
+                                                        <option key={p.id} value={p.id}>{p.name}</option>
+                                                    ))}
+                                                </select>
+                                                <button onClick={() => handleProject(loan)} disabled={!selectedProjectId}
+                                                    className="flex-shrink-0 py-2 px-4 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white text-xs font-black rounded-xl transition-all">
+                                                    Confirmar
+                                                </button>
+                                                <button onClick={cancelAction} className="flex-shrink-0 py-2 px-3 bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-black rounded-xl transition-all">✕</button>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
+                {/* Consumible: no hay nada que reclamar, pero sí hay gasto que analizar */}
+                {consumos.length > 0 && (
+                    <div className="mb-4 bg-emerald-50 border border-emerald-200 rounded-xl p-3">
+                        <p className="text-xs font-black text-emerald-700 mb-2">
+                            📦 Consumido — {consumos.reduce((s, c) => s + c.unidades, 0)} {item.unit} en total
+                        </p>
+                        <div className="space-y-1">
+                            {consumos.map(c => (
+                                <div key={c.nombre} className="flex items-center justify-between bg-white border border-emerald-100 rounded-lg px-2 py-1.5">
+                                    <span className="text-xs font-bold text-gray-700 truncate">{c.nombre}</span>
+                                    <span className="text-xs text-gray-400 flex-shrink-0 ml-2">
+                                        <span className="font-black text-emerald-600">×{c.unidades}</span>
+                                        <span className="ml-2">último: {c.ultima.toLocaleDateString('es-CO')}</span>
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 )}
 

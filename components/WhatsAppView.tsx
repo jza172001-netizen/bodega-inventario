@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Movement, Item, Personnel, InventoryType } from '../types';
+import { Movement, Item, Personnel, InventoryType, MovementType } from '../types';
 import {
     ReminderLog,
+    ReminderKind,
     loadReminderLog,
     recordReminders,
     isDueForReminder,
@@ -11,6 +12,7 @@ import {
     daysSince,
     REMINDER_INTERVAL_DAYS,
 } from '../services/whatsappService';
+import { isConsumable, CONSUMABLE_TYPES } from '../utils/inventory';
 
 interface Props {
     movements: Movement[];
@@ -23,9 +25,19 @@ interface Props {
 interface PersonGroup {
     person: Personnel;
     loans: Movement[];
+    /** Consumo reciente de EPP/material. Sin esto, los botones 🦺 EPP y 📦
+     *  Consumibles nacían en (0): la lista se armaba solo desde préstamos
+     *  activos, y un consumible nunca es préstamo. */
+    consumos: Movement[];
     hasPhone: boolean;
     isDue: boolean;
 }
+
+/** Ventana de consumo. Más larga que la de préstamos porque el gasto se
+ *  analiza por acumulado, no por mora. */
+const CONSUMO_WINDOW_DAYS = 30;
+
+const isConsumableCat = (catKey: string): boolean => CONSUMABLE_TYPES.has(catKey as InventoryType);
 
 type WeeklyLog = {
     week: string;
@@ -33,8 +45,17 @@ type WeeklyLog = {
 };
 
 const WEEKLY_LOG_KEY = 'wa_weekly_v1';
-const QUEUE_KEY      = 'wa_remind_queue_v1';
-const STEP_KEY       = 'wa_remind_step_v1';
+// v2: la cola ahora recuerda también qué tipo de mensaje se está enviando, para
+// que al volver de WhatsApp el siguiente de la fila reciba el mismo mensaje.
+const QUEUE_KEY      = 'wa_remind_queue_v2';
+const STEP_KEY       = 'wa_remind_step_v2';
+
+interface RemindQueue {
+    batch: PersonGroup[];
+    kind: ReminderKind;
+    windowDays: number;
+    label: string;
+}
 
 const getWeekKey = (): string => {
     const d = new Date();
@@ -65,7 +86,7 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
     const [weeklyLog, setWeeklyLog] = useState<WeeklyLog>(loadWeeklyLog);
     const bottomRef = useRef<HTMLDivElement>(null);
 
-    const [queue, setQueue] = useState<PersonGroup[] | null>(() => {
+    const [queue, setQueue] = useState<RemindQueue | null>(() => {
         try { const s = sessionStorage.getItem(QUEUE_KEY); return s ? JSON.parse(s) : null; } catch { return null; }
     });
     const [step, setStep] = useState<number>(() => {
@@ -85,16 +106,28 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
     const itemMap = new Map(items.map(i => [i.id, i]));
     const activeLoans = movements.filter(m => m.isLoan && !m.isReturned);
 
+    const consumoCutoff = new Date(Date.now() - CONSUMO_WINDOW_DAYS * 86400000);
+    const recentConsumos = movements.filter(m =>
+        m.type === MovementType.CHECK_OUT &&
+        !m.isLoan &&
+        new Date(m.timestamp) > consumoCutoff &&
+        isConsumable(itemMap.get(m.itemId))
+    );
+
+    // Una persona entra a la lista si tiene algo pendiente O si consumió algo
+    // hace poco: las dos cosas ameritan un mensaje, aunque sean mensajes distintos.
     const groups: PersonGroup[] = [];
     const seen = new Set<string>();
-    for (const loan of activeLoans) {
-        const person = personnel.find(p => p.id === loan.personnelId);
+    for (const mov of [...activeLoans, ...recentConsumos]) {
+        const person = personnel.find(p => p.id === mov.personnelId);
         if (!person || seen.has(person.id)) continue;
         seen.add(person.id);
         const personLoans = activeLoans.filter(m => m.personnelId === person.id);
+        const personConsumos = recentConsumos.filter(m => m.personnelId === person.id);
         const hasPhone = !!person.phone;
+        // La mora aplica solo a préstamos: un consumible ya se gastó, no está vencido.
         const isDue = hasPhone && personLoans.some(m => isDueForReminder(m.id, m.timestamp, log));
-        groups.push({ person, loans: personLoans, hasPhone, isDue });
+        groups.push({ person, loans: personLoans, consumos: personConsumos, hasPhone, isDue });
     }
     groups.sort((a, b) => a.person.name.localeCompare(b.person.name, 'es'));
 
@@ -102,26 +135,16 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
     const onTrackGroups = groups.filter(g => g.hasPhone && !g.isDue);
     const noPhoneGroups = groups.filter(g => !g.hasPhone);
 
-    const remind = (g: PersonGroup) => {
-        if (!g.person.phone) return;
-        const grps = buildPersonGroups(g.person, movements, items, 7);
-        window.open(buildPersonReminderUrl(g.person.phone, g.person.name, grps), '_blank');
-        const newLog = recordReminders(g.loans.map(m => m.id));
-        setLog({ ...newLog });
-    };
-
-    const remindMonthly = (g: PersonGroup) => {
-        if (!g.person.phone) return;
-        const grps = buildPersonGroups(g.person, movements, items, 30);
-        window.open(buildPersonReminderUrl(g.person.phone, g.person.name, grps), '_blank');
-        const newLog = recordReminders(g.loans.map(m => m.id));
-        setLog({ ...newLog });
-    };
-
-    // Mark a person in the weekly log for all their loan categories
-    const markSentInLog = (g: PersonGroup, currentLog: WeeklyLog): WeeklyLog => {
+    // Marca a la persona en el registro semanal. Solo las categorías del tipo de
+    // mensaje que se envió: mandar el reporte de consumo no debe dar por
+    // recordadas las herramientas.
+    const markSentInLog = (g: PersonGroup, currentLog: WeeklyLog, kind: ReminderKind): WeeklyLog => {
         const newWL: WeeklyLog = { week: currentLog.week, sent: { ...currentLog.sent } };
-        for (const m of g.loans) {
+        const covered: Movement[] = [
+            ...(kind === 'loan'    || kind === 'all' ? g.loans    : []),
+            ...(kind === 'consumo' || kind === 'all' ? g.consumos : []),
+        ];
+        for (const m of covered) {
             const catKey = itemMap.get(m.itemId)?.inventoryType;
             if (!catKey) continue;
             const existing = newWL.sent[catKey] ?? [];
@@ -136,60 +159,91 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
         setWeeklyLog(updated);
     };
 
+    /**
+     * Abre WhatsApp con el mensaje del tipo pedido. Devuelve false si no había
+     * nada que reportar, para no abrir un chat en blanco.
+     * Registra en los dos logs: el de 8 días (por movimiento) y el semanal (por
+     * categoría). Antes el semanal solo se escribía desde la cola, así que los
+     * botones individuales "Semana"/"Mes" no dejaban rastro y el ✓ nunca aparecía.
+     */
+    const remind = (g: PersonGroup, windowDays = 7, kind: ReminderKind = 'all'): boolean => {
+        if (!g.person.phone) return false;
+        const grps = buildPersonGroups(g.person, movements, items, windowDays, kind);
+        if (grps.every(x => x.items.length === 0)) return false;
+
+        window.open(buildPersonReminderUrl(g.person.phone, g.person.name, grps, kind), '_blank');
+
+        const covered = kind === 'consumo' ? [] : g.loans;
+        if (covered.length > 0) setLog({ ...recordReminders(covered.map(m => m.id)) });
+        saveWeekly(markSentInLog(g, weeklyLog, kind));
+        return true;
+    };
+
+    const remindMonthly = (g: PersonGroup) => remind(g, 30, 'all');
+
     // ── Due-queue (Recordar a todos) ──────────────────────────────────────
     const startRemindAll = () => {
         if (dueGroups.length === 0) return;
-        const frozen = [...dueGroups];
-        setQueue(frozen);
-        setStep(0);
-        remind(frozen[0]);
-        onBehaviorLog?.('ACTION', `Inició cola "Recordar a todos" (${frozen.length} personas)`);
+        startBatchQueue([...dueGroups], 'Recordar a todos', 'loan', 7);
     };
 
     // ── Batch queue — shared for category + general ───────────────────────
-    const startBatchQueue = (batch: PersonGroup[], label: string) => {
+    const startBatchQueue = (batch: PersonGroup[], label: string, kind: ReminderKind, windowDays: number) => {
         if (batch.length === 0) return;
-        setQueue(batch);
+        setQueue({ batch, kind, windowDays, label });
         setStep(0);
-        remind(batch[0]);
+        remind(batch[0], windowDays, kind);
         onBehaviorLog?.('ACTION', `Inició cola ${label}: ${batch[0].person.name} (1/${batch.length})`);
     };
 
     const remindCategory = (catKey: string) => {
-        const batch = groups.filter(g => g.hasPhone && g.loans.some(m => itemMap.get(m.itemId)?.inventoryType === catKey));
-        startBatchQueue(batch, `categoría ${catKey}`);
+        const esConsumo = isConsumableCat(catKey);
+        const kind: ReminderKind = esConsumo ? 'consumo' : 'loan';
+        const windowDays = esConsumo ? CONSUMO_WINDOW_DAYS : 7;
+        // Excluye a quien ya recibió esta categoría esta semana. El ✓ era
+        // informativo y el lote se rearmaba completo, así que la misma persona
+        // podía recibir el mismo mensaje varias veces.
+        const yaEnviado = weeklyLog.sent[catKey] ?? [];
+        const batch = getGroupsForCategory(catKey).filter(g => !yaEnviado.includes(g.person.id));
+        if (batch.length === 0) {
+            const total = getGroupsForCategory(catKey).length;
+            if (total > 0) alert(`Ya le enviaste esta categoría a las ${total} persona(s) esta semana.\n\nPara reenviar, usa el botón individual de cada tarjeta.`);
+            return;
+        }
+        startBatchQueue(batch, `categoría ${catKey}`, kind, windowDays);
     };
 
     const remindGeneralWeekly = () => {
-        const batch = groups.filter(g => g.hasPhone);
-        startBatchQueue(batch, 'General');
+        const allSent = new Set(Object.values(weeklyLog.sent).flat());
+        const batch = groups.filter(g => g.hasPhone && !allSent.has(g.person.id));
+        if (batch.length === 0) {
+            alert('Ya le enviaste a todas las personas con número esta semana.\n\nPara reenviar, usa el botón individual de cada tarjeta.');
+            return;
+        }
+        startBatchQueue(batch, 'General', 'all', 7);
     };
 
     // ── Advance queue step ────────────────────────────────────────────────
     const nextStep = () => {
         if (!queue) return;
-        // Mark the just-sent person in weekly log
-        const justSent = queue[step];
-        if (justSent) {
-            const updated = markSentInLog(justSent, weeklyLog);
-            saveWeekly(updated);
-        }
         const next = step + 1;
-        if (next >= queue.length) {
+        if (next >= queue.batch.length) {
             setQueue(null);
             setStep(0);
             return;
         }
         setStep(next);
-        remind(queue[next]);
+        remind(queue.batch[next], queue.windowDays, queue.kind);
         // Scroll so the next person's card is visible
         setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }), 150);
-        onBehaviorLog?.('ACTION', `Cola paso ${next + 1}/${queue.length}: ${queue[next].person.name}`);
+        onBehaviorLog?.('ACTION', `Cola paso ${next + 1}/${queue.batch.length}: ${queue.batch[next].person.name}`);
     };
 
     // ── Category helpers ──────────────────────────────────────────────────
+    // Para herramienta se mira lo prestado; para EPP/consumible, lo consumido.
     const getGroupsForCategory = (catKey: string) =>
-        groups.filter(g => g.hasPhone && g.loans.some(m => itemMap.get(m.itemId)?.inventoryType === catKey));
+        groups.filter(g => g.hasPhone && (isConsumableCat(catKey) ? g.consumos : g.loans)
+            .some(m => itemMap.get(m.itemId)?.inventoryType === catKey));
 
     const isCategoryDone = (catKey: string): boolean => {
         const cat = getGroupsForCategory(catKey);
@@ -230,8 +284,13 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
     };
 
     const PersonCard: React.FC<{ g: PersonGroup; highlight?: boolean }> = ({ g, highlight }) => {
-        const maxDays = Math.max(...g.loans.map(m => daysSince(m.timestamp)));
-        const itemNames = g.loans.map(m => itemMap.get(m.itemId)?.name ?? '—').join(', ');
+        // Una persona puede estar en la lista solo por consumo, sin préstamos:
+        // Math.max() de un arreglo vacío da -Infinity.
+        const maxDays = g.loans.length > 0 ? Math.max(...g.loans.map(m => daysSince(m.timestamp))) : 0;
+        const unidadesConsumidas = g.consumos.reduce((s, m) => s + m.quantity, 0);
+        const itemNames = g.loans.length > 0
+            ? g.loans.map(m => itemMap.get(m.itemId)?.name ?? '—').join(', ')
+            : `${unidadesConsumidas} ud consumidas · sin préstamos`;
         const lastRemindedTs = g.loans.map(m => log[m.id]).filter(Boolean).sort().reverse()[0];
         const daysSinceReminder = lastRemindedTs ? daysSince(lastRemindedTs) : null;
 
@@ -251,9 +310,14 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
                     </div>
                     <p className="text-xs text-gray-500 truncate mt-0.5">{itemNames}</p>
                     <div className="flex items-center gap-2 flex-wrap mt-0.5">
-                        <span className={`text-[10px] font-semibold ${maxDays > 14 ? 'text-red-500' : maxDays > 7 ? 'text-yellow-600' : 'text-gray-400'}`}>
-                            {maxDays}d fuera
-                        </span>
+                        {g.loans.length > 0 && (
+                            <span className={`text-[10px] font-semibold ${maxDays > 14 ? 'text-red-500' : maxDays > 7 ? 'text-yellow-600' : 'text-gray-400'}`}>
+                                {maxDays}d fuera
+                            </span>
+                        )}
+                        {unidadesConsumidas > 0 && g.loans.length > 0 && (
+                            <span className="text-[10px] font-semibold text-emerald-600">• {unidadesConsumidas} ud consumidas</span>
+                        )}
                         {g.person.phone && <span className="text-[10px] text-gray-400">{g.person.phone}</span>}
                         {daysSinceReminder !== null && (
                             <span className="text-[10px] text-green-600">• recordado hace {daysSinceReminder}d</span>
@@ -294,14 +358,14 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
             {queue && (
                 <div className="sticky top-0 z-20 bg-green-600 text-white px-4 py-3 rounded-2xl flex items-center justify-between gap-3 shadow-lg mb-3">
                     <div>
-                        <p className="font-black text-sm">Paso {step + 1} de {queue.length} — {queue[step]?.person.name}</p>
+                        <p className="font-black text-sm">Paso {step + 1} de {queue.batch.length} — {queue.batch[step]?.person.name}</p>
                         <p className="text-xs text-green-100">WhatsApp abierto → toca Enviar → vuelve aquí</p>
                     </div>
                     <button
                         onClick={nextStep}
                         className="flex-shrink-0 px-4 py-2 bg-white text-green-700 font-black text-xs rounded-xl hover:bg-green-50 transition-colors"
                     >
-                        {step < queue.length - 1 ? 'Siguiente →' : '✓ Listo'}
+                        {step < queue.batch.length - 1 ? 'Siguiente →' : '✓ Listo'}
                     </button>
                 </div>
             )}
@@ -396,7 +460,7 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
                                     <PersonCard
                                         key={g.person.id}
                                         g={g}
-                                        highlight={!!queue && queue[step]?.person.id === g.person.id}
+                                        highlight={!!queue && queue.batch[step]?.person.id === g.person.id}
                                     />
                                 )))}
                             </div>
@@ -421,7 +485,7 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
                                     <PersonCard
                                         key={g.person.id}
                                         g={g}
-                                        highlight={!!queue && queue[step]?.person.id === g.person.id}
+                                        highlight={!!queue && queue.batch[step]?.person.id === g.person.id}
                                     />
                                 )))}
                             </div>
