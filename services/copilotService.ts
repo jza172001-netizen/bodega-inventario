@@ -1,5 +1,6 @@
 // copilotService.ts
 import { Item, Movement, InventoryType, MovementType, Personnel, PurchaseOrder, PurchaseOrderStatus, Project } from '../types';
+import { rankMatches } from '../utils/search';
 
 export interface CopilotMessage { role: 'user' | 'assistant'; content: string; timestamp: Date; }
 export interface WarehouseContext { items: Item[]; movements: Movement[]; personnel: Personnel[]; purchaseOrders: PurchaseOrder[]; }
@@ -197,9 +198,13 @@ function fuzzyMatchList<T extends { name: string }>(query: string, list: T[]): {
     const q = normalize(query);
     const exact = list.find(x => normalize(x.name) === q);
     if (exact) return { matched: exact, candidates: [] };
-    const hits = list.filter(x => normalize(x.name).includes(q) || q.includes(normalize(x.name)));
+    // Antes solo `includes`, exacto: un nombre con una letra cambiada ("hektor")
+    // no encontraba a nadie. Se usa el mismo motor del buscador global, para que
+    // las dos superficies se comporten igual — y ORDENADO, porque si el copiloto
+    // ofrece tres opciones, la correcta tiene que salir de primera.
+    const hits = rankMatches(list, query, x => [x.name], 3).map(r => r.value);
     if (hits.length === 1) return { matched: hits[0], candidates: [] };
-    if (hits.length > 1) return { matched: null, candidates: hits.slice(0, 3) };
+    if (hits.length > 1) return { matched: null, candidates: hits };
     return { matched: null, candidates: [] };
 }
 
