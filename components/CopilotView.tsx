@@ -9,7 +9,9 @@ interface CopilotViewProps {
     personnel: Personnel[];
     purchaseOrders: PurchaseOrder[];
     projects: Project[];
-    onLogMovements: (movements: Array<Omit<Movement, 'id'>>) => void;
+    /** Devuelve cuántos quedaron realmente registrados: la app puede rechazar
+     *  una salida por stock insuficiente. */
+    onLogMovements: (movements: Array<Omit<Movement, 'id'>>) => number;
     onCreateItem: (item: Omit<Item, 'id'>) => Item;
     onCreateProject: (project: Omit<Project, 'id'>) => Project;
     onCreatePersonnel: (person: Omit<Personnel, 'id'>) => Personnel;
@@ -131,10 +133,16 @@ const CopilotView: React.FC<CopilotViewProps> = ({
             isLoan: LOAN_TYPES.has(items.find(i => i.id === itemId)?.inventoryType ?? InventoryType.HAND_TOOL),
             isReturned: false,
         }));
-        onLogMovements(movs);
+        const ok = onLogMovements(movs);
         const workerName = sortedPersonnel.find(p => p.id === loanPersonnelId)?.name ?? 'trabajador';
         const itemNames = [...loanSelected.keys()].map(id => items.find(i => i.id === id)?.name ?? id);
-        addBot(`✅ Préstamo registrado para **${workerName}**: ${itemNames.join(', ')}.`);
+        if (ok === 0) {
+            addBot(`❌ No se registró nada: la bodega rechazó ${movs.length === 1 ? 'el movimiento' : `los ${movs.length} movimientos`} por falta de stock.`);
+        } else if (ok < movs.length) {
+            addBot(`⚠️ Solo ${ok} de ${movs.length} quedaron registrados para **${workerName}**. El resto se rechazó por falta de stock.`);
+        } else {
+            addBot(`✅ Préstamo registrado para **${workerName}**: ${itemNames.join(', ')}.`);
+        }
         closePanel();
     };
 
@@ -231,9 +239,15 @@ const CopilotView: React.FC<CopilotViewProps> = ({
             return { itemId: item.id, type: MovementType.CHECK_OUT, quantity: pm.quantity, timestamp: new Date(), personnelId: exit.matchedPersonnel?.id, projectId: exit.matchedProject?.id, notes: '', isLoan: LOAN_TYPES.has(item.inventoryType), isReturned: false };
         }).filter(Boolean) as Array<Omit<Movement, 'id'>>;
         if (!toLog.length) { addBot('No hay materiales confirmados para registrar.'); return; }
-        onLogMovements(toLog);
+        const ok = onLogMovements(toLog);
         setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, confirmed: true } : m));
-        addBot(`✅ ${toLog.length} salida(s) registradas correctamente.`);
+        if (ok === 0) {
+            addBot(`❌ No se registró ninguna salida: la bodega rechazó las ${toLog.length} por falta de stock.`);
+        } else if (ok < toLog.length) {
+            addBot(`⚠️ Solo ${ok} de ${toLog.length} salida(s) quedaron registradas. El resto se rechazó por falta de stock.`);
+        } else {
+            addBot(`✅ ${ok} salida(s) registradas correctamente.`);
+        }
     };
 
     const handleCancelExit = (msgId: string) => {
