@@ -6,17 +6,31 @@ export const getGenus = (name: string): string =>
 export const normStr = (s: string): string =>
     s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 
-const editDistance = (a: string, b: string): number => {
+/**
+ * Distancia de edición Damerau-Levenshtein: cuántos errores separan dos palabras.
+ *
+ * A diferencia del Levenshtein clásico, cuenta el CAMBIO DE PUESTO de dos letras
+ * vecinas como UN error, no dos. Para un dedo en un teclado, "amrtillo" es un
+ * solo resbalón sobre "martillo"; sin esta regla el buscador lo veía tan lejos
+ * como si fueran dos errores distintos y no lo sugería.
+ */
+export const editDistance = (a: string, b: string): number => {
     if (a === b) return 0;
     if (a.length > 40 || b.length > 40) return Math.abs(a.length - b.length);
     const dp: number[][] = Array.from({ length: a.length + 1 }, (_, i) =>
         Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
     );
-    for (let i = 1; i <= a.length; i++)
-        for (let j = 1; j <= b.length; j++)
+    for (let i = 1; i <= a.length; i++) {
+        for (let j = 1; j <= b.length; j++) {
             dp[i][j] = a[i - 1] === b[j - 1]
                 ? dp[i - 1][j - 1]
                 : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+            // Transposición: "ab" ↔ "ba" cuesta 1, no 2.
+            if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+                dp[i][j] = Math.min(dp[i][j], dp[i - 2][j - 2] + 1);
+            }
+        }
+    }
     return dp[a.length][b.length];
 };
 
