@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { Movement, Item, Personnel, Project, InventoryType, ReturnCondition, UserRole } from '../types';
-import { buildConsolidatedPickupUrl } from '../services/whatsappService';
+import { buildConsolidatedPickupUrl, buildConsolidatedPickupText } from '../services/whatsappService';
 import { ReturnToolModal } from './ReturnToolModal';
 import { ConfirmDialog } from './ConfirmDialog';
 
@@ -83,6 +83,8 @@ export const PickupView: React.FC<Props> = ({
         return buildConsolidatedPickupUrl(pendingItems, selectedRecipient.phone, selectedRecipient.name);
     }, [pendingItems, selectedRecipient, pending.length]);
 
+    const [confirmandoAviso, setConfirmandoAviso] = useState(false);
+
     const getDays = (ts: Date | string) =>
         Math.ceil(Math.abs(Date.now() - new Date(ts).getTime()) / 86400000);
 
@@ -127,14 +129,10 @@ export const PickupView: React.FC<Props> = ({
                             ))
                         }
                     </select>
-                    <a
-                        href={waUrl ?? '#'}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={e => {
-                            if (!waUrl) { e.preventDefault(); return; }
-                            onAuditLog?.('PICKUP_NOTIFIED', `Avisó a ${selectedRecipient?.name} para recoger ${pending.length} herramienta(s)`);
-                        }}
+                    <button
+                        type="button"
+                        disabled={!waUrl}
+                        onClick={() => setConfirmandoAviso(true)}
                         className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-black text-sm transition-all w-full ${
                             waUrl
                                 ? 'bg-green-600 hover:bg-green-700 text-white shadow-sm'
@@ -142,7 +140,7 @@ export const PickupView: React.FC<Props> = ({
                         }`}
                     >
                         📲 {selectedRecipient ? `Avisar a ${selectedRecipient.name.split(' ')[0]}` : 'Selecciona un trabajador'}
-                    </a>
+                    </button>
                 </div>
             </div>
 
@@ -227,6 +225,21 @@ export const PickupView: React.FC<Props> = ({
                     />
                 );
             })()}
+            {confirmandoAviso && selectedRecipient && waUrl && (
+                <ConfirmDialog
+                    title={`Avisar a ${selectedRecipient.name}`}
+                    message={`Se le va a enviar al ${selectedRecipient.phone}\n\nEsto es lo que va a recibir:\n────────────────\n${buildConsolidatedPickupText(pendingItems, selectedRecipient.name)}`}
+                    confirmLabel="Sí, enviar"
+                    onConfirm={() => {
+                        // Dentro del clic de confirmar: fuera de un gesto del usuario el
+                        // navegador bloquearía la ventana en silencio.
+                        onAuditLog?.('PICKUP_NOTIFIED', `Avisó a ${selectedRecipient.name} para recoger ${pending.length} herramienta(s)`);
+                        window.open(waUrl, '_blank', 'noopener,noreferrer');
+                    }}
+                    onClose={() => setConfirmandoAviso(false)}
+                />
+            )}
+
             {cancelingPickup && (
                 <ConfirmDialog
                     title="Cancelar recogida"

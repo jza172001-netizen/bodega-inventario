@@ -9,10 +9,12 @@ import {
     isDueForReminder,
     buildPersonGroups,
     buildPersonReminderUrl,
+    buildPersonReminderText,
     daysSince,
     REMINDER_INTERVAL_DAYS,
 } from '../services/whatsappService';
 import { isConsumable, CONSUMABLE_TYPES } from '../utils/inventory';
+import { ConfirmDialog } from './ConfirmDialog';
 
 interface Props {
     movements: Movement[];
@@ -105,6 +107,13 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
         }
     }, [queue, step]);
 
+    /**
+     * Lo que está esperando confirmación. Mandar un WhatsApp sale de la app y no
+     * se puede deshacer: es de las pocas acciones de la bodega con esa
+     * característica, y era la única sin confirmar.
+     */
+    const [porConfirmar, setPorConfirmar] = useState<{ titulo: string; mensaje: string; hacer: () => void } | null>(null);
+
     const itemMap = new Map(items.map(i => [i.id, i]));
     const activeLoans = movements.filter(m => m.isLoan && !m.isReturned);
 
@@ -185,10 +194,39 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
 
     const remindMonthly = (g: PersonGroup) => remind(g, 30, 'all');
 
+    /** Pide confirmación mostrando el mensaje exacto que va a recibir la persona. */
+    const confirmarEnvio = (g: PersonGroup, windowDays: number, kind: ReminderKind) => {
+        if (!g.person.phone) return;
+        const grps = buildPersonGroups(g.person, movements, items, windowDays, kind);
+        const texto = buildPersonReminderText(g.person.name, grps, kind);
+        if (!texto) { alert(`No hay nada que reportarle a ${g.person.name} en esta ventana.`); return; }
+        setPorConfirmar({
+            titulo: `Enviar WhatsApp a ${g.person.name}`,
+            mensaje: `Se le va a enviar al ${g.person.phone}\n\nEsto es lo que va a recibir:\n────────────────\n${texto}`,
+            // La apertura ocurre DENTRO del clic de confirmar: los navegadores solo
+            // permiten abrir una ventana dentro de un gesto real del usuario, y si
+            // esto quedara detrás de una promesa el celular lo bloquearía en silencio.
+            hacer: () => { remind(g, windowDays, kind); },
+        });
+    };
+
+    /** Confirma un lote: se listan los nombres, no los mensajes completos — con
+     *  ocho personas la pantalla se vuelve ilegible y la confirmación deja de
+     *  cumplir su función. */
+    const confirmarLote = (batch: PersonGroup[], label: string, kind: ReminderKind, windowDays: number) => {
+        if (batch.length === 0) return;
+        const queReporta = kind === 'consumo' ? 'Reporte de consumo' : kind === 'loan' ? 'Reporte de préstamos' : 'Reporte de préstamos y consumo';
+        setPorConfirmar({
+            titulo: `Enviar ${batch.length} mensaje(s)`,
+            mensaje: `Se van a enviar uno por uno, a:\n\n${batch.map(g => `• ${g.person.name}`).join('\n')}\n\n${queReporta} · ventana de ${windowDays} días`,
+            hacer: () => { startBatchQueue(batch, label, kind, windowDays); },
+        });
+    };
+
     // ── Due-queue (Recordar a todos) ──────────────────────────────────────
     const startRemindAll = () => {
         if (dueGroups.length === 0) return;
-        startBatchQueue([...dueGroups], 'Recordar a todos', 'loan', 7);
+        confirmarLote([...dueGroups], 'Recordar a todos', 'loan', 7);
     };
 
     // ── Batch queue — shared for category + general ───────────────────────
@@ -214,7 +252,7 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
             if (total > 0) alert(`Ya le enviaste esta categoría a las ${total} persona(s) esta semana.\n\nPara reenviar, usa el botón individual de cada tarjeta.`);
             return;
         }
-        startBatchQueue(batch, `categoría ${catKey}`, kind, windowDays);
+        confirmarLote(batch, `categoría ${catKey}`, kind, windowDays);
     };
 
     const remindGeneralWeekly = () => {
@@ -224,7 +262,7 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
             alert('Ya le enviaste a todas las personas con número esta semana.\n\nPara reenviar, usa el botón individual de cada tarjeta.');
             return;
         }
-        startBatchQueue(batch, 'General', 'all', 7);
+        confirmarLote(batch, 'General', 'all', 7);
     };
 
     // ── Advance queue step ────────────────────────────────────────────────
@@ -330,13 +368,13 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
                 </div>
                 {g.hasPhone ? (
                     <div className="flex flex-col gap-1 flex-shrink-0">
-                        <button onClick={() => { remind(g); onBehaviorLog?.('ACTION', `Recordatorio semana: ${g.person.name}`); }}
+                        <button onClick={() => { onBehaviorLog?.('BUTTON', `Pidió recordatorio semana: ${g.person.name}`); confirmarEnvio(g, 7, 'all'); }}
                             className={`flex items-center gap-1 px-3 py-2 text-xs font-black rounded-xl transition-all ${
                                 g.isDue ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-green-100 hover:bg-green-200 text-green-800'
                             }`}>
                             📲 Semana
                         </button>
-                        <button onClick={() => { remindMonthly(g); onBehaviorLog?.('ACTION', `Recordatorio mes: ${g.person.name}`); }}
+                        <button onClick={() => { onBehaviorLog?.('BUTTON', `Pidió recordatorio mes: ${g.person.name}`); confirmarEnvio(g, 30, 'all'); }}
                             className="flex items-center gap-1 px-3 py-2 text-xs font-black bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-xl transition-all">
                             📅 Mes
                         </button>
@@ -535,6 +573,15 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
                 </div>
             )}
             </div>
+            {porConfirmar && (
+                <ConfirmDialog
+                    title={porConfirmar.titulo}
+                    message={porConfirmar.mensaje}
+                    confirmLabel="Sí, enviar"
+                    onConfirm={porConfirmar.hacer}
+                    onClose={() => setPorConfirmar(null)}
+                />
+            )}
         </div>
     );
 };
