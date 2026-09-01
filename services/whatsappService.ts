@@ -128,44 +128,66 @@ const CLOSING: Record<ReminderKind, string> = {
 };
 
 /** Builds the wa.me URL for a person using categorized groups. */
+/**
+ * El texto exacto que va a recibir el trabajador.
+ *
+ * Está separado del constructor de la URL a propósito: la confirmación previa
+ * muestra ESTE mismo texto. Si el vistazo previo se armara aparte, tarde o
+ * temprano diría una cosa y se enviaría otra — y un preview que miente es peor
+ * que no mostrar nada.
+ *
+ * Devuelve null cuando no hay nada que reportar, para no abrir un chat en blanco.
+ */
+export const buildPersonReminderText = (
+    personName: string,
+    groups: ReminderGroup[],
+    kind: ReminderKind = 'all'
+): string | null => {
+    const nonempty = groups.filter(g => g.items.length > 0);
+    if (nonempty.length === 0) return null;
+    const body = nonempty
+        .map(g => `${g.emoji} *${g.label}:*\n${g.items.map(i => `• ${i}`).join('\n')}`)
+        .join('\n\n');
+    return `Hola ${personName} 👋, aquí tu resumen de la bodega de Grupo Montecielo:\n\n` +
+        `${body}\n\n` +
+        `${CLOSING[kind]}\n\n` +
+        `Gracias 🙏`;
+};
+
 export const buildPersonReminderUrl = (
     phone: string,
     personName: string,
     groups: ReminderGroup[],
     kind: ReminderKind = 'all'
 ): string => {
-    const nonempty = groups.filter(g => g.items.length > 0);
-    if (nonempty.length === 0) return `https://wa.me/${formatPhone(phone)}`;
-    const body = nonempty
-        .map(g => `${g.emoji} *${g.label}:*\n${g.items.map(i => `• ${i}`).join('\n')}`)
-        .join('\n\n');
-    const text = encodeURIComponent(
-        `Hola ${personName} 👋, aquí tu resumen de la bodega de Grupo Montecielo:\n\n` +
-        `${body}\n\n` +
-        `${CLOSING[kind]}\n\n` +
-        `Gracias 🙏`
-    );
-    return `https://wa.me/${formatPhone(phone)}?text=${text}`;
+    const text = buildPersonReminderText(personName, groups, kind);
+    if (!text) return `https://wa.me/${formatPhone(phone)}`;
+    return `https://wa.me/${formatPhone(phone)}?text=${encodeURIComponent(text)}`;
 };
 
 /** Mensaje consolidado con todos los ítems pendientes de recoger, enviado al destinatario elegido. */
-export const buildConsolidatedPickupUrl = (
+/** Mismo criterio que el de arriba: el texto se arma una sola vez y se usa
+ *  tanto para el vistazo previo como para el envío. */
+export const buildConsolidatedPickupText = (
     loans: { itemName: string; qty: number; workerName: string; projectName?: string }[],
-    recipientPhone: string,
     recipientName: string
 ): string => {
     const lines = loans.map(l => {
         const proj = l.projectName ? ` (${l.projectName})` : '';
         return `• ${l.itemName} x${l.qty} — con ${l.workerName}${proj}`;
     });
-    const text = encodeURIComponent(
-        `📍 *Herramientas a recoger — Bodega Grupo Montecielo*\n\n` +
+    return `📍 *Herramientas a recoger — Bodega Grupo Montecielo*\n\n` +
         `Hola ${recipientName} 👋, estas herramientas están pendientes de recogida:\n\n` +
         `${lines.join('\n')}\n\n` +
-        `Por favor pásalas a buscar cuando puedas. Gracias 🙏`
-    );
-    return `https://wa.me/${formatPhone(recipientPhone)}?text=${text}`;
+        `Por favor pásalas a buscar cuando puedas. Gracias 🙏`;
 };
+
+export const buildConsolidatedPickupUrl = (
+    loans: { itemName: string; qty: number; workerName: string; projectName?: string }[],
+    recipientPhone: string,
+    recipientName: string
+): string =>
+    `https://wa.me/${formatPhone(recipientPhone)}?text=${encodeURIComponent(buildConsolidatedPickupText(loans, recipientName))}`;
 
 export const buildTestReminderUrl = (): string => {
     const text = encodeURIComponent(
