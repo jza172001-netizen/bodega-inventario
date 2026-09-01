@@ -16,7 +16,7 @@
  * infiere: el bot puede no saber, pero no puede inventar.
  */
 
-import { Item, Movement, MovementType, Personnel, Project, PurchaseOrder, PurchaseOrderStatus } from '../types';
+import { Item, InventoryType, Movement, MovementType, Personnel, Project, PurchaseOrder, PurchaseOrderStatus } from '../types';
 import { normStr } from '../utils/genus';
 import { rankMatches, scoreMatch } from '../utils/search';
 import { isAsset, isConsumable, getActiveLoans, daysSince } from '../utils/inventory';
@@ -41,13 +41,20 @@ const DIAS_VENCIDO = 14;
 type Intent =
     | 'stock' | 'quien_tiene' | 'que_tiene' | 'consumo' | 'alertas'
     | 'movimientos' | 'mermas' | 'gastos' | 'mas_usado' | 'compras'
-    | 'recoger' | 'vencidos' | 'proyecto' | 'ayuda' | null;
+    | 'recoger' | 'vencidos' | 'proyecto' | 'ayuda'
+    | 'cuadrilla' | 'danados' | 'quietas' | 'quien_consume' | 'mas_viejo' | 'sin_telefono' | null;
 
 // Se evalúa sobre el texto ya normalizado (sin tildes, en minúscula), por eso
 // no hacen falta las variantes con acento que tenía la versión anterior.
 const INTENT_PATTERNS: Array<[Intent, RegExp]> = [
     // Va de primera: "que puedes hacer" no debe caer en la adivinanza de entidades.
-    ['ayuda',       /\bque (puede|puedes|podes|sabe|sabes|haces)\b|para que (sirve|sirves)|\bayuda\b|\bque te pregunto\b|\bque puedo preguntar\b|\bcomo funciona\b|\bopciones\b/],
+    ['ayuda',       /\bque (puede|puedes|podes|sabe|sabes|haces)\b|para que (sirve|sirves)|\bayuda\b|\bque te pregunto|\bque puedo preguntar|\bcomo funciona\b|\bopciones\b/],
+    ['cuadrilla',    /\bcuadrilla|equipo de|grupo de|oficial\b/],
+    ['sin_telefono', /\bsin telefono|sin numero|no tiene telefono|sin whatsapp\b/],
+    ['quietas',      /\bno se ha movido|sin mover|quieta|quietas|sin movimiento|parada|arrumada\b/],
+    ['quien_consume',/\bquien consume|quien gasta|quien mas gasta|quien saca mas\b/],
+    ['mas_viejo',    /\bmas viejo|mas antiguo|hace mas tiempo|el que lleva mas\b/],
+    ['danados',      /\bdanad|dano|roto|incompleta|mantenimiento|mal estado\b/],
     ['recoger',     /\brecoger|recogida|pendiente de recog|ir a recoger\b/],
     ['vencidos',    /\bvencid|atrasad|demorad|hace mucho|mas de \d+ dias|cobrar\b/],
     ['alertas',     /\bque falta|hace falta|falta\b|agotad|stock bajo|bajo minimo|reponer|comprar ya|acabando|se acaba|urgente|alerta|mal hoy\b/],
@@ -87,6 +94,42 @@ const STOPWORDS = new Set([
     'muestra','muestrame','mostrar','ver','necesito','quiero','quisiera','dame','busca','buscar',
     'para','sobre','acerca','favor','porfa','gracias','hola','buenas','oye',
 ]);
+
+/** Ventanas nombradas. No se aceptan rangos escritos a mano: "del 5 al 12" es
+ *  otro problema, y estas cubren lo que un bodeguero pregunta de verdad. */
+const VENTANAS: Array<[RegExp, number, string]> = [
+    [/\bhoy\b/, 1, 'hoy'],
+    [/\besta semana|ultimos 7|ultima semana\b/, 7, 'esta semana'],
+    [/\beste mes|ultimos 30|ultimo mes\b/, 30, 'este mes'],
+    [/\beste trimestre|ultimos 90\b/, 90, 'este trimestre'],
+];
+
+const detectVentana = (norm: string): { dias: number; label: string } | null => {
+    for (const [re, dias, label] of VENTANAS) if (re.test(norm)) return { dias, label };
+    return null;
+};
+
+/** Tipos de inventario por su nombre coloquial, para "¿qué eléctricas hay?". */
+const TIPO_ALIAS: Array<[RegExp, InventoryType, string]> = [
+    [/\belectric|taladro|maquina\b/, InventoryType.ELECTRICAL_TOOL, 'herramientas eléctricas'],
+    [/\bmanual|de mano\b/,            InventoryType.HAND_TOOL,       'herramientas manuales'],
+    [/\bepp|proteccion|seguridad\b/,  InventoryType.PPE,             'EPP'],
+    [/\bconsumible|material\b/,       InventoryType.SINGLE_USE,      'consumibles'],
+];
+
+/** La etiqueta canónica de cada tipo. detectTipo reconoce estas mismas, para
+ *  que una pregunta sugerida siempre se pueda responder. */
+const ETIQUETA_TIPO: Record<InventoryType, string> = {
+    [InventoryType.ELECTRICAL_TOOL]: 'herramientas eléctricas',
+    [InventoryType.HAND_TOOL]:       'herramientas manuales',
+    [InventoryType.PPE]:             'EPP',
+    [InventoryType.SINGLE_USE]:      'consumibles',
+};
+
+const detectTipo = (norm: string): { tipo: InventoryType; label: string } | null => {
+    for (const [re, tipo, label] of TIPO_ALIAS) if (re.test(norm)) return { tipo, label };
+    return null;
+};
 
 const contentWords = (norm: string): string[] =>
     norm.split(/\s+/).filter(w => w.length >= 3 && !STOPWORDS.has(w) && !/^\d+$/.test(w));
@@ -289,6 +332,17 @@ const listaConsumo = (ctx: QAContext, dias = 30): string => {
     return L.join('\n');
 };
 
+const listaMovimientosVentana = (v: { dias: number; label: string }, ctx: QAContext): string => {
+    const desde = new Date(Date.now() - v.dias * 86400000);
+    const movs = ctx.movements.filter(m => new Date(m.timestamp) >= desde)
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    if (movs.length === 0) return `Sin movimientos ${v.label}.`;
+    const u = movs.reduce((n, m) => n + m.quantity, 0);
+    return `**Movimientos ${v.label}: ${movs.length} (${u} unidades)**\n` + movs.slice(0, 15).map(m =>
+        `- ${fecha(m.timestamp)} · ${m.type} · ${ctx.items.find(i => i.id === m.itemId)?.name ?? '?'} ×${m.quantity}${m.personnelId ? ` · ${nombreDe(ctx, m.personnelId)}` : ''}`
+    ).join('\n');
+};
+
 const listaMovimientos = (ctx: QAContext): string => {
     const recientes = [...ctx.movements].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 10);
     if (recientes.length === 0) return 'Todavía no hay movimientos registrados.';
@@ -360,6 +414,150 @@ const listaAyuda = (ctx: QAContext): string => {
     return L.join('\n');
 };
 
+// ── Cruce de dos dimensiones ─────────────────────────────────────────────
+export interface Filtros {
+    item?: Item;
+    persona?: Personnel;
+    proyecto?: Project;
+    tipo?: { tipo: InventoryType; label: string };
+    ventana?: { dias: number; label: string };
+}
+
+/**
+ * Responde la INTERSECCIÓN de varias dimensiones: "¿qué se llevó Abel para
+ * Discover?", "¿cuántos clavos se fueron a la obra?".
+ *
+ * Ninguna pantalla de la app responde esto hoy, ni siquiera el informe: todas
+ * miran una dimensión a la vez. Acá se filtran los movimientos por todo lo que
+ * se reconoció y se resume lo que queda.
+ */
+const fichaCruce = (f: Filtros, ctx: QAContext): string => {
+    const itemDe = (id: string) => ctx.items.find(i => i.id === id);
+    const desde = f.ventana ? new Date(Date.now() - f.ventana.dias * 86400000) : null;
+
+    const movs = ctx.movements.filter(m => {
+        if (f.item     && m.itemId      !== f.item.id)     return false;
+        if (f.persona  && m.personnelId !== f.persona.id)  return false;
+        if (f.proyecto && m.projectId   !== f.proyecto.id) return false;
+        if (f.tipo     && itemDe(m.itemId)?.inventoryType !== f.tipo.tipo) return false;
+        if (desde && new Date(m.timestamp) < desde) return false;
+        return m.type === MovementType.CHECK_OUT || m.type === MovementType.WASTE;
+    });
+
+    // El título dice exactamente qué se cruzó, para que no quede duda de qué
+    // se está mirando.
+    const partes: string[] = [];
+    if (f.item)     partes.push(f.item.name);
+    if (f.tipo)     partes.push(f.tipo.label);
+    if (f.persona)  partes.push(`con ${f.persona.name}`);
+    if (f.proyecto) partes.push(`en ${f.proyecto.name}`);
+    if (f.ventana)  partes.push(f.ventana.label);
+    const titulo = `**${partes.join(' · ')}**`;
+
+    if (movs.length === 0) return `${titulo}\n\nNo hay movimientos que cumplan eso.`;
+
+    const prestados = movs.filter(m => m.isLoan && !m.isReturned);
+    const gastados  = movs.filter(m => !m.isLoan);
+    const L = [titulo];
+
+    if (prestados.length > 0) {
+        const u = prestados.reduce((n, m) => n + m.quantity, 0);
+        L.push(`\n**Prestado y sin devolver: ${u} unidad(es)**`);
+        for (const m of prestados.slice(0, 12)) {
+            L.push(`- ${itemDe(m.itemId)?.name ?? '?'} ×${m.quantity} — ${nombreDe(ctx, m.personnelId)}, ${plural(daysSince(m.timestamp), 'día', 'días')}${daysSince(m.timestamp) > DIAS_VENCIDO ? ' ⚠️' : ''}`);
+        }
+    }
+    if (gastados.length > 0) {
+        const porItem = new Map<string, number>();
+        for (const m of gastados) porItem.set(m.itemId, (porItem.get(m.itemId) ?? 0) + m.quantity);
+        const total = gastados.reduce((n, m) => n + m.quantity, 0);
+        L.push(`\n**Consumido: ${total} unidad(es)**`);
+        for (const [id, qty] of [...porItem.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12)) {
+            const it = itemDe(id);
+            L.push(`- ${it?.name ?? '?'}: ${qty} ${it?.unit ?? 'ud'}`);
+        }
+    }
+    return L.join('\n');
+};
+
+// ── Familias nuevas de una sola dimensión ────────────────────────────────
+const listaPorTipo = (t: { tipo: InventoryType; label: string }, ctx: QAContext): string => {
+    const items = ctx.items.filter(i => i.inventoryType === t.tipo).sort((a, b) => a.name.localeCompare(b.name, 'es'));
+    if (items.length === 0) return `No hay ${t.label} en el inventario.`;
+    const loans = getActiveLoans(ctx.movements);
+    const L = [`**${t.label.charAt(0).toUpperCase() + t.label.slice(1)} (${items.length})**`];
+    for (const i of items.slice(0, 20)) {
+        const fuera = loans.filter(m => m.itemId === i.id).reduce((n, m) => n + m.quantity, 0);
+        L.push(`- ${i.name}: ${i.quantity} ${i.unit} en bodega${fuera > 0 ? ` · ${fuera} afuera` : ''}${i.quantity === 0 ? ' — AGOTADO' : ''}`);
+    }
+    return L.join('\n');
+};
+
+/** La cuadrilla: el oficial MÁS sus sub-trabajadores. `teamLeaderId` existía
+ *  desde siempre y solo se usaba para crear gente, nunca para consultar. */
+const fichaCuadrilla = (lider: Personnel, ctx: QAContext): string => {
+    const equipo = [lider, ...ctx.personnel.filter(p => p.teamLeaderId === lider.id)];
+    const ids = new Set(equipo.map(p => p.id));
+    const loans = getActiveLoans(ctx.movements).filter(m => ids.has(m.personnelId ?? ''));
+    const L = [`**Cuadrilla de ${lider.name}** — ${plural(equipo.length, 'persona', 'personas')}`];
+    L.push(equipo.map(p => `· ${p.name}${p.id === lider.id ? ' (oficial)' : ''}`).join('\n'));
+    if (loans.length === 0) { L.push('\nSin herramientas prestadas.'); return L.join('\n'); }
+    const u = loans.reduce((n, m) => n + m.quantity, 0);
+    L.push(`\n**Tienen ${u} herramienta(s) afuera:**`);
+    for (const m of loans) {
+        L.push(`- ${ctx.items.find(i => i.id === m.itemId)?.name ?? '?'} ×${m.quantity} — ${nombreDe(ctx, m.personnelId)}, ${plural(daysSince(m.timestamp), 'día', 'días')}`);
+    }
+    return L.join('\n');
+};
+
+const listaDanados = (ctx: QAContext): string => {
+    const malas = ctx.movements.filter(m => m.isReturned && (m.returnCondition === 'damaged' || m.returnCondition === 'incomplete' || m.returnCondition === 'needs_maintenance'));
+    if (malas.length === 0) return 'Ninguna herramienta se devolvió dañada o incompleta.';
+    const ETQ: Record<string, string> = { damaged: 'dañada', incomplete: 'incompleta', needs_maintenance: 'necesita mantenimiento' };
+    return `**Devueltas con problema (${malas.length}):**\n` + malas.slice(0, 15).map(m =>
+        `- ${ctx.items.find(i => i.id === m.itemId)?.name ?? '?'} — ${ETQ[m.returnCondition!] ?? m.returnCondition} · ${nombreDe(ctx, m.personnelId)} · ${fecha(m.timestamp)}${m.returnNotes ? ` — "${m.returnNotes}"` : ''}`
+    ).join('\n');
+};
+
+const listaQuietas = (ctx: QAContext, dias = 30): string => {
+    const desde = new Date(Date.now() - dias * 86400000);
+    const conMov = new Set(ctx.movements.filter(m => new Date(m.timestamp) >= desde).map(m => m.itemId));
+    const quietas = ctx.items.filter(i => isAsset(i) && !conMov.has(i.id));
+    if (quietas.length === 0) return `Todas las herramientas se movieron en los últimos ${dias} días.`;
+    return `**Sin moverse hace más de ${dias} días (${quietas.length}):**\n` +
+        quietas.slice(0, 20).map(i => `- ${i.name} — ${i.quantity} ${i.unit} en bodega`).join('\n') +
+        '\n\nSon herramientas que están quietas: o sobran, o nadie sabe que están.';
+};
+
+const listaQuienConsume = (ctx: QAContext, dias = 30): string => {
+    const desde = new Date(Date.now() - dias * 86400000);
+    const porPersona = new Map<string, number>();
+    for (const m of ctx.movements) {
+        if (m.type !== MovementType.CHECK_OUT || m.isLoan) continue;
+        if (new Date(m.timestamp) < desde) continue;
+        if (!isConsumable(ctx.items.find(i => i.id === m.itemId))) continue;
+        const k = m.personnelId ?? '__sin__';
+        porPersona.set(k, (porPersona.get(k) ?? 0) + m.quantity);
+    }
+    if (porPersona.size === 0) return `Sin consumo de material en los últimos ${dias} días.`;
+    return `**Quién consume más (${dias} días):**\n` + [...porPersona.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10)
+        .map(([id, u], i) => `${i + 1}. ${id === '__sin__' ? 'Sin asignar' : nombreDe(ctx, id)} — ${u} unidad(es)`).join('\n');
+};
+
+const listaPrestamoViejo = (ctx: QAContext): string => {
+    const loans = getActiveLoans(ctx.movements).sort((a, b) => daysSince(b.timestamp) - daysSince(a.timestamp));
+    if (loans.length === 0) return 'No hay préstamos activos.';
+    return `**Los préstamos más viejos:**\n` + loans.slice(0, 8).map(m =>
+        `- ${ctx.items.find(i => i.id === m.itemId)?.name ?? '?'} ×${m.quantity} — ${nombreDe(ctx, m.personnelId)}, ${plural(daysSince(m.timestamp), 'día', 'días')}${daysSince(m.timestamp) > DIAS_VENCIDO ? ' ⚠️' : ''}`
+    ).join('\n');
+};
+
+const listaSinTelefono = (ctx: QAContext): string => {
+    const sin = ctx.personnel.filter(p => !p.phone);
+    if (sin.length === 0) return 'Todo el personal tiene teléfono registrado.';
+    return `**Sin teléfono (${sin.length}) — no pueden recibir WhatsApp:**\n` + sin.map(p => `- ${p.name}`).join('\n');
+};
+
 // ── Sugerencias: el predictor de preguntas ───────────────────────────────
 /**
  * Una pregunta sugerida separa DOS cosas: el texto que se envía y las palabras
@@ -380,6 +578,16 @@ const CANDIDATAS_FIJAS: Candidata[] = [
     { text: '¿Órdenes de compra pendientes?',     keys: ['compras', 'ordenes', 'proveedor', 'pedido'] },
     { text: '¿Qué proyectos hay?',                keys: ['proyectos', 'obras'] },
     { text: '¿Qué puedo preguntarte?',            keys: ['ayuda', 'que puedes hacer', 'opciones', 'como funciona'] },
+    { text: '¿Qué se devolvió dañado?',           keys: ['dañado', 'roto', 'incompleta', 'mal estado', 'mantenimiento'] },
+    { text: '¿Qué no se ha movido en 30 días?',   keys: ['sin mover', 'quieta', 'sin movimiento', 'parada', 'arrumada'] },
+    { text: '¿Quién consume más material?',       keys: ['quien consume', 'quien gasta', 'quien saca mas'] },
+    { text: '¿Cuál es el préstamo más viejo?',    keys: ['mas viejo', 'mas antiguo', 'lleva mas tiempo'] },
+    { text: '¿Quién no tiene teléfono?',          keys: ['sin telefono', 'sin numero', 'sin whatsapp'] },
+    { text: '¿Qué herramientas eléctricas hay?',  keys: ['electricas', 'taladro', 'maquinas'] },
+    { text: '¿Qué herramientas manuales hay?',    keys: ['manuales', 'de mano'] },
+    { text: '¿Qué EPP hay?',                      keys: ['epp', 'proteccion', 'seguridad', 'gafas', 'guantes'] },
+    { text: '¿Qué consumibles hay?',              keys: ['consumibles', 'material'] },
+    { text: '¿Qué se movió esta semana?',         keys: ['esta semana', 'movio hoy', 'del dia'] },
 ];
 
 /**
@@ -387,7 +595,51 @@ const CANDIDATAS_FIJAS: Candidata[] = [
  * Con el campo vacío no devuelve una lista genérica: pone primero lo que de
  * verdad está pasando hoy en la bodega.
  */
-export const suggestQuestions = (partial: string, ctx: QAContext, limit = 6): string[] => {
+/**
+ * Cruces de dos dimensiones, generados SOLO desde movimientos que existen.
+ *
+ * Es la regla que evita que esto explote: ítems × personas serían cientos de
+ * combinaciones teóricas, y casi todas vacías. Recorriendo los movimientos
+ * reales quedan las pocas docenas que son ciertas hoy, y ninguna sugerencia
+ * lleva a una respuesta en blanco.
+ */
+const combinaciones = (ctx: QAContext): Candidata[] => {
+    const out: Candidata[] = [];
+    const vistos = new Set<string>();
+    const itemDe = (id: string) => ctx.items.find(i => i.id === id);
+    const persDe = (id?: string) => ctx.personnel.find(p => p.id === id);
+    const projDe = (id?: string) => (ctx.projects ?? []).find(p => p.id === id);
+
+    const push = (clave: string, text: string, keys: string[]) => {
+        if (vistos.has(clave)) return;
+        vistos.add(clave);
+        out.push({ text, keys });
+    };
+
+    for (const m of ctx.movements) {
+        if (m.type !== MovementType.CHECK_OUT) continue;
+        const it = itemDe(m.itemId), pe = persDe(m.personnelId), pr = projDe(m.projectId);
+
+        if (pe && pr) push(`pp:${pe.id}:${pr.id}`, `¿Qué se llevó ${pe.name} para ${pr.name}?`, [`${pe.name} ${pr.name}`, pe.name, pr.name]);
+        if (it && pr) push(`ip:${it.id}:${pr.id}`, `¿Cuántos ${it.name} se fueron a ${pr.name}?`, [`${it.name} ${pr.name}`, it.name, pr.name]);
+        if (it && pe) push(`ie:${it.id}:${pe.id}`, `¿Qué ${it.name} tiene ${pe.name}?`, [`${it.name} ${pe.name}`, it.name, pe.name]);
+        // La etiqueta tiene que ser la MISMA que después reconoce detectTipo. Con
+        // "consumibles" genérico, unas gafas (EPP) generaban un combo que al
+        // responderse filtraba solo material de consumo y salía vacío.
+        const et = it ? ETIQUETA_TIPO[it.inventoryType] : null;
+        if (pe && et) push(`pt:${pe.id}:${et}`, `¿Qué ${et} se llevó ${pe.name}?`, [`${et} ${pe.name}`, pe.name, et]);
+        if (pr && et) push(`rt:${pr.id}:${et}`, `¿Cuántos ${et} se fueron a ${pr.name}?`, [`${et} ${pr.name}`, pr.name, et]);
+    }
+    // Cuadrilla: solo para quienes de verdad tienen gente a cargo.
+    for (const p of ctx.personnel) {
+        if (ctx.personnel.some(x => x.teamLeaderId === p.id)) {
+            push(`cu:${p.id}`, `¿Qué tiene la cuadrilla de ${p.name}?`, [`cuadrilla ${p.name}`, p.name, 'cuadrilla']);
+        }
+    }
+    return out;
+};
+
+export const suggestQuestions = (partial: string, ctx: QAContext, limit = 8): string[] => {
     if (!ctx?.items) return [];
     const q = normStr(partial ?? '');
 
@@ -403,7 +655,7 @@ export const suggestQuestions = (partial: string, ctx: QAContext, limit = 6): st
         return [...urgentes, ...resto].slice(0, limit);
     }
 
-    const candidatas: Candidata[] = [...CANDIDATAS_FIJAS];
+    const candidatas: Candidata[] = [...CANDIDATAS_FIJAS, ...combinaciones(ctx)];
     for (const i of ctx.items) {
         candidatas.push({ text: `¿Cuántos ${i.name} hay?`, keys: [i.name, i.subCategory] });
         if (isAsset(i)) candidatas.push({ text: `¿Quién tiene ${i.name}?`, keys: [i.name, `quien tiene ${i.name}`] });
@@ -445,6 +697,38 @@ export const answerQuestion = (message: string, ctx: QAContext): QAAnswer => {
     // terminar en la ficha de un ítem que se le parezca a alguna palabra.
     if (intent === 'ayuda') return { text: listaAyuda(ctx), suggestions: suggestQuestions('', ctx, 4) };
 
+    // La cuadrilla necesita la persona, así que va antes del cruce.
+    if (intent === 'cuadrilla' && persona && persona.score >= STRONG) {
+        return { text: fichaCuadrilla(persona.value, ctx), suggestions: [] };
+    }
+
+    // ── DOS O MÁS dimensiones: se responde la intersección ──
+    // "¿qué se llevó Abel para Discover?" cruza persona × proyecto. Ninguna
+    // pantalla de la app responde esto hoy.
+    const tipo    = detectTipo(norm);
+    const ventana = detectVentana(norm);
+    const dims: Filtros = {
+        item:     item     && item.score     >= STRONG ? item.value     : undefined,
+        persona:  persona  && persona.score  >= STRONG ? persona.value  : undefined,
+        proyecto: proyecto && proyecto.score >= STRONG ? proyecto.value : undefined,
+        tipo:     tipo     ?? undefined,
+        ventana:  ventana  ?? undefined,
+    };
+    const cuantasEntidades = [dims.item, dims.persona, dims.proyecto, dims.tipo].filter(Boolean).length;
+    if (cuantasEntidades >= 2 || (cuantasEntidades === 1 && dims.ventana)) {
+        return { text: fichaCruce(dims, ctx), suggestions: [] };
+    }
+
+    // Un tipo solo, sin nada más: la lista de esa categoría.
+    if (cuantasEntidades === 1 && dims.tipo) {
+        return { text: listaPorTipo(dims.tipo, ctx), suggestions: [] };
+    }
+
+    // Solo una ventana de tiempo: "¿qué se movió esta semana?".
+    if (cuantasEntidades === 0 && dims.ventana) {
+        return { text: listaMovimientosVentana(dims.ventana, ctx), suggestions: [] };
+    }
+
     // ── Entidad reconocida con confianza: se responde sobre ELLA ──
     if (mejor && mejor.score >= STRONG) {
         if (mejor.tipo === 'item')     return { text: fichaItem(item!.value, ctx), suggestions: [] };
@@ -469,6 +753,11 @@ export const answerQuestion = (message: string, ctx: QAContext): QAAnswer => {
             proyecto:    () => listaProyectos(ctx),
             ayuda:       () => listaAyuda(ctx),
             stock:       () => listaStockGeneral(ctx),
+            danados:      () => listaDanados(ctx),
+            quietas:      () => listaQuietas(ctx),
+            quien_consume:() => listaQuienConsume(ctx),
+            mas_viejo:    () => listaPrestamoViejo(ctx),
+            sin_telefono: () => listaSinTelefono(ctx),
         };
         const fn = general[intent];
         if (fn) {

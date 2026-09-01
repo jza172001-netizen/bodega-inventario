@@ -165,7 +165,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     // El predictor: con el campo vacío muestra lo urgente del día; mientras se
     // escribe, filtra en vivo con el mismo motor tolerante del buscador.
     const sugerencias = useMemo(
-        () => suggestQuestions(input, { items, movements, personnel, projects, purchaseOrders }, 6),
+        () => suggestQuestions(input, { items, movements, personnel, projects, purchaseOrders }, 8),
         [input, items, movements, personnel, projects, purchaseOrders]
     );
 
