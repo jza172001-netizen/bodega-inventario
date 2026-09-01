@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Item, Movement, Personnel, PurchaseOrder, Project, MovementType, InventoryType } from '../types';
 import { askCopilot } from '../services/copilotService';
+import { suggestQuestions } from '../services/warehouseQA';
 
 interface FloatingChatProps {
     items: Item[];
@@ -47,6 +48,34 @@ const CATEGORY_BY_TYPE: Record<InventoryType, string> = {
 };
 
 type ChatMsg = { id: string; role: 'user' | 'bot'; text: string };
+/**
+ * Pinta el formato mínimo que usan las respuestas: **negrita** y renglones de
+ * lista. Salían los asteriscos crudos porque la burbuja era texto plano.
+ *
+ * A propósito NO se usa un renderizador de markdown completo: el texto incluye
+ * nombres escritos por el usuario (ítems, trabajadores), y un renderizador
+ * general abriría la puerta a que un nombre inyecte contenido en el chat.
+ */
+const RichText: React.FC<{ text: string }> = ({ text }) => (
+    <>
+        {text.split('\n').map((linea, i) => {
+            const esItem = /^\s*[-·]\s+/.test(linea);
+            const contenido = esItem ? linea.replace(/^\s*[-·]\s+/, '') : linea;
+            const sangria = esItem ? (linea.match(/^\s*/)?.[0].length ?? 0) : 0;
+            return (
+                <span key={i} className="block" style={esItem ? { paddingLeft: 8 + sangria * 4 } : undefined}>
+                    {esItem && <span className="text-gray-400 mr-1.5">•</span>}
+                    {contenido.split(/(\*\*[^*]+\*\*)/g).map((trozo, j) =>
+                        trozo.startsWith('**') && trozo.endsWith('**')
+                            ? <strong key={j} className="font-black">{trozo.slice(2, -2)}</strong>
+                            : <React.Fragment key={j}>{trozo}</React.Fragment>
+                    )}
+                </span>
+            );
+        })}
+    </>
+);
+
 const uid = () => Math.random().toString(36).slice(2);
 const todayISO = () => new Date().toISOString().split('T')[0];
 
@@ -132,6 +161,13 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         setMessages(prev => [...prev, { id: uid(), role: 'bot', text }]);
         if (!open) setHasNew(true);
     };
+
+    // El predictor: con el campo vacío muestra lo urgente del día; mientras se
+    // escribe, filtra en vivo con el mismo motor tolerante del buscador.
+    const sugerencias = useMemo(
+        () => suggestQuestions(input, { items, movements, personnel, projects, purchaseOrders }, 6),
+        [input, items, movements, personnel, projects, purchaseOrders]
+    );
 
     const handleSend = async (text: string) => {
         const trimmed = text.trim();
@@ -1186,8 +1222,8 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                 <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3 min-h-0">
                                     {messages.map(msg => (
                                         <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                            <div className={`max-w-[88%] px-3 py-2 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-br-sm' : 'bg-gray-100 text-gray-800 rounded-bl-sm'}`}>
-                                                {msg.text}
+                                            <div className={`max-w-[88%] px-3 py-2 rounded-2xl text-sm leading-relaxed ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-br-sm whitespace-pre-wrap' : 'bg-gray-100 text-gray-800 rounded-bl-sm'}`}>
+                                                {msg.role === 'bot' ? <RichText text={msg.text} /> : msg.text}
                                             </div>
                                         </div>
                                     ))}
@@ -1200,10 +1236,23 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                     )}
                                     <div ref={bottomRef}/>
                                 </div>
+                                {sugerencias.length > 0 && (
+                                    <div className="border-t border-gray-100 px-3 py-2 flex gap-1.5 overflow-x-auto scrollbar-hide flex-shrink-0">
+                                        {sugerencias.map(q => (
+                                            <button
+                                                key={q}
+                                                onClick={() => { onBehaviorLog?.('CHAT_SUGGESTION', `Tocó sugerencia: ${q}`); handleSend(q); }}
+                                                className="flex-shrink-0 px-3 py-1.5 rounded-full bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold border border-blue-100 transition-colors whitespace-nowrap"
+                                            >
+                                                {q}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                                 <div className="border-t border-gray-200 px-3 py-2 flex gap-2 items-end flex-shrink-0">
                                     <textarea value={input} onChange={e => setInput(e.target.value)}
                                         onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(input); } }}
-                                        placeholder="Consulta: stock, préstamos, movimientos…" rows={2}
+                                        placeholder="Escribí o tocá una sugerencia…" rows={2}
                                         className="flex-1 resize-none border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                                         style={{ maxHeight: '80px' }} />
                                     <button onClick={() => handleSend(input)} disabled={!input.trim() || loading}
