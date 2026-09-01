@@ -18,7 +18,7 @@
 
 import { Item, Movement, MovementType, Personnel, Project, PurchaseOrder, PurchaseOrderStatus } from '../types';
 import { normStr } from '../utils/genus';
-import { rankMatches } from '../utils/search';
+import { rankMatches, scoreMatch } from '../utils/search';
 import { isAsset, isConsumable, getActiveLoans, daysSince } from '../utils/inventory';
 
 export interface QAContext {
@@ -41,11 +41,13 @@ const DIAS_VENCIDO = 14;
 type Intent =
     | 'stock' | 'quien_tiene' | 'que_tiene' | 'consumo' | 'alertas'
     | 'movimientos' | 'mermas' | 'gastos' | 'mas_usado' | 'compras'
-    | 'recoger' | 'vencidos' | 'proyecto' | null;
+    | 'recoger' | 'vencidos' | 'proyecto' | 'ayuda' | null;
 
 // Se evalúa sobre el texto ya normalizado (sin tildes, en minúscula), por eso
 // no hacen falta las variantes con acento que tenía la versión anterior.
 const INTENT_PATTERNS: Array<[Intent, RegExp]> = [
+    // Va de primera: "que puedes hacer" no debe caer en la adivinanza de entidades.
+    ['ayuda',       /\bque (puede|puedes|podes|sabe|sabes|haces)\b|para que (sirve|sirves)|\bayuda\b|\bque te pregunto\b|\bque puedo preguntar\b|\bcomo funciona\b|\bopciones\b/],
     ['recoger',     /\brecoger|recogida|pendiente de recog|ir a recoger\b/],
     ['vencidos',    /\bvencid|atrasad|demorad|hace mucho|mas de \d+ dias|cobrar\b/],
     ['alertas',     /\bque falta|hace falta|falta\b|agotad|stock bajo|bajo minimo|reponer|comprar ya|acabando|se acaba|urgente|alerta|mal hoy\b/],
@@ -77,6 +79,13 @@ const STOPWORDS = new Set([
     'prestado','prestados','prestamo','prestamos','consumo','consumido','gasto','gastado','recoger','vencido',
     'movimiento','movimientos','historial','kardex','ultimo','ultimos','ultima','ultimas','reciente','recientes',
     'merma','mermas','compra','compras','orden','ordenes','proveedor','proyecto','obra','total','valor',
+    // Verbos y muletillas. Sin esto "que puede HACER" competía como si "hacer"
+    // fuera el nombre de un ítem, y se parece a "acero" a dos letras: el bot
+    // respondía la ficha de los clavos.
+    'hacer','haces','hacen','hago','puede','puedes','podes','puedo','pueden','sabes','sabe','saber',
+    'sirve','sirves','servir','funciona','funcionas','ayuda','ayudar','ayudas','decir','dime','dice',
+    'muestra','muestrame','mostrar','ver','necesito','quiero','quisiera','dame','busca','buscar',
+    'para','sobre','acerca','favor','porfa','gracias','hola','buenas','oye',
 ]);
 
 const contentWords = (norm: string): string[] =>
@@ -153,7 +162,7 @@ const fichaItem = (item: Item, ctx: QAContext): string => {
         const consumido = historial
             .filter(m => m.type === MovementType.CHECK_OUT && !m.isLoan)
             .reduce((s, m) => s + m.quantity, 0);
-        L.push(`- Consumido en total: **${consumido} ${item.unit}** (es material de gasto, no vuelve)`);
+        L.push(`- Consumido en total: **${consumido} ${item.unit}** — es material de gasto, no vuelve`);
     }
 
     if (historial[0]) {
@@ -338,6 +347,78 @@ const listaStockGeneral = (ctx: QAContext): string => {
     return `**Resumen de bodega**\n- ${total} referencias en inventario\n- ${agotados} agotadas\n- ${fuera} unidades prestadas afuera\n- ${ctx.personnel.length} personas registradas\n\nPreguntá por una herramienta o por una persona para el detalle.`;
 };
 
+/** Qué sabe responder, con ejemplos armados con los datos de la bodega. */
+const listaAyuda = (ctx: QAContext): string => {
+    const L = ['**Esto es lo que puedo responder:**'];
+    L.push('- Por herramienta o material: cuánto hay, quién la tiene y hace cuántos días');
+    L.push('- Por trabajador: qué tiene prestado y qué consumió');
+    L.push('- Por proyecto: qué herramientas hay allá y cuánto material se gastó');
+    L.push('- Del día: qué falta, qué hay que recoger, qué préstamos están vencidos');
+    L.push('- Del período: cuánto se consumió, últimos movimientos, mermas, órdenes de compra');
+    L.push('');
+    L.push('No hace falta escribir bien: entiendo tildes, mayúsculas y errores de dedo.');
+    return L.join('\n');
+};
+
+// ── Sugerencias: el predictor de preguntas ───────────────────────────────
+/**
+ * Una pregunta sugerida separa DOS cosas: el texto que se envía y las palabras
+ * por las que se encuentra. Esa separación es lo que hace que escribir "stovk"
+ * ofrezca "¿Qué falta?" — la pregunta no contiene la palabra "stock", pero sí
+ * está entre sus palabras clave.
+ */
+interface Candidata { text: string; keys: string[] }
+
+const CANDIDATAS_FIJAS: Candidata[] = [
+    { text: '¿Qué falta?',                        keys: ['falta', 'stock bajo', 'agotado', 'reponer', 'comprar', 'acabando', 'minimo'] },
+    { text: '¿Qué hay que recoger?',              keys: ['recoger', 'recogida', 'pendiente', 'motocarguero'] },
+    { text: '¿Qué préstamos están vencidos?',     keys: ['vencidos', 'atrasados', 'demorados', 'cobrar', 'mora'] },
+    { text: '¿Cuánto se consumió este mes?',      keys: ['consumo', 'consumido', 'gasto', 'material', 'gastamos'] },
+    { text: '¿Cuáles son los más consumidos?',    keys: ['mas consumidos', 'mas usados', 'top', 'mayor consumo'] },
+    { text: '¿Últimos movimientos?',              keys: ['movimientos', 'historial', 'kardex', 'reciente', 'ultimo'] },
+    { text: '¿Hay mermas?',                       keys: ['mermas', 'perdida', 'desperdicio', 'daño', 'roto'] },
+    { text: '¿Órdenes de compra pendientes?',     keys: ['compras', 'ordenes', 'proveedor', 'pedido'] },
+    { text: '¿Qué proyectos hay?',                keys: ['proyectos', 'obras'] },
+    { text: '¿Qué puedo preguntarte?',            keys: ['ayuda', 'que puedes hacer', 'opciones', 'como funciona'] },
+];
+
+/**
+ * Preguntas listas para enviar, ordenadas por qué tan bien pegan con lo escrito.
+ * Con el campo vacío no devuelve una lista genérica: pone primero lo que de
+ * verdad está pasando hoy en la bodega.
+ */
+export const suggestQuestions = (partial: string, ctx: QAContext, limit = 6): string[] => {
+    if (!ctx?.items) return [];
+    const q = normStr(partial ?? '');
+
+    if (!q) {
+        const urgentes: string[] = [];
+        const vencidos = getActiveLoans(ctx.movements).filter(m => daysSince(m.timestamp) > DIAS_VENCIDO).length;
+        const recoger  = getActiveLoans(ctx.movements).filter(m => m.pendingPickup).length;
+        const bajos    = ctx.items.filter(i => i.minStock > 0 && i.quantity <= i.minStock).length;
+        if (vencidos > 0) urgentes.push(`¿Qué préstamos están vencidos? (${vencidos})`);
+        if (recoger  > 0) urgentes.push(`¿Qué hay que recoger? (${recoger})`);
+        if (bajos    > 0) urgentes.push(`¿Qué falta? (${bajos})`);
+        const resto = CANDIDATAS_FIJAS.map(c => c.text).filter(t => !urgentes.some(u => u.startsWith(t.slice(0, -1))));
+        return [...urgentes, ...resto].slice(0, limit);
+    }
+
+    const candidatas: Candidata[] = [...CANDIDATAS_FIJAS];
+    for (const i of ctx.items) {
+        candidatas.push({ text: `¿Cuántos ${i.name} hay?`, keys: [i.name, i.subCategory] });
+        if (isAsset(i)) candidatas.push({ text: `¿Quién tiene ${i.name}?`, keys: [i.name, `quien tiene ${i.name}`] });
+    }
+    for (const p of ctx.personnel) candidatas.push({ text: `¿Qué tiene ${p.name}?`, keys: [p.name] });
+    for (const pr of ctx.projects ?? []) candidatas.push({ text: `¿Qué hay en ${pr.name}?`, keys: [pr.name] });
+
+    return candidatas
+        .map(c => ({ c, score: Math.max(...c.keys.filter(Boolean).map(k => scoreMatch(k, q)), 0) }))
+        .filter(x => x.score >= WEAK)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, limit)
+        .map(x => x.c.text);
+};
+
 // ── Motor ────────────────────────────────────────────────────────────────
 export const answerQuestion = (message: string, ctx: QAContext): QAAnswer => {
     if (!ctx?.items || !ctx?.movements) return { text: 'Cargando datos, intentá de nuevo en un momento.', suggestions: [] };
@@ -359,6 +440,10 @@ export const answerQuestion = (message: string, ctx: QAContext): QAAnswer => {
         persona  ? { tipo: 'persona' as const,  score: persona.score }  : null,
         proyecto ? { tipo: 'proyecto' as const, score: proyecto.score } : null,
     ].filter(Boolean).sort((a, b) => b!.score - a!.score)[0];
+
+    // La ayuda va antes que la entidad: preguntar "¿qué puedes hacer?" no debe
+    // terminar en la ficha de un ítem que se le parezca a alguna palabra.
+    if (intent === 'ayuda') return { text: listaAyuda(ctx), suggestions: suggestQuestions('', ctx, 4) };
 
     // ── Entidad reconocida con confianza: se responde sobre ELLA ──
     if (mejor && mejor.score >= STRONG) {
@@ -382,6 +467,7 @@ export const answerQuestion = (message: string, ctx: QAContext): QAAnswer => {
             vencidos:    () => listaVencidos(ctx),
             gastos:      () => listaConsumo(ctx),
             proyecto:    () => listaProyectos(ctx),
+            ayuda:       () => listaAyuda(ctx),
             stock:       () => listaStockGeneral(ctx),
         };
         const fn = general[intent];
