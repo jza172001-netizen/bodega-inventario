@@ -150,11 +150,29 @@ export const TraceabilityView: React.FC<Props> = ({
     const personMap  = useMemo(() => new Map(personnel.map(p => [p.id, p])), [personnel]);
     const projectMap = useMemo(() => new Map(projects.map(p => [p.id, p])), [projects]);
 
+    /**
+     * Los chips de persona mezclan dos fuentes: los usuarios con cuenta y el
+     * visitante (que no tiene cuenta propia). El visitante quedó guardado como
+     * un usuario más con rol 'employee' —el enum de la base no aceptaba
+     * 'visitor' hasta la migración 20260817120000—, así que salía dos veces:
+     * una desde la lista de usuarios y otra desde el nombre fijo. Se juntan
+     * todas las fuentes y se deduplica por nombre conservando el orden.
+     * También se suman los actores que aparecen en los registros pero ya no
+     * tienen cuenta: si no, se perdería el acceso a la historia de alguien que
+     * ya salió.
+     */
     const allActors = useMemo(() => {
-        const owners   = users.filter(u => u.role === UserRole.OWNER).map(u => u.name);
-        const employees = users.filter(u => u.role === UserRole.EMPLOYEE).map(u => u.name);
-        return [...owners, ...employees, 'Visitante'];
-    }, [users]);
+        const nombresPorRol = (rol: UserRole) => users.filter(u => u.role === rol).map(u => u.name);
+        const actoresDeRegistros = [...auditLogs, ...behaviorLogs].map(l => l.actor);
+        const enOrden = [
+            ...nombresPorRol(UserRole.OWNER),
+            ...nombresPorRol(UserRole.EMPLOYEE),
+            ...nombresPorRol(UserRole.VISITOR),
+            'Visitante',
+            ...actoresDeRegistros,
+        ];
+        return [...new Set(enOrden.map(n => n?.trim()).filter(Boolean))];
+    }, [users, auditLogs, behaviorLogs]);
 
     const combinedEntries = useMemo<CombinedEntry[]>(() => {
         const bEntries: CombinedEntry[] = behaviorLogs.map(l => ({ kind: 'behavior', ts: new Date(l.timestamp), data: l }));
@@ -166,7 +184,8 @@ export const TraceabilityView: React.FC<Props> = ({
         return combinedEntries.filter(e => {
             const actor = e.data.actor;
             const action = e.data.action;
-            if (actorFilter && actor !== actorFilter) return false;
+            // Se compara sin espacios sobrantes: los chips también se arman con el nombre recortado
+            if (actorFilter && actor?.trim() !== actorFilter) return false;
             if (typeFilter) {
                 if (typeFilter === 'SESSION' && e.kind === 'behavior') return getBehaviorCategory(action) === 'SESSION';
                 if (typeFilter === 'SESSION' && e.kind === 'audit') return action === 'USER_LOGIN' || action === 'USER_LOGOUT';
