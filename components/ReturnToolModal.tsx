@@ -31,7 +31,7 @@ export const ReturnToolModal: React.FC<Props> = ({ item, personName, movementIds
 
     return (
         <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
                 {/* Header */}
                 <div className="px-5 pt-5 pb-4 border-b border-gray-100">
                     <h3 className="text-base font-black text-gray-900">Registrar devolución</h3>

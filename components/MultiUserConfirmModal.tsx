@@ -70,7 +70,7 @@ export const MultiUserConfirmModal: React.FC<Props> = ({ title, message, users, 
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={onClose}>
-            <div className={`w-full max-w-sm bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden ${shake ? 'animate-shake' : ''}`}
+            <div className={`w-full max-w-sm bg-white rounded-2xl shadow-2xl border border-gray-200 max-h-[90vh] overflow-y-auto ${shake ? 'animate-shake' : ''}`}
                 onClick={e => e.stopPropagation()}>
                 <div className="bg-red-600 px-5 py-4">
                     <p className="text-white font-black text-sm">🔐 {title}</p>
