@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Item, Movement, Personnel, UserRole, InventoryType, Project } from '../types';
 import { MovementType } from '../types';
+import { momentoDeFecha } from '../utils/date';
 import { XIcon } from './icons/XIcon';
 import { ConfirmDialog } from './ConfirmDialog';
 import { AddItemModal } from './AddItemModal';
@@ -69,7 +70,7 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
         // Si la fecha es hoy, usar hora real para preservar el orden intradiario del kardex;
         // para fechas pasadas, mediodía (evita saltos de día por zona horaria).
         const today = new Date().toISOString().slice(0, 10);
-        const timestamp = movDate === today ? new Date() : new Date(movDate + 'T12:00:00');
+        const timestamp = momentoDeFecha(movDate);
         onLogMovement({
             itemId,
             type,

@@ -75,6 +75,10 @@ export interface Movement {
     pendingPickup?: boolean;
     returnCondition?: ReturnCondition;
     returnNotes?: string;
+    /** Cuándo volvió la herramienta a la bodega. Antes solo se guardaba QUE había
+     *  vuelto y en qué estado, nunca cuándo: una devolución de hoy seguía
+     *  apareciendo en el historial con la fecha de su salida. */
+    returnedAt?: Date;
 }
 
 export interface Personnel {

@@ -1,6 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Item, Movement, Personnel, PurchaseOrder, Project, MovementType, InventoryType } from '../types';
+import { momentoDeFecha } from '../utils/date';
 import { askCopilot } from '../services/copilotService';
 import { suggestQuestions } from '../services/warehouseQA';
 
@@ -299,7 +300,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             return;
         }
 
-        const ts = wizardDate ? new Date(wizardDate + 'T12:00:00') : new Date();
+        const ts = momentoDeFecha(wizardDate);
 
         const toLog: Array<Omit<Movement, 'id'>> = [];
         for (const type of wizardData.selectedTypes) {
@@ -365,7 +366,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
 
     const confirmLoan = () => {
         if (!loanPersonnelId || loanSelected.size === 0) return;
-        const ts = loanDate ? new Date(loanDate + 'T12:00:00') : new Date();
+        const ts = momentoDeFecha(loanDate);
 
         // Sub-trabajador: si el elegido es oficial, usar el sub-trabajador seleccionado/creado
         const leader = personnel.find(p => p.id === loanPersonnelId);
