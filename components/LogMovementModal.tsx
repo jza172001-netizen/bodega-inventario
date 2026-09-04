@@ -3,6 +3,7 @@ import { Item, Movement, Personnel, UserRole, InventoryType, Project } from '../
 import { MovementType } from '../types';
 import { XIcon } from './icons/XIcon';
 import { ConfirmDialog } from './ConfirmDialog';
+import { AddItemModal } from './AddItemModal';
 
 interface LogMovementModalProps {
     isOpen: boolean;
@@ -14,9 +15,15 @@ interface LogMovementModalProps {
     projects: Project[];
     userRole: UserRole;
     filterInventoryType?: InventoryType;
+    /** Permite crear el artículo sin salir de aquí. Devuelve el ítem ya creado
+     *  para poder dejarlo elegido. */
+    onCreateItem?: (item: Omit<Item, 'id'>) => Item;
 }
 
-export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onClose, onLogMovement, items, movements, personnel, projects, userRole, filterInventoryType }) => {
+/** Valor centinela del desplegable: no es un id de ítem, abre el formulario de creación. */
+const NUEVO_ITEM = '__crear_articulo__';
+
+export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onClose, onLogMovement, items, movements, personnel, projects, userRole, filterInventoryType, onCreateItem }) => {
     const [itemId, setItemId] = useState('');
     const [type, setType] = useState<MovementType>(MovementType.CHECK_OUT);
     const [quantity, setQuantity] = useState(1);
@@ -29,6 +36,9 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
     const [notes, setNotes] = useState('');
     const [movDate, setMovDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
     const [loanWarning, setLoanWarning] = useState<string | null>(null);
+    // Si el artículo no existe todavía, había que cerrar todo, irse a Inventario,
+    // crearlo y volver a empezar el movimiento desde cero.
+    const [creandoItem, setCreandoItem] = useState(false);
 
     // Regla de negocio en el sistema, no en la memoria del bodeguero:
     // una herramienta se presta (vuelve) y un consumible/EPP es gasto definitivo.
@@ -40,12 +50,17 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
     ]);
 
     const filteredItems = useMemo(() => {
-        return filterInventoryType ? items.filter(i => i.inventoryType === filterInventoryType) : items;
-    }, [items, filterInventoryType]);
+        const base = filterInventoryType ? items.filter(i => i.inventoryType === filterInventoryType) : items;
+        // El recién creado puede ser de otro tipo que el del filtro: sin esto
+        // quedaría elegido pero fuera de la lista, y el select se vería vacío.
+        const elegido = items.find(i => i.id === itemId);
+        return elegido && !base.some(i => i.id === elegido.id) ? [...base, elegido] : base;
+    }, [items, filterInventoryType, itemId]);
 
     if (!isOpen) return null;
 
     const selectedItem = items.find(i => i.id === itemId);
+    const puedeCrear = !!onCreateItem && userRole !== UserRole.VISITOR;
     const isWithdrawal = type === MovementType.CHECK_OUT || type === MovementType.WASTE;
     const vuelvePorTipo = selectedItem ? VUELVE_POR_DEFECTO.has(selectedItem.inventoryType) : false;
     const esPrestamo = isLoanTocado ? isLoan : vuelvePorTipo;
@@ -127,9 +142,19 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Artículo</label>
-                            <select value={itemId} onChange={e => { setItemId(e.target.value); setIsLoanTocado(false); }} required className="w-full input-style">
+                            <select
+                                value={itemId}
+                                onChange={e => {
+                                    if (e.target.value === NUEVO_ITEM) { setCreandoItem(true); return; }
+                                    setItemId(e.target.value);
+                                    setIsLoanTocado(false);
+                                }}
+                                required
+                                className="w-full input-style"
+                            >
                                 <option value="" disabled>Seleccionar artículo...</option>
                                 {filteredItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+                                {puedeCrear && <option value={NUEVO_ITEM}>➕ Crear artículo nuevo…</option>}
                             </select>
                             {selectedItem && isWithdrawal && (
                                 <p className={`text-xs mt-1 font-medium ${selectedItem.quantity === 0 ? 'text-red-600' : 'text-gray-500'}`}>
@@ -212,6 +237,21 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
                     </div>
                 </form>
             </div>
+            {creandoItem && onCreateItem && (
+                <AddItemModal
+                    isOpen
+                    userRole={userRole}
+                    onClose={() => setCreandoItem(false)}
+                    onAddItem={nuevo => {
+                        // Queda elegido de una: crear el ítem y tener que buscarlo
+                        // otra vez en la lista sería la mitad del favor.
+                        const creado = onCreateItem(nuevo);
+                        setItemId(creado.id);
+                        setIsLoanTocado(false);
+                        setCreandoItem(false);
+                    }}
+                />
+            )}
             {loanWarning && (
                 <ConfirmDialog
                     title="Préstamo duplicado"
