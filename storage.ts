@@ -51,6 +51,9 @@ export function loadFromLocalStorage(): Partial<AppData> | null {
         data.movements = data.movements.map(m => ({
             ...m,
             timestamp: new Date(m.timestamp),
+            // Sin esto volvería del JSON como texto y las comparaciones de fecha
+            // fallarían en silencio.
+            returnedAt: m.returnedAt ? new Date(m.returnedAt) : undefined,
         }));
         data.purchaseOrders = data.purchaseOrders.map(po => ({
             ...po,
@@ -127,6 +130,7 @@ export function importFromFile(
             data.movements = (data.movements || []).map(m => ({
                 ...m,
                 timestamp: new Date(m.timestamp),
+                returnedAt: m.returnedAt ? new Date(m.returnedAt) : undefined,
             }));
             data.purchaseOrders = (data.purchaseOrders || []).map(po => ({
                 ...po,

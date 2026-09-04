@@ -61,6 +61,7 @@ function dbToMovement(row: Record<string, unknown>): Movement {
         pendingPickup: row.pending_pickup as boolean | undefined,
         returnCondition: row.return_condition as ReturnCondition | undefined,
         returnNotes: row.return_notes as string | undefined,
+        returnedAt: row.returned_at ? new Date(row.returned_at as string) : undefined,
     };
 }
 
@@ -78,6 +79,7 @@ function movementToDb(m: Omit<Movement, 'id'>): Record<string, unknown> {
         pending_pickup: m.pendingPickup ?? false,
         return_condition: m.returnCondition ?? null,
         return_notes: m.returnNotes ?? null,
+        returned_at: m.returnedAt instanceof Date ? m.returnedAt.toISOString() : (m.returnedAt ?? null),
     };
 }
 

@@ -67,11 +67,20 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
     const getItemName   = (id: string)  => itemMap.get(id)?.name ?? 'Ítem eliminado';
     const getPersonName = (id?: string) => id ? (personnelMap.get(id)?.name ?? '') : '';
 
+    /**
+     * La fecha por la que el historial ordena y filtra: lo ÚLTIMO que le pasó al
+     * movimiento. Una devolución no crea una fila nueva, marca la de la salida
+     * original — y esa fila conservaba la fecha de salida, así que lo devuelto
+     * hoy quedaba enterrado semanas atrás y "¿qué me devolvieron hoy?" no se
+     * podía responder mirando el historial.
+     */
+    const fechaRelevante = (m: Movement) => new Date(m.returnedAt ?? m.timestamp);
+
     const allMovements = useMemo(() => {
         const base = filterType
             ? movements.filter(m => itemMap.get(m.itemId)?.inventoryType === filterType)
             : movements;
-        return [...base].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        return [...base].sort((a, b) => fechaRelevante(b).getTime() - fechaRelevante(a).getTime());
     }, [movements, filterType, itemMap]);
 
     const filtered = useMemo(() => {
@@ -87,8 +96,8 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
 
     const byDate = useMemo(() => {
         let list = filtered;
-        if (dateFrom) list = list.filter(m => new Date(m.timestamp) >= new Date(dateFrom));
-        if (dateTo)   list = list.filter(m => new Date(m.timestamp) <= new Date(dateTo + 'T23:59:59'));
+        if (dateFrom) list = list.filter(m => fechaRelevante(m) >= new Date(dateFrom));
+        if (dateTo)   list = list.filter(m => fechaRelevante(m) <= new Date(dateTo + 'T23:59:59'));
         return list;
     }, [filtered, dateFrom, dateTo]);
 
@@ -115,7 +124,8 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
     const renderMovementRow = useCallback((m: Movement) => {
         const itemName   = getItemName(m.itemId);
         const personName = getPersonName(m.personnelId);
-        const timeStr    = new Date(m.timestamp).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' });
+        const fmt        = (d: Date | string) => new Date(d).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' });
+        const timeStr    = fmt(m.timestamp);
         const isActiveLoan = !!m.isLoan && !m.isReturned;
         const isReturned   = !!m.isLoan && !!m.isReturned;
         const isCheckOut   = m.type === MovementType.CHECK_OUT && !m.isLoan;
@@ -136,7 +146,11 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
                         {m.pendingPickup && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700">📍 A recoger</span>}
                     </div>
                     <div className="flex items-center gap-1.5 mt-1 flex-wrap text-[10px] text-gray-400">
-                        <span>{timeStr}</span>
+                        {/* Con la devolución se muestran las dos fechas: cuándo salió
+                            y cuándo volvió. Solo la de salida no dejaba saber si lo
+                            que se devolvió fue hoy o hace un mes. */}
+                        <span>{m.returnedAt ? `Salió ${timeStr}` : timeStr}</span>
+                        {m.returnedAt && <><span>·</span><span className="font-bold text-green-600">Devuelta {fmt(m.returnedAt)}</span></>}
                         {personName && <><span>·</span><span className="font-semibold text-gray-500">{personName}</span></>}
                         {m.returnCondition && <><span>·</span><span>{CONDITION_LABEL[m.returnCondition] ?? m.returnCondition}</span></>}
                         {m.notes && <><span>·</span><span className="italic truncate max-w-[140px]">{m.notes}</span></>}

@@ -694,7 +694,7 @@ const App: React.FC = () => {
         const personName = mov?.personnelId ? personnel.find(p => p.id === mov.personnelId)?.name : undefined;
 
         setMovements(prev => prev.map(m => m.id === id
-            ? { ...m, isReturned: true, pendingPickup: false, returnCondition: condition as import('./types').ReturnCondition | undefined, returnNotes: notes }
+            ? { ...m, isReturned: true, pendingPickup: false, returnCondition: condition as import('./types').ReturnCondition | undefined, returnNotes: notes, returnedAt: new Date() }
             : m));
 
         // La herramienta vuelve a la bodega: hay que reponer la unidad al inventario.
