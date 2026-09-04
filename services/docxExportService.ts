@@ -12,6 +12,7 @@ import {
     getActiveLoans, getActiveLoansByItem, getLoansByPerson,
     summarizeLoanItems, daysSince, getConsumption, isAsset,
 } from '../utils/inventory';
+import { nombreArchivoReporte } from '../utils/date';
 
 // ── Palette matching the MONTECIELO VERDE template ────────────────────
 const NAVY   = '1F3864'; // dark navy — main headings
@@ -546,7 +547,7 @@ export async function exportReportAsDocx(opts: {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `Bodega_Informe_${periodLabel.replace(/\s+/g, '_')}.docx`;
+    a.download = nombreArchivoReporte('docx');
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

@@ -647,9 +647,13 @@ const App: React.FC = () => {
         if (m.isLoan) {
             addAuditLog('LOAN_CREATED', `Préstamo: "${itemName}"${personName ? ` → ${personName}` : ''}`);
         } else if (m.type === MovementType.CHECK_OUT) {
-            addAuditLog('ITEM_EDITED', `📤 Salida: "${itemName}" ×${m.quantity}${personName ? ` — ${personName}` : ''}`);
+            // Antes esto se guardaba como ITEM_EDITED y la entrada como ITEM_CREATED:
+            // la descripción decía la verdad pero la acción no, así que en
+            // Trazabilidad un despacho aparecía archivado como "se editó un
+            // artículo" y las creaciones venían infladas con las entradas.
+            addAuditLog('STOCK_OUT', `📤 Salida: "${itemName}" ×${m.quantity}${personName ? ` — ${personName}` : ''}`);
         } else if (m.type === MovementType.CHECK_IN) {
-            addAuditLog('ITEM_CREATED', `📥 Entrada: "${itemName}" ×${m.quantity}${personName ? ` — ${personName}` : ''}`);
+            addAuditLog('STOCK_IN', `📥 Entrada: "${itemName}" ×${m.quantity}${personName ? ` — ${personName}` : ''}`);
         }
         return true;
     };
