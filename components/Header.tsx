@@ -49,7 +49,7 @@ export const Header: React.FC<HeaderProps> = ({ toggleSidebar, userRole, userNam
                             </svg>
                         </button>
                     )}
-                    {onOpenInvoiceReader && userRole === UserRole.OWNER && (
+                    {onOpenInvoiceReader && userRole !== UserRole.VISITOR && (
                         <button
                             onClick={onOpenInvoiceReader}
                             title="Importar factura o archivo"

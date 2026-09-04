@@ -29,7 +29,7 @@ export const AddPersonnelModal: React.FC<AddPersonnelModalProps> = ({ isOpen, on
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
-            <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md m-4">
+            <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md m-4 max-h-[90vh] overflow-y-auto">
                 <div className="flex justify-between items-center mb-6">
                     <h2 className="text-2xl font-bold text-gray-800">Añadir Personal</h2>
                     <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><XIcon className="w-6 h-6" /></button>

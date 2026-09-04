@@ -44,12 +44,12 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onA
 
     if (!isOpen) return null;
     
-    if (userRole !== UserRole.OWNER) {
+    if (userRole === UserRole.VISITOR) {
         return (
              <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50" onClick={onClose}>
                 <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md m-4" onClick={e => e.stopPropagation()}>
                     <h2 className="text-xl font-bold text-gray-800">Acceso Denegado</h2>
-                    <p className="text-gray-600 mt-4">Solo los propietarios pueden añadir nuevos artículos.</p>
+                    <p className="text-gray-600 mt-4">Los visitantes no pueden añadir artículos. Inicia sesión con tu cuenta.</p>
                     <div className="flex justify-end mt-6">
                          <button onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Cerrar</button>
                     </div>

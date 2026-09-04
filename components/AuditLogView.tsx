@@ -38,7 +38,7 @@ const FILTER_OPTIONS = [
 
 export const AuditLogView: React.FC<AuditLogViewProps> = ({ auditLogs, userRole, onClearLogs }) => {
     const [filter, setFilter] = useState('');
-    const isOwner = userRole === UserRole.OWNER;
+    const isOwner = userRole !== UserRole.VISITOR;
 
     const filtered = useMemo(() => {
         if (!filter) return auditLogs;

@@ -29,7 +29,7 @@ export const StartBusinessModal: React.FC<StartBusinessModalProps> = ({ isOpen, 
 
     return (
         <div className="fixed inset-0 bg-blue-900/90 backdrop-blur-md flex justify-center items-center z-[200] p-4 text-center">
-            <div className="bg-white rounded-[2.5rem] shadow-2xl p-8 md:p-12 w-full max-w-lg border-4 border-blue-500 animate-in zoom-in duration-300">
+            <div className="bg-white rounded-[2.5rem] shadow-2xl p-8 md:p-12 w-full max-w-lg border-4 border-blue-500 animate-in zoom-in duration-300 max-h-[90vh] overflow-y-auto">
                 <div className="w-20 h-20 bg-blue-100 text-blue-600 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-inner">
                     <HardHatIcon className="w-10 h-10" />
                 </div>

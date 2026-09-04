@@ -109,7 +109,7 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
-            <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-lg m-4">
+            <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-lg m-4 max-h-[90vh] overflow-y-auto">
                 <div className="flex justify-between items-center mb-6">
                     <h2 className="text-2xl font-bold text-gray-800">Registrar Movimiento</h2>
                     <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><XIcon className="w-6 h-6" /></button>
@@ -203,7 +203,10 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
                         <label className="block text-sm font-medium text-gray-700 mb-1">Notas (Opcional)</label>
                         <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} className="w-full input-style" placeholder="Ej: Para el proyecto Edificio Central" />
                     </div>
-                    <div className="flex justify-end space-x-3 pt-4">
+                    {/* Pegada abajo: es la única acción que, si no se alcanza, deja
+                        el formulario lleno y el trabajo perdido. En el celular quedaba
+                        debajo de "Notas", fuera de la pantalla. */}
+                    <div className="sticky bottom-0 -mx-8 -mb-8 px-8 pt-4 pb-8 bg-white border-t border-gray-100 flex justify-end space-x-3">
                         <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Cancelar</button>
                         <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Guardar Movimiento</button>
                     </div>
