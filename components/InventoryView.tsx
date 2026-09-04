@@ -65,6 +65,41 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, movements =
 
     const genusList = useMemo(() => clusterGenera(displayItems), [displayItems]);
 
+    /**
+     * Las familias, repartidas por grupo. La vista ya juntaba las variantes de
+     * una misma familia ("Guantes (Negro)" + "Guantes (Rojo)" → Guantes), pero
+     * dos familias emparentadas —"Gafas" y "Gafas de seguridad"— quedaban
+     * sueltas y revueltas con todo lo demás.
+     *
+     * Se devuelve una sola lista de filas, encabezados incluidos, para no
+     * reescribir el renderizado de cada familia.
+     */
+    const filasAgrupadas = useMemo(() => {
+        const porGrupo = new Map<string, typeof genusList>();
+        for (const fam of genusList) {
+            const g = fam.species[0]?.subCategory?.trim() || 'General';
+            if (!porGrupo.has(g)) porGrupo.set(g, []);
+            porGrupo.get(g)!.push(fam);
+        }
+        // "General" al final: es el cajón de lo que todavía no tiene grupo, y
+        // no tiene por qué encabezar la lista.
+        const grupos = [...porGrupo.keys()].sort((a, b) =>
+            a === 'General' ? 1 : b === 'General' ? -1 : a.localeCompare(b, 'es'));
+
+        type Fila =
+            | { tipo: 'grupo'; grupo: string; familias: number }
+            | { tipo: 'familia'; cluster: typeof genusList[number] };
+        const filas: Fila[] = [];
+        // Con un solo grupo el encabezado no informa nada: se omite.
+        const conEncabezado = grupos.length > 1;
+        for (const g of grupos) {
+            const fams = porGrupo.get(g)!;
+            if (conEncabezado) filas.push({ tipo: 'grupo', grupo: g, familias: fams.length });
+            for (const f of fams) filas.push({ tipo: 'familia', cluster: f });
+        }
+        return filas;
+    }, [genusList]);
+
     const getStockStatusColor = (item: Item) => {
         if (item.minStock <= 0) return 'bg-gray-200 text-gray-800';
         if (item.quantity <= 0) return 'bg-red-200 text-red-800';
@@ -136,7 +171,17 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, movements =
 
             {/* Mobile cards — agrupadas por género */}
             <div className="md:hidden space-y-2 mb-2">
-                {genusList.map(({ canonical, species }) => {
+                {filasAgrupadas.map(fila => {
+                    if (fila.tipo === 'grupo') {
+                        return (
+                            <div key={`grupo-${fila.grupo}`} className="flex items-baseline gap-2 pt-3 pb-1 px-1">
+                                <p className="text-[11px] font-black text-indigo-700 uppercase tracking-widest">{fila.grupo}</p>
+                                <span className="text-[10px] text-gray-400">{fila.familias} familia{fila.familias !== 1 ? 's' : ''}</span>
+                                <span className="flex-1 border-b border-gray-200" />
+                            </div>
+                        );
+                    }
+                    const { canonical, species } = fila.cluster;
                     const isExpanded = expandedGenus.has(canonical) || species.length === 1;
                     const totalQty = species.reduce((s, i) => s + i.quantity, 0);
                     const emoji = INV_EMOJI[species[0]?.inventoryType] ?? '📦';
