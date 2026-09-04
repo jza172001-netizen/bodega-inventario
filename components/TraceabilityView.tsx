@@ -49,6 +49,8 @@ const AUDIT_CATEGORY: Record<string, { icon: string; color: string; bg: string }
     ITEM_CREATED:       { icon: '📦', color: 'text-green-700',  bg: 'bg-green-50'  },
     ITEM_EDITED:        { icon: '✏️', color: 'text-blue-700',   bg: 'bg-blue-50'   },
     ITEM_DELETED:       { icon: '🗑️', color: 'text-red-700',    bg: 'bg-red-50'    },
+    STOCK_OUT:          { icon: '📤', color: 'text-orange-700', bg: 'bg-orange-50' },
+    STOCK_IN:           { icon: '📥', color: 'text-green-700',  bg: 'bg-green-50'  },
     PERSONNEL_CREATED:  { icon: '👷', color: 'text-green-700',  bg: 'bg-green-50'  },
     PERSONNEL_EDITED:   { icon: '✏️', color: 'text-blue-700',   bg: 'bg-blue-50'   },
     PERSONNEL_DELETED:  { icon: '🗑️', color: 'text-red-700',    bg: 'bg-red-50'    },
@@ -76,6 +78,19 @@ const AUDIT_CATEGORY: Record<string, { icon: string; color: string; bg: string }
     PICKUP_NOTIFIED:    { icon: '📲', color: 'text-orange-700', bg: 'bg-orange-50' },
     REPORT_EXPORTED:    { icon: '📄', color: 'text-blue-700',   bg: 'bg-blue-50'   },
     AUDIT_CLEARED:      { icon: '🧹', color: 'text-red-700',    bg: 'bg-red-50'    },
+};
+
+/**
+ * Los registros guardados antes de que salidas y entradas tuvieran acción
+ * propia dicen ITEM_EDITED / ITEM_CREATED, y saldrían con el icono de "editado"
+ * o "creado". Se corrige la LECTURA, mirando el prefijo de la descripción — el
+ * registro guardado no se toca: una bitácora que se puede reescribir hacia
+ * atrás deja de servir para lo único que sirve.
+ */
+const categoriaDe = (log: { action: string; description: string }) => {
+    if (log.description.startsWith('📤')) return AUDIT_CATEGORY.STOCK_OUT;
+    if (log.description.startsWith('📥')) return AUDIT_CATEGORY.STOCK_IN;
+    return AUDIT_CATEGORY[log.action] ?? { icon: '•', color: 'text-gray-600', bg: 'bg-gray-50' };
 };
 
 type CombinedEntry =
@@ -406,7 +421,7 @@ export const TraceabilityView: React.FC<Props> = ({
                             }
 
                             const log = entry.data;
-                            const meta = AUDIT_CATEGORY[log.action] ?? { icon: '•', color: 'text-gray-600', bg: 'bg-gray-50' };
+                            const meta = categoriaDe(log);
                             return (
                                 <div key={log.id} className={`flex items-start gap-3 px-4 py-2.5 ${meta.bg}`}>
                                     <span className="text-base flex-shrink-0 mt-0.5">{meta.icon}</span>
