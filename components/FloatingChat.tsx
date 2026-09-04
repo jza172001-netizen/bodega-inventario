@@ -4,6 +4,7 @@ import { Item, Movement, Personnel, PurchaseOrder, Project, MovementType, Invent
 import { momentoDeFecha } from '../utils/date';
 import { askCopilot } from '../services/copilotService';
 import { suggestQuestions } from '../services/warehouseQA';
+import { scoreMatch } from '../utils/search';
 
 interface FloatingChatProps {
     items: Item[];
@@ -114,6 +115,13 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     const [wizardCreateColor, setWizardCreateColor] = useState('');
     const [wizardCreateUnit, setWizardCreateUnit] = useState('unidades');
     const [wizardSpecies, setWizardSpecies] = useState<Array<{brand: string; color: string}>>([{ brand: '', color: '' }]);
+    // El grupo (sub-clasificación). Antes se escribía 'General' a mano en los seis
+    // puntos de creación del chatbot, así que TODO lo creado por acá caía en el
+    // mismo montón y no había manera de agrupar nada en el histórico.
+    const [wizardCreateGroup, setWizardCreateGroup] = useState('');
+    // Cuando el nombre se parece a algo que ya existe, se para antes de crear y
+    // se pregunta. Unir por parecido sin preguntar juntaría cosas distintas.
+    const [parecidoPendiente, setParecidoPendiente] = useState<Item[] | null>(null);
     const [createSpecies, setCreateSpecies] = useState<Array<{brand: string; color: string}>>([{ brand: '', color: '' }]);
 
     // Panel state
@@ -184,6 +192,35 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
 
     // ── Wizard ──────────────────────────────────────────────────────────────
 
+    /** Los grupos que ya usó para ese tipo, para ofrecerlos como botones en vez
+     *  de que tenga que acordarse de cómo los escribió la vez pasada. */
+    const gruposDe = (tipo: InventoryType | null): string[] => {
+        if (!tipo) return [];
+        const usados = items.filter(i => i.inventoryType === tipo).map(i => i.subCategory?.trim()).filter(Boolean) as string[];
+        return [...new Set(usados)].filter(g => g !== 'General').sort((a, b) => a.localeCompare(b, 'es'));
+    };
+
+    /** Ítems cuyo nombre se parece al que está escribiendo. 600 es el umbral de
+     *  "una palabra completa coincide" del buscador: por debajo empiezan las
+     *  coincidencias por casualidad. */
+    const parecidosA = (nombre: string, tipo: InventoryType | null): Item[] => {
+        const q = nombre.trim();
+        if (q.length < 3) return [];
+        return items
+            .filter(i => !tipo || i.inventoryType === tipo)
+            .map(i => ({ i, s: Math.max(scoreMatch(q, i.name), scoreMatch(i.name, q)) }))
+            .filter(x => x.s >= 600)
+            .sort((a, b) => b.s - a.s)
+            .slice(0, 4)
+            .map(x => x.i);
+    };
+
+    /** Para los atajos de creación rápida, donde no cabe preguntar: hereda el
+     *  grupo del ítem más parecido que ya exista. Sigue siendo mejor que
+     *  mandar todo a "General", que es lo que hacía antes. */
+    const grupoSugerido = (nombre: string, tipo: InventoryType | null): string =>
+        parecidosA(nombre, tipo)[0]?.subCategory?.trim() || 'General';
+
     const resetWizardCreate = () => {
         setWizardCreateType(null);
         setWizardCreateName('');
@@ -191,6 +228,8 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         setWizardCreateBrand('');
         setWizardCreateColor('');
         setWizardCreateUnit('unidades');
+        setWizardCreateGroup('');
+        setParecidoPendiente(null);
         setWizardSpecies([{ brand: '', color: '' }]);
     };
 
@@ -236,8 +275,11 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         });
     };
 
-    const handleWizardCreateItem = () => {
+    /** Crea de verdad. `grupo` viene aparte porque al elegir "es una variante de X"
+     *  se hereda el grupo de X, para que las dos queden juntas en el histórico. */
+    const crearItemDelAsistente = (grupo: string) => {
         if (!wizardCreateType || !wizardCreateName.trim()) return;
+        const subCategory = grupo.trim() || 'General';
         if (wizardCreateType === InventoryType.ELECTRICAL_TOOL || wizardCreateType === InventoryType.HAND_TOOL) {
             const valid = wizardSpecies.filter(s => s.brand.trim() && s.color.trim());
             if (valid.length === 0) return;
@@ -249,7 +291,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                     quantity: wizardCreateQty,
                     unit: wizardCreateUnit.trim() || 'unidades',
                     category: CATEGORY_BY_TYPE[wizardCreateType],
-                    subCategory: 'General',
+                    subCategory,
                     minStock: 0, price: 0,
                     brand: sp.brand.trim(), color: sp.color.trim(),
                 });
@@ -257,19 +299,48 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             }
             setWizardSel(prev => { const next = new Map(prev); for (const [id, qty] of newEntries) next.set(id, qty); return next; });
         } else {
+            // Color y marca también acá: unos guantes negros y unos rojos son dos
+            // ítems distintos, pero de la misma familia. Son opcionales — pedirlos
+            // a la fuerza para unos clavos sería un estorbo.
+            const color = wizardCreateColor.trim(), marca = wizardCreateBrand.trim();
+            const variante = [color, marca].filter(Boolean).join(' · ');
             const newItem = onCreateItem({
-                name: wizardCreateName.trim(),
+                name: variante ? `${wizardCreateName.trim()} (${variante})` : wizardCreateName.trim(),
                 inventoryType: wizardCreateType,
                 quantity: wizardCreateQty,
                 unit: wizardCreateUnit.trim() || 'unidades',
                 category: CATEGORY_BY_TYPE[wizardCreateType],
-                subCategory: 'General',
+                subCategory,
                 minStock: 0, price: 0,
+                ...(marca ? { brand: marca } : {}),
+                ...(color ? { color } : {}),
             });
             setWizardSel(prev => { const next = new Map(prev); next.set(newItem.id, wizardCreateQty); return next; });
         }
         // Mantener el tipo seleccionado para que el usuario pueda crear otro género inmediatamente
-        setWizardCreateName(''); setWizardCreateQty(1); setWizardCreateUnit('unidades'); setWizardSpecies([{ brand: '', color: '' }]);
+        setWizardCreateName(''); setWizardCreateQty(1); setWizardCreateUnit('unidades');
+        setWizardSpecies([{ brand: '', color: '' }]); setWizardCreateColor(''); setWizardCreateBrand('');
+        setParecidoPendiente(null);
+    };
+
+    const handleWizardCreateItem = () => {
+        if (!wizardCreateType || !wizardCreateName.trim()) return;
+        // Si ya hay algo parecido, se para acá y se pregunta. Decidir solo por
+        // parecido juntaría "Gafas" con "Gafas de soldar", que no son lo mismo.
+        const parecidos = parecidosA(wizardCreateName, wizardCreateType);
+        if (parecidos.length > 0 && !parecidoPendiente) {
+            setParecidoPendiente(parecidos);
+            return;
+        }
+        crearItemDelAsistente(wizardCreateGroup);
+    };
+
+    /** "Es la misma": no se crea nada, se usa la que ya existe. */
+    const usarItemExistente = (it: Item) => {
+        setWizardSel(prev => { const next = new Map(prev); next.set(it.id, wizardCreateQty); return next; });
+        setWizardCreateName(''); setWizardCreateQty(1); setWizardCreateUnit('unidades');
+        setWizardSpecies([{ brand: '', color: '' }]); setWizardCreateColor(''); setWizardCreateBrand('');
+        setParecidoPendiente(null);
     };
 
     const handleConfirmWizard = () => {
@@ -420,7 +491,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                     quantity: loanCreateQty,
                     unit: 'unidades',
                     category: CATEGORY_BY_TYPE[loanInvType],
-                    subCategory: 'General',
+                    subCategory: grupoSugerido(loanCreateName, loanInvType),
                     minStock: 0, price: 0,
                     brand: sp.brand.trim(), color: sp.color.trim(),
                 });
@@ -433,7 +504,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                 quantity: loanCreateQty,
                 unit: loanCreateUnit.trim() || 'unidades',
                 category: CATEGORY_BY_TYPE[loanInvType],
-                subCategory: 'General',
+                subCategory: grupoSugerido(loanCreateName, loanInvType),
                 minStock: 0, price: 0,
             });
             setLoanSelected(prev => { const next = new Map(prev); next.set(newItem.id, loanCreateQty); return next; });
@@ -454,7 +525,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                     name: `${createName.trim()} (${sp.color.trim()} · ${sp.brand.trim()})`,
                     inventoryType: createInvType,
                     quantity: createQty, unit: createUnit.trim() || 'unidades',
-                    category: CATEGORY_BY_TYPE[createInvType], subCategory: 'General',
+                    category: CATEGORY_BY_TYPE[createInvType], subCategory: grupoSugerido(createName, createInvType),
                     minStock: 0, price: 0, brand: sp.brand.trim(), color: sp.color.trim(),
                 });
                 names.push(it.name);
@@ -464,7 +535,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             const it = onCreateItem({
                 name: createName.trim(), inventoryType: createInvType,
                 quantity: createQty, unit: createUnit.trim() || 'unidades',
-                category: CATEGORY_BY_TYPE[createInvType], subCategory: 'General', minStock: 0, price: 0,
+                category: CATEGORY_BY_TYPE[createInvType], subCategory: grupoSugerido(createName, createInvType), minStock: 0, price: 0,
             });
             addBot(`✅ ${it.name} agregado al inventario (${createQty} ${createUnit}).`);
         }
@@ -794,10 +865,68 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                                 </div>
                                             )}
                                             {(type === InventoryType.PPE || type === InventoryType.SINGLE_USE) && (
-                                                <input type="text" value={wizardCreateUnit}
-                                                    onChange={e => setWizardCreateUnit(e.target.value)}
-                                                    placeholder="Unidad (ej: unidades, pares, cajas)"
+                                                <>
+                                                    <input type="text" value={wizardCreateUnit}
+                                                        onChange={e => setWizardCreateUnit(e.target.value)}
+                                                        placeholder="Unidad (ej: unidades, pares, cajas)"
+                                                        className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                                                    {/* Opcionales: unos guantes negros y unos rojos son dos ítems
+                                                        de la misma familia. Sin esto solo se podía tener "Guantes". */}
+                                                    <div className="flex gap-1.5">
+                                                        <input type="text" value={wizardCreateColor}
+                                                            onChange={e => setWizardCreateColor(e.target.value)}
+                                                            placeholder="Color (opcional)"
+                                                            className="flex-1 min-w-0 border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                                                        <input type="text" value={wizardCreateBrand}
+                                                            onChange={e => setWizardCreateBrand(e.target.value)}
+                                                            placeholder="Marca (opcional)"
+                                                            className="flex-1 min-w-0 border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                                                    </div>
+                                                </>
+                                            )}
+                                            {/* El grupo: antes se escribía 'General' a mano y todo caía al mismo montón. */}
+                                            <div className="space-y-1">
+                                                <p className="text-[9px] font-black text-blue-500 uppercase tracking-wider">Grupo</p>
+                                                <div className="flex flex-wrap gap-1">
+                                                    {gruposDe(type).map(g => (
+                                                        <button key={g} onClick={() => setWizardCreateGroup(g)}
+                                                            className={`px-2 py-1 rounded-full text-[10px] font-black transition-all ${
+                                                                wizardCreateGroup === g ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:border-blue-400'}`}>
+                                                            {g}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                                <input type="text" value={wizardCreateGroup}
+                                                    onChange={e => setWizardCreateGroup(e.target.value)}
+                                                    placeholder={gruposDe(type).length ? '…o escribe uno nuevo' : 'Ej: Protección para ojos'}
                                                     className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                                            </div>
+                                            {parecidoPendiente && parecidoPendiente.length > 0 && (
+                                                <div className="border border-amber-300 bg-amber-50 rounded-xl p-2.5 space-y-2">
+                                                    <p className="text-[11px] font-black text-amber-800">
+                                                        Ya tenés algo parecido. ¿Qué hacemos?
+                                                    </p>
+                                                    {parecidoPendiente.map(it => (
+                                                        <div key={it.id} className="space-y-1">
+                                                            <p className="text-[11px] font-bold text-gray-700">{it.name}</p>
+                                                            <div className="flex gap-1">
+                                                                <button onClick={() => usarItemExistente(it)}
+                                                                    className="flex-1 py-1 text-[10px] font-black bg-green-600 hover:bg-green-700 text-white rounded-lg">
+                                                                    Es la misma
+                                                                </button>
+                                                                {/* Hereda el grupo del que ya existe: así las dos quedan juntas. */}
+                                                                <button onClick={() => crearItemDelAsistente(it.subCategory || wizardCreateGroup)}
+                                                                    className="flex-1 py-1 text-[10px] font-black bg-blue-600 hover:bg-blue-700 text-white rounded-lg">
+                                                                    Es una variante
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                    <button onClick={() => crearItemDelAsistente(wizardCreateGroup)}
+                                                        className="w-full py-1 text-[10px] font-black text-gray-600 bg-white border border-gray-300 rounded-lg hover:border-gray-400">
+                                                        Es algo distinto, créalo aparte
+                                                    </button>
+                                                </div>
                                             )}
                                             <div className="flex gap-2">
                                                 <button onClick={resetWizardCreate}
