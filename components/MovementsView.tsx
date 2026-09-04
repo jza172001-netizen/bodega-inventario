@@ -1,6 +1,7 @@
 
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { Movement, Item, Personnel, InventoryType, MovementType, UserRole } from '../types';
+import { getGenus } from '../utils/genus';
 import { TruckIcon } from './icons/TruckIcon';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
 import { TrashIcon } from './icons/TrashIcon';
@@ -101,16 +102,28 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
         return list;
     }, [filtered, dateFrom, dateTo]);
 
+    /**
+     * Agrupa por FAMILIA, no por ítem exacto: "Guantes (Negro · Nn)" y
+     * "Guantes (Rojo · Nn)" son el mismo guante en dos colores, y verlos en dos
+     * bloques separados no deja seguirle el rastro a los guantes.
+     */
     const toolGroups = useMemo(() => {
         if (!groupByTool) return [];
-        const map = new Map<string, { item: Item; movements: Movement[] }>();
+        const map = new Map<string, { familia: string; grupo: string; movements: Movement[] }>();
         for (const m of byDate) {
             const item = itemMap.get(m.itemId);
             if (!item) continue;
-            if (!map.has(m.itemId)) map.set(m.itemId, { item, movements: [] });
-            map.get(m.itemId)!.movements.push(m);
+            const familia = getGenus(item.name);
+            if (!map.has(familia)) {
+                map.set(familia, { familia, grupo: item.subCategory?.trim() || 'General', movements: [] });
+            }
+            map.get(familia)!.movements.push(m);
         }
-        return [...map.values()].sort((a, b) => a.item.name.localeCompare(b.item.name, 'es'));
+        return [...map.values()].sort((a, b) =>
+            // Primero por grupo, y "General" al final: es el cajón de lo que
+            // todavía no tiene grupo asignado.
+            (a.grupo === 'General' ? 1 : b.grupo === 'General' ? -1 : a.grupo.localeCompare(b.grupo, 'es'))
+            || a.familia.localeCompare(b.familia, 'es'));
     }, [byDate, groupByTool, itemMap]);
 
     useEffect(() => { setPage(0); }, [filter, filterType, dateFrom, dateTo, groupByTool]);
@@ -243,10 +256,17 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
                     {toolGroups.length === 0 && (
                         <p className="text-center py-12 text-gray-400 text-sm">Sin movimientos.</p>
                     )}
-                    {toolGroups.map(({ item, movements: ms }) => (
-                        <div key={item.id}>
+                    {toolGroups.map(({ familia, grupo, movements: ms }, idx) => (
+                        <div key={familia}>
+                            {/* Encabezado de grupo, solo cuando cambia */}
+                            {(idx === 0 || toolGroups[idx - 1].grupo !== grupo) && (
+                                <div className="flex items-baseline gap-2 px-4 pt-4 pb-1">
+                                    <p className="text-[11px] font-black text-indigo-700 uppercase tracking-widest">{grupo}</p>
+                                    <span className="flex-1 border-b border-gray-200" />
+                                </div>
+                            )}
                             <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
-                                <p className="text-sm font-black text-gray-800">{item.name}</p>
+                                <p className="text-sm font-black text-gray-800">{familia}</p>
                                 <span className="text-[10px] font-bold bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">
                                     {ms.length} mov.
                                 </span>
