@@ -5,7 +5,7 @@ import { momentoDeFecha } from '../utils/date';
 import { askCopilot } from '../services/copilotService';
 import { suggestQuestions } from '../services/warehouseQA';
 import { scoreMatch } from '../utils/search';
-import { getGenus } from '../utils/genus';
+import { getGenus, familiaDe } from '../utils/genus';
 
 interface FloatingChatProps {
     items: Item[];
@@ -241,9 +241,20 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     const parecidosA = (nombre: string, tipo: InventoryType | null): Item[] => {
         const q = nombre.trim();
         if (q.length < 3) return [];
+        // Dos criterios. El puntaje pilla "Gafas" vs "Gafas de seguridad", pero
+        // daba CERO con "Lechada veige" vs "Lechada gris claro": son dos nombres
+        // que se separan después de la primera palabra. Por eso la familia
+        // cuenta como parecido por sí sola — y es justo el caso de consumibles
+        // y EPP, que se nombran con la variante suelta.
+        const familiaQ = familiaDe(q).toLowerCase();
         return items
             .filter(i => !tipo || i.inventoryType === tipo)
-            .map(i => ({ i, s: Math.max(scoreMatch(q, i.name), scoreMatch(i.name, q)) }))
+            .map(i => ({
+                i,
+                s: familiaDe(i.name).toLowerCase() === familiaQ
+                    ? 1000
+                    : Math.max(scoreMatch(q, i.name), scoreMatch(i.name, q)),
+            }))
             .filter(x => x.s >= 600)
             .sort((a, b) => b.s - a.s)
             .slice(0, 4)

@@ -5,6 +5,7 @@ import { MovementsView } from './MovementsView';
 import { LoansView, LoansLens } from './LoansView';
 import { InventoryView } from './InventoryView';
 import { ProjectsView } from './ProjectsView';
+import { ReturnToolModal } from './ReturnToolModal';
 
 type KardexTab = 'movements' | 'loans' | 'inventory' | 'projects';
 
@@ -28,7 +29,7 @@ interface KardexHubProps {
     onDeleteMovement?: (id: string) => void;
     onReturnLoan?: (movementId: string) => void;
     // loans handlers
-    onReturnItem: (movementId: string) => void;
+    onReturnItem: (movementId: string, condition?: string, notes?: string) => void;
     onMarkPendingPickup: (movementId: string, pending: boolean) => void;
     // inventory handlers
     openAddItemModal: () => void;
@@ -70,6 +71,9 @@ export const KardexHub: React.FC<KardexHubProps> = ({
 }) => {
     const [activeTab, setActiveTab] = useState<KardexTab>(initialTab);
     const [invType, setInvType] = useState<InventoryType | null>(initialInventoryType);
+    // Devolver desde el Historial abría nada: llamaba a la devolución directo y
+    // se saltaba el estado y la revisión de accesorios.
+    const [devolviendo, setDevolviendo] = useState<Movement | null>(null);
 
     useEffect(() => { setActiveTab(initialTab); }, [initialTab]);
 
@@ -123,6 +127,23 @@ export const KardexHub: React.FC<KardexHubProps> = ({
                 )}
             </div>
 
+            {devolviendo && (() => {
+                const item = items.find(i => i.id === devolviendo.itemId);
+                if (!item) return null;
+                return (
+                    <ReturnToolModal
+                        item={item}
+                        personName={personnel.find(p => p.id === devolviendo.personnelId)?.name ?? 'Sin asignar'}
+                        movementIds={[devolviendo.id]}
+                        onConfirm={(ids, condition, notes) => {
+                            ids.forEach(id => onReturnItem(id, condition, notes));
+                            setDevolviendo(null);
+                        }}
+                        onClose={() => setDevolviendo(null)}
+                    />
+                );
+            })()}
+
             {activeTab === 'movements' && (
                 <MovementsView
                     movements={movements}
@@ -131,6 +152,8 @@ export const KardexHub: React.FC<KardexHubProps> = ({
                     openLogMovementModal={openLogMovementModal}
                     onDeleteMovement={onDeleteMovement}
                     onReturnLoan={onReturnLoan}
+                    onReturnWithForm={setDevolviendo}
+                    onItemHistory={onItemHistory}
                     onGoBack={onGoBack}
                     userRole={userRole}
                     onBehaviorLog={onBehaviorLog}
