@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Item, UserRole, InventoryType } from '../types';
+import { Item, UserRole, InventoryType, Accessory } from '../types';
+import { AccessoriesEditor } from './AccessoriesEditor';
 import { CATEGORIES } from '../constants';
 import { XIcon } from './icons/XIcon';
 
@@ -8,12 +9,14 @@ interface AddItemModalProps {
     onClose: () => void;
     onAddItem: (item: Omit<Item, 'id'>) => void;
     userRole: UserRole;
+    items: Item[];
 }
 
-export const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onAddItem, userRole }) => {
+export const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onAddItem, userRole, items }) => {
     const [name, setName] = useState('');
     const [category, setCategory] = useState(CATEGORIES[0]);
     const [subCategory, setSubCategory] = useState('');
+    const [accessories, setAccessories] = useState<Accessory[]>([]);
     const [inventoryType, setInventoryType] = useState<InventoryType>(InventoryType.HAND_TOOL);
     const [quantity, setQuantity] = useState(0);
     const [minStock, setMinStock] = useState(10);
@@ -33,7 +36,10 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onA
         setColor('');
         setBrand('');
         setRequiresReturnNote(false);
+        setAccessories([]);
     };
+
+    const esHerramienta = inventoryType === InventoryType.ELECTRICAL_TOOL || inventoryType === InventoryType.HAND_TOOL;
 
     const UNIT_OPTIONS = ['unidades', 'pares', 'caja', 'bolsa', 'rollo', 'pliego', 'litro', 'ml', 'galón', 'kg', 'g', 'ton', 'm', 'cm', 'mm', 'km', 'm²', 'm³', 'yarda'];
 
@@ -76,6 +82,7 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onA
             color: inventoryType === InventoryType.ELECTRICAL_TOOL ? (color.trim() || undefined) : undefined,
             brand: inventoryType === InventoryType.ELECTRICAL_TOOL ? (brand.trim() || undefined) : undefined,
             requiresReturnNote: requiresReturnNote || undefined,
+            accessories,
         });
         
         // El modal no se desmonta al cerrar (solo retorna null), así que el estado
@@ -163,6 +170,9 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onA
                                 <span className="block text-xs font-normal text-amber-600">Para taladros, pulidoras y herramientas con accesorios</span>
                             </label>
                         </div>
+                    )}
+                    {esHerramienta && (
+                        <AccessoriesEditor value={accessories} onChange={setAccessories} items={items} />
                     )}
                     <div className="flex justify-end space-x-3 pt-4">
                         <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Cancelar</button>

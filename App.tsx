@@ -569,6 +569,37 @@ const App: React.FC = () => {
         addAuditLog('ITEM_CREATED', `Carga masiva: ${created.length} ítem(s) agregados de una vez${created.length <= 5 ? ` — ${created.map(i => i.name).join(', ')}` : ''}`);
     };
 
+    /**
+     * Un disco no se despacha aparte: sale pegado a la pulidora. Acá el lote de
+     * salida se expande con los accesorios CONSUMIBLES de cada herramienta, para
+     * que descuenten stock y queden en el Kardex como el gasto que son.
+     *
+     * Se hace en un solo lugar y no en cada pantalla: así lo respetan por igual
+     * el chatbot, el asistente de despacho y el formulario directo.
+     *
+     * Los accesorios retornables (maleta, llave) NO entran acá: esos vuelven con
+     * la herramienta y se revisan en la devolución, no son un movimiento.
+     */
+    const expandirAccesorios = (batch: Omit<Movement, 'id'>[]): Omit<Movement, 'id'>[] => {
+        const extra: Omit<Movement, 'id'>[] = [];
+        for (const m of batch) {
+            if (m.type !== MovementType.CHECK_OUT) continue;
+            const herramienta = items.find(i => i.id === m.itemId);
+            for (const acc of herramienta?.accessories ?? []) {
+                if (!acc.itemId) continue;                    // retornable: no es movimiento
+                const porUnidad = acc.cantidad ?? 1;
+                extra.push({
+                    ...m,
+                    itemId: acc.itemId,
+                    quantity: porUnidad * m.quantity,          // 2 pulidoras → 2 juegos de discos
+                    isLoan: false,                             // se gasta, no se presta
+                    notes: `Sale con ${herramienta?.name ?? 'la herramienta'}`,
+                });
+            }
+        }
+        return [...batch, ...extra];
+    };
+
     const handleAddItem = (i: Omit<Item, 'id'>) => {
         const id = crypto.randomUUID();
         const newItem = { ...i, id };
@@ -1070,7 +1101,7 @@ const App: React.FC = () => {
                                 personnel={personnel}
                                 purchaseOrders={purchaseOrders}
                                 projects={projects}
-                                onLogMovements={batch => batch.reduce((ok, m) => handleLogMovement(m) ? ok + 1 : ok, 0)}
+                                onLogMovements={batch => expandirAccesorios(batch).reduce((ok, m) => handleLogMovement(m) ? ok + 1 : ok, 0)}
                                 onCreateItem={handleAddItemSync}
                                 onCreateProject={handleAddProjectSync}
                                 onCreatePersonnel={handleAddPersonnelSync}
@@ -1110,8 +1141,8 @@ const App: React.FC = () => {
                 </main>
             </div>
 
-            <AddItemModal isOpen={isAddItemModalOpen} onClose={() => setAddItemModalOpen(false)} onAddItem={handleAddItem} userRole={userRole} />
-            <EditItemModal isOpen={isEditModalOpen} onClose={() => setEditModalOpen(false)} onEditItem={handleEditItem} itemToEdit={itemToEdit} />
+            <AddItemModal isOpen={isAddItemModalOpen} onClose={() => setAddItemModalOpen(false)} onAddItem={handleAddItem} userRole={userRole} items={items} />
+            <EditItemModal isOpen={isEditModalOpen} onClose={() => setEditModalOpen(false)} onEditItem={handleEditItem} itemToEdit={itemToEdit} items={items} />
             <LogMovementModal isOpen={isLogMovementModalOpen} onClose={() => setLogMovementModalOpen(false)} onLogMovement={handleLogMovement} items={items} movements={movements} personnel={personnel} projects={projects} userRole={userRole} onCreateItem={handleAddItemSync} />
             <AddPersonnelModal isOpen={isAddPersonnelModalOpen} onClose={() => setAddPersonnelModalOpen(false)} onAddPersonnel={handleAddPersonnel} />
             <ItemHistoryModal isOpen={isHistoryModalOpen} onClose={() => setHistoryModalOpen(false)} item={itemForHistory} movements={movements} personnel={personnel} projects={projects} onReturnItem={handleReturnItem} onTransferLoan={handleTransferLoan} onAssignProject={handleAssignProjectToLoan} />
@@ -1170,7 +1201,7 @@ const App: React.FC = () => {
                     personnel={personnel}
                     purchaseOrders={purchaseOrders}
                     projects={projects}
-                    onLogMovements={batch => batch.reduce((ok, m) => handleLogMovement(m) ? ok + 1 : ok, 0)}
+                    onLogMovements={batch => expandirAccesorios(batch).reduce((ok, m) => handleLogMovement(m) ? ok + 1 : ok, 0)}
                     onCreateItem={handleAddItemSync}
                     onCreateProject={handleAddProjectSync}
                     onCreatePersonnel={handleAddPersonnelSync}

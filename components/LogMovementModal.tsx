@@ -242,6 +242,7 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
                 <AddItemModal
                     isOpen
                     userRole={userRole}
+                    items={items}
                     onClose={() => setCreandoItem(false)}
                     onAddItem={nuevo => {
                         // Queda elegido de una: crear el ítem y tener que buscarlo

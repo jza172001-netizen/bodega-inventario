@@ -39,6 +39,20 @@ export enum PurchaseOrderStatus {
 
 export type ReturnCondition = 'good' | 'worn' | 'incomplete' | 'damaged' | 'needs_maintenance';
 
+/**
+ * Un accesorio de una herramienta. Hay dos clases y la diferencia es de
+ * negocio, no de forma:
+ *  · Sin `itemId` — retornable (maleta, llave, cargador): sale y vuelve CON la
+ *    herramienta, y se revisa al devolverla.
+ *  · Con `itemId` — consumible (disco, broca): es un ítem del inventario con su
+ *    propio stock, sale pegado a la herramienta, se gasta y no vuelve.
+ */
+export interface Accessory {
+    nombre: string;
+    itemId?: string;
+    cantidad?: number;
+}
+
 export interface Item {
     id: string;
     name: string;
@@ -52,6 +66,7 @@ export interface Item {
     color?: string;
     brand?: string;
     requiresReturnNote?: boolean;
+    accessories?: Accessory[];
 }
 
 export interface Project {
