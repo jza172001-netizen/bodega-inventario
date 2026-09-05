@@ -211,12 +211,28 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         );
     };
 
+    /**
+     * Grupos de arranque por tipo. Sin esto, la primera vez que se crea algo de
+     * un tipo la lista sale vacía —no hay grupos previos que ofrecer— y el
+     * bodeguero queda mirando una caja de texto sin saber qué escribir. Son
+     * sugerencias: se toca una, o se escribe la propia.
+     */
+    const GRUPOS_SUGERIDOS: Record<string, string[]> = {
+        [InventoryType.HAND_TOOL]:       ['Golpe', 'Albañilería', 'Corte y medición', 'Ajuste'],
+        [InventoryType.ELECTRICAL_TOOL]: ['Perforación', 'Corte y pulido', 'Compactación', 'Medición'],
+        [InventoryType.PPE]:             ['Protección para ojos', 'Protección para manos', 'Protección para cabeza', 'Ropa de trabajo'],
+        [InventoryType.SINGLE_USE]:      ['Fijación', 'Acabados', 'Pinturas y solventes', 'Eléctricos'],
+    };
+
     /** Los grupos que ya usó para ese tipo, para ofrecerlos como botones en vez
      *  de que tenga que acordarse de cómo los escribió la vez pasada. */
     const gruposDe = (tipo: InventoryType | null): string[] => {
         if (!tipo) return [];
         const usados = items.filter(i => i.inventoryType === tipo).map(i => i.subCategory?.trim()).filter(Boolean) as string[];
-        return [...new Set(usados)].filter(g => g !== 'General').sort((a, b) => a.localeCompare(b, 'es'));
+        const propios = [...new Set(usados)].filter(g => g !== 'General').sort((a, b) => a.localeCompare(b, 'es'));
+        // Los suyos primero; las sugerencias solo rellenan lo que falte.
+        const sugeridos = (GRUPOS_SUGERIDOS[tipo] ?? []).filter(g => !propios.includes(g));
+        return [...propios, ...sugeridos];
     };
 
     /** Ítems cuyo nombre se parece al que está escribiendo. 600 es el umbral de
@@ -824,7 +840,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                                         <FilaItem item={item} />
                                                         <span className="text-[10px] text-gray-400 flex-shrink-0">{item.quantity} disp.</span>
                                                         {isSelected && (
-                                                            <input type="number" value={qty} min={1} max={item.quantity}
+                                                            <input type="number" onFocus={e => e.target.select()} value={qty} min={1} max={item.quantity}
                                                                 onChange={e => setWizardSelQty(item.id, parseInt(e.target.value) || 1)}
                                                                 onClick={e => e.stopPropagation()}
                                                                 className="w-11 text-xs text-center border border-blue-300 rounded-lg px-1 py-0.5 bg-white focus:outline-none" />
@@ -846,7 +862,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                                 placeholder={(type === InventoryType.ELECTRICAL_TOOL || type === InventoryType.HAND_TOOL) ? 'Género (ej: Pulidora, Martillo) *' : 'Nombre del ítem *'} autoFocus
                                                 className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
                                             {(type === InventoryType.ELECTRICAL_TOOL || type === InventoryType.HAND_TOOL) ? null : (
-                                                <input type="number" value={wizardCreateQty} min={1}
+                                                <input type="number" onFocus={e => e.target.select()} value={wizardCreateQty} min={1}
                                                     onChange={e => setWizardCreateQty(parseInt(e.target.value) || 1)}
                                                     placeholder="Cantidad *"
                                                     className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
@@ -917,7 +933,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                                 </div>
                                                 <input type="text" value={wizardCreateGroup}
                                                     onChange={e => setWizardCreateGroup(e.target.value)}
-                                                    placeholder={gruposDe(type).length ? '…o escribe uno nuevo' : 'Ej: Protección para ojos'}
+                                                    placeholder="…o escribe uno nuevo"
                                                     className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
                                             </div>
                                             {parecidoPendiente && parecidoPendiente.length > 0 && (
@@ -988,7 +1004,9 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             const preview = wizardData.selectedTypes.flatMap(type =>
                 [...wizardSel.entries()]
                     .filter(([id]) => items.find(i => i.id === id)?.inventoryType === type)
-                    .map(([id, quantity]) => ({ rawName: items.find(i => i.id === id)?.name ?? id, quantity, type }))
+                    // La unidad va con la cantidad: "4" no dice nada, "4 kg" sí.
+                    .map(([id, quantity]) => ({ rawName: items.find(i => i.id === id)?.name ?? id,
+                                                unidad: items.find(i => i.id === id)?.unit ?? '', quantity, type }))
             );
             return (
                 <div className="flex-1 overflow-y-auto px-3 py-4 space-y-3">
@@ -1005,7 +1023,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                             {preview.map((it, i) => (
                                 <div key={i} className="flex items-center gap-2 text-xs px-2 py-1.5 rounded-lg bg-white border border-gray-100">
                                     <span>{TYPE_LABELS[it.type].split(' ')[0]}</span>
-                                    <span className="font-bold text-gray-700">{it.quantity}×</span>
+                                    <span className="font-bold text-gray-700 flex-shrink-0">{it.quantity} {it.unidad}</span>
                                     <span className="text-gray-600 truncate flex-1">{it.rawName}</span>
                                     {!wizardIsAddMode && LOAN_TYPES.has(it.type) && <span className="text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0">Préstamo</span>}
                                 </div>
@@ -1110,7 +1128,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                         <FilaItem item={item} />
                                         <span className="text-[10px] text-gray-400 flex-shrink-0">{item.quantity} disp.</span>
                                         {isSelected && (
-                                            <input type="number" value={qty} min={1} max={item.quantity}
+                                            <input type="number" onFocus={e => e.target.select()} value={qty} min={1} max={item.quantity}
                                                 onChange={e => setLoanItemQty(item.id, parseInt(e.target.value) || 1)}
                                                 onClick={e => e.stopPropagation()}
                                                 className="w-12 text-xs text-center border border-blue-300 rounded-lg px-1 py-0.5 bg-white focus:outline-none" />
@@ -1129,7 +1147,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                 className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
                             {(loanInvType !== InventoryType.ELECTRICAL_TOOL && loanInvType !== InventoryType.HAND_TOOL) && (
                                 <>
-                                    <input type="number" value={loanCreateQty} min={1}
+                                    <input type="number" onFocus={e => e.target.select()} value={loanCreateQty} min={1}
                                         onChange={e => setLoanCreateQty(parseInt(e.target.value) || 1)}
                                         placeholder="Cantidad *"
                                         className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
@@ -1287,7 +1305,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                             {createSpecies.filter(s => s.brand.trim() && s.color.trim()).length || 1} ítem(s)
                         </div>
                     ) : (
-                        <input type="number" value={createQty} min={1} onChange={e => setCreateQty(Math.max(1, parseInt(e.target.value) || 1))}
+                        <input type="number" onFocus={e => e.target.select()} value={createQty} min={1} onChange={e => setCreateQty(Math.max(1, parseInt(e.target.value) || 1))}
                             className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400" />
                     )}
                 </div>
