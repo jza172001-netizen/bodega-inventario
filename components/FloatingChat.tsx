@@ -5,6 +5,7 @@ import { momentoDeFecha } from '../utils/date';
 import { askCopilot } from '../services/copilotService';
 import { suggestQuestions } from '../services/warehouseQA';
 import { scoreMatch } from '../utils/search';
+import { getGenus } from '../utils/genus';
 
 interface FloatingChatProps {
     items: Item[];
@@ -191,6 +192,24 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     };
 
     // ── Wizard ──────────────────────────────────────────────────────────────
+
+    /**
+     * El nombre completo no cabe en una línea de celular: "Taladro Inhalambrico
+     * (Amarillo · Dwalt)" se cortaba justo antes de la marca, que es lo único
+     * que distingue un taladro amarillo de otro. Se parte en dos renglones para
+     * que el color y la marca SIEMPRE se vean.
+     */
+    const FilaItem = ({ item }: { item: Item }) => {
+        const familia = getGenus(item.name);
+        const variante = item.name.match(/\(([^)]+)\)/)?.[1]
+            ?? [item.color, item.brand].filter(Boolean).join(' · ');
+        return (
+            <div className="flex-1 min-w-0">
+                <p className="text-sm text-gray-800 truncate">{familia}</p>
+                {variante && <p className="text-[10px] font-semibold text-blue-600 truncate">{variante}</p>}
+            </div>
+        );
+    };
 
     /** Los grupos que ya usó para ese tipo, para ofrecerlos como botones en vez
      *  de que tenga que acordarse de cómo los escribió la vez pasada. */
@@ -802,7 +821,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                                     <div key={item.id} onClick={() => toggleWizardSel(item.id)}
                                                         className={`flex items-center gap-2 px-2 py-1.5 rounded-lg border cursor-pointer transition-all ${isSelected ? 'bg-blue-50 border-blue-300' : 'bg-white border-transparent hover:border-blue-200 hover:bg-blue-50'}`}>
                                                         <input type="checkbox" checked={isSelected} readOnly className="w-4 h-4 accent-blue-600 flex-shrink-0" />
-                                                        <span className="flex-1 text-sm text-gray-800 truncate">{item.name}</span>
+                                                        <FilaItem item={item} />
                                                         <span className="text-[10px] text-gray-400 flex-shrink-0">{item.quantity} disp.</span>
                                                         {isSelected && (
                                                             <input type="number" value={qty} min={1} max={item.quantity}
@@ -1088,7 +1107,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                     <div key={item.id} onClick={() => toggleLoanItem(item.id)}
                                         className={`flex items-center gap-2 px-3 py-2 rounded-xl border cursor-pointer transition-all ${isSelected ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-200 hover:border-blue-300'}`}>
                                         <input type="checkbox" checked={isSelected} readOnly className="w-4 h-4 accent-blue-600 flex-shrink-0" />
-                                        <span className="flex-1 text-sm text-gray-800 truncate">{item.name}</span>
+                                        <FilaItem item={item} />
                                         <span className="text-[10px] text-gray-400 flex-shrink-0">{item.quantity} disp.</span>
                                         {isSelected && (
                                             <input type="number" value={qty} min={1} max={item.quantity}
