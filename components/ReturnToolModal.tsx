@@ -21,12 +21,32 @@ export const ReturnToolModal: React.FC<Props> = ({ item, personName, movementIds
     const [condition, setCondition] = useState<ReturnCondition | null>(null);
     const [notes, setNotes] = useState('');
 
-    const noteRequired = !!item.requiresReturnNote;
+    // Solo los retornables se revisan: un disco se gastó, no tiene por qué volver.
+    const retornables = (item.accessories ?? []).filter(a => !a.itemId);
+    // Arrancan todos marcados: lo normal es que vuelva completa, y así el
+    // bodeguero solo desmarca lo que falta en vez de marcar lo que sí llegó.
+    const [volvieron, setVolvieron] = useState<boolean[]>(() => retornables.map(() => true));
+    const faltantes = retornables.filter((_, i) => !volvieron[i]).map(a => a.nombre);
+
+    const noteRequired = !!item.requiresReturnNote && retornables.length === 0;
     const canSubmit = condition !== null && (!noteRequired || notes.trim().length > 0);
+
+    const alternar = (idx: number) => setVolvieron(prev => {
+        const next = prev.map((v, i) => (i === idx ? !v : v));
+        // Si falta algo, el estado es "incompleta": no hay que acordarse de elegirlo.
+        const hayFaltantes = retornables.some((_, i) => !next[i]);
+        if (hayFaltantes) setCondition('incomplete');
+        else if (condition === 'incomplete') setCondition(null);
+        return next;
+    });
 
     const handleSubmit = () => {
         if (!condition) return;
-        onConfirm(movementIds, condition, notes.trim());
+        // Lo que faltó queda ESCRITO con nombre. "Incompleta" a secas no sirve
+        // para reclamarle nada a nadie.
+        const detalle = faltantes.length > 0 ? `Faltó: ${faltantes.join(', ')}.` : '';
+        const nota = [detalle, notes.trim()].filter(Boolean).join(' ');
+        onConfirm(movementIds, condition, nota);
     };
 
     return (
@@ -41,6 +61,33 @@ export const ReturnToolModal: React.FC<Props> = ({ item, personName, movementIds
                 </div>
 
                 <div className="px-5 py-4 space-y-4">
+                    {retornables.length > 0 && (
+                        <div>
+                            <label className="text-xs font-black text-gray-500 uppercase tracking-wide">
+                                ¿Volvió con todo?
+                            </label>
+                            <p className="text-[10px] text-gray-400 mt-0.5 mb-1.5">Desmarcá lo que no volvió.</p>
+                            <div className="space-y-1">
+                                {retornables.map((acc, idx) => (
+                                    <button key={idx} type="button" onClick={() => alternar(idx)}
+                                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl border text-sm text-left transition-all ${
+                                            volvieron[idx]
+                                                ? 'border-green-300 bg-green-50 text-green-800'
+                                                : 'border-orange-400 bg-orange-50 text-orange-800 font-bold'}`}>
+                                        <span>{volvieron[idx] ? '✅' : '⚠️'}</span>
+                                        <span className="flex-1">{acc.nombre}</span>
+                                        {!volvieron[idx] && <span className="text-[10px] font-black uppercase">Falta</span>}
+                                    </button>
+                                ))}
+                            </div>
+                            {faltantes.length > 0 && (
+                                <p className="text-[11px] text-orange-700 font-bold mt-1.5">
+                                    Va a quedar registrado: faltó {faltantes.join(', ')}.
+                                </p>
+                            )}
+                        </div>
+                    )}
+
                     {/* Condition picker */}
                     <div>
                         <p className="text-xs font-black text-gray-500 uppercase tracking-wide mb-2">

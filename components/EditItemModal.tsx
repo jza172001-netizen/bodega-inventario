@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Item, InventoryType } from '../types';
+import { Item, InventoryType, Accessory } from '../types';
+import { AccessoriesEditor } from './AccessoriesEditor';
 import { CATEGORIES } from '../constants';
 import { XIcon } from './icons/XIcon';
 
@@ -8,12 +9,14 @@ interface EditItemModalProps {
     onClose: () => void;
     onEditItem: (item: Item) => void;
     itemToEdit: Item | null;
+    items: Item[];
 }
 
-export const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, onEditItem, itemToEdit }) => {
+export const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, onEditItem, itemToEdit, items }) => {
     const [name, setName] = useState('');
     const [category, setCategory] = useState('');
     const [subCategory, setSubCategory] = useState('');
+    const [accessories, setAccessories] = useState<Accessory[]>([]);
     const [inventoryType, setInventoryType] = useState<InventoryType>(InventoryType.HAND_TOOL);
     const [quantity, setQuantity] = useState(0);
     const [minStock, setMinStock] = useState(0);
@@ -29,6 +32,7 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, o
             setName(itemToEdit.name);
             setCategory(itemToEdit.category);
             setSubCategory(itemToEdit.subCategory);
+            setAccessories(itemToEdit.accessories ?? []);
             setInventoryType(itemToEdit.inventoryType);
             setQuantity(itemToEdit.quantity);
             setMinStock(itemToEdit.minStock);
@@ -48,6 +52,7 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, o
             name,
             category,
             subCategory,
+            accessories,
             inventoryType,
             quantity,
             minStock,
@@ -123,6 +128,9 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, o
                             <label className="block text-sm font-medium text-gray-700 mb-1">Marca (Opcional)</label>
                             <input type="text" value={brand} onChange={e => setBrand(e.target.value)} className="w-full input-style" placeholder="Ej: Stanley, DeWalt, Bosch..."/>
                         </div>
+                    )}
+                    {(inventoryType === InventoryType.ELECTRICAL_TOOL || inventoryType === InventoryType.HAND_TOOL) && (
+                        <AccessoriesEditor value={accessories} onChange={setAccessories} items={items} />
                     )}
                     {(inventoryType === 'Herramienta Manual' || inventoryType === 'Herramienta Eléctrica') && (
                         <div className="flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">

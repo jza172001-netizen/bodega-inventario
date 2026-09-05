@@ -27,6 +27,7 @@ function dbToItem(row: Record<string, unknown>): Item {
         color: row.color as string | undefined,
         brand: row.brand as string | undefined,
         requiresReturnNote: row.requires_return_note as boolean | undefined,
+        accessories: Array.isArray(row.accessories) ? (row.accessories as import('../types').Accessory[]) : [],
     };
 }
 
@@ -43,6 +44,7 @@ function itemToDb(item: Omit<Item, 'id'>): Record<string, unknown> {
         color: item.color ?? null,
         brand: item.brand ?? null,
         requires_return_note: item.requiresReturnNote ?? false,
+        accessories: item.accessories ?? [],
     };
 }
 
