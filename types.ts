@@ -67,6 +67,8 @@ export interface Item {
     brand?: string;
     requiresReturnNote?: boolean;
     accessories?: Accessory[];
+    /** Familia confirmada por el usuario. Sin ella se usa la sugerencia del nombre. */
+    familia?: string;
 }
 
 export interface Project {

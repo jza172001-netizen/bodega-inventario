@@ -28,6 +28,7 @@ function dbToItem(row: Record<string, unknown>): Item {
         brand: row.brand as string | undefined,
         requiresReturnNote: row.requires_return_note as boolean | undefined,
         accessories: Array.isArray(row.accessories) ? (row.accessories as import('../types').Accessory[]) : [],
+        familia: (row.familia as string | null) ?? undefined,
     };
 }
 
@@ -45,6 +46,7 @@ function itemToDb(item: Omit<Item, 'id'>): Record<string, unknown> {
         brand: item.brand ?? null,
         requires_return_note: item.requiresReturnNote ?? false,
         accessories: item.accessories ?? [],
+        familia: item.familia ?? null,
     };
 }
 
