@@ -113,10 +113,38 @@ export interface GenusCluster {
     species: Item[];
 }
 
+/**
+ * Candidatos a ser la misma familia que `nombre`.
+ *
+ * Es DELIBERADAMENTE generoso, y puede serlo porque cada candidato se confirma
+ * antes de agrupar: un falso positivo cuesta un toque, y un duplicado que nadie
+ * detecta cuesta una bodega desordenada. Un detector prudente sería lo correcto
+ * si agrupara solo; acá no agrupa solo.
+ *
+ * Entra por cualquiera de estos caminos:
+ *  · la familia ya confirmada coincide;
+ *  · comparten la primera palabra ("Lechada gris claro" / "Lechada veige",
+ *    que por puntaje de texto daba CERO);
+ *  · la primera palabra está a un error de dedo ("Palustre" / "Palustra").
+ *
+ * El puntaje de texto del buscador lo aporta quien llama, con scoreMatch.
+ */
+export const esParecido = (nombre: string, otro: Item, familiaConfirmada?: string): boolean => {
+    const fa = (familiaConfirmada?.trim() || familiaDe(nombre));
+    const fb = (otro.familia?.trim() || familiaDe(otro.name));
+    const a = normStr(fa), b = normStr(fb);
+    if (!a || !b) return false;
+    if (a === b) return true;
+    // Un error de dedo en la primera palabra: "Palustre" vs "Palustra".
+    return Math.abs(a.length - b.length) <= 2 && editDistance(a, b) <= 1;
+};
+
 export const clusterGenera = (items: Item[]): GenusCluster[] => {
     // familiaDe y no getGenus: así "Lechada gris claro" y "Lechada veige"
     // caen en el mismo grupo, no solo las que traen paréntesis.
-    const rawGenera = items.map(i => familiaDe(i.name));
+    // La familia CONFIRMADA manda sobre la sugerida: la app propone, el
+    // bodeguero decide, y esa decisión no se vuelve a discutir.
+    const rawGenera = items.map(i => i.familia?.trim() || familiaDe(i.name));
 
     const canonicalOf = new Map<string, string>();
     const clusterMap = new Map<string, Item[]>();
@@ -144,7 +172,7 @@ export const clusterGenera = (items: Item[]): GenusCluster[] => {
             // lechadas decía "Lechada gris claro", que es solo una de ellas.
             const freq = new Map<string, number>();
             for (const item of clItems) {
-                const g = familiaDe(item.name);
+                const g = item.familia?.trim() || familiaDe(item.name);
                 freq.set(g, (freq.get(g) ?? 0) + 1);
             }
             const dominant = [...freq.entries()].sort((a, b) => b[1] - a[1])[0][0];

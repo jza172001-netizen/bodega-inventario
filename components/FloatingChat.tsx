@@ -5,7 +5,7 @@ import { momentoDeFecha } from '../utils/date';
 import { askCopilot } from '../services/copilotService';
 import { suggestQuestions } from '../services/warehouseQA';
 import { scoreMatch } from '../utils/search';
-import { getGenus, familiaDe } from '../utils/genus';
+import { getGenus, familiaDe, esParecido } from '../utils/genus';
 
 interface FloatingChatProps {
     items: Item[];
@@ -17,6 +17,9 @@ interface FloatingChatProps {
      *  rechazar una salida por stock insuficiente y el bot no debe cantar éxito. */
     onLogMovements: (ms: Array<Omit<Movement, 'id'>>) => number;
     onCreateItem: (item: Omit<Item, 'id'>) => Item;
+    /** Para fijarle la familia a un ítem que ya existía cuando se confirma
+     *  que el nuevo es una variante suyo. */
+    onEditItem?: (item: Item) => void;
     onCreateProject: (p: Omit<Project, 'id'>) => Project;
     onCreatePersonnel: (p: Omit<Personnel, 'id'>) => Personnel;
     onBehaviorLog?: (action: string, detail: string) => void;
@@ -90,7 +93,7 @@ const INIT_WIZARD: WizardData = {
 
 export const FloatingChat: React.FC<FloatingChatProps> = ({
     items, movements, personnel, purchaseOrders, projects,
-    onLogMovements, onCreateItem, onCreateProject, onCreatePersonnel,
+    onLogMovements, onCreateItem, onEditItem, onCreateProject, onCreatePersonnel,
     onBehaviorLog,
 }) => {
     const [open, setOpen] = useState(false);
@@ -246,14 +249,13 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         // que se separan después de la primera palabra. Por eso la familia
         // cuenta como parecido por sí sola — y es justo el caso de consumibles
         // y EPP, que se nombran con la variante suelta.
-        const familiaQ = familiaDe(q).toLowerCase();
         return items
             .filter(i => !tipo || i.inventoryType === tipo)
             .map(i => ({
                 i,
-                s: familiaDe(i.name).toLowerCase() === familiaQ
-                    ? 1000
-                    : Math.max(scoreMatch(q, i.name), scoreMatch(i.name, q)),
+                // esParecido cubre lo que el puntaje de texto no ve: misma
+                // primera palabra, o un error de dedo en ella.
+                s: esParecido(q, i) ? 1000 : Math.max(scoreMatch(q, i.name), scoreMatch(i.name, q)),
             }))
             .filter(x => x.s >= 600)
             .sort((a, b) => b.s - a.s)
@@ -323,9 +325,12 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
 
     /** Crea de verdad. `grupo` viene aparte porque al elegir "es una variante de X"
      *  se hereda el grupo de X, para que las dos queden juntas en el histórico. */
-    const crearItemDelAsistente = (grupo: string) => {
+    const crearItemDelAsistente = (grupo: string, familia?: string) => {
         if (!wizardCreateType || !wizardCreateName.trim()) return;
         const subCategory = grupo.trim() || 'General';
+        // La familia queda GRABADA, no supuesta: es lo que el bodeguero acaba
+        // de decidir en el aviso de parecidos.
+        const fam = familia?.trim() || familiaDe(wizardCreateName);
         if (wizardCreateType === InventoryType.ELECTRICAL_TOOL || wizardCreateType === InventoryType.HAND_TOOL) {
             const valid = wizardSpecies.filter(s => s.brand.trim() && s.color.trim());
             if (valid.length === 0) return;
@@ -337,7 +342,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                     quantity: wizardCreateQty,
                     unit: wizardCreateUnit.trim() || 'unidades',
                     category: CATEGORY_BY_TYPE[wizardCreateType],
-                    subCategory,
+                    subCategory, familia: fam,
                     minStock: 0, price: 0,
                     brand: sp.brand.trim(), color: sp.color.trim(),
                 });
@@ -356,7 +361,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                 quantity: wizardCreateQty,
                 unit: wizardCreateUnit.trim() || 'unidades',
                 category: CATEGORY_BY_TYPE[wizardCreateType],
-                subCategory,
+                subCategory, familia: fam,
                 minStock: 0, price: 0,
                 ...(marca ? { brand: marca } : {}),
                 ...(color ? { color } : {}),
@@ -379,6 +384,22 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             return;
         }
         crearItemDelAsistente(wizardCreateGroup);
+    };
+
+    /** "Es una variante de X": el nuevo hereda la familia de X. Y si X todavía
+     *  no tenía familia decidida, se le fija también — así la decisión queda
+     *  tomada para los dos y no se vuelve a preguntar. */
+    const crearComoVarianteDe = (base: Item) => {
+        const fam = base.familia?.trim() || familiaDe(base.name);
+        if (!base.familia?.trim()) onEditItem?.({ ...base, familia: fam });
+        crearItemDelAsistente(base.subCategory || wizardCreateGroup, fam);
+    };
+
+    /** "Es algo distinto": se le fija familia propia, para que la app NO se lo
+     *  vuelva a proponer junto con aquel. La app aprende del "no". */
+    const crearComoDistinto = () => {
+        const propia = `${familiaDe(wizardCreateName)} · ${wizardCreateName.trim()}`;
+        crearItemDelAsistente(wizardCreateGroup, propia);
     };
 
     /** "Es la misma": no se crea nada, se usa la que ya existe. */
@@ -961,14 +982,14 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                                                     Es la misma
                                                                 </button>
                                                                 {/* Hereda el grupo del que ya existe: así las dos quedan juntas. */}
-                                                                <button onClick={() => crearItemDelAsistente(it.subCategory || wizardCreateGroup)}
+                                                                <button onClick={() => crearComoVarianteDe(it)}
                                                                     className="flex-1 py-1 text-[10px] font-black bg-blue-600 hover:bg-blue-700 text-white rounded-lg">
                                                                     Es una variante
                                                                 </button>
                                                             </div>
                                                         </div>
                                                     ))}
-                                                    <button onClick={() => crearItemDelAsistente(wizardCreateGroup)}
+                                                    <button onClick={crearComoDistinto}
                                                         className="w-full py-1 text-[10px] font-black text-gray-600 bg-white border border-gray-300 rounded-lg hover:border-gray-400">
                                                         Es algo distinto, créalo aparte
                                                     </button>

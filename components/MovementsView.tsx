@@ -147,6 +147,10 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
         const isReturned   = !!m.isLoan && !!m.isReturned;
         const isCheckOut   = m.type === MovementType.CHECK_OUT && !m.isLoan;
         const isCheckIn    = m.type === MovementType.CHECK_IN;
+        // La carga inicial NO es un movimiento que alguien hizo: es cómo el ítem
+        // entró a la bodega. Verse igual que una Entrada normal hizo que Juli
+        // borrara "dos veces" lo mismo — en realidad eran dos filas distintas.
+        const esCargaInicial = (m.notes ?? '').startsWith('Carga inicial');
 
         return (
             <div key={m.id} className="flex items-start gap-3 px-4 py-3 hover:bg-gray-50/50">
@@ -168,7 +172,8 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
                         {isActiveLoan && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">🔑 Préstamo activo</span>}
                         {isReturned   && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-green-100 text-green-700">✅ Devuelta</span>}
                         {isCheckOut   && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-700">📤 Salida</span>}
-                        {isCheckIn    && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">📥 Entrada</span>}
+                        {isCheckIn && !esCargaInicial && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">📥 Entrada</span>}
+                        {esCargaInicial && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">📦 Carga inicial</span>}
                         {m.pendingPickup && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700">📍 A recoger</span>}
                     </div>
                     <div className="flex items-center gap-1.5 mt-1 flex-wrap text-[10px] text-gray-400">

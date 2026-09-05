@@ -1,6 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { AddItemModal } from './components/AddItemModal';
+import { ReviewFamiliesView } from './components/ReviewFamiliesView';
+import { familiaDe as familiaDeNombre } from './utils/genus';
 import { EditItemModal } from './components/EditItemModal';
 import { Dashboard } from './components/Dashboard';
 import { Header } from './components/Header';
@@ -40,7 +42,7 @@ import { MovementsIcon } from './components/icons/MovementsIcon';
 import { PersonnelIcon } from './components/icons/PersonnelIcon';
 import { WhatsAppIcon } from './components/icons/WhatsAppIcon';
 
-type View = 'dashboard' | 'kardex' | 'personnel' | 'copilot' | 'help' | 'whatsapp' | 'pickup' | 'traceability';
+type View = 'dashboard' | 'kardex' | 'personnel' | 'copilot' | 'help' | 'whatsapp' | 'pickup' | 'traceability' | 'familias';
 type KardexTab = 'movements' | 'loans' | 'inventory' | 'projects';
 
 const SESSION_KEY = 'bodega_session';
@@ -411,13 +413,25 @@ const App: React.FC = () => {
 
     const [currentView, setCurrentView] = useState<View>('dashboard');
     const [kardexTab, setKardexTab] = useState<KardexTab>('movements');
-    const EMPLOYEE_VIEWS: View[] = ['dashboard', 'kardex', 'personnel', 'help', 'whatsapp', 'pickup', 'traceability', 'copilot'];
+    const EMPLOYEE_VIEWS: View[] = ['dashboard', 'kardex', 'personnel', 'help', 'whatsapp', 'pickup', 'traceability', 'copilot', 'familias'];
     const VISITOR_VIEWS: View[] = ['dashboard', 'kardex', 'whatsapp', 'traceability'];
     const effectiveView: View = (userRole === UserRole.VISITOR && !VISITOR_VIEWS.includes(currentView))
         ? 'dashboard'
         : (userRole === UserRole.EMPLOYEE && !EMPLOYEE_VIEWS.includes(currentView))
             ? 'dashboard'
             : currentView;
+    // Cuántas agrupaciones faltan por confirmar: si no se ve, nadie entra a la
+    // pantalla y la bodega se queda con las suposiciones.
+    const familiasPorRevisar = (() => {
+        const cuenta = new Map<string, number>();
+        for (const i of items) {
+            if (i.familia?.trim()) continue;
+            const f = familiaDeNombre(i.name);
+            cuenta.set(f, (cuenta.get(f) ?? 0) + 1);
+        }
+        return [...cuenta.values()].filter(n => n >= 2).length;
+    })();
+
     const pendingPickupCount = movements.filter(m => m.isLoan && !m.isReturned && m.pendingPickup).length;
     const [isSidebarOpen, setSidebarOpen] = useState(true);
 
@@ -524,6 +538,7 @@ const App: React.FC = () => {
         help: 'Ayuda',
         whatsapp: 'WhatsApp',
         pickup: 'A Recoger',
+        familias: 'Agrupar ítems',
         traceability: 'Trazabilidad',
     };
 
@@ -983,6 +998,13 @@ const App: React.FC = () => {
                             <>
                                 <NavItem icon={PersonnelIcon} label="Personal" onClick={() => selectView('personnel')} isActive={effectiveView === 'personnel'} />
                                 <NavItem icon={PickupNavIcon} label="A Recoger" onClick={() => selectView('pickup')} isActive={effectiveView === 'pickup'} badge={pendingPickupCount} />
+                                <NavItem
+                                    icon={({ className }: { className?: string }) => <span className={className}>🗂️</span>}
+                                    label="Agrupar ítems"
+                                    onClick={() => selectView('familias')}
+                                    isActive={effectiveView === 'familias'}
+                                    badge={familiasPorRevisar}
+                                />
                             </>
                         )}
                         <NavItem
@@ -1109,6 +1131,14 @@ const App: React.FC = () => {
                                 onBehaviorLog={addBehaviorLog}
                             />
                         )}
+                        {effectiveView === 'familias' && (
+                            <ReviewFamiliesView
+                                items={items}
+                                onEditItem={handleEditItem}
+                                onGoBack={() => selectView('kardex')}
+                                onBehaviorLog={addBehaviorLog}
+                            />
+                        )}
                         {effectiveView === 'help' && <HelpView />}
                         {effectiveView === 'traceability' && (
                             <TraceabilityView
@@ -1196,6 +1226,7 @@ const App: React.FC = () => {
             )}
             {(userRole === UserRole.OWNER || userRole === UserRole.EMPLOYEE) && (
                 <FloatingChat
+                    onEditItem={handleEditItem}
                     items={items}
                     movements={movements}
                     personnel={personnel}
