@@ -33,6 +33,10 @@ interface MovementsViewProps {
     filterType?: InventoryType;
     openLogMovementModal?: () => void;
     onReturnLoan?: (movementId: string) => void;
+    /** Devolución con formulario: pregunta estado y revisa accesorios. */
+    onReturnWithForm?: (movement: Movement) => void;
+    /** Abre el histórico del ítem, el mismo de Inventario. */
+    onItemHistory?: (item: Item) => void;
     onDeleteMovement?: (id: string) => void;
     onGoBack: () => void;
     userRole?: UserRole;
@@ -41,7 +45,7 @@ interface MovementsViewProps {
 
 export const MovementsView: React.FC<MovementsViewProps> = ({
     movements, items, personnel, filterType,
-    openLogMovementModal, onReturnLoan, onDeleteMovement, onGoBack,
+    openLogMovementModal, onReturnLoan, onReturnWithForm, onDeleteMovement, onGoBack, onItemHistory,
     userRole = UserRole.EMPLOYEE, onBehaviorLog,
 }) => {
     const isOwner = userRole !== UserRole.VISITOR;
@@ -147,10 +151,19 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
         return (
             <div key={m.id} className="flex items-start gap-3 px-4 py-3 hover:bg-gray-50/50">
                 <div className="flex-1 min-w-0">
+                    {/* El trabajador manda: probando en la bodega, lo que se busca
+                        es de QUIÉN es cada cosa, no cómo se llama el ítem. */}
                     <div className="flex items-baseline gap-1.5 flex-wrap">
-                        <span className="text-sm font-bold text-gray-900">{itemName}</span>
+                        <span className="text-sm font-black text-indigo-700">{personName || 'Sin asignar'}</span>
                         <span className="text-xs text-gray-400">×{m.quantity}</span>
                     </div>
+                    <button
+                        type="button"
+                        onClick={() => { const it = itemMap.get(m.itemId); if (it && onItemHistory) { onBehaviorLog?.('BUTTON', `Ver historial desde Kardex: ${it.name}`); onItemHistory(it); } }}
+                        disabled={!onItemHistory || !itemMap.get(m.itemId)}
+                        className="text-sm font-semibold text-gray-700 truncate max-w-full text-left hover:text-blue-600 hover:underline disabled:hover:text-gray-700 disabled:hover:no-underline">
+                        {itemName}
+                    </button>
                     <div className="flex flex-wrap gap-1 mt-1">
                         {isActiveLoan && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">🔑 Préstamo activo</span>}
                         {isReturned   && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-green-100 text-green-700">✅ Devuelta</span>}
@@ -164,15 +177,16 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
                             que se devolvió fue hoy o hace un mes. */}
                         <span>{m.returnedAt ? `Salió ${timeStr}` : timeStr}</span>
                         {m.returnedAt && <><span>·</span><span className="font-bold text-green-600">Devuelta {fmt(m.returnedAt)}</span></>}
-                        {personName && <><span>·</span><span className="font-semibold text-gray-500">{personName}</span></>}
                         {m.returnCondition && <><span>·</span><span>{CONDITION_LABEL[m.returnCondition] ?? m.returnCondition}</span></>}
                         {m.notes && <><span>·</span><span className="italic truncate max-w-[140px]">{m.notes}</span></>}
                     </div>
                 </div>
                 {isOwner && (
                     <div className="flex flex-col gap-1 flex-shrink-0">
-                        {isActiveLoan && onReturnLoan && (
-                            <button onClick={() => onReturnLoan(m.id)}
+                        {isActiveLoan && (onReturnWithForm || onReturnLoan) && (
+                            // Con formulario si se puede: devolver sin preguntar se
+                            // salta el estado y la revisión de accesorios.
+                            <button onClick={() => onReturnWithForm ? onReturnWithForm(m) : onReturnLoan?.(m.id)}
                                 className="text-xs bg-indigo-600 text-white px-2.5 py-1.5 rounded-lg hover:bg-indigo-700 font-bold">
                                 Devolver
                             </button>
@@ -188,7 +202,7 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
             </div>
         );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isOwner, onReturnLoan, onDeleteMovement, onBehaviorLog, itemMap, personnelMap]);
+    }, [isOwner, onReturnLoan, onReturnWithForm, onDeleteMovement, onBehaviorLog, onItemHistory, itemMap, personnelMap]);
 
     return (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
