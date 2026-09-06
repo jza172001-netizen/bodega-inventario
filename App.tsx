@@ -1178,6 +1178,10 @@ const App: React.FC = () => {
                                 onMarkPendingPickup={handleMarkPendingPickup}
                                 openAddItemModal={() => { setAddItemModalOpen(true); addBehaviorLog('BUTTON', 'Abrió modal Agregar ítem'); }}
                                 onEditItem={(i) => { setItemToEdit(i); setEditModalOpen(true); addBehaviorLog('BUTTON', `Editó ítem: ${i.name}`); }}
+                                // `onEditItem` en Kardex ABRE el modal; para guardar de una
+                                // (enganchar un accesorio desde la lista) hace falta el que
+                                // escribe de verdad.
+                                onSaveItem={handleEditItem}
                                 onDeleteItem={handleDeleteItem}
                                 onItemHistory={(i) => { setItemForHistory(i); setHistoryModalOpen(true); addBehaviorLog('BUTTON', `Ver historial: ${i.name}`); }}
                                 onOpenInvoiceReader={() => { setInvoiceReaderOpen(true); addBehaviorLog('BUTTON', 'Abrió Leer factura'); }}

@@ -5,6 +5,7 @@ import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
 import { ClockIcon } from './icons/ClockIcon';
 import { ReturnToolModal } from './ReturnToolModal';
 import { getGenus, looseMatch } from '../utils/genus';
+import { AccesoriosDeItem, AgregarAccesorio } from './AccesoriosDeItem';
 import { getActiveToolLoans, getConsumedMovements } from '../utils/inventory';
 
 /**
@@ -27,6 +28,8 @@ interface LoansViewProps {
     onGoBack: () => void;
     userRole?: UserRole;
     onBehaviorLog?: (action: string, detail: string) => void;
+    /** Para engancharle un consumible a la herramienta sin salir de la lista. */
+    onEditItem?: (item: Item) => void;
 }
 
 // Los chips se recortan por lente: no tiene sentido ofrecer "EPP" filtrando
@@ -51,7 +54,7 @@ const INV_EMOJI: Record<string, string> = {
 };
 
 export const LoansView: React.FC<LoansViewProps> = ({
-    movements, items, personnel, onReturnItem, onMarkPendingPickup, onGoBack, userRole = UserRole.EMPLOYEE, onBehaviorLog,
+    movements, items, personnel, onReturnItem, onMarkPendingPickup, onGoBack, userRole = UserRole.EMPLOYEE, onBehaviorLog, onEditItem,
     initialLens = 'loans',
 }) => {
     const isOwner = userRole !== UserRole.VISITOR;
@@ -208,11 +211,18 @@ export const LoansView: React.FC<LoansViewProps> = ({
                 <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-800 truncate">{getPersonName(loan.personnelId)}</p>
                     <p className="text-xs text-gray-400">{new Date(loan.timestamp).toLocaleDateString('es-CO')}</p>
+                    {/* Lo que salió pegado a la herramienta, dicho acá: antes solo
+                        se veía abriendo el editor del ítem. */}
+                    <AccesoriosDeItem item={itemMap.get(loan.itemId)} className="mt-1" />
                 </div>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 bg-gray-100 text-gray-600">×{loan.quantity}</span>
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${daysBadge}`}>{days}d</span>
                 {isPending && <span className="text-[10px] font-black bg-indigo-600 text-white px-1.5 py-0.5 rounded-full flex-shrink-0">Recoger</span>}
-                <div className="flex gap-1 flex-shrink-0">
+                <div className="flex gap-1 flex-shrink-0 items-center">
+                    {isOwner && onEditItem && itemMap.get(loan.itemId) && (
+                        <AgregarAccesorio item={itemMap.get(loan.itemId)!} items={items}
+                            onEditItem={onEditItem} onBehaviorLog={onBehaviorLog} />
+                    )}
                     {isOwner && (
                         <button onClick={() => handleReturn(loan)}
                             className="py-1 px-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold rounded-lg transition-all">

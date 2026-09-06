@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Personnel, Movement, Item, Project, MovementType, InventoryType, ReturnCondition } from '../types';
 import { PeriodPicker, Periodo, periodoPorDefecto } from './PeriodPicker';
+import { AccesoriosDeItem } from './AccesoriosDeItem';
 import { ReturnToolModal } from './ReturnToolModal';
 
 interface Props {
@@ -237,6 +238,8 @@ export const PersonnelDetailModal: React.FC<Props> = ({
                                 <span className="ml-1 font-black text-indigo-600">· {nombreDe(g.personnelId)}</span>
                             )}
                         </p>
+                        {/* Lo que salió pegado a la herramienta. */}
+                        <AccesoriosDeItem item={items.find(i => i.id === g.itemId)} className="mt-1" />
                         {proj && (
                             <p className="text-xs text-indigo-600 font-semibold mt-0.5 truncate">📁 {proj}</p>
                         )}
