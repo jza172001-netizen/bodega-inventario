@@ -6,6 +6,7 @@ import { askCopilot } from '../services/copilotService';
 import { suggestQuestions } from '../services/warehouseQA';
 import { scoreMatch } from '../utils/search';
 import { AccesoriosDeItem } from './AccesoriosDeItem';
+import { unidadesCon } from '../utils/unidades';
 import { getGenus, familiaDe, esParecido, familiaCanonica, familiasParecidas, coloresDeFamilia } from '../utils/genus';
 
 interface FloatingChatProps {
@@ -1050,10 +1051,13 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                             )}
                                             {(type === InventoryType.PPE || type === InventoryType.SINGLE_USE) && (
                                                 <>
-                                                    <input type="text" value={wizardCreateUnit}
+                                                    {/* Lista, no texto libre: escrito a mano salían "und",
+                                                        "Und" y "unidades" como tres unidades distintas. */}
+                                                    <select value={wizardCreateUnit}
                                                         onChange={e => setWizardCreateUnit(e.target.value)}
-                                                        placeholder="Unidad (ej: unidades, pares, cajas)"
-                                                        className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                                                        className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white">
+                                                        {unidadesCon(wizardCreateUnit).map(u => <option key={u} value={u}>{u}</option>)}
+                                                    </select>
                                                     {/* Opcionales: unos guantes negros y unos rojos son dos ítems
                                                         de la misma familia. Sin esto solo se podía tener "Guantes". */}
                                                     <div className="flex gap-1.5">
@@ -1344,9 +1348,10 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                         onChange={e => setLoanCreateQty(parseInt(e.target.value) || 1)}
                                         placeholder="Cantidad *"
                                         className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
-                                    <input type="text" value={loanCreateUnit} onChange={e => setLoanCreateUnit(e.target.value)}
-                                        placeholder="Unidad (ej: unidades, pares, cajas)"
-                                        className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                                    <select value={loanCreateUnit} onChange={e => setLoanCreateUnit(e.target.value)}
+                                        className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white">
+                                        {unidadesCon(loanCreateUnit).map(u => <option key={u} value={u}>{u}</option>)}
+                                    </select>
                                 </>
                             )}
                             {(loanInvType === InventoryType.ELECTRICAL_TOOL || loanInvType === InventoryType.HAND_TOOL) && (
@@ -1504,8 +1509,10 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                 </div>
                 <div>
                     <label className="text-[10px] font-black text-green-700 uppercase tracking-wide block mb-1">Unidad</label>
-                    <input type="text" value={createUnit} onChange={e => setCreateUnit(e.target.value)} placeholder="unidades"
-                        className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400" />
+                    <select value={createUnit} onChange={e => setCreateUnit(e.target.value)}
+                        className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400 bg-white">
+                        {unidadesCon(createUnit).map(u => <option key={u} value={u}>{u}</option>)}
+                    </select>
                 </div>
             </div>
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Item, InventoryType, Accessory } from '../types';
 import { AccessoriesEditor } from './AccessoriesEditor';
 import { CATEGORIES } from '../constants';
+import { unidadesCon } from '../utils/unidades';
 import { XIcon } from './icons/XIcon';
 
 interface EditItemModalProps {
@@ -28,7 +29,6 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, o
     // que un ítem mal agrupado no se podía arreglar desde ninguna parte.
     const [familia, setFamilia] = useState('');
 
-    const UNIT_OPTIONS = ['unidades', 'pares', 'caja', 'bolsa', 'rollo', 'pliego', 'litro', 'ml', 'galón', 'kg', 'g', 'ton', 'm', 'cm', 'mm', 'km', 'm²', 'm³', 'yarda'];
 
     useEffect(() => {
         if (itemToEdit) {
@@ -117,13 +117,12 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, o
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Unidad de Medida</label>
-                            {inventoryType === InventoryType.SINGLE_USE ? (
-                                <select value={unit} onChange={e => setUnit(e.target.value)} className="w-full input-style">
-                                    {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
-                                </select>
-                            ) : (
-                                <input type="text" value={unit} onChange={e => setUnit(e.target.value)} required className="w-full input-style"/>
-                            )}
+                            {/* Lista para TODOS los tipos, no solo consumibles. Escrita a
+                                mano aparecían "und", "Und" y "unidades" como tres cosas
+                                distintas, y el consumo quedaba partido en tres. */}
+                            <select value={unit} onChange={e => setUnit(e.target.value)} required className="w-full input-style">
+                                {unidadesCon(unit).map(u => <option key={u} value={u}>{u}</option>)}
+                            </select>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Color (Opcional)</label>
