@@ -228,6 +228,53 @@ export const nombreCorregido = (nombre: string, familia: string): string => {
     return [fam, ...palabras.slice(1)].join(' ');
 };
 
+/**
+ * Qué accesorio le corresponde a esta familia de herramienta.
+ *
+ * Lo dijo el bodeguero: "para los taladros son casi todos brocas, de diferentes
+ * tipos; y pulidoras, todo discos de diferentes tipos". El accesorio es
+ * predecible por la familia, y hoy el selector muestra la lista completa de
+ * consumibles sin orden — para engancharle una broca a un taladro hay que
+ * buscarla entre lechadas, clavos y bombillos.
+ *
+ * Manda lo APRENDIDO: lo que ya tienen enganchado las otras herramientas de la
+ * misma familia. La lista de abajo es solo el arranque, para el primer día en
+ * que todavía no hay nada que aprender.
+ */
+const ARRANQUE: Record<string, string> = {
+    taladro:  'broca',
+    pulidora: 'disco',
+    radial:   'disco',
+    lijadora: 'lija',
+    soldador: 'electrodo',
+    tronzadora: 'disco',
+    sierra:   'disco',
+};
+
+export const accesorioDeFamilia = (familia: string, items: Item[]): string[] => {
+    const fam = normStr(familia);
+
+    // 1) Lo que ya engancharon las hermanas de esta misma familia.
+    const aprendidos = new Set<string>();
+    for (const i of items) {
+        const f = normStr(i.familia?.trim() || familiaDe(i.name));
+        if (f !== fam) continue;
+        for (const a of i.accessories ?? []) if (a.itemId) aprendidos.add(a.itemId);
+    }
+    if (aprendidos.size > 0) return [...aprendidos];
+
+    // 2) Primer día: se siembra con la palabra que usa la bodega.
+    const palabra = ARRANQUE[fam];
+    if (!palabra) return [];
+    return items.filter(i => normStr(i.name).startsWith(palabra)).map(i => i.id);
+};
+
+/** La palabra con la que arranca un accesorio nuevo de esta familia. */
+export const palabraDeAccesorio = (familia: string): string => {
+    const p = ARRANQUE[normStr(familia)];
+    return p ? p.charAt(0).toUpperCase() + p.slice(1) + ' ' : '';
+};
+
 export const clusterGenera = (items: Item[]): GenusCluster[] => {
     // familiaDe y no getGenus: así "Lechada gris claro" y "Lechada veige"
     // caen en el mismo grupo, no solo las que traen paréntesis.

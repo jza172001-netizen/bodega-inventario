@@ -7,6 +7,8 @@ import { TrashIcon } from './icons/TrashIcon';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
 import { HistoryIcon } from './icons/HistoryIcon';
 import { getGenus, normStr, clusterGenera, looseMatch } from '../utils/genus';
+import { construirArbol, detalleDe } from '../utils/arbol';
+import { tonoDe } from '../utils/colores';
 
 interface InventoryViewProps {
     items: Item[];
@@ -22,6 +24,26 @@ interface InventoryViewProps {
     onGoBack: () => void;
     onBehaviorLog?: (action: string, detail: string) => void;
 }
+
+/**
+ * Las especies de una familia, con la rama que las separa intercalada.
+ *
+ * Una lista plana de once taladros no se lee; «Alambrico / Inhalambrico /
+ * Percutor» sí. Si solo hay una rama no se intercala nada: un encabezado que
+ * cubre toda la lista no separa nada.
+ */
+type EntradaDeRama =
+    | { tipo: 'rama'; nombre: string; cuantos: number; total: number }
+    | { tipo: 'item'; item: Item };
+
+const enRamas = (species: Item[]): EntradaDeRama[] => {
+    const ramas = construirArbol(species).flatMap(a => a.ramas);
+    if (ramas.length < 2) return species.map(item => ({ tipo: 'item', item }));
+    return ramas.flatMap(r => [
+        { tipo: 'rama', nombre: r.variante, cuantos: r.items.length, total: r.total } as EntradaDeRama,
+        ...r.items.map(item => ({ tipo: 'item', item }) as EntradaDeRama),
+    ]);
+};
 
 export const InventoryView: React.FC<InventoryViewProps> = ({ items, movements = [], personnel = [], openAddItemModal, onEditItem, onDeleteItem, onItemHistory, onOpenInvoiceReader, userRole, category, onGoBack, onBehaviorLog }) => {
     const [search, setSearch] = useState('');
@@ -235,18 +257,35 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, movements =
                             {/* Species list (expandable) */}
                             {species.length > 1 && isExpanded && (
                                 <div className="divide-y divide-gray-100">
-                                    {species.map(item => {
-                                        const speciesLabel = item.name.match(/\(([^)]+)\)/)?.[1] ?? item.name;
+                                    {/* El nivel del medio que faltaba. Él lo pidió con los clavos
+                                        —«me meto a una familia y me salen 1 pulgada, 2 pulgadas»— y
+                                        lo mismo aplica a las pulidoras: grandes y pequeñas, y dentro
+                                        de cada una los colores y las marcas. Con una sola rama no se
+                                        muestra nada: no separaría nada. */}
+                                    {enRamas(species).map(entrada => {
+                                        if (entrada.tipo === 'rama') {
+                                            return (
+                                                <div key={`rama-${entrada.nombre}`} className="flex items-center gap-1.5 px-3 py-1 bg-gray-50/70">
+                                                    {tonoDe(entrada.nombre) && (
+                                                        <span className="w-2 h-2 rounded-full border border-black/10 flex-shrink-0"
+                                                            style={{ backgroundColor: tonoDe(entrada.nombre)! }} />
+                                                    )}
+                                                    <p className="text-[11px] font-black text-gray-500 uppercase tracking-wider flex-1 min-w-0 truncate">
+                                                        {entrada.nombre === '—' ? canonical : entrada.nombre}
+                                                    </p>
+                                                    <span className="text-[10px] text-gray-400">{entrada.cuantos} · {entrada.total}</span>
+                                                </div>
+                                            );
+                                        }
+                                        const item = entrada.item;
+                                        const speciesLabel = detalleDe(item, canonical, species) || item.name.match(/\(([^)]+)\)/)?.[1] || item.name;
                                         return (
-                                            <div key={item.id} className="flex items-center justify-between px-3 py-2 bg-white gap-2">
+                                            <div key={item.id} className="flex items-center justify-between px-3 py-2 bg-white gap-2 pl-5">
                                                 <div className="min-w-0 flex-1">
                                                     <p className="text-xs font-semibold text-gray-700 cursor-pointer" onClick={() => onItemHistory(item)}>{speciesLabel}</p>
-                                                    {item.inventoryType === InventoryType.ELECTRICAL_TOOL && (item.brand || item.color) && (
-                                                        <div className="flex flex-wrap gap-1 mt-0.5">
-                                                            {item.brand && <span className="text-[10px] font-semibold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">{item.brand}</span>}
-                                                            {item.color && <span className="text-[10px] font-semibold bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full">{item.color}</span>}
-                                                        </div>
-                                                    )}
+                                                    {/* Antes acá iban dos chips con la marca y el color. Ahora la
+                                                        etiqueta ya dice "Amarillo · Dwalt" y la rama de arriba dice
+                                                        el resto: repetirlo tres veces gastaba media pantalla. */}
                                                 </div>
                                                 <div className="flex items-center gap-2 flex-shrink-0">
                                                     <span className="text-sm font-bold text-gray-800">{item.quantity} <span className="text-xs font-normal text-gray-500">{item.unit}</span></span>

@@ -6,6 +6,7 @@ import { askCopilot } from '../services/copilotService';
 import { suggestQuestions } from '../services/warehouseQA';
 import { scoreMatch } from '../utils/search';
 import { AccesoriosDeItem } from './AccesoriosDeItem';
+import { ArbolFamilias } from './ArbolFamilias';
 import { unidadesCon } from '../utils/unidades';
 import { getGenus, familiaDe, esParecido, familiaCanonica, familiasParecidas, coloresDeFamilia, marcasDeFamilia, nombreCorregido } from '../utils/genus';
 import { tonoDe, raizDeColor, coloresUnificados } from '../utils/colores';
@@ -228,14 +229,26 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
      * que distingue un taladro amarillo de otro. Se parte en dos renglones para
      * que el color y la marca SIEMPRE se vean.
      */
-    const FilaItem = ({ item }: { item: Item }) => {
+    const FilaItem = ({ item, detalle }: { item: Item; detalle?: string }) => {
         const familia = getGenus(item.name);
-        const variante = item.name.match(/\(([^)]+)\)/)?.[1]
-            ?? [item.color, item.brand].filter(Boolean).join(' · ');
+        const variante = detalle ?? (item.name.match(/\(([^)]+)\)/)?.[1]
+            ?? [item.color, item.brand].filter(Boolean).join(' · '));
+        // Dentro del árbol la familia y la rama ya están arriba: repetir el
+        // nombre completo en la hoja es gastar el único renglón que hay.
+        const titulo = detalle !== undefined ? (detalle ? '' : item.name) : familia;
         return (
             <div className="flex-1 min-w-0">
-                <p className="text-sm text-gray-800 truncate">{familia}</p>
-                {variante && <p className="text-[10px] font-semibold text-blue-600 truncate">{variante}</p>}
+                {titulo && <p className="text-sm text-gray-800 truncate">{titulo}</p>}
+                {variante && (
+                    <p className={`truncate font-semibold text-blue-600 flex items-center gap-1 ${titulo ? 'text-[10px]' : 'text-sm'}`}>
+                        {/* El color, del color que es. Leerlo es más lento que verlo. */}
+                        {tonoDe(item.color ?? '') && (
+                            <span className="w-2 h-2 rounded-full border border-black/10 flex-shrink-0"
+                                style={{ backgroundColor: tonoDe(item.color ?? '')! }} />
+                        )}
+                        <span className="truncate">{variante}</span>
+                    </p>
+                )}
                 {/* Lo que sale pegado: hay que saber que la pulidora lleva disco
                     ANTES de entregarla, no cuando el disco ya no aparece. */}
                 <AccesoriosDeItem item={item} className="mt-0.5" />
@@ -993,27 +1006,35 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                     </label>
 
                                     {available.length > 0 && !wizardIsAddMode && (
-                                        <div className="space-y-1 max-h-36 overflow-y-auto border border-gray-200 rounded-xl p-1 mb-1">
-                                            {available.map(item => {
-                                                const isSelected = wizardSel.has(item.id);
-                                                const qty = wizardSel.get(item.id) ?? 1;
-                                                return (
-                                                    <div key={item.id} onClick={() => toggleWizardSel(item.id)}
-                                                        className={`flex items-center gap-2 px-2 py-1.5 rounded-lg border cursor-pointer transition-all ${isSelected ? 'bg-blue-50 border-blue-300' : 'bg-white border-transparent hover:border-blue-200 hover:bg-blue-50'}`}>
-                                                        <input type="checkbox" checked={isSelected} readOnly className="w-4 h-4 accent-blue-600 flex-shrink-0" />
-                                                        <FilaItem item={item} />
-                                                        <span className={`text-[10px] flex-shrink-0 ${item.quantity > 0 ? 'text-gray-400' : 'font-black text-orange-600'}`}>
-                                                            {item.quantity > 0 ? `${item.quantity} disp.` : 'agotado'}
-                                                        </span>
-                                                        {isSelected && (
-                                                            <input type="number" onFocus={e => e.target.select()} value={qty} min={1}
-                                                                onChange={e => setWizardSelQty(item.id, parseInt(e.target.value) || 1)}
-                                                                onClick={e => e.stopPropagation()}
-                                                                className="w-11 text-xs text-center border border-blue-300 rounded-lg px-1 py-0.5 bg-white focus:outline-none" />
-                                                        )}
-                                                    </div>
-                                                );
-                                            })}
+                                        <div className="max-h-52 overflow-y-auto border border-gray-200 rounded-xl p-1 mb-1">
+                                            {/* Once taladros en fila no se leen en un celular; cuatro
+                                                colores sí. Es el árbol que pidió con los clavos, acá
+                                                y en el resto de la app. */}
+                                            <ArbolFamilias
+                                                items={available}
+                                                escogidos={new Set(wizardSel.keys())}
+                                                abrirTodo={available.length <= 6}
+                                                fila={(item, detalle) => {
+                                                    const isSelected = wizardSel.has(item.id);
+                                                    const qty = wizardSel.get(item.id) ?? 1;
+                                                    return (
+                                                        <div onClick={() => toggleWizardSel(item.id)}
+                                                            className={`flex items-center gap-2 px-2 py-1.5 rounded-lg border cursor-pointer transition-all ${isSelected ? 'bg-blue-50 border-blue-300' : 'bg-white border-transparent hover:border-blue-200 hover:bg-blue-50'}`}>
+                                                            <input type="checkbox" checked={isSelected} readOnly className="w-4 h-4 accent-blue-600 flex-shrink-0" />
+                                                            <FilaItem item={item} detalle={detalle} />
+                                                            <span className={`text-[10px] flex-shrink-0 ${item.quantity > 0 ? 'text-gray-400' : 'font-black text-orange-600'}`}>
+                                                                {item.quantity > 0 ? `${item.quantity} disp.` : 'agotado'}
+                                                            </span>
+                                                            {isSelected && (
+                                                                <input type="number" onFocus={e => e.target.select()} value={qty} min={1}
+                                                                    onChange={e => setWizardSelQty(item.id, parseInt(e.target.value) || 1)}
+                                                                    onClick={e => e.stopPropagation()}
+                                                                    className="w-11 text-xs text-center border border-blue-300 rounded-lg px-1 py-0.5 bg-white focus:outline-none" />
+                                                            )}
+                                                        </div>
+                                                    );
+                                                }}
+                                            />
                                         </div>
                                     )}
                                     {available.length === 0 && !isCreating && !wizardIsAddMode && (
@@ -1401,25 +1422,31 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                         <p className="text-xs text-gray-400 text-center py-2">Sin stock. Usa "+ Crear nuevo".</p>
                     )}
                     {availableForLoan.length > 0 && (
-                        <div className="space-y-1 max-h-36 overflow-y-auto mb-1">
-                            {availableForLoan.map(item => {
-                                const isSelected = loanSelected.has(item.id);
-                                const qty = loanSelected.get(item.id) ?? 1;
-                                return (
-                                    <div key={item.id} onClick={() => toggleLoanItem(item.id)}
-                                        className={`flex items-center gap-2 px-3 py-2 rounded-xl border cursor-pointer transition-all ${isSelected ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-200 hover:border-blue-300'}`}>
-                                        <input type="checkbox" checked={isSelected} readOnly className="w-4 h-4 accent-blue-600 flex-shrink-0" />
-                                        <FilaItem item={item} />
-                                        <span className="text-[10px] text-gray-400 flex-shrink-0">{item.quantity} disp.</span>
-                                        {isSelected && (
-                                            <input type="number" onFocus={e => e.target.select()} value={qty} min={1} max={item.quantity}
-                                                onChange={e => setLoanItemQty(item.id, parseInt(e.target.value) || 1)}
-                                                onClick={e => e.stopPropagation()}
-                                                className="w-12 text-xs text-center border border-blue-300 rounded-lg px-1 py-0.5 bg-white focus:outline-none" />
-                                        )}
-                                    </div>
-                                );
-                            })}
+                        <div className="max-h-48 overflow-y-auto mb-1">
+                            {/* El mismo árbol del despacho: familia → rama → color y marca. */}
+                            <ArbolFamilias
+                                items={availableForLoan}
+                                escogidos={new Set(loanSelected.keys())}
+                                abrirTodo={availableForLoan.length <= 6}
+                                fila={(item, detalle) => {
+                                    const isSelected = loanSelected.has(item.id);
+                                    const qty = loanSelected.get(item.id) ?? 1;
+                                    return (
+                                        <div onClick={() => toggleLoanItem(item.id)}
+                                            className={`flex items-center gap-2 px-3 py-2 rounded-xl border cursor-pointer transition-all ${isSelected ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-200 hover:border-blue-300'}`}>
+                                            <input type="checkbox" checked={isSelected} readOnly className="w-4 h-4 accent-blue-600 flex-shrink-0" />
+                                            <FilaItem item={item} detalle={detalle} />
+                                            <span className="text-[10px] text-gray-400 flex-shrink-0">{item.quantity} disp.</span>
+                                            {isSelected && (
+                                                <input type="number" onFocus={e => e.target.select()} value={qty} min={1} max={item.quantity}
+                                                    onChange={e => setLoanItemQty(item.id, parseInt(e.target.value) || 1)}
+                                                    onClick={e => e.stopPropagation()}
+                                                    className="w-12 text-xs text-center border border-blue-300 rounded-lg px-1 py-0.5 bg-white focus:outline-none" />
+                                            )}
+                                        </div>
+                                    );
+                                }}
+                            />
                         </div>
                     )}
                     {loanIsCreating ? (
