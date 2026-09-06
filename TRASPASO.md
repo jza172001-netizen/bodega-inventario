@@ -6,40 +6,58 @@ Todo lo que dice acá está verificado contra la base de producción
 
 ---
 
-## 1. El plan de pruebas es el mismo. No hay trece pasos nuevos.
+## 1. El plan de pruebas es el mismo, y está entero por correr
 
 Son **12 pasos** (Juli los recuerda como trece, contando el Paso 0 —la primera
-foto del Resumen—). El plan no cambió; lo que cambió es cuántos están hechos.
+foto del Resumen—). El plan no cambió.
 
-| Paso | Qué prueba | Estado | Evidencia |
-|---|---|---|---|
-| 1 | Despachos por chatbot | ✅ | 42 préstamos registrados |
-| 2 | Estrés del buscador general | ✅ | «Héctor con k» corregido y verificado |
-| 3 | Checkbox por tipo (formulario directo) | ⬜ **falta** | quedó a medias por el botón de guardar, ya arreglado |
-| 4 | Devoluciones dañadas | ✅ | `damaged` con fecha y tenedor |
-| 5 | Otros estados de devolución | ✅ | los cinco estados usados |
-| 6 | Borrar movimientos | ✅ | 33 borrados con PIN y rastro |
-| 7 | Stock negativo | 🟡 sin evidencia directa en la base | el aviso está en el código |
-| 8 | A Recoger | ✅ | 5 marcados |
-| 9 | Resumen, segunda foto | ⬜ **falta** | |
-| 10 | Persistencia y multidispositivo | ⬜ **falta** | |
-| 11 | WhatsApp | 🟡 | 1 mensaje enviado; falta probar que no repita |
-| 12 | Veredicto: stock ↔ Kardex | ✅ corrido hoy | **74 de 77 cuadran** |
+**Y no hay pasos hechos.** Él lo dijo con todas las letras: *«nunca hice los 12,
+los pusiste en un plan pero no los hice»*. En el chat anterior yo di ocho por
+hechos mirando su base de datos —42 préstamos, devoluciones con estado, 33
+borrados— y eso fue un error de razonamiento: esos datos prueban que **la app se
+usó**, no que alguien haya comprobado lo que el paso pregunta.
 
-**Los tres que faltan (3, 9, 10) solo los puede hacer Juli**, con el celular en
-la mano. No son de programar: son de mirar y confirmar.
+La diferencia importa y es toda la diferencia:
+
+| Lo que hay | Lo que NO hay |
+|---|---|
+| Se registraron 42 préstamos sin que la app se cayera | Nadie verificó que el stock quedara bien después |
+| Hay devoluciones guardadas como `damaged`, `worn`, `incomplete` | Nadie miró si la trazabilidad dice **quién la tuvo** ni si el stock subió +1 |
+| Se borraron 33 movimientos | Nadie confirmó que el stock volviera |
+
+Usar una función y verificarla son dos cosas. Lo primero dice que no explota;
+lo segundo dice que la cuenta queda bien. Solo lo segundo cierra un paso.
+
+### Lo único verificado hasta hoy, y por quién
+
+- **Paso 12 (stock ↔ Kardex)** — lo corrí yo contra producción el 6 de
+  septiembre: **74 de 77 cuadran**, los 3 descuadres están nombrados abajo.
+  Este sí cuenta, porque es una consulta, no una impresión.
+- **Arreglos sueltos** verificados en navegador a 390 px (choques de pantalla,
+  el «?» de la ayuda, el botón de Despacho). Son de esos arreglos, no de los
+  pasos del plan.
+
+Todo lo demás —los pasos 1 al 11— **está por correr**, y los tiene que correr
+Juli con el celular en la mano. No son de programar: son de hacer la acción y
+mirar si la app contestó lo que debía.
 
 ---
 
 ## 2. Lo que Juli cree que falta, contra lo que de verdad falta
 
 Él dijo: *«estamos a dos pasos: verificar que esté lista y terminar de subir los
-números del personal»*. Casi. Medido hoy:
+números del personal»*. La segunda mitad está casi lista; la primera es más
+grande de lo que suena.
 
 - **Los teléfonos ya están casi todos: 31 de 33.** Faltan exactamente dos —
   **Jhon jader** y **Rafael**. Eso no es «terminar de subir los números», es
   agregar dos.
-- **«Verificar que esté lista» son los pasos 3, 9 y 10**, más cerrar el 11.
+- **«Verificar que esté lista» son los once pasos del plan**, no tres. Varios
+  son cortos y de solo mirar, pero ninguno está cerrado.
+
+Una advertencia para el chat que siga: **no dar un paso por hecho porque en la
+base haya datos que se le parezcan.** Un paso se cierra cuando Juli hizo la
+acción y dijo qué vio.
 
 ---
 
@@ -119,8 +137,13 @@ nombre quede en la trazabilidad.
 
 ## 7. Lo primero que hay que preguntarle al retomar
 
-> ¿Hiciste los pasos 3, 9 y 10? ¿Y le pusiste el teléfono a Jhon jader y a
+> ¿Con cuál paso arrancamos? Y de paso, ¿le ponés el teléfono a Jhon jader y a
 > Rafael?
 
-Si la respuesta es que sí a todo, **la app está lista para entregar** y lo que
-queda es decidir entregarla — que no es lo mismo que que no quede nada por hacer.
+Sugerencia de orden, de lo más corto a lo más largo: **3** (formulario directo),
+**9** (mirar el Resumen), **4 y 5** (devoluciones, que son las de plata), **6**
+(borrar), **10** (otro celular), **11** (WhatsApp). El 1, 2, 7 y 8 se cruzan
+solos mientras hace los otros.
+
+Cuando estén corridos, **la app está lista para entregar** — y entregarla no es
+lo mismo que que no quede nada por hacer.
