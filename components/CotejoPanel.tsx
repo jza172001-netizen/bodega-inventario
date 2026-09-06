@@ -8,6 +8,15 @@ interface Props {
     movements: Movement[];
     personnel: Personnel[];
     auditLogs: AuditLog[];
+    /** Para dejar constancia de que ya se revisó. */
+    onAuditLog?: (action: string, description: string) => void;
+}
+
+/** Algo que no cuadra, con la fecha del hecho para saber si ya se revisó. */
+interface Hallazgo {
+    texto: string;
+    /** Cuándo pasó. 0 = no se puede fechar. */
+    cuando: number;
 }
 
 /** Una diferencia entre lo que muestra este teléfono y lo que hay en la nube. */
@@ -27,7 +36,7 @@ interface Diferencia {
  * Que se vea sin tener que acordarse de buscarlo. Un dato que aparece solo se
  * nota el mismo día, no dos meses después.
  */
-export const CotejoPanel: React.FC<Props> = ({ items, movements, personnel, auditLogs }) => {
+export const CotejoPanel: React.FC<Props> = ({ items, movements, personnel, auditLogs, onAuditLog }) => {
     /**
      * El segundo cotejo, y el que la bitácora no puede hacer: lo que muestra
      * ESTE teléfono contra lo que hay de verdad en la base.
@@ -95,6 +104,35 @@ export const CotejoPanel: React.FC<Props> = ({ items, movements, personnel, audi
         const nombrado = (accion: string, nombre: string) =>
             auditLogs.some(l => l.action === accion && l.description.includes(`"${nombre}"`));
 
+        /**
+         * Todos los nombres que ha tenido esta cosa, siguiendo los renombrados
+         * hacia atrás.
+         *
+         * La bitácora no guarda ids, solo nombres. Así que al renombrar "Rodilleras
+         * (N · N)" a "Rodilleras" se rompía el hilo con su creación y el ítem
+         * aparecía "sin registro de creación" — un problema inventado por un
+         * cambio de nombre. Pasó de verdad con cinco.
+         */
+        const renombres = auditLogs
+            .filter(l => l.action === 'ITEM_RENAMED')
+            .map(l => {
+                const m = l.description.match(/"([^"]*)"\s*→\s*"([^"]*)"/);
+                return m ? { antes: m[1], despues: m[2] } : null;
+            })
+            .filter((x): x is { antes: string; despues: string } => !!x);
+
+        const nombresDe = (actual: string): string[] => {
+            const vistos = new Set([actual]);
+            let creció = true;
+            while (creció) {
+                creció = false;
+                for (const r of renombres) {
+                    if (vistos.has(r.despues) && !vistos.has(r.antes)) { vistos.add(r.antes); creció = true; }
+                }
+            }
+            return [...vistos];
+        };
+
         // 1) Vivos que la bitácora dice borrados, sin una creación posterior.
         const ultimo = (accion: string, nombre: string): number => {
             let t = 0;
@@ -104,14 +142,16 @@ export const CotejoPanel: React.FC<Props> = ({ items, movements, personnel, audi
             }
             return t;
         };
-        const resucitados: string[] = [];
+        const resucitados: Hallazgo[] = [];
         for (const i of items) {
-            const b = ultimo('ITEM_DELETED', i.name);
-            if (b > 0 && ultimo('ITEM_CREATED', i.name) <= b) resucitados.push(`Ítem "${i.name}"`);
+            const alias = nombresDe(i.name);
+            const b = Math.max(...alias.map(n => ultimo('ITEM_DELETED', n)));
+            const c = Math.max(...alias.map(n => ultimo('ITEM_CREATED', n)));
+            if (b > 0 && c <= b) resucitados.push({ texto: `Ítem "${i.name}"`, cuando: b });
         }
         for (const p of personnel) {
             const b = ultimo('PERSONNEL_DELETED', p.name);
-            if (b > 0 && ultimo('PERSONNEL_CREATED', p.name) <= b) resucitados.push(`Trabajador "${p.name}"`);
+            if (b > 0 && ultimo('PERSONNEL_CREATED', p.name) <= b) resucitados.push({ texto: `Trabajador "${p.name}"`, cuando: b });
         }
 
         // 2) Cuadrillas sin quién las armara.
@@ -120,32 +160,70 @@ export const CotejoPanel: React.FC<Props> = ({ items, movements, personnel, audi
             .filter(p => p.teamLeaderId)
             .filter(p => !auditLogs.some(l =>
                 l.action === 'PERSONNEL_EDITED' && l.description.includes(`"${p.name}"`)))
-            .map(p => `"${p.name}" figura en la cuadrilla de "${nombreDe(p.teamLeaderId)}"`);
+            .map(p => ({ texto: `"${p.name}" figura en la cuadrilla de "${nombreDe(p.teamLeaderId)}"`, cuando: 0 }));
 
         // 3) Ítems que existen sin registro de creación.
         const sinOrigen = items
-            .filter(i => !nombrado('ITEM_CREATED', i.name))
-            .map(i => `Ítem "${i.name}"`);
+            .filter(i => !nombresDe(i.name).some(n => nombrado('ITEM_CREATED', n)))
+            .map(i => ({ texto: `Ítem "${i.name}"`, cuando: 0 }));
 
         return { resucitados, cuadrillasSinRastro, sinOrigen };
     }, [items, personnel, auditLogs]);
 
     const total = hallazgos.resucitados.length + hallazgos.cuadrillasSinRastro.length + hallazgos.sinOrigen.length;
 
-    const Bloque = ({ titulo, explica, lista }: { titulo: string; explica: string; lista: string[] }) => {
+    /**
+     * Cuándo fue la última vez que se revisó todo esto.
+     *
+     * Hace falta porque los 19 ítems que volvieron el 8 de junio son un hecho y
+     * no se pueden "arreglar": son la bodega de verdad. Sin esto, el panel
+     * gritaba 25 problemas para siempre y dejaba de leerse — que es peor que no
+     * avisar, porque entierra lo NUEVO entre lo viejo ya sabido.
+     */
+    const revisadoHasta = useMemo(() => {
+        let t = 0;
+        for (const l of auditLogs) {
+            if (l.action !== 'COTEJO_REVISADO') continue;
+            t = Math.max(t, new Date(l.timestamp).getTime());
+        }
+        return t;
+    }, [auditLogs]);
+
+    const marcarRevisado = () => {
+        onAuditLog?.('COTEJO_REVISADO',
+            `Revisó el cotejo: ${total} hallazgo(s) dados por vistos. Los nuevos vuelven a salir.`);
+    };
+
+    const Bloque = ({ titulo, explica, lista }: { titulo: string; explica: string; lista: Hallazgo[] }) => {
         if (lista.length === 0) return null;
+        // Lo fechado antes de la última revisión ya se vio; lo que no se puede
+        // fechar se considera revisado si hubo revisión, para no repetir ruido.
+        const nuevos = lista.filter(h => h.cuando === 0 ? revisadoHasta === 0 : h.cuando > revisadoHasta);
+        const vistos = lista.length - nuevos.length;
+        if (nuevos.length === 0) {
+            return (
+                <div className="border border-papel-borde rounded-xl px-3 py-2">
+                    <p className="text-[11px] text-tinta-tenue">
+                        <strong className="text-tinta-suave">{titulo}</strong> · {vistos} ya revisado{vistos !== 1 ? 's' : ''}
+                    </p>
+                </div>
+            );
+        }
         return (
             <div className="border border-atencion bg-atencion-suave rounded-xl p-3 space-y-1">
-                <p className="text-xs font-black text-atencion">{titulo} · {lista.length}</p>
+                <p className="text-xs font-black text-atencion">{titulo} · {nuevos.length}</p>
                 <p className="text-[11px] text-atencion">{explica}</p>
                 <ul className="space-y-0.5 pt-1">
-                    {lista.slice(0, 12).map((x, i) => (
-                        <li key={i} className="text-[11px] text-tinta-suave">· {x}</li>
+                    {nuevos.slice(0, 12).map((x, i) => (
+                        <li key={i} className="text-[11px] text-tinta-suave">· {x.texto}</li>
                     ))}
-                    {lista.length > 12 && (
-                        <li className="text-[11px] text-tinta-tenue">…y {lista.length - 12} más</li>
+                    {nuevos.length > 12 && (
+                        <li className="text-[11px] text-tinta-tenue">…y {nuevos.length - 12} más</li>
                     )}
                 </ul>
+                {vistos > 0 && (
+                    <p className="text-[10px] text-tinta-tenue pt-0.5">y {vistos} más que ya habías revisado</p>
+                )}
             </div>
         );
     };
@@ -219,6 +297,17 @@ export const CotejoPanel: React.FC<Props> = ({ items, movements, personnel, audi
                         titulo="Existe sin registro de creación"
                         explica="Normal si entró en la carga inicial; raro si es reciente."
                         lista={hallazgos.sinOrigen} />
+                
+                    {/* Lo que no se puede deshacer, al menos se puede dar por
+                        visto: los 19 ítems que volvieron el 8 de junio son la
+                        bodega de verdad. Queda constancia de quién los revisó y
+                        cuándo, y lo NUEVO vuelve a salir en rojo. */}
+                    {onAuditLog && (
+                        <button type="button" onClick={marcarRevisado}
+                            className="w-full py-2 text-[11px] font-black rounded-xl border border-papel-borde text-tinta-suave hover:border-marca hover:bg-marca-suave transition-colors">
+                            ✓ Ya lo revisé — dar por vistos estos {total}
+                        </button>
+                    )}
                 </>
             )}
         </div>

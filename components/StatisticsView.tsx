@@ -476,6 +476,13 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                 </div>
             )}
 
+            {/* Lo puse al final y él lo quiere arriba: lo saca seguido. */}
+            <button onClick={() => setShowDocxModal(true)} disabled={docxExporting}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-papel border border-papel-borde hover:border-marca text-tinta-suave font-bold rounded-xl text-sm transition-all disabled:opacity-60">
+                <span className="text-base">📄</span>
+                {docxExporting ? 'Generando DOCX…' : 'Exportar reporte DOCX'}
+            </button>
+
             {/* ── LOS TRES NÚMEROS, EN UNA TIRA ──
                 Antes eran tres tarjetas de p-5, cada una con su propio idioma de
                 color: etiqueta azul, etiqueta verde, tarjeta amarilla. Ocupaban
@@ -747,16 +754,6 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                 );
             })()}
 
-            {/* El reporte es cosa de fin de mes, no de todos los días: estaba
-                suelto y alineado a la derecha en mitad del camino, entre los
-                pendientes y los números. Va al final, después de los datos. */}
-            <div className="pt-1">
-                <button onClick={() => setShowDocxModal(true)} disabled={docxExporting}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-papel border border-papel-borde hover:border-marca text-tinta-suave font-bold rounded-xl text-sm transition-all disabled:opacity-60">
-                    <span className="text-base">📄</span>
-                    {docxExporting ? 'Generando DOCX…' : 'Exportar reporte DOCX'}
-                </button>
-            </div>
         </div>
     );
 };

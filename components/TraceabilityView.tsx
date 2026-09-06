@@ -12,6 +12,8 @@ interface Props {
     behaviorLogs: BehaviorLog[];
     users: AppUser[];
     onBehaviorLog?: (action: string, detail: string) => void;
+    /** Para que el cotejo pueda dejar constancia de que ya se revisó. */
+    onAuditLog?: (action: string, description: string) => void;
 }
 
 type MainTab = 'actividad' | 'estadisticas' | 'herramientas';
@@ -110,8 +112,7 @@ function getBehaviorCategory(action: string): keyof typeof BEHAVIOR_CATEGORY {
 }
 
 export const TraceabilityView: React.FC<Props> = ({
-    movements, items, personnel, projects, auditLogs, behaviorLogs, users, onBehaviorLog,
-}) => {
+    movements, items, personnel, projects, auditLogs, behaviorLogs, users, onBehaviorLog, onAuditLog}) => {
     const [mainTab, setMainTab] = useState<MainTab>('actividad');
     const [herramientasTab, setHerramientasTab] = useState<HerramientasTab>('tools');
     const [selectedItemId, setSelectedItemId] = useState('');
@@ -380,7 +381,7 @@ export const TraceabilityView: React.FC<Props> = ({
                     {/* El cotejo primero: si algo no cuadra, hay que verlo antes de
                         ponerse a leer la lista de lo que pasó. */}
                     <div className="px-4 pt-3">
-                        <CotejoPanel items={items} movements={movements} personnel={personnel} auditLogs={auditLogs} />
+                        <CotejoPanel items={items} movements={movements} personnel={personnel} auditLogs={auditLogs} onAuditLog={onAuditLog} />
                     </div>
                     <div className="px-4 py-3 border-b border-papel-borde space-y-2">
                         {/* Actor filter */}

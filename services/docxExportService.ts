@@ -8,6 +8,7 @@ import {
     FileChild,
 } from 'docx';
 import { Item, Movement, MovementType, InventoryType } from '../types';
+import { familiaDe as familiaDelNombre, sameGenus } from '../utils/genus';
 import {
     getActiveLoans, getActiveLoansByItem, getLoansByPerson,
     summarizeLoanItems, daysSince, getConsumption, isAsset,
@@ -54,6 +55,13 @@ const sectionHeading = (text: string) => new Paragraph({
     children: [run(text, { bold: true, size: 10, color: NAVY })],
     spacing: { before: 400, after: 120 },
     border: { bottom: blueBorder },
+    alignment: AlignmentType.LEFT,
+});
+
+/** Un subtítulo dentro de una sección: «2.1 Herramienta Manual». */
+const subHeading = (text: string) => new Paragraph({
+    children: [run(text, { bold: true, size: 9, color: NAVY })],
+    spacing: { before: 260, after: 90 },
     alignment: AlignmentType.LEFT,
 });
 
@@ -268,13 +276,22 @@ export async function exportReportAsDocx(opts: {
     ];
 
     // ── Tabla de contenido (manual) ───────────────────────────────────
+    // La estructura la puso el bodeguero: «inventarios, herramienta manual y
+    // eléctrica; y consumos, que son los consumos y los elementos de protección
+    // personal, que también se entiende como consumo». Antes las herramientas
+    // manuales y eléctricas iban revueltas en una tabla con una columna "Tipo",
+    // y los consumibles con el EPP en otra igual.
     const tocEntries = [
-        ['1.', 'Resumen Ejecutivo'],
-        ['2.', 'Personal con Herramientas Asignadas'],
-        ['3.', 'Inventario de Herramientas (Capital)'],
-        ['4.', 'Materiales de Consumo del Período'],
-        ['5.', 'Análisis de Consumo'],
-        ['6.', 'Indicadores Generales'],
+        ['1.',   'Resumen'],
+        ['2.',   'Inventario'],
+        ['2.1',  'Herramienta Manual'],
+        ['2.2',  'Herramienta Eléctrica'],
+        ['3.',   'Consumos del período'],
+        ['3.1',  'Consumibles'],
+        ['3.2',  'Elementos de Protección Personal'],
+        ['4.',   'Quién tiene qué'],
+        ['5.',   'Análisis del consumo'],
+        ['6.',   'Indicadores'],
     ];
 
     const tocChildren = [
@@ -304,7 +321,7 @@ export async function exportReportAsDocx(opts: {
     const ANC_W  = [4680, 2340, 2340]       as const;
 
     const execChildren: FileChild[] = [
-        sectionHeading('1. Resumen Ejecutivo'),
+        sectionHeading('1. Resumen'),
         para(run(prose, { size: 11, color: '374151' }), { spaceAfter: 200 }),
 
         // KPI mini-table
@@ -326,7 +343,7 @@ export async function exportReportAsDocx(opts: {
 
     // ── 2. Personal ───────────────────────────────────────────────────
     const personnelChildren: FileChild[] = [
-        sectionHeading('2. Personal con Herramientas Asignadas'),
+        sectionHeading('4. Quién tiene qué'),
     ];
 
     if (personnelLoans.length === 0) {
@@ -349,56 +366,140 @@ export async function exportReportAsDocx(opts: {
 
     personnelChildren.push(new Paragraph({ children: [new PageBreak()], spacing: { before: 600, after: 0 } }));
 
-    // ── 3. Capital items ──────────────────────────────────────────────
-    const capitalChildren: FileChild[] = [
-        sectionHeading('3. Inventario de Herramientas (Capital)'),
-        new Table({
+    // ── 2. INVENTARIO — manual y eléctrica, cada una lo suyo ──────────
+    //
+    // Antes era una sola tabla de ocho columnas con las manuales y las
+    // eléctricas revueltas y una columna "Tipo" para distinguirlas. Se leía
+    // como una lista de 40 renglones sin orden claro. Ahora son dos bloques,
+    // cada uno alfabético, y la columna "Tipo" sobra porque el título ya lo
+    // dice. En las manuales tampoco tiene sentido la marca: nunca la llevan.
+    // La FAMILIA entra al reporte. Es como está organizada la app desde que se
+    // hizo el árbol —Pulidora → Grande → Amarillo · Dwalt— y el informe seguía
+    // listando 52 herramientas eléctricas en fila, sin agrupar por nada.
+    //
+    // Y usa la MISMA regla que la app, no una propia: con la primera palabra a
+    // secas, "Extension" y "Extensiones" salían como dos familias distintas,
+    // justo lo que `sameGenus` ya resuelve en pantalla. Un informe que agrupa
+    // distinto que la app es un informe que no cuadra con lo que él ve.
+    const canon: string[] = [];
+    const familiaDe = (ci: typeof capitalItems[number]) => {
+        const cruda = ci.item.familia?.trim() || familiaDelNombre(ci.item.name);
+        const ya = canon.find(c => sameGenus(c, cruda));
+        if (ya) return ya;
+        canon.push(cruda);
+        return cruda;
+    };
+
+    const filaDeHerramienta = (ci: typeof capitalItems[number], anchos: readonly number[], idx: number, conMarca: boolean) =>
+        tableRow([
+            familiaDe(ci),
+            ci.item.name,
+            ...(conMarca ? [ci.item.brand ?? '—'] : []),
+            String(ci.item.quantity),
+            ci.unidadesFuera > 0 ? String(ci.unidadesFuera) : '—',
+            ci.loans.length > 0 ? 'Prestado' : ci.item.quantity <= 0 ? 'Agotado' : 'Disponible',
+            ci.holders || '—',
+            ci.loans.length > 0 ? `${ci.maxDays}d` : '—',
+        ], [...anchos], idx % 2 === 1);
+
+    const MAN_W = [1500, 2200, 850, 850, 1000, 1960, 1000] as const;
+    const ELE_W = [1400, 1900, 1200, 750, 750, 900, 1660, 800] as const;
+
+    const manuales   = capitalItems.filter(ci => ci.item.inventoryType === InventoryType.HAND_TOOL);
+    const electricas = capitalItems.filter(ci => ci.item.inventoryType === InventoryType.ELECTRICAL_TOOL);
+
+    const bloqueHerramientas = (
+        titulo: string,
+        lista: typeof capitalItems,
+        anchos: readonly number[],
+        conMarca: boolean,
+    ): FileChild[] => {
+        const hijos: FileChild[] = [subHeading(titulo)];
+        if (lista.length === 0) {
+            hijos.push(para(run('Sin herramientas de este tipo.', { size: 10, color: GRAY })));
+            return hijos;
+        }
+        // Alfabético por FAMILIA y, dentro de cada una, por nombre: así los ocho
+        // taladros quedan juntos, que es como los busca en la bodega.
+        lista = [...lista].sort((a, b) =>
+            familiaDe(a).localeCompare(familiaDe(b), 'es') || a.item.name.localeCompare(b.item.name, 'es'));
+        const unidades = lista.reduce((n, ci) => n + ci.item.quantity, 0);
+        const fuera    = lista.reduce((n, ci) => n + ci.unidadesFuera, 0);
+        hijos.push(new Table({
             width: { size: 9360, type: WidthType.DXA },
-            columnWidths: [...CAP_W],
+            columnWidths: [...anchos],
             rows: [
-                // "En bodega" es el stock; "Prestado" son las unidades afuera. Antes solo
-                // se imprimía el stock, así que no había forma de leer cuánto estaba fuera.
-                tableHeader(['Herramienta', 'Tipo', 'Marca', 'En bodega', 'Prestado', 'Estado', 'Responsable(s)', 'Días max'], [...CAP_W]),
-                ...capitalItems.map((ci, idx) => tableRow([
-                    ci.item.name,
-                    ci.item.inventoryType === InventoryType.HAND_TOOL ? 'Manual' : 'Eléctrica',
-                    ci.item.inventoryType === InventoryType.ELECTRICAL_TOOL ? (ci.item.brand ?? '—') : '—',
-                    String(ci.item.quantity),
-                    ci.unidadesFuera > 0 ? String(ci.unidadesFuera) : '—',
-                    ci.loans.length > 0 ? 'Prestado' : ci.item.quantity <= 0 ? 'Agotado' : 'Disponible',
-                    ci.holders || '—',
-                    ci.loans.length > 0 ? `${ci.maxDays}d` : '—',
-                ], [...CAP_W], idx % 2 === 1)),
+                tableHeader([
+                    'Familia', 'Herramienta',
+                    ...(conMarca ? ['Marca'] : []),
+                    'En bodega', 'Prestado', 'Estado', 'Responsable(s)', 'Días max',
+                ], [...anchos]),
+                ...lista.map((ci, idx) => filaDeHerramienta(ci, anchos, idx, conMarca)),
+                tableRow([
+                    `TOTAL — ${lista.length} ítem(s)`, '',
+                    ...(conMarca ? [''] : []),
+                    String(unidades), fuera > 0 ? String(fuera) : '—', '', '', '',
+                ], [...anchos], true),
             ],
-        }),
+        }));
+        return hijos;
+    };
+
+    const capitalChildren: FileChild[] = [
+        sectionHeading('2. Inventario'),
+        para(run('Lo que no se gasta: vuelve a la bodega. Ordenado por familia y, dentro de cada una, alfabético.',
+            { size: 10, color: GRAY }), { spaceAfter: 120 }),
+        ...bloqueHerramientas('2.1  Herramienta Manual', manuales, MAN_W, false),
+        ...bloqueHerramientas('2.2  Herramienta Eléctrica', electricas, ELE_W, true),
         new Paragraph({ children: [new PageBreak()], spacing: { before: 600, after: 0 } }),
     ];
 
-    // ── 4. Consumables ────────────────────────────────────────────────
+    // ── 3. CONSUMOS — consumibles y EPP ───────────────────────────────
+    //
+    // Él lo dijo así: «los consumos y los elementos de protección personal, que
+    // también se entiende como consumo». Van juntos en la misma sección porque
+    // los dos se gastan, pero en dos tablas porque no se compran igual: la
+    // lechada se pide por kilos y unos guantes por pares.
+    //
+    // Y en orden alfabético, no por cantidad: para pedir hay que BUSCAR algo,
+    // y buscar en una lista ordenada por cuánto se gastó es imposible.
     const consChildren: FileChild[] = [
-        sectionHeading('4. Materiales de Consumo del Período'),
+        sectionHeading('3. Consumos del período'),
+        para(run('Lo que se gasta y no vuelve. Cada bloque va en orden alfabético.',
+            { size: 10, color: GRAY }), { spaceAfter: 120 }),
     ];
 
-    if (consumables.length === 0) {
-        consChildren.push(para(run('Sin consumos registrados en el período seleccionado.', { size: 10, color: GRAY })));
-    } else {
-        consChildren.push(
-            new Table({
-                width: { size: 9360, type: WidthType.DXA },
-                columnWidths: [...CONS_W],
-                rows: [
-                    tableHeader(['Material', 'Categoría', 'Cantidad consumida', 'Unidad'], [...CONS_W]),
-                    ...consumables.map((c, i) => tableRow([
-                        c.item.name,
-                        c.item.inventoryType === InventoryType.PPE ? 'EPP / Seguridad' : 'Consumible',
-                        String(c.qty),
-                        c.item.unit,
-                    ], [...CONS_W], i % 2 === 1)),
-                    tableRow(['TOTAL DEL PERÍODO', '', String(consumption.totalUnidades), 'ud'], [...CONS_W], true),
-                ],
-            })
-        );
-    }
+    const bloqueConsumo = (titulo: string, lista: typeof consumables): FileChild[] => {
+        const hijos: FileChild[] = [subHeading(titulo)];
+        if (lista.length === 0) {
+            hijos.push(para(run('Sin consumos de este tipo en el período.', { size: 10, color: GRAY })));
+            return hijos;
+        }
+        const enOrden = [...lista].sort((a, b) => a.item.name.localeCompare(b.item.name, 'es'));
+        const total = enOrden.reduce((n, c) => n + c.qty, 0);
+        hijos.push(new Table({
+            width: { size: 9360, type: WidthType.DXA },
+            columnWidths: [...CONS_W],
+            rows: [
+                tableHeader(['Material', 'Familia', 'Consumido', 'Unidad'], [...CONS_W]),
+                ...enOrden.map((c, i) => tableRow([
+                    c.item.name,
+                    c.item.familia?.trim() || '—',
+                    String(c.qty),
+                    c.item.unit,
+                ], [...CONS_W], i % 2 === 1)),
+                tableRow([`TOTAL — ${enOrden.length} ítem(s)`, '', String(total), ''], [...CONS_W], true),
+            ],
+        }));
+        return hijos;
+    };
+
+    consChildren.push(
+        ...bloqueConsumo('3.1  Consumibles',
+            consumables.filter(c => c.item.inventoryType === InventoryType.SINGLE_USE)),
+        ...bloqueConsumo('3.2  Elementos de Protección Personal',
+            consumables.filter(c => c.item.inventoryType === InventoryType.PPE)),
+    );
     consChildren.push(new Paragraph({ children: [new PageBreak()], spacing: { before: 600, after: 0 } }));
 
     // ── 5. Análisis de consumo ────────────────────────────────────────
@@ -410,7 +511,7 @@ export async function exportReportAsDocx(opts: {
     };
 
     const analysisChildren: FileChild[] = [
-        sectionHeading('5. Análisis de Consumo'),
+        sectionHeading('5. Análisis del consumo'),
     ];
 
     if (consumption.totalUnidades === 0) {
@@ -484,7 +585,7 @@ export async function exportReportAsDocx(opts: {
 
     // ── 6. Indicators ─────────────────────────────────────────────────
     const indChildren: FileChild[] = [
-        sectionHeading('6. Indicadores Generales'),
+        sectionHeading('6. Indicadores'),
         new Table({
             width: { size: 9360, type: WidthType.DXA },
             columnWidths: [...IND_W],
@@ -538,9 +639,12 @@ export async function exportReportAsDocx(opts: {
                 children: [
                     ...tocChildren,
                     ...execChildren,
-                    ...personnelChildren,
+                    // El orden es el del índice: primero lo que HAY (inventario),
+                    // después lo que se GASTÓ, y solo entonces quién lo tiene.
+                    // Antes «Personal» iba de segundo y partía el inventario en dos.
                     ...capitalChildren,
                     ...consChildren,
+                    ...personnelChildren,
                     ...analysisChildren,
                     ...indChildren,
                 ],
