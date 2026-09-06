@@ -27,6 +27,8 @@ type LoanGroup = {
     workers: string[];
     projectId?: string;
     pendingPickup: boolean;
+    /** De quién es, para poder decirlo cuando la ficha muestra toda la cuadrilla. */
+    personnelId?: string;
 };
 
 const currentYear = new Date().getFullYear();
@@ -44,9 +46,32 @@ export const PersonnelDetailModal: React.FC<Props> = ({
     const [selectedProject, setSelectedProject] = useState('');
     const [selectedPerson, setSelectedPerson] = useState('');
 
+    /**
+     * Un oficial no saca herramienta: la saca su gente. Filtrar solo por
+     * `person.id` hacía que abrir a Alex dijera «0 movimientos en total»
+     * mientras su cuadrilla —Jhon jader y Rafael— movía siete herramientas
+     * ese mismo día. Los datos estaban bien; la pantalla no los sumaba.
+     */
+    const cuadrilla = useMemo(
+        () => (allPersonnel ?? []).filter(p => p.teamLeaderId === person.id),
+        [allPersonnel, person.id]
+    );
+    const esOficial = !!person.isTeamLeader && cuadrilla.length > 0;
+    const [verCuadrilla, setVerCuadrilla] = useState(true);
+
+    /** A quiénes mira esta ficha ahora mismo. */
+    const idsEnFoco = useMemo(() => {
+        const s = new Set<string>([person.id]);
+        if (esOficial && verCuadrilla) for (const p of cuadrilla) s.add(p.id);
+        return s;
+    }, [person.id, esOficial, verCuadrilla, cuadrilla]);
+
+    const nombreDe = (id?: string) =>
+        (allPersonnel ?? []).find(p => p.id === id)?.name ?? '';
+
     const myMovements = useMemo(
-        () => movements.filter(m => m.personnelId === person.id),
-        [movements, person.id]
+        () => movements.filter(m => m.personnelId && idsEnFoco.has(m.personnelId)),
+        [movements, idsEnFoco]
     );
 
     const itemByType = (type: InventoryType) => new Set(items.filter(i => i.inventoryType === type).map(i => i.id));
@@ -55,9 +80,11 @@ export const PersonnelDetailModal: React.FC<Props> = ({
         const map = new Map<string, LoanGroup>();
         for (const m of loanMovements) {
             const ts = new Date(m.timestamp);
-            const dayKey = `${m.itemId}__${ts.getFullYear()}-${ts.getMonth()}-${ts.getDate()}`;
+            // La persona entra en la clave: en modo cuadrilla, dos trabajadores
+            // con la misma herramienta el mismo día son DOS préstamos, no uno.
+            const dayKey = `${m.itemId}__${m.personnelId ?? ''}__${ts.getFullYear()}-${ts.getMonth()}-${ts.getDate()}`;
             if (!map.has(dayKey)) {
-                map.set(dayKey, { itemId: m.itemId, totalQty: 0, movementIds: [], date: ts, workers: [], projectId: m.projectId, pendingPickup: false });
+                map.set(dayKey, { itemId: m.itemId, totalQty: 0, movementIds: [], date: ts, workers: [], projectId: m.projectId, pendingPickup: false, personnelId: m.personnelId });
             }
             const g = map.get(dayKey)!;
             g.totalQty += m.quantity;
@@ -71,8 +98,8 @@ export const PersonnelDetailModal: React.FC<Props> = ({
 
     // Re-derive active loans from live movements so actions update in real time
     const liveMovements = useMemo(
-        () => movements.filter(m => m.personnelId === person.id),
-        [movements, person.id]
+        () => movements.filter(m => m.personnelId && idsEnFoco.has(m.personnelId)),
+        [movements, idsEnFoco]
     );
 
     const activeManual = useMemo(() => {
@@ -202,6 +229,9 @@ export const PersonnelDetailModal: React.FC<Props> = ({
                         <p className="font-semibold text-gray-800 text-sm leading-snug">{itemName(g.itemId)}</p>
                         <p className="text-xs text-gray-400 mt-0.5">
                             {g.totalQty} {itemUnit(g.itemId)} · {g.date.toLocaleDateString('es-CO')}
+                            {esOficial && verCuadrilla && g.personnelId !== person.id && (
+                                <span className="ml-1 font-black text-indigo-600">· {nombreDe(g.personnelId)}</span>
+                            )}
                         </p>
                         {proj && (
                             <p className="text-xs text-indigo-600 font-semibold mt-0.5 truncate">📁 {proj}</p>
@@ -383,13 +413,34 @@ export const PersonnelDetailModal: React.FC<Props> = ({
                         </div>
                         <div>
                             <h2 className="text-lg font-black text-gray-900">{person.name}</h2>
-                            <p className="text-xs text-gray-400">{myMovements.length} movimientos en total</p>
+                            <p className="text-xs text-gray-400">
+                                {myMovements.length} movimientos en total
+                                {esOficial && verCuadrilla && ` · ${person.name} y su cuadrilla`}
+                            </p>
                         </div>
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl text-gray-400 hover:text-gray-600">
                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
                     </button>
                 </div>
+
+                {esOficial && (
+                    <div className="px-4 pt-3 bg-gray-50">
+                        <div className="flex gap-1 bg-gray-200/70 rounded-xl p-1">
+                            {([[false, `Solo ${person.name.split(' ')[0]}`], [true, 'Toda la cuadrilla']] as const).map(([v, label]) => (
+                                <button key={String(v)} type="button" onClick={() => setVerCuadrilla(v)}
+                                    className={`flex-1 py-1.5 text-[11px] font-black rounded-lg transition-all ${
+                                        verCuadrilla === v ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+                                    }`}>
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+                        <p className="text-[10px] text-gray-400 mt-1 px-1 truncate">
+                            {cuadrilla.map(p => p.name).join(' · ')}
+                        </p>
+                    </div>
+                )}
 
                 {/* Tabs */}
                 <div className="flex gap-1.5 px-4 py-3 bg-gray-50 border-b border-gray-100 overflow-x-auto">
