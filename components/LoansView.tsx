@@ -229,8 +229,11 @@ export const LoansView: React.FC<LoansViewProps> = ({
                     {new Date(loan.timestamp).toLocaleDateString('es-CO')} · ×{loan.quantity}
                 </p>
 
-                {/* Lo que salió pegado a la herramienta. */}
-                <AccesoriosDeItem item={itemMap.get(loan.itemId)} />
+                {/* Lo que salió pegado a la herramienta. Acá se corrige y se quita:
+                    antes solo se podía añadir, y un accesorio enganchado por error
+                    se quedaba puesto para siempre. */}
+                <AccesoriosDeItem item={itemMap.get(loan.itemId)}
+                    onEditItem={isOwner ? onEditItem : undefined} onBehaviorLog={onBehaviorLog} />
 
                 <div className="flex flex-wrap gap-1.5 items-center pt-0.5">
                     {isOwner && (
