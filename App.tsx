@@ -1283,6 +1283,7 @@ const App: React.FC = () => {
                                 // (enganchar un accesorio desde la lista) hace falta el que
                                 // escribe de verdad.
                                 onSaveItem={handleEditItem}
+                                onCreateItem={handleAddItemSync}
                                 onDeleteItem={handleDeleteItem}
                                 onItemHistory={(i) => { setItemForHistory(i); setHistoryModalOpen(true); addBehaviorLog('BUTTON', `Ver historial: ${i.name}`); }}
                                 onOpenInvoiceReader={() => { setInvoiceReaderOpen(true); addBehaviorLog('BUTTON', 'Abrió Leer factura'); }}
