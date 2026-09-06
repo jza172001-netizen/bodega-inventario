@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { AddItemModal } from './components/AddItemModal';
+import { OrderListView } from './components/OrderListView';
 import { ReviewFamiliesView } from './components/ReviewFamiliesView';
 import { familiaDe as familiaDeNombre } from './utils/genus';
 import { EditItemModal } from './components/EditItemModal';
@@ -26,7 +27,7 @@ import { requestNotificationPermission, checkAndNotifyPickup } from './services/
 
 import { mockItems, mockMovements, mockPersonnel, mockPurchaseOrders, mockProjects, mockUsers } from './mockData';
 import { realUsers as seedUsers } from './realData';
-import { Item, Movement, MovementType, Personnel, PurchaseOrder, UserRole, InventoryType, Project, AppUser, PurchaseOrderStatus, AuditLog, BehaviorLog, RechazoStock, LoteResultado } from './types';
+import { Item, Movement, MovementType, Personnel, PurchaseOrder, UserRole, InventoryType, Project, AppUser, PurchaseOrderStatus, AuditLog, BehaviorLog, RechazoStock, LoteResultado, OrderNote } from './types';
 import { LoginView } from './components/LoginView';
 import { LandingPage } from './components/LandingPage';
 import { InvoiceReaderModal } from './components/InvoiceReaderModal';
@@ -42,7 +43,7 @@ import { MovementsIcon } from './components/icons/MovementsIcon';
 import { PersonnelIcon } from './components/icons/PersonnelIcon';
 import { WhatsAppIcon } from './components/icons/WhatsAppIcon';
 
-type View = 'dashboard' | 'kardex' | 'personnel' | 'copilot' | 'help' | 'whatsapp' | 'pickup' | 'traceability' | 'familias';
+type View = 'dashboard' | 'kardex' | 'personnel' | 'copilot' | 'help' | 'whatsapp' | 'pickup' | 'traceability' | 'familias' | 'pedidos';
 type KardexTab = 'movements' | 'loans' | 'inventory' | 'projects';
 
 const SESSION_KEY = 'bodega_session';
@@ -447,6 +448,35 @@ const App: React.FC = () => {
         };
     }, []);
 
+    /**
+     * La lista de pedidos vive aparte del inventario a propósito: es una libreta.
+     * Se carga sola de Supabase y no participa del merge de arranque, porque no
+     * tiene copia local que pueda contradecirla.
+     */
+    const [orderNotes, setOrderNotes] = useState<OrderNote[]>([]);
+    useEffect(() => { db.fetchOrderList().then(setOrderNotes).catch(e => console.error('[Supabase] pedidos:', e)); }, []);
+
+    const handleAddOrderNote = (texto: string, cantidad?: number, unidad?: string, familia?: string) => {
+        const nota: OrderNote = { id: crypto.randomUUID(), texto, cantidad, unidad, familia, comprado: false, createdAt: new Date(), updatedAt: new Date() };
+        setOrderNotes(prev => [nota, ...prev]);
+        const { id, ...resto } = nota;
+        withSync(db.addOrderNote(resto, id));
+        addAuditLog('ORDER_NOTE_ADDED', `Anotó para comprar: "${texto}"${cantidad ? ` ×${cantidad}` : ''}`);
+    };
+
+    const handleToggleOrderNote = (n: OrderNote) => {
+        const upd = { ...n, comprado: !n.comprado, updatedAt: new Date() };
+        setOrderNotes(prev => prev.map(x => x.id === n.id ? upd : x));
+        withSync(db.updateOrderNote(upd));
+        addAuditLog(upd.comprado ? 'ORDER_NOTE_BOUGHT' : 'ORDER_NOTE_REOPENED', `"${n.texto}" — ${upd.comprado ? 'comprado' : 'vuelve a pendiente'}`);
+    };
+
+    const handleDeleteOrderNote = (n: OrderNote) => {
+        setOrderNotes(prev => prev.filter(x => x.id !== n.id));
+        withSync(db.deleteOrderNote(n.id));
+        addAuditLog('ORDER_NOTE_DELETED', `Quitó de la lista de pedidos: "${n.texto}"`);
+    };
+
     const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle');
     const syncTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
     const withSync = (promise: Promise<unknown>) => {
@@ -465,7 +495,7 @@ const App: React.FC = () => {
 
     const [currentView, setCurrentView] = useState<View>('dashboard');
     const [kardexTab, setKardexTab] = useState<KardexTab>('movements');
-    const EMPLOYEE_VIEWS: View[] = ['dashboard', 'kardex', 'personnel', 'help', 'whatsapp', 'pickup', 'traceability', 'copilot', 'familias'];
+    const EMPLOYEE_VIEWS: View[] = ['dashboard', 'kardex', 'personnel', 'help', 'whatsapp', 'pickup', 'traceability', 'copilot', 'familias', 'pedidos'];
     const VISITOR_VIEWS: View[] = ['dashboard', 'kardex', 'whatsapp', 'traceability'];
     const effectiveView: View = (userRole === UserRole.VISITOR && !VISITOR_VIEWS.includes(currentView))
         ? 'dashboard'
@@ -592,6 +622,7 @@ const App: React.FC = () => {
         pickup: 'A Recoger',
         familias: 'Agrupar ítems',
         traceability: 'Trazabilidad',
+        pedidos: 'Lista de pedidos',
     };
 
     const selectView = (view: View, tab?: KardexTab) => {
@@ -1089,6 +1120,13 @@ const App: React.FC = () => {
                                 <NavItem icon={PersonnelIcon} label="Personal" onClick={() => selectView('personnel')} isActive={effectiveView === 'personnel'} />
                                 <NavItem icon={PickupNavIcon} label="A Recoger" onClick={() => selectView('pickup')} isActive={effectiveView === 'pickup'} badge={pendingPickupCount} />
                                 <NavItem
+                                    icon={({ className }: { className?: string }) => <span className={className}>🧾</span>}
+                                    label="Lista de pedidos"
+                                    onClick={() => selectView('pedidos')}
+                                    isActive={effectiveView === 'pedidos'}
+                                    badge={orderNotes.filter(n => !n.comprado).length}
+                                />
+                                <NavItem
                                     icon={({ className }: { className?: string }) => <span className={className}>🗂️</span>}
                                     label="Agrupar ítems"
                                     onClick={() => selectView('familias')}
@@ -1234,6 +1272,18 @@ const App: React.FC = () => {
                             />
                         )}
                         {effectiveView === 'help' && <HelpView />}
+                        {effectiveView === 'pedidos' && (
+                            <OrderListView
+                                notes={orderNotes}
+                                items={items}
+                                movements={movements}
+                                personnel={personnel}
+                                onAddNote={handleAddOrderNote}
+                                onToggleNote={handleToggleOrderNote}
+                                onDeleteNote={handleDeleteOrderNote}
+                                onBehaviorLog={addBehaviorLog}
+                            />
+                        )}
                         {effectiveView === 'traceability' && (
                             <TraceabilityView
                                 movements={movements}
