@@ -72,10 +72,11 @@ const tableHeader = (cells: string[], widths: number[]) => new TableRow({
         children: [new Paragraph({
             children: [run(text, { bold: true, size: 8, color: NAVY })],
             alignment: AlignmentType.LEFT,
+            spacing: SIN_AIRE,
         })],
         shading: { fill: 'F3F4F6', type: ShadingType.CLEAR, color: 'auto' },
         width: { size: widths[i], type: WidthType.DXA },
-        margins: { top: 60, bottom: 60, left: 80, right: 80 },
+        margins: { top: 30, bottom: 30, left: 70, right: 70 },
         borders: {
             top: { style: BorderStyle.SINGLE, size: 4, color: LGRAY },
             bottom: { style: BorderStyle.SINGLE, size: 8, color: BLUE },
@@ -85,15 +86,27 @@ const tableHeader = (cells: string[], widths: number[]) => new TableRow({
     })),
 });
 
+/**
+ * Una fila de tabla, apretada.
+ *
+ * Los párrafos dentro de las celdas no llevaban espaciado propio, así que
+ * heredaban el de Word —unos 8 pt después de cada uno y la línea a 1,15— y cada
+ * fila quedaba con casi el doble del alto que necesita. En una tabla de 50
+ * filas eso es una página entera de aire. Va explícito: cero antes, cero
+ * después, línea sencilla.
+ */
+const SIN_AIRE = { before: 0, after: 0, line: 240, lineRule: 'auto' as const };
+
 const tableRow = (cells: string[], widths: number[], shade = false) => new TableRow({
     children: cells.map((text, i) => new TableCell({
         children: [new Paragraph({
             children: [run(text, { size: 9, color: '374151' })],
             alignment: AlignmentType.LEFT,
+            spacing: SIN_AIRE,
         })],
         shading: shade ? { fill: 'F9FAFB', type: ShadingType.CLEAR, color: 'auto' } : undefined,
         width: { size: widths[i], type: WidthType.DXA },
-        margins: { top: 50, bottom: 50, left: 80, right: 80 },
+        margins: { top: 20, bottom: 20, left: 70, right: 70 },
         borders: {
             top: noBorder,
             bottom: { style: BorderStyle.SINGLE, size: 2, color: LGRAY },
@@ -289,9 +302,8 @@ export async function exportReportAsDocx(opts: {
         ['3.',   'Consumos del período'],
         ['3.1',  'Consumibles'],
         ['3.2',  'Elementos de Protección Personal'],
+        ['3.3',  'En qué se va'],
         ['4.',   'Quién tiene qué'],
-        ['5.',   'Análisis del consumo'],
-        ['6.',   'Indicadores'],
     ];
 
     const tocChildren = [
@@ -305,7 +317,6 @@ export async function exportReportAsDocx(opts: {
                 spacing: { before: 80, after: 80 },
             })
         ),
-        new Paragraph({ children: [new PageBreak()], spacing: { before: 0, after: 0 } }),
     ];
 
     // ── 1. Resumen ejecutivo ──────────────────────────────────────────
@@ -324,21 +335,27 @@ export async function exportReportAsDocx(opts: {
         sectionHeading('1. Resumen'),
         para(run(prose, { size: 11, color: '374151' }), { spaceAfter: 200 }),
 
-        // KPI mini-table
+        // Los números, UNA sola vez.
+        //
+        // Estaban tres veces: cuatro acá, los mismos cuatro más otros cinco en
+        // "Indicadores" al final, y otra vez en "Análisis del consumo". Tres
+        // sitios con las mismas cifras es justo por qué no se entendían.
         new Table({
             width: { size: 9360, type: WidthType.DXA },
-            columnWidths: [...KPI_W],
+            columnWidths: [...IND_W],
             rows: [
-                tableHeader(['Ítems en inventario', 'Despachos (ud)', 'Prestado afuera (ud)', 'Stock bajo mínimo'], [...KPI_W]),
-                tableRow([
-                    String(items.length),
-                    String(checkOuts),
-                    String(activeLoanUnits),
-                    String(lowStock),
-                ], [...KPI_W]),
+                tableHeader(['Indicador', 'Valor'], [...IND_W]),
+                tableRow(['Período analizado', `${fmtLong(fromDate)} al ${fmtLong(toDate)}`], [...IND_W]),
+                tableRow(['Total ítems en inventario', String(items.length)], [...IND_W], true),
+                tableRow(['Unidades en préstamo activo', String(activeLoanUnits)], [...IND_W]),
+                tableRow(['Despachos en el período', String(checkOuts)], [...IND_W], true),
+                tableRow(['Ingresos en el período', String(checkIns)], [...IND_W]),
+                tableRow(['Ítems con stock bajo mínimo', String(lowStock)], [...IND_W], true),
+                tableRow(['Trabajadores con herramientas', String(personnelLoans.length)], [...IND_W]),
+                tableRow(['Consumo del período (EPP + material)', `${consumption.totalUnidades} ud`], [...IND_W], true),
+                tableRow(['Promedio semanal de consumo', `${consumption.promedioSemanal} ud`], [...IND_W]),
             ],
         }),
-        new Paragraph({ children: [new PageBreak()], spacing: { before: 600, after: 0 } }),
     ];
 
     // ── 2. Personal ───────────────────────────────────────────────────
@@ -364,7 +381,6 @@ export async function exportReportAsDocx(opts: {
         );
     }
 
-    personnelChildren.push(new Paragraph({ children: [new PageBreak()], spacing: { before: 600, after: 0 } }));
 
     // ── 2. INVENTARIO — manual y eléctrica, cada una lo suyo ──────────
     //
@@ -390,68 +406,80 @@ export async function exportReportAsDocx(opts: {
         return cruda;
     };
 
-    const filaDeHerramienta = (ci: typeof capitalItems[number], anchos: readonly number[], idx: number, conMarca: boolean) =>
-        tableRow([
-            familiaDe(ci),
-            ci.item.name,
-            ...(conMarca ? [ci.item.brand ?? '—'] : []),
-            String(ci.item.quantity),
-            ci.unidadesFuera > 0 ? String(ci.unidadesFuera) : '—',
-            ci.loans.length > 0 ? 'Prestado' : ci.item.quantity <= 0 ? 'Agotado' : 'Disponible',
-            ci.holders || '—',
-            ci.loans.length > 0 ? `${ci.maxDays}d` : '—',
-        ], [...anchos], idx % 2 === 1);
-
-    const MAN_W = [1500, 2200, 850, 850, 1000, 1960, 1000] as const;
-    const ELE_W = [1400, 1900, 1200, 750, 750, 900, 1660, 800] as const;
-
-    const manuales   = capitalItems.filter(ci => ci.item.inventoryType === InventoryType.HAND_TOOL);
-    const electricas = capitalItems.filter(ci => ci.item.inventoryType === InventoryType.ELECTRICAL_TOOL);
+    /**
+     * El inventario RESUMIDO POR FAMILIA, que es lo que él pidió al ver que las
+     * 52 herramientas eléctricas se comían la mitad del documento.
+     *
+     * Con una salvedad: si una familia tiene un solo ítem se muestra su nombre
+     * completo, para no perder "Alicate (Verde · Siata)" y dejar solo "Alicate".
+     * Es la misma regla del árbol en pantalla.
+     *
+     * El detalle de QUIÉN tiene cuál no se pierde: sigue entero en la sección
+     * "Quién tiene qué", que es donde se busca.
+     */
+    const INV_W = [2600, 900, 1200, 1200, 1400, 2060] as const;
 
     const bloqueHerramientas = (
         titulo: string,
         lista: typeof capitalItems,
-        anchos: readonly number[],
-        conMarca: boolean,
     ): FileChild[] => {
         const hijos: FileChild[] = [subHeading(titulo)];
         if (lista.length === 0) {
             hijos.push(para(run('Sin herramientas de este tipo.', { size: 10, color: GRAY })));
             return hijos;
         }
-        // Alfabético por FAMILIA y, dentro de cada una, por nombre: así los ocho
-        // taladros quedan juntos, que es como los busca en la bodega.
-        lista = [...lista].sort((a, b) =>
-            familiaDe(a).localeCompare(familiaDe(b), 'es') || a.item.name.localeCompare(b.item.name, 'es'));
-        const unidades = lista.reduce((n, ci) => n + ci.item.quantity, 0);
-        const fuera    = lista.reduce((n, ci) => n + ci.unidadesFuera, 0);
+        // Agrupar por familia, con la misma regla que usa la app.
+        const porFamilia = new Map<string, typeof capitalItems>();
+        for (const ci of lista) {
+            const f = familiaDe(ci);
+            if (!porFamilia.has(f)) porFamilia.set(f, []);
+            porFamilia.get(f)!.push(ci);
+        }
+        const familias = [...porFamilia.entries()]
+            .sort((a, b) => a[0].localeCompare(b[0], 'es'));
+
+        const filas = familias.map(([fam, suyos], idx) => {
+            const enBodega = suyos.reduce((n, ci) => n + ci.item.quantity, 0);
+            const fuera    = suyos.reduce((n, ci) => n + ci.unidadesFuera, 0);
+            const agotados = suyos.filter(ci => ci.item.quantity <= 0).length;
+            const marcas   = [...new Set(suyos.map(ci => ci.item.brand?.trim()).filter(Boolean))];
+            return tableRow([
+                suyos.length === 1 ? suyos[0].item.name : fam,
+                String(suyos.length),
+                String(enBodega),
+                fuera > 0 ? String(fuera) : '—',
+                agotados > 0 ? `${agotados} agotado${agotados > 1 ? 's' : ''}` : 'Completo',
+                marcas.length > 0 ? marcas.join(', ') : '—',
+            ], [...INV_W], idx % 2 === 1);
+        });
+
+        const totUnidades = lista.reduce((n, ci) => n + ci.item.quantity, 0);
+        const totFuera    = lista.reduce((n, ci) => n + ci.unidadesFuera, 0);
         hijos.push(new Table({
             width: { size: 9360, type: WidthType.DXA },
-            columnWidths: [...anchos],
+            columnWidths: [...INV_W],
             rows: [
-                tableHeader([
-                    'Familia', 'Herramienta',
-                    ...(conMarca ? ['Marca'] : []),
-                    'En bodega', 'Prestado', 'Estado', 'Responsable(s)', 'Días max',
-                ], [...anchos]),
-                ...lista.map((ci, idx) => filaDeHerramienta(ci, anchos, idx, conMarca)),
+                tableHeader(['Familia', 'Ítems', 'En bodega', 'Prestado', 'Estado', 'Marcas'], [...INV_W]),
+                ...filas,
                 tableRow([
-                    `TOTAL — ${lista.length} ítem(s)`, '',
-                    ...(conMarca ? [''] : []),
-                    String(unidades), fuera > 0 ? String(fuera) : '—', '', '', '',
-                ], [...anchos], true),
+                    `TOTAL — ${familias.length} familia(s)`,
+                    String(lista.length), String(totUnidades),
+                    totFuera > 0 ? String(totFuera) : '—', '', '',
+                ], [...INV_W], true),
             ],
         }));
         return hijos;
     };
 
+    const manuales   = capitalItems.filter(ci => ci.item.inventoryType === InventoryType.HAND_TOOL);
+    const electricas = capitalItems.filter(ci => ci.item.inventoryType === InventoryType.ELECTRICAL_TOOL);
+
     const capitalChildren: FileChild[] = [
         sectionHeading('2. Inventario'),
-        para(run('Lo que no se gasta: vuelve a la bodega. Ordenado por familia y, dentro de cada una, alfabético.',
+        para(run('Lo que no se gasta: vuelve a la bodega. Agrupado por familia y en orden alfabético. Quién tiene cada herramienta va en la sección 4.',
             { size: 10, color: GRAY }), { spaceAfter: 120 }),
-        ...bloqueHerramientas('2.1  Herramienta Manual', manuales, MAN_W, false),
-        ...bloqueHerramientas('2.2  Herramienta Eléctrica', electricas, ELE_W, true),
-        new Paragraph({ children: [new PageBreak()], spacing: { before: 600, after: 0 } }),
+        ...bloqueHerramientas('2.1  Herramienta Manual', manuales),
+        ...bloqueHerramientas('2.2  Herramienta Eléctrica', electricas),
     ];
 
     // ── 3. CONSUMOS — consumibles y EPP ───────────────────────────────
@@ -500,7 +528,7 @@ export async function exportReportAsDocx(opts: {
         ...bloqueConsumo('3.2  Elementos de Protección Personal',
             consumables.filter(c => c.item.inventoryType === InventoryType.PPE)),
     );
-    consChildren.push(new Paragraph({ children: [new PageBreak()], spacing: { before: 600, after: 0 } }));
+
 
     // ── 5. Análisis de consumo ────────────────────────────────────────
     // Una herramienta se rastrea ("¿dónde está?"); un consumible se analiza
@@ -510,8 +538,13 @@ export async function exportReportAsDocx(opts: {
         [InventoryType.SINGLE_USE]: 'Consumible',
     };
 
+    // Esto era la sección 5, con cuatro tablas, y una de ellas —"Material ·
+    // Consumido"— era la MISMA lista de 3.1 y 3.2, solo que ordenada por
+    // cantidad en vez de alfabéticamente. Ahora es un bloque dentro de Consumos
+    // y sin la repetida: quién gasta y en qué se va, que es lo que 3.1 y 3.2 no
+    // dicen.
     const analysisChildren: FileChild[] = [
-        sectionHeading('5. Análisis del consumo'),
+        subHeading('3.3  En qué se va'),
     ];
 
     if (consumption.totalUnidades === 0) {
@@ -539,18 +572,6 @@ export async function exportReportAsDocx(opts: {
             }),
 
             para(run('Más consumidos', { bold: true, size: 11, color: NAVY }), { spaceBefore: 300, spaceAfter: 100 }),
-            new Table({
-                width: { size: 9360, type: WidthType.DXA },
-                columnWidths: [...ANC_W],
-                rows: [
-                    tableHeader(['Material', 'Categoría', 'Consumido'], [...ANC_W]),
-                    ...consumption.porItem.slice(0, 10).map((r, i) => tableRow([
-                        r.key.name,
-                        TIPO_LABEL[r.key.inventoryType] ?? '—',
-                        `${r.unidades} ${r.key.unit}`,
-                    ], [...ANC_W], i % 2 === 1)),
-                ],
-            }),
 
             para(run('Consumo por trabajador', { bold: true, size: 11, color: NAVY }), { spaceBefore: 300, spaceAfter: 100 }),
             new Table({
@@ -581,28 +602,11 @@ export async function exportReportAsDocx(opts: {
             }),
         );
     }
-    analysisChildren.push(new Paragraph({ children: [new PageBreak()], spacing: { before: 600, after: 0 } }));
+
 
     // ── 6. Indicators ─────────────────────────────────────────────────
-    const indChildren: FileChild[] = [
-        sectionHeading('6. Indicadores'),
-        new Table({
-            width: { size: 9360, type: WidthType.DXA },
-            columnWidths: [...IND_W],
-            rows: [
-                tableHeader(['Indicador', 'Valor'], [...IND_W]),
-                tableRow(['Período analizado', `${fmtLong(fromDate)} al ${fmtLong(toDate)}`], [...IND_W]),
-                tableRow(['Total ítems en inventario', String(items.length)], [...IND_W], true),
-                tableRow(['Unidades en préstamo activo', String(activeLoanUnits)], [...IND_W]),
-                tableRow(['Despachos en el período', String(checkOuts)], [...IND_W], true),
-                tableRow(['Ingresos en el período', String(checkIns)], [...IND_W]),
-                tableRow(['Ítems con stock bajo mínimo', String(lowStock)], [...IND_W], true),
-                tableRow(['Trabajadores con herramientas', String(personnelLoans.length)], [...IND_W]),
-                tableRow(['Consumo del período (EPP + material)', `${consumption.totalUnidades} ud`], [...IND_W], true),
-                tableRow(['Promedio semanal de consumo', `${consumption.promedioSemanal} ud`], [...IND_W]),
-            ],
-        }),
-    ];
+    // La sección "6. Indicadores" se fue: repetía en el cierre los mismos
+    // números que ya abren el Resumen.
 
     // ── Build document ────────────────────────────────────────────────
     const doc = new Document({
@@ -610,6 +614,9 @@ export async function exportReportAsDocx(opts: {
             default: {
                 document: {
                     run: { font: 'Arial', size: 22, color: GRAY },
+                    // Sin esto, cada párrafo del documento arrastra el espaciado
+                    // que Word pone por defecto.
+                    paragraph: { spacing: { before: 0, after: 0, line: 252, lineRule: 'auto' } },
                 },
             },
         },
@@ -644,9 +651,8 @@ export async function exportReportAsDocx(opts: {
                     // Antes «Personal» iba de segundo y partía el inventario en dos.
                     ...capitalChildren,
                     ...consChildren,
-                    ...personnelChildren,
                     ...analysisChildren,
-                    ...indChildren,
+                    ...personnelChildren,
                 ],
             },
         ],
