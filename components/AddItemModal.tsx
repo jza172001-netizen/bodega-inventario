@@ -41,7 +41,11 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onA
 
     const esHerramienta = inventoryType === InventoryType.ELECTRICAL_TOOL || inventoryType === InventoryType.HAND_TOOL;
 
-    const UNIT_OPTIONS = ['unidades', 'pares', 'caja', 'bolsa', 'rollo', 'pliego', 'litro', 'ml', 'galón', 'kg', 'g', 'ton', 'm', 'cm', 'mm', 'km', 'm²', 'm³', 'yarda'];
+    // Primero las que se usan de verdad en la bodega. Los clavos van por LIBRA:
+    // una caja puede traer 50 clavos, pero sacar una caja es sacar una libra.
+    const UNIT_OPTIONS = ['unidades', 'libras', 'kilos', 'gramos', 'litros', 'mililitros',
+        'caja', 'bolsa', 'pares', 'rollo', 'pliego', 'galón', 'ton',
+        'm', 'cm', 'mm', 'km', 'm²', 'm³', 'yarda'];
 
 
     // Limpieza también al abrir: cubre el caso de haber cerrado a medias

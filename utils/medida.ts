@@ -9,6 +9,10 @@
  * El número del nombre es la MEDIDA, no la cantidad — que es justo la confusión
  * que había: "Clavos acero 1" no es un clavo, es un clavo de una pulgada.
  */
+// Los clavos se cuentan siempre por LIBRAS. Una caja puede traer 50 clavos,
+// pero sacar una caja es sacar una libra. Lo que cambia entre uno y otro es la
+// PULGADA: de una, de dos, de tres. Por eso se agrupa por pulgada y se mide en
+// libras — no al revés.
 const MATERIALES = [
     'acero', 'hierro', 'galvanizado', 'inoxidable', 'cobre', 'aluminio',
     'bronce', 'plástico', 'plastico', 'pvc', 'madera', 'concreto', 'nylon',
@@ -32,6 +36,9 @@ export const medidaDe = (nombre: string): string | null => {
     const num = m[1].replace(',', '.');
     // Un número pegado a una unidad de peso o largo no es una medida en pulgadas.
     const despues = sinParentesis.slice(m.index! + m[0].length).trimStart().toLowerCase();
-    if (/^(kg|g|gr|ml|l|lt|m|cm|mm|km)\b/.test(despues)) return null;
+    // `libra` va acá y no es un detalle: los clavos se piden POR LIBRA, y la
+    // pulgada solo sirve para distinguir el tamaño. Sin esto, "Clavos 2 libras"
+    // daría medida 2" — y ese 2 son las libras, no las pulgadas.
+    if (/^(kg|kilos?|g|gr|gramos?|ml|mililitros?|l|lt|litros?|m|cm|mm|km|lb|lbs|libras?)\b/.test(despues)) return null;
     return `${num}"`;
 };

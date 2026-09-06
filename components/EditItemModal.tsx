@@ -28,7 +28,11 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, o
     // que un ítem mal agrupado no se podía arreglar desde ninguna parte.
     const [familia, setFamilia] = useState('');
 
-    const UNIT_OPTIONS = ['unidades', 'pares', 'caja', 'bolsa', 'rollo', 'pliego', 'litro', 'ml', 'galón', 'kg', 'g', 'ton', 'm', 'cm', 'mm', 'km', 'm²', 'm³', 'yarda'];
+    // Primero las que se usan de verdad en la bodega. Los clavos van por LIBRA:
+    // una caja puede traer 50 clavos, pero sacar una caja es sacar una libra.
+    const UNIT_OPTIONS = ['unidades', 'libras', 'kilos', 'gramos', 'litros', 'mililitros',
+        'caja', 'bolsa', 'pares', 'rollo', 'pliego', 'galón', 'ton',
+        'm', 'cm', 'mm', 'km', 'm²', 'm³', 'yarda'];
 
     useEffect(() => {
         if (itemToEdit) {
@@ -119,7 +123,10 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, o
                             <label className="block text-sm font-medium text-gray-700 mb-1">Unidad de Medida</label>
                             {inventoryType === InventoryType.SINGLE_USE ? (
                                 <select value={unit} onChange={e => setUnit(e.target.value)} className="w-full input-style">
-                                    {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
+                                    {/* La unidad que ya tiene el ítem va siempre, aunque no esté en la lista:
+                                        si no, el select saldría vacío y guardar se la borraría. */}
+                                    {(UNIT_OPTIONS.includes(unit) || !unit ? UNIT_OPTIONS : [unit, ...UNIT_OPTIONS])
+                                        .map(u => <option key={u} value={u}>{u}</option>)}
                                 </select>
                             ) : (
                                 <input type="text" value={unit} onChange={e => setUnit(e.target.value)} required className="w-full input-style"/>
