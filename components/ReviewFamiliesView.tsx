@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { Item } from '../types';
-import { familiaDe } from '../utils/genus';
+import { familiaDe, nombreCorregido, normStr, esParecido } from '../utils/genus';
 
 interface Props {
     items: Item[];
@@ -9,6 +9,15 @@ interface Props {
     onGoBack: () => void;
     onBehaviorLog?: (action: string, detail: string) => void;
 }
+
+/** La forma que más se repite; en empate gana la que va con mayúscula. */
+const formaMandante = (formas: string[]): string => {
+    const cuenta = new Map<string, number>();
+    for (const f of formas) cuenta.set(f, (cuenta.get(f) ?? 0) + 1);
+    const conMayuscula = (v: string) => (v[0] && v[0] === v[0].toUpperCase() ? 0 : 1);
+    return [...cuenta.entries()]
+        .sort((a, b) => b[1] - a[1] || conMayuscula(a[0]) - conMayuscula(b[0]) || a[0].localeCompare(b[0], 'es'))[0][0];
+};
 
 /**
  * Los ítems creados antes de que la familia fuera una decisión traen la
@@ -21,25 +30,75 @@ interface Props {
 export const ReviewFamiliesView: React.FC<Props> = ({ items, onEditItem, onGoBack, onBehaviorLog }) => {
     const [separando, setSeparando] = useState<string | null>(null);
     const [fuera, setFuera] = useState<Set<string>>(new Set());
+    // Ítems a los que el bodeguero le dijo «no» a la corrección del nombre.
+    const [sinCorregir, setSinCorregir] = useState<Set<string>>(new Set());
+
+    /**
+     * Los del grupo que están escritos distinto a su familia.
+     *
+     * Él lo pidió así: *"cuando ya agrupe la familia, se corrijan las palabras
+     * y ya"*. Pero se MUESTRA antes de hacerlo: cambiarle los nombres a
+     * espaldas del bodeguero es peor que el error de dedo que se está
+     * arreglando. Por eso cada uno se puede dejar como está.
+     */
+    const porCorregir = (familia: string, grupo: Item[]) =>
+        grupo
+            .map(i => ({ item: i, nuevo: nombreCorregido(i.name, familia) }))
+            .filter(c => c.nuevo !== c.item.name);
 
     const pendientes = useMemo(() => {
-        const porFamilia = new Map<string, Item[]>();
+        // La clave va normalizada. Con la palabra tal cual, "Pulidora Grande" y
+        // "pulidora pequeña" caían en dos grupos de uno —y como los grupos de
+        // uno no se muestran, no aparecía ninguno de los dos. La familia que se
+        // ofrece es la forma más usada, con la mayúscula ganando los empates.
+        const porFamilia = new Map<string, { formas: string[]; its: Item[] }>();
         for (const i of items) {
             if (i.familia?.trim()) continue;              // ya decidido
             const f = familiaDe(i.name);
-            if (!porFamilia.has(f)) porFamilia.set(f, []);
-            porFamilia.get(f)!.push(i);
+            const clave = normStr(f);
+            if (!porFamilia.has(clave)) porFamilia.set(clave, { formas: [], its: [] });
+            const g = porFamilia.get(clave)!;
+            g.formas.push(f);
+            g.its.push(i);
         }
-        return [...porFamilia.entries()]
-            .filter(([, its]) => its.length >= 2)
+        // Los sueltos con un dedazo se arriman al grupo que se les parece.
+        // Es el caso que él tuvo escribiendo "Peludora": queda solo, y como los
+        // grupos de uno no se muestran, nunca se le ofrecía juntarlo con las
+        // pulidoras. Ahora entra al grupo, y la corrección de abajo le ofrece
+        // arreglarle el nombre — que puede rechazar.
+        const grupos = [...porFamilia.entries()];
+        const grandes = grupos.filter(([, g]) => g.its.length >= 2);
+        for (const [clave, g] of grupos) {
+            if (g.its.length >= 2) continue;
+            const suelto = g.its[0];
+            const destino = grandes.find(([c, otro]) =>
+                c !== clave && esParecido(suelto.name, otro.its[0]));
+            if (destino) { destino[1].formas.push(...g.formas); destino[1].its.push(suelto); }
+        }
+
+        return grandes
+            .map(([, g]) => [formaMandante(g.formas), g.its] as [string, Item[]])
             .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0], 'es'));
     }, [items]);
 
     const confirmar = (familia: string, grupo: Item[]) => {
-        grupo.forEach(i => onEditItem({ ...i, familia }));
+        const arreglos = porCorregir(familia, grupo).filter(c => !sinCorregir.has(c.item.id));
+        const nuevoNombre = new Map(arreglos.map(c => [c.item.id, c.nuevo]));
+        grupo.forEach(i => onEditItem({ ...i, familia, name: nuevoNombre.get(i.id) ?? i.name }));
         onBehaviorLog?.('ACTION', `Confirmó familia "${familia}" (${grupo.length} ítems)`);
+        if (arreglos.length) {
+            onBehaviorLog?.('ACTION',
+                `Corrigió ${arreglos.length} nombre(s) al agrupar en "${familia}": ` +
+                arreglos.map(c => `${c.item.name} → ${c.nuevo}`).join(', '));
+        }
         setSeparando(null); setFuera(new Set());
     };
+
+    const alternarCorreccion = (id: string) => setSinCorregir(prev => {
+        const n = new Set(prev);
+        n.has(id) ? n.delete(id) : n.add(id);
+        return n;
+    });
 
     const aplicarSeparacion = (familia: string, grupo: Item[]) => {
         for (const i of grupo) {
@@ -107,6 +166,33 @@ export const ReviewFamiliesView: React.FC<Props> = ({ items, onEditItem, onGoBac
                                 ))}
                             </div>
 
+                            {!enSeparacion && porCorregir(familia, grupo).length > 0 && (
+                                <div className="mx-4 mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 space-y-1.5">
+                                    <p className="text-[10px] font-black text-amber-700 uppercase tracking-wider">
+                                        Se escribieron distinto
+                                    </p>
+                                    {porCorregir(familia, grupo).map(c => {
+                                        const se = sinCorregir.has(c.item.id);
+                                        return (
+                                            <button key={c.item.id} type="button"
+                                                onClick={() => alternarCorreccion(c.item.id)}
+                                                className="w-full flex items-center gap-2 text-left text-xs">
+                                                <span className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 text-[10px] font-black ${
+                                                    se ? 'border-gray-300 bg-white text-transparent' : 'border-amber-500 bg-amber-500 text-white'}`}>✓</span>
+                                                <span className={`flex-1 min-w-0 truncate ${se ? 'text-gray-400' : 'text-amber-900'}`}>
+                                                    <span className="line-through opacity-60">{c.item.name}</span>
+                                                    {' → '}
+                                                    <strong>{c.nuevo}</strong>
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
+                                    <p className="text-[10px] text-amber-600 pt-0.5">
+                                        Toca uno para dejarlo como está.
+                                    </p>
+                                </div>
+                            )}
+
                             <div className="flex gap-2 px-4 pb-3">
                                 {enSeparacion ? (
                                     <>
@@ -128,7 +214,9 @@ export const ReviewFamiliesView: React.FC<Props> = ({ items, onEditItem, onGoBac
                                         </button>
                                         <button onClick={() => confirmar(familia, grupo)}
                                             className="flex-1 py-2 text-xs font-black bg-green-600 hover:bg-green-700 text-white rounded-xl">
-                                            Sí, son la misma familia
+                                            {porCorregir(familia, grupo).some(c => !sinCorregir.has(c.item.id))
+                                                ? 'Sí, y corregir los nombres'
+                                                : 'Sí, son la misma familia'}
                                         </button>
                                     </>
                                 )}

@@ -136,7 +136,15 @@ export const esParecido = (nombre: string, otro: Item, familiaConfirmada?: strin
     if (!a || !b) return false;
     if (a === b) return true;
     // Un error de dedo en la primera palabra: "Palustre" vs "Palustra".
-    return Math.abs(a.length - b.length) <= 2 && editDistance(a, b) <= 1;
+    //
+    // El margen crece con la palabra. Con uno fijo de 1, el error que él tuvo de
+    // verdad —"Peludora" por "Pulidora"— no se pillaba: son DOS letras cambiadas
+    // (e→u, u→i). Y en una palabra de ocho letras, dos cambios siguen siendo un
+    // dedazo; en una de cuatro, ya son otra palabra ("pala" y "pila").
+    // Probado contra las 40 familias de la bodega: el único par nuevo que junta
+    // es "extension" con "extensiones", que en efecto son lo mismo.
+    const margen = Math.max(a.length, b.length) >= 7 ? 2 : 1;
+    return Math.abs(a.length - b.length) <= 2 && editDistance(a, b) <= margen;
 };
 
 /**
