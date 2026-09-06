@@ -15,8 +15,6 @@ interface UserManagementModalProps {
 }
 
 export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClose, users, onAddUser, onDeleteUser, onEditUser }) => {
-    const [newUsername, setNewUsername] = useState('');
-    const [newPassword, setNewPassword] = useState('');
     const [newName, setNewName] = useState('');
     const [newRole, setNewRole] = useState<UserRole>(UserRole.EMPLOYEE);
     const [editingUserId, setEditingUserId] = useState<string | null>(null);
@@ -26,55 +24,62 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         
-        if (!newUsername.trim() || !newPassword.trim() || !newName.trim()) {
-            alert("Todos los campos son obligatorios para crear un acceso.");
-            return;
-        }
-
-        if (!editingUserId && users.some(u => u.username === newUsername)) {
-            alert("El nombre de usuario ya está ocupado. Intente con otro.");
+        if (!newName.trim()) {
+            alert("Falta el nombre de la persona.");
             return;
         }
 
         if (editingUserId) {
+            // Editar NO toca la contraseña: es de la persona, no del administrador.
+            const previo = users.find(u => u.id === editingUserId);
             const updatedUser: AppUser = {
+                ...(previo as AppUser),
                 id: editingUserId,
-                username: newUsername.trim(),
-                password: newPassword,
                 name: newName.trim(),
-                role: newRole
+                role: newRole,
             };
             onEditUser(updatedUser);
             setEditingUserId(null);
         } else {
+            if (users.some(u => u.name.trim().toLowerCase() === newName.trim().toLowerCase())) {
+                alert("Ya hay alguien con ese nombre.");
+                return;
+            }
+            /**
+             * El acceso se crea VACÍO: sin usuario y sin contraseña.
+             *
+             * Antes el administrador escribía la clave del otro, y con eso la
+             * sabía para siempre. Ahora la tarjeta queda esperando: la primera
+             * vez que esa persona la toca, la app le pide que ponga su usuario y
+             * su contraseña (la pantalla de primer ingreso que ya existía, la
+             * que se dispara con `setupComplete` en falso).
+             *
+             * Resultado: Juli ve en Trazabilidad todo lo que cada quien hace, y
+             * no puede entrar haciéndose pasar por nadie.
+             */
             const newUser: AppUser = {
                 id: crypto.randomUUID(),
-                username: newUsername.trim(),
-                password: newPassword,
+                username: '',
+                password: '',
                 name: newName.trim(),
-                role: newRole
+                role: newRole,
+                setupComplete: false,
             };
             onAddUser(newUser);
         }
 
-        setNewUsername('');
-        setNewPassword('');
         setNewName('');
         setNewRole(UserRole.EMPLOYEE);
     };
 
     const handleEditClick = (user: AppUser) => {
         setEditingUserId(user.id);
-        setNewUsername(user.username);
-        setNewPassword(user.password);
         setNewName(user.name);
         setNewRole(user.role);
     };
 
     const handleCancelEdit = () => {
         setEditingUserId(null);
-        setNewUsername('');
-        setNewPassword('');
         setNewName('');
         setNewRole(UserRole.EMPLOYEE);
     };
@@ -110,30 +115,18 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                                     required
                                 />
                             </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="text-[10px] font-black text-tinta-tenue uppercase tracking-widest mb-1 block">Usuario Login</label>
-                                    <input
-                                        type="text"
-                                        value={newUsername}
-                                        onChange={e => setNewUsername(e.target.value)}
-                                        placeholder="ej: andres_bodega"
-                                        className="w-full p-3 bg-papel border-2 border-papel-borde rounded-xl focus:border-marca outline-none font-bold text-tinta-suave transition-colors"
-                                        required
-                                    />
+                            {/* Ni usuario ni contraseña: los pone la persona la
+                                primera vez que entra. Acá solo se crea la tarjeta. */}
+                            {!editingUserId && (
+                                <div className="rounded-xl bg-marca-suave border border-marca-borde p-3">
+                                    <p className="text-xs font-bold text-marca-oscuro">
+                                        El acceso queda esperando a esa persona. La primera vez que
+                                        toque su tarjeta, la app le pide que ponga su usuario y su
+                                        contraseña — vos no la vas a saber, y no la necesitás:
+                                        todo lo que haga queda en Trazabilidad con su nombre.
+                                    </p>
                                 </div>
-                                <div>
-                                    <label className="text-[10px] font-black text-tinta-tenue uppercase tracking-widest mb-1 block">Contraseña</label>
-                                    <input
-                                        type="password"
-                                        value={newPassword}
-                                        onChange={e => setNewPassword(e.target.value)}
-                                        placeholder="••••••••"
-                                        className="w-full p-3 bg-papel border-2 border-papel-borde rounded-xl focus:border-marca outline-none font-bold text-tinta-suave transition-colors"
-                                        required
-                                    />
-                                </div>
-                            </div>
+                            )}
                             <div>
                                 <label className="text-[10px] font-black text-tinta-tenue uppercase tracking-widest mb-1 block">Nivel de Seguridad</label>
                                 <select 

@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Item, Movement, Personnel, MovementType, Project } from '../types';
+import { Item, Movement, Personnel, MovementType, Project, UserRole } from '../types';
 import { XIcon } from './icons/XIcon';
 import { isAsset, daysSince } from '../utils/inventory';
 
@@ -14,12 +14,31 @@ interface ItemHistoryModalProps {
     onReturnItem?: (id: string) => void;
     onTransferLoan?: (movementId: string, newPersonnelId: string) => void;
     onAssignProject?: (movementId: string, projectId: string) => void;
+    /**
+     * Marcar para recoger, igual que en Préstamos.
+     *
+     * Faltaba justo acá, y eso hacía que el botón "pareciera" ir y venir: en
+     * Préstamos estaba, y al abrir la ficha de la misma herramienta desde el
+     * Kardex ya no. No era un botón que desaparecía — eran dos pantallas que
+     * no decían lo mismo de un mismo préstamo.
+     */
+    onMarkPendingPickup?: (movementId: string, pending: boolean) => void;
+    /**
+     * El Visitante entra a mirar, no a mover. Esta pantalla era el único lugar
+     * de la app que no lo sabía: se abría una herramienta desde el Kardex y
+     * salían Devolver, Reasignar y Proyecto para cualquiera. El resto de la app
+     * ya filtra por rol (App.tsx, VISITOR_VIEWS); este modal se había quedado
+     * por fuera.
+     */
+    userRole?: UserRole;
 }
 
 export const ItemHistoryModal: React.FC<ItemHistoryModalProps> = ({
     isOpen, onClose, item, movements, personnel,
     projects = [], onReturnItem, onTransferLoan, onAssignProject,
+    onMarkPendingPickup, userRole = UserRole.EMPLOYEE,
 }) => {
+    const soloMirar = userRole === UserRole.VISITOR;
     // La acción es por préstamo, no global: un ítem puede estar con dos personas
     // a la vez y cada una se devuelve o reasigna por separado.
     const [activeAction, setActiveAction] = useState<{ movId: string; kind: 'transfer' | 'project' } | null>(null);
@@ -139,7 +158,7 @@ export const ItemHistoryModal: React.FC<ItemHistoryModalProps> = ({
                                             )}
                                         </p>
 
-                                        {!open ? (
+                                        {soloMirar ? null : !open ? (
                                             <div className="flex gap-2 flex-wrap">
                                                 <button
                                                     onClick={() => handleReturn(loan)}
@@ -161,6 +180,17 @@ export const ItemHistoryModal: React.FC<ItemHistoryModalProps> = ({
                                                         className="flex-1 min-w-[100px] py-2 bg-marca hover:bg-marca-fuerte text-tinta text-xs font-black rounded-xl transition-all"
                                                     >
                                                         📁 Proyecto
+                                                    </button>
+                                                )}
+                                                {onMarkPendingPickup && (
+                                                    <button
+                                                        onClick={() => onMarkPendingPickup(loan.id, !loan.pendingPickup)}
+                                                        className={`flex-1 min-w-[100px] py-2 text-xs font-black rounded-xl transition-all ${
+                                                            loan.pendingPickup
+                                                                ? 'bg-marca-suave text-marca-oscuro'
+                                                                : 'bg-papel-hondo hover:bg-marca-suave text-marca-oscuro'}`}
+                                                    >
+                                                        {loan.pendingPickup ? '✕ Cancelar recogida' : '📍 Recoger'}
                                                     </button>
                                                 )}
                                             </div>

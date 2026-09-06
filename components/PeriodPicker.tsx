@@ -64,6 +64,28 @@ export const PeriodPicker: React.FC<Props> = ({ value, onChange, onBehaviorLog }
 
     return (
         <div className="space-y-1.5">
+            {/* El rango de fechas va PRIMERO y siempre a la vista.
+                Era lo que más se usaba y estaba escondido detrás de un botón que
+                además no se veía: se pintaba con letra blanca sobre fondo blanco
+                (`bg-papel text-papel`), así que en el celular se veía una pastilla
+                vacía. Juli lo reportó como "el cronológico me aparece en blanco" —
+                no estaba vacío, era invisible. */}
+            <div className="flex items-center gap-1.5">
+                <input type="date" value={desde} aria-label="Desde"
+                    onChange={e => { setDesde(e.target.value); setPersonalizado(true); aplicarPersonalizado(e.target.value, hasta); }}
+                    className="flex-1 min-w-0 text-xs border border-papel-borde rounded-lg px-2 py-1.5 bg-papel text-tinta" />
+                <span className="text-[11px] text-tinta-tenue flex-shrink-0">→</span>
+                <input type="date" value={hasta} aria-label="Hasta"
+                    onChange={e => { setHasta(e.target.value); setPersonalizado(true); aplicarPersonalizado(desde, e.target.value); }}
+                    className="flex-1 min-w-0 text-xs border border-papel-borde rounded-lg px-2 py-1.5 bg-papel text-tinta" />
+                {personalizado && (
+                    <button type="button" title="Quitar el rango de fechas"
+                        onClick={() => { setPersonalizado(false); setDesde(''); setHasta(''); onChange(TODO); }}
+                        className="flex-shrink-0 px-2 py-1.5 text-[11px] font-black text-tinta-tenue hover:text-alerta">
+                        ✕
+                    </button>
+                )}
+            </div>
             <div className="flex flex-wrap gap-1">
                 {PERIODOS.map(p => {
                     const activo = !personalizado && value.label === p.build().label;
@@ -77,26 +99,7 @@ export const PeriodPicker: React.FC<Props> = ({ value, onChange, onBehaviorLog }
                         </button>
                     );
                 })}
-                <button type="button"
-                    onClick={() => setPersonalizado(v => !v)}
-                    className={`px-2.5 py-1 rounded-full text-[11px] font-black transition-all ${
-                        personalizado ? 'bg-tinta text-papel' : 'bg-papel text-papel border border-papel-borde hover:border-tinta-tenue'
-                    }`}>
-                    Fechas…
-                </button>
             </div>
-
-            {personalizado && (
-                <div className="flex items-center gap-1.5">
-                    <input type="date" value={desde}
-                        onChange={e => { setDesde(e.target.value); aplicarPersonalizado(e.target.value, hasta); }}
-                        className="flex-1 min-w-0 text-xs border border-papel-borde rounded-lg px-2 py-1.5 bg-papel" />
-                    <span className="text-[11px] text-tinta-tenue">→</span>
-                    <input type="date" value={hasta}
-                        onChange={e => { setHasta(e.target.value); aplicarPersonalizado(desde, e.target.value); }}
-                        className="flex-1 min-w-0 text-xs border border-papel-borde rounded-lg px-2 py-1.5 bg-papel" />
-                </div>
-            )}
         </div>
     );
 };

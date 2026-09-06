@@ -27,7 +27,14 @@ export const LOAN_TYPES = new Set<InventoryType>([
 export const CONSUMABLE_TYPES = new Set<InventoryType>([
     InventoryType.PPE,
     InventoryType.SINGLE_USE,
+    // Un disco o una broca también se gastan: para las cuentas son gasto, no
+    // activo. Lo que los separa de los demás consumibles es dónde viven y a
+    // quién se le pueden enganchar, no cómo se contabilizan.
+    InventoryType.ACCESSORY,
 ]);
+
+/** Del catálogo de accesorios: se engancha a una herramienta, no se despacha solo. */
+export const isAccessory = (item?: Item): boolean => item?.inventoryType === InventoryType.ACCESSORY;
 
 /** Herramienta: se presta y debe volver. */
 export const isAsset = (item?: Item): boolean => !!item && LOAN_TYPES.has(item.inventoryType);

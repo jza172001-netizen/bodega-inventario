@@ -18,6 +18,7 @@ const TYPE_LABELS: Record<InventoryType, string> = {
     [InventoryType.HAND_TOOL]: 'Herramienta Manual',
     [InventoryType.PPE]: 'Elementos de Seguridad (EPP)',
     [InventoryType.SINGLE_USE]: 'Material de Consumo / Un solo uso',
+    [InventoryType.ACCESSORY]: 'Accesorio de herramienta',
 };
 
 export const InvoiceReaderModal: React.FC<InvoiceReaderModalProps> = ({ isOpen, onClose, onImport }) => {

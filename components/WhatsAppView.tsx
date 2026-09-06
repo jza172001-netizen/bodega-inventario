@@ -118,6 +118,24 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
      * característica, y era la única sin confirmar.
      */
     const [porConfirmar, setPorConfirmar] = useState<{ titulo: string; mensaje: string; hacer: () => void } | null>(null);
+    /**
+     * A quién se le manda.
+     *
+     * Antes solo existía "Recordar a todos": o les caía a los siete o había que
+     * ir uno por uno. Y a veces hay que llamarle a uno solo. Vacío = todos, que
+     * es como funcionaba antes; marcar a alguien reduce el envío a los marcados.
+     *
+     * La selección vive acá arriba y no dentro de la tarjeta a propósito:
+     * `PersonCard` se declara adentro de esta vista, así que React la vuelve a
+     * montar en cada render y cualquier estado suyo se pierde. Es la misma
+     * trampa de `LoanRow` en Préstamos.
+     */
+    const [elegidos, setElegidos] = useState<Set<string>>(new Set());
+    const alternarElegido = (id: string) => setElegidos(prev => {
+        const s = new Set(prev);
+        s.has(id) ? s.delete(id) : s.add(id);
+        return s;
+    });
 
     const itemMap = new Map(items.map(i => [i.id, i]));
     const activeLoans = movements.filter(m => m.isLoan && !m.isReturned);
@@ -229,10 +247,17 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
         });
     };
 
-    // ── Due-queue (Recordar a todos) ──────────────────────────────────────
+    // ── Due-queue (Recordar a los elegidos, o a todos) ────────────────────
+    /** Los que de verdad se van a contactar: los marcados, o todos si no hay
+     *  ninguno marcado. */
+    const aQuienesLeVa = () => {
+        const marcados = dueGroups.filter(g => elegidos.has(g.person.id));
+        return marcados.length > 0 ? marcados : [...dueGroups];
+    };
     const startRemindAll = () => {
-        if (dueGroups.length === 0) return;
-        confirmarLote([...dueGroups], 'Recordar a todos', 'loan', 7);
+        const batch = aQuienesLeVa();
+        if (batch.length === 0) return;
+        confirmarLote(batch, batch.length === dueGroups.length ? 'Recordar a todos' : 'Recordar a los marcados', 'loan', 7);
     };
 
     // ── Batch queue — shared for category + general ───────────────────────
@@ -461,8 +486,8 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
                                 !hasPhoneUsers
                                     ? 'bg-papel-hondo text-tinta-tenue cursor-not-allowed'
                                     : generalDone
-                                        ? 'bg-bien hover:bg-bien text-tinta-tenue opacity-70'
-                                        : 'bg-bien hover:bg-bien text-tinta-tenue'
+                                        ? 'bg-bien hover:bg-bien text-papel opacity-70'
+                                        : 'bg-bien hover:bg-bien text-papel'
                             }`}
                             title={generalDone ? 'Todos recordados esta semana — toca para re-enviar' : `Recordar a los ${totalWithPhone} trabajadores`}
                         >
@@ -494,17 +519,39 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
                                         onClick={startRemindAll}
                                         className="flex-shrink-0 text-xs font-black bg-papel text-bien hover:bg-bien-suave px-3 py-1.5 rounded-xl transition-colors"
                                     >
-                                        Recordar a todos ({dueGroups.length}) →
+                                        {elegidos.size > 0
+                                            ? `Recordar a los marcados (${aQuienesLeVa().length}) →`
+                                            : `Recordar a todos (${dueGroups.length}) →`}
                                     </button>
                                 )}
                             </div>
+                            {/* Marcar a quién sí y a quién no. Sin nada marcado se
+                                comporta como siempre: les va a todos. */}
+                            {!queue && elegidos.size > 0 && (
+                                <div className="px-3 pt-2">
+                                    <button onClick={() => setElegidos(new Set())}
+                                        className="text-[11px] font-black text-tinta-tenue hover:text-alerta">
+                                        ✕ Quitar las marcas ({elegidos.size})
+                                    </button>
+                                </div>
+                            )}
                             <div className="p-3 space-y-2">
                                 {dueGroups.map(g => wrapCard(g, (
-                                    <PersonCard
-                                        key={g.person.id}
-                                        g={g}
-                                        highlight={!!queue && queue.batch[step]?.person.id === g.person.id}
-                                    />
+                                    <div key={g.person.id} className="flex items-start gap-2">
+                                        {!queue && (
+                                            <label className="flex-shrink-0 pt-5 cursor-pointer" title={`Incluir a ${g.person.name} en el envío`}>
+                                                <input type="checkbox" checked={elegidos.has(g.person.id)}
+                                                    onChange={() => alternarElegido(g.person.id)}
+                                                    className="w-5 h-5 accent-bien cursor-pointer" />
+                                            </label>
+                                        )}
+                                        <div className="flex-1 min-w-0">
+                                            <PersonCard
+                                                g={g}
+                                                highlight={!!queue && queue.batch[step]?.person.id === g.person.id}
+                                            />
+                                        </div>
+                                    </div>
                                 )))}
                             </div>
                         </div>

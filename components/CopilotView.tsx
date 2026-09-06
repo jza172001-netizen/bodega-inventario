@@ -38,6 +38,7 @@ const TYPE_LABELS: Record<InventoryType, string> = {
     [InventoryType.HAND_TOOL]: '🔨 H. Manual',
     [InventoryType.PPE]: '🦺 Seguridad (EPP)',
     [InventoryType.SINGLE_USE]: '📦 Consumible',
+    [InventoryType.ACCESSORY]: '🔩 Accesorio',
 };
 
 const CATEGORY_BY_TYPE: Record<InventoryType, string> = {
@@ -45,6 +46,7 @@ const CATEGORY_BY_TYPE: Record<InventoryType, string> = {
     [InventoryType.ELECTRICAL_TOOL]: 'Herramientas',
     [InventoryType.PPE]: 'Seguridad',
     [InventoryType.SINGLE_USE]: 'Materiales',
+    [InventoryType.ACCESSORY]: 'Accesorios',
 };
 
 const uid = () => Math.random().toString(36).slice(2);

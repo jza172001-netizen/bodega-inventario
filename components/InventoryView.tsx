@@ -100,14 +100,35 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, movements =
     const filasAgrupadas = useMemo(() => {
         const porGrupo = new Map<string, typeof genusList>();
         for (const fam of genusList) {
-            const g = fam.species[0]?.subCategory?.trim() || 'General';
+            // El encabezado sale del TIPO DE INVENTARIO, no de la
+            // sub-clasificación.
+            //
+            // Antes salía de `subCategory`, y como ese campo casi nadie lo
+            // llenaba, la pantalla mostraba "HERRAMIENTA ELÉCTRICA · 9 familias"
+            // y más abajo "GENERAL · 11 familias" con más herramientas
+            // eléctricas adentro. No eran dos grupos: era qué ítems tenían
+            // escrito ese campo y cuáles no. Y "GOLOE" era un "GOLPE" con un
+            // error de dedo que se quedó guardado.
+            const g = fam.species[0]?.inventoryType ?? 'Sin tipo';
             if (!porGrupo.has(g)) porGrupo.set(g, []);
             porGrupo.get(g)!.push(fam);
         }
-        // "General" al final: es el cajón de lo que todavía no tiene grupo, y
-        // no tiene por qué encabezar la lista.
+        // El orden es el del uso real de la bodega, no el alfabético: primero lo
+        // que más se mueve. Lo dijo Juli con estas palabras — "consumibles,
+        // herramienta eléctrica, herramienta manual tercera y elementos de
+        // protección personal de última".
+        const ORDEN: string[] = [
+            InventoryType.SINGLE_USE,
+            InventoryType.ELECTRICAL_TOOL,
+            InventoryType.HAND_TOOL,
+            InventoryType.PPE,
+            // El catálogo de accesorios va de último: no se despacha solo, sale
+            // pegado a su herramienta.
+            InventoryType.ACCESSORY,
+        ];
+        const peso = (g: string) => { const i = ORDEN.indexOf(g); return i === -1 ? ORDEN.length : i; };
         const grupos = [...porGrupo.keys()].sort((a, b) =>
-            a === 'General' ? 1 : b === 'General' ? -1 : a.localeCompare(b, 'es'));
+            peso(a) - peso(b) || a.localeCompare(b, 'es'));
 
         type Fila =
             | { tipo: 'grupo'; grupo: string; familias: number }
@@ -151,6 +172,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, movements =
         [InventoryType.HAND_TOOL]: '🔨',
         [InventoryType.PPE]: '🦺',
         [InventoryType.SINGLE_USE]: '📦',
+        [InventoryType.ACCESSORY]: '🔩',
     };
 
     return (

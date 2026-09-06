@@ -92,13 +92,17 @@ interface AgregarProps {
 }
 
 /**
- * Engancharle un consumible a la herramienta sin salir de donde se está. Es el
+ * Engancharle un accesorio a la herramienta sin salir de donde se está. Es el
  * disco de la pulidora: se decide en el mostrador, no en la pantalla de edición.
  *
- * Y se puede CREARLO ahí mismo. Antes solo ofrecía los que ya existían, y peor:
- * si no había ningún consumible cargado, el botón ni aparecía. O sea que no se
- * podía enganchar un disco justo cuando el disco todavía no estaba en el
- * inventario — que es exactamente cuando hace falta.
+ * Lo que ofrece es el CATÁLOGO DE ACCESORIOS, que es una lista aparte y propia.
+ * Antes ofrecía todos los consumibles de la bodega, y al abrirlo salían
+ * bombillos, estopa, gafas, clavos y conectores — nada de eso es accesorio de
+ * nada. Un disco no es una libra de clavos y no se cuenta con ella.
+ *
+ * El catálogo empieza vacío y se llena de a poco, con el «➕ Crear uno nuevo»:
+ * este tipo de disco, este otro tipo de broca, el soporte del láser. Quién
+ * entra al catálogo lo decide el bodeguero, no la app.
  */
 export const AgregarAccesorio: React.FC<AgregarProps> = ({ item, items, onEditItem, onCreateItem, onBehaviorLog }) => {
     const [creando, setCreando] = useState(false);
@@ -111,7 +115,7 @@ export const AgregarAccesorio: React.FC<AgregarProps> = ({ item, items, onEditIt
     const propios = new Set(accesorioDeFamilia(familia, items));
 
     const disponibles = items
-        .filter(i => i.inventoryType === InventoryType.SINGLE_USE || i.inventoryType === InventoryType.PPE)
+        .filter(i => i.inventoryType === InventoryType.ACCESSORY)
         .filter(i => !(item.accessories ?? []).some(a => a.itemId === i.id))
         .sort((a, b) => a.name.localeCompare(b.name, 'es'));
 
@@ -129,13 +133,28 @@ export const AgregarAccesorio: React.FC<AgregarProps> = ({ item, items, onEditIt
         const n = nombre.trim();
         if (!n || !onCreateItem) return;
         const nuevo = onCreateItem({
-            name: n, category: 'Materiales', subCategory: 'General',
-            inventoryType: InventoryType.SINGLE_USE,
+            // Nace en el catálogo de accesorios y en cero: el contador es suyo,
+            // no el de los consumibles de la bodega.
+            name: n, category: 'Accesorios', subCategory: '',
+            inventoryType: InventoryType.ACCESSORY,
             quantity: 0, minStock: 0, price: 0, unit: unidad,
         });
         enganchar(nuevo);
         setNombre(''); setUnidad('unidades'); setCreando(false);
     };
+
+    /**
+     * Accesorios solo donde tienen sentido.
+     *
+     * Un martillo no lleva accesorios, y un consumible menos. En la práctica
+     * son las pulidoras y los taladros: herramienta eléctrica. Se deja también
+     * la manual —hay manuales con estuche o con llave— pero solo si ya se le
+     * puso alguno, para que la opción no aparezca en las 30 que no la usan.
+     */
+    const admiteAccesorios =
+        item.inventoryType === InventoryType.ELECTRICAL_TOOL
+        || (item.inventoryType === InventoryType.HAND_TOOL && (item.accessories ?? []).length > 0);
+    if (!admiteAccesorios) return null;
 
     if (creando) {
         return (
@@ -174,7 +193,7 @@ export const AgregarAccesorio: React.FC<AgregarProps> = ({ item, items, onEditIt
                 const c = consumibles.find(x => x.id === e.target.value);
                 if (c) enganchar(c);
             }}
-            title="Engancharle un consumible a esta herramienta"
+            title="Engancharle un accesorio a esta herramienta"
             // Encoge con la fila. Con `flex-shrink-0` dentro de un `flex-nowrap`
             // no podía ceder ni un píxel y se salía de la tarjeta por la derecha.
             className="flex-1 min-w-0 w-full text-[11px] font-bold px-1.5 py-1.5 rounded-lg border border-papel-borde text-tinta-suave bg-papel"
@@ -186,7 +205,7 @@ export const AgregarAccesorio: React.FC<AgregarProps> = ({ item, items, onEditIt
                 </optgroup>
             )}
             {demas.length > 0 && (
-                <optgroup label={suyos.length > 0 ? 'Todo lo demás' : 'Consumibles'}>
+                <optgroup label={suyos.length > 0 ? 'Todo el catálogo' : 'Catálogo de accesorios'}>
                     {demas.map(c => <option key={c.id} value={c.id}>{c.name} · {c.quantity} {c.unit}</option>)}
                 </optgroup>
             )}

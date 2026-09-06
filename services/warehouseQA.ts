@@ -125,6 +125,7 @@ const ETIQUETA_TIPO: Record<InventoryType, string> = {
     [InventoryType.HAND_TOOL]:       'herramientas manuales',
     [InventoryType.PPE]:             'EPP',
     [InventoryType.SINGLE_USE]:      'consumibles',
+    [InventoryType.ACCESSORY]:       'accesorios',
 };
 
 const detectTipo = (norm: string): { tipo: InventoryType; label: string } | null => {

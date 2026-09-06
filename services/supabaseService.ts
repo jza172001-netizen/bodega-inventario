@@ -43,7 +43,21 @@ function dbToItem(row: Record<string, unknown>): Item {
         requiresReturnNote: row.requires_return_note as boolean | undefined,
         accessories: Array.isArray(row.accessories) ? (row.accessories as import('../types').Accessory[]) : [],
         familia: (row.familia as string | null) ?? undefined,
+        reparacion: row.reparacion ? deDbReparacion(row.reparacion as Record<string, unknown>) : undefined,
         updatedAt: row.updated_at ? new Date(row.updated_at as string) : undefined,
+    };
+}
+
+/** El jsonb de reparación viene con las fechas en texto: hay que revivirlas o
+ *  `daysSince` recibe una cadena y devuelve NaN. */
+function deDbReparacion(raw: Record<string, unknown>): import('../types').EstadoReparacion {
+    return {
+        estado: raw.estado as 'dañada' | 'enviada' | 'arreglada',
+        desde: new Date(raw.desde as string),
+        enviadaEl: raw.enviadaEl ? new Date(raw.enviadaEl as string) : undefined,
+        devueltaEl: raw.devueltaEl ? new Date(raw.devueltaEl as string) : undefined,
+        nota: (raw.nota as string | null) ?? undefined,
+        porQuien: (raw.porQuien as string | null) ?? undefined,
     };
 }
 
@@ -62,6 +76,7 @@ function itemToDb(item: Omit<Item, 'id'>): Record<string, unknown> {
         requires_return_note: item.requiresReturnNote ?? false,
         accessories: item.accessories ?? [],
         familia: item.familia ?? null,
+        reparacion: item.reparacion ?? null,
         updated_at: sello(item.updatedAt),
     };
 }
@@ -773,6 +788,10 @@ function dbToOrderNote(row: Record<string, unknown>): OrderNote {
         familia: (row.familia as string | null) ?? undefined,
         color: (row.color as string | null) ?? undefined,
         comprado: !!row.comprado,
+        recibido: !!row.recibido,
+        recibidoQty: row.recibido_qty != null ? Number(row.recibido_qty) : undefined,
+        itemId: (row.item_id as string | null) ?? undefined,
+        recibidoAt: row.recibido_at ? new Date(row.recibido_at as string) : undefined,
         createdAt: new Date(row.created_at as string),
         updatedAt: row.updated_at ? new Date(row.updated_at as string) : undefined,
     };
@@ -788,6 +807,8 @@ export async function addOrderNote(n: Omit<OrderNote, 'id'>, id: string): Promis
     const { error } = await supabase.from('order_list').insert({
         id, texto: n.texto, cantidad: n.cantidad ?? null, unidad: n.unidad ?? null,
         familia: n.familia ?? null, color: n.color ?? null, comprado: n.comprado,
+        recibido: n.recibido ?? false, recibido_qty: n.recibidoQty ?? null,
+        item_id: n.itemId ?? null, recibido_at: sello(n.recibidoAt),
         created_at: sello(n.createdAt), updated_at: sello(n.updatedAt),
     });
     if (error) throw error;
@@ -796,7 +817,9 @@ export async function addOrderNote(n: Omit<OrderNote, 'id'>, id: string): Promis
 export async function updateOrderNote(n: OrderNote): Promise<void> {
     const { error } = await supabase.from('order_list').update({
         texto: n.texto, cantidad: n.cantidad ?? null, unidad: n.unidad ?? null,
-        familia: n.familia ?? null, color: n.color ?? null, comprado: n.comprado, updated_at: sello(new Date()),
+        familia: n.familia ?? null, color: n.color ?? null, comprado: n.comprado,
+        recibido: n.recibido ?? false, recibido_qty: n.recibidoQty ?? null,
+        item_id: n.itemId ?? null, recibido_at: sello(n.recibidoAt), updated_at: sello(new Date()),
     }).eq('id', n.id);
     if (error) throw error;
 }

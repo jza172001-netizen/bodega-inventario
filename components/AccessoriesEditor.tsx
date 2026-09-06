@@ -26,8 +26,10 @@ interface Props {
 export const AccessoriesEditor: React.FC<Props> = ({ value, onChange, items }) => {
     const [nuevoRetornable, setNuevoRetornable] = useState('');
 
+    // Del catálogo de accesorios, no de los consumibles de la bodega: un disco
+    // es accesorio, unos bombillos y unas gafas no lo son de nada.
     const consumibles = items
-        .filter(i => i.inventoryType === InventoryType.SINGLE_USE || i.inventoryType === InventoryType.PPE)
+        .filter(i => i.inventoryType === InventoryType.ACCESSORY)
         .sort((a, b) => a.name.localeCompare(b.name, 'es'));
 
     const quitar = (idx: number) => onChange(value.filter((_, i) => i !== idx));
