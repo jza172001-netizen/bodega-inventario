@@ -5,6 +5,7 @@ import { momentoDeFecha } from '../utils/date';
 import { askCopilot } from '../services/copilotService';
 import { suggestQuestions } from '../services/warehouseQA';
 import { scoreMatch } from '../utils/search';
+import { AccesoriosDeItem } from './AccesoriosDeItem';
 import { getGenus, familiaDe, esParecido, familiaCanonica, familiasParecidas, coloresDeFamilia } from '../utils/genus';
 
 interface FloatingChatProps {
@@ -222,6 +223,9 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             <div className="flex-1 min-w-0">
                 <p className="text-sm text-gray-800 truncate">{familia}</p>
                 {variante && <p className="text-[10px] font-semibold text-blue-600 truncate">{variante}</p>}
+                {/* Lo que sale pegado: hay que saber que la pulidora lleva disco
+                    ANTES de entregarla, no cuando el disco ya no aparece. */}
+                <AccesoriosDeItem item={item} className="mt-0.5" />
             </div>
         );
     };
