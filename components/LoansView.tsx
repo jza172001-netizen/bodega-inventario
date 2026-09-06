@@ -30,6 +30,10 @@ interface LoansViewProps {
     onBehaviorLog?: (action: string, detail: string) => void;
     /** Para engancharle un consumible a la herramienta sin salir de la lista. */
     onEditItem?: (item: Item) => void;
+    /** Para crear un consumible que todavía no existe y engancharlo de una. */
+    onCreateItem?: (item: Omit<Item, 'id'>) => Item;
+    /** Abre el histórico de una herramienta, igual que en Historial e Inventario. */
+    onItemHistory?: (item: Item) => void;
 }
 
 // Los chips se recortan por lente: no tiene sentido ofrecer "EPP" filtrando
@@ -54,7 +58,7 @@ const INV_EMOJI: Record<string, string> = {
 };
 
 export const LoansView: React.FC<LoansViewProps> = ({
-    movements, items, personnel, onReturnItem, onMarkPendingPickup, onGoBack, userRole = UserRole.EMPLOYEE, onBehaviorLog, onEditItem,
+    movements, items, personnel, onReturnItem, onMarkPendingPickup, onGoBack, userRole = UserRole.EMPLOYEE, onBehaviorLog, onEditItem, onCreateItem, onItemHistory,
     initialLens = 'loans',
 }) => {
     const isOwner = userRole !== UserRole.VISITOR;
@@ -206,39 +210,50 @@ export const LoansView: React.FC<LoansViewProps> = ({
         else if (days > 14) { rowClass = 'border-l-2 border-red-400 pl-3';    daysBadge = 'bg-red-100 text-red-800'; }
         else if (days > 7)  { rowClass = 'border-l-2 border-yellow-400 pl-3'; daysBadge = 'bg-yellow-100 text-yellow-800'; }
 
+        // El nombre va SOLO en su renglón. Antes competía en la misma línea con la
+        // cantidad, los días, la etiqueta "Recoger", dos botones y un selector de
+        // 92 px: en un teléfono de 390 px el nombre desaparecía —ni truncado, un
+        // hilito encima de la fecha— y el botón de devolver se salía de la tarjeta.
+        // Saber QUIÉN la tiene es la única razón por la que existe esta pantalla.
         return (
-            <div className={`py-2 ${rowClass} flex items-center gap-2`}>
-                <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-800 truncate">{getPersonName(loan.personnelId)}</p>
-                    <p className="text-xs text-gray-400">{new Date(loan.timestamp).toLocaleDateString('es-CO')}</p>
-                    {/* Lo que salió pegado a la herramienta, dicho acá: antes solo
-                        se veía abriendo el editor del ítem. */}
-                    <AccesoriosDeItem item={itemMap.get(loan.itemId)} className="mt-1" />
+            <div className={`py-2 ${rowClass} space-y-1.5`}>
+                <div className="flex items-baseline gap-2">
+                    <p className="flex-1 min-w-0 text-sm font-bold text-gray-900 truncate">
+                        {getPersonName(loan.personnelId)}
+                    </p>
+                    {isPending && <span className="text-[10px] font-black bg-indigo-600 text-white px-1.5 py-0.5 rounded-full flex-shrink-0">Recoger</span>}
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${daysBadge}`}>{days}d</span>
                 </div>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 bg-gray-100 text-gray-600">×{loan.quantity}</span>
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${daysBadge}`}>{days}d</span>
-                {isPending && <span className="text-[10px] font-black bg-indigo-600 text-white px-1.5 py-0.5 rounded-full flex-shrink-0">Recoger</span>}
-                <div className="flex gap-1 flex-shrink-0 items-center">
-                    {isOwner && onEditItem && itemMap.get(loan.itemId) && (
-                        <AgregarAccesorio item={itemMap.get(loan.itemId)!} items={items}
-                            onEditItem={onEditItem} onBehaviorLog={onBehaviorLog} />
-                    )}
+
+                <p className="text-xs text-gray-400">
+                    {new Date(loan.timestamp).toLocaleDateString('es-CO')} · ×{loan.quantity}
+                </p>
+
+                {/* Lo que salió pegado a la herramienta. */}
+                <AccesoriosDeItem item={itemMap.get(loan.itemId)} />
+
+                <div className="flex flex-wrap gap-1.5 items-center pt-0.5">
                     {isOwner && (
                         <button onClick={() => handleReturn(loan)}
-                            className="py-1 px-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold rounded-lg transition-all">
-                            ✓
+                            className="py-1.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-black rounded-lg transition-all">
+                            ✓ Devolver
                         </button>
                     )}
                     {!isPending ? (
                         <button onClick={() => { onBehaviorLog?.('ACTION', `Marcó recoger: ${getItemName(loan.itemId)}`); onMarkPendingPickup(loan.id, true); }}
-                            className="py-1 px-2 bg-gray-100 hover:bg-indigo-50 text-indigo-600 text-[10px] font-bold rounded-lg transition-all">
-                            📍
+                            className="py-1.5 px-3 bg-gray-100 hover:bg-indigo-50 text-indigo-600 text-[11px] font-bold rounded-lg transition-all">
+                            📍 A recoger
                         </button>
                     ) : (
                         <button onClick={() => { onMarkPendingPickup(loan.id, false); }}
-                            className="py-1 px-2 bg-indigo-50 text-indigo-400 text-[10px] font-bold rounded-lg transition-all">
-                            ✕
+                            className="py-1.5 px-3 bg-indigo-50 text-indigo-500 text-[11px] font-bold rounded-lg transition-all">
+                            ✕ Cancelar
                         </button>
+                    )}
+                    {isOwner && onEditItem && itemMap.get(loan.itemId) && (
+                        <AgregarAccesorio item={itemMap.get(loan.itemId)!} items={items}
+                            onCreateItem={onCreateItem}
+                            onEditItem={onEditItem} onBehaviorLog={onBehaviorLog} />
                     )}
                 </div>
             </div>
@@ -336,12 +351,19 @@ export const LoansView: React.FC<LoansViewProps> = ({
                                 >
                                     {/* Genus header */}
                                     <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-100">
-                                        <div className="min-w-0 flex-1">
-                                            <p className="font-black text-gray-900 text-sm leading-snug">{emoji} {genus}</p>
+                                        <button type="button" className="min-w-0 flex-1 text-left"
+                                            disabled={!onItemHistory || !species[0]}
+                                            onClick={() => { if (species[0]) { onBehaviorLog?.('BUTTON', `Historial desde préstamos: ${genus}`); onItemHistory?.(species[0].item); } }}>
+                                            {/* Desde Préstamos no había forma de ver el histórico de una
+                                                herramienta: onItemHistory llegaba a Historial y a Inventario,
+                                                pero no acá. */}
+                                            <p className="font-black text-gray-900 text-sm leading-snug">
+                                                {emoji} {genus}{onItemHistory && <span className="ml-1 text-gray-300 font-normal">›</span>}
+                                            </p>
                                             {species.length > 1 && (
                                                 <p className="text-[10px] text-gray-400">{species.length} especies</p>
                                             )}
-                                        </div>
+                                        </button>
                                         <div className="flex items-center gap-2 flex-shrink-0 ml-2">
                                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isConsumedLens ? 'bg-emerald-100 text-emerald-700' : 'bg-indigo-100 text-indigo-700'}`}>
                                                 {totalLoans} {isConsumedLens

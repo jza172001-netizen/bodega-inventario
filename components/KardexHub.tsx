@@ -36,6 +36,8 @@ interface KardexHubProps {
     onEditItem: (item: Item) => void;
     /** Guarda el ítem directo, sin abrir el modal. */
     onSaveItem?: (item: Item) => void;
+    /** Crea un ítem y lo devuelve — para el accesorio que todavía no existe. */
+    onCreateItem?: (item: Omit<Item, 'id'>) => Item;
     onDeleteItem: (itemId: string) => void;
     onItemHistory: (item: Item) => void;
     onOpenInvoiceReader?: () => void;
@@ -68,7 +70,7 @@ export const KardexHub: React.FC<KardexHubProps> = ({
     onGoBack, onTabChange, onBehaviorLog,
     openLogMovementModal, onDeleteMovement, onReturnLoan,
     onReturnItem, onMarkPendingPickup,
-    openAddItemModal, onEditItem, onSaveItem, onDeleteItem, onItemHistory, onOpenInvoiceReader,
+    openAddItemModal, onEditItem, onSaveItem, onCreateItem, onDeleteItem, onItemHistory, onOpenInvoiceReader,
     onAddProject, onDeleteProject, showEconomicValues = false,
 }) => {
     const [activeTab, setActiveTab] = useState<KardexTab>(initialTab);
@@ -165,6 +167,8 @@ export const KardexHub: React.FC<KardexHubProps> = ({
             {activeTab === 'loans' && (
                 <LoansView
                     onEditItem={onSaveItem}
+                    onCreateItem={onCreateItem}
+                    onItemHistory={onItemHistory}
                     movements={movements}
                     items={items}
                     personnel={personnel}
