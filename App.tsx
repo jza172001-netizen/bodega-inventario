@@ -811,7 +811,11 @@ const App: React.FC = () => {
         setItems(p => p.map(i => i.id === updated.id ? updated : i));
         withSync(db.updateItem(updated));
         if (prev?.name !== updated.name) {
-            addAuditLog('ITEM_EDITED', `Se editó "${prev?.name ?? updated.name}" → nombre cambiado a "${updated.name}"`);
+            // Acción propia, no un ITEM_EDITED cualquiera: el cotejo compara por
+            // NOMBRE porque la bitácora no guarda ids, así que al renombrar algo se
+            // rompía el hilo con su creación y el ítem salía "sin registro de
+            // creación" para siempre. Con esto el hilo se puede seguir.
+            addAuditLog('ITEM_RENAMED', `Se renombró "${prev?.name ?? ''}" → "${updated.name}"`);
         } else {
             addAuditLog('ITEM_EDITED', `Se editó "${updated.name}"`);
         }
@@ -1378,6 +1382,7 @@ const App: React.FC = () => {
                         )}
                         {effectiveView === 'traceability' && (
                             <TraceabilityView
+                                onAuditLog={addAuditLog}
                                 movements={movements}
                                 items={items}
                                 personnel={personnel}
