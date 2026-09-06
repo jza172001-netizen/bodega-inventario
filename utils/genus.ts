@@ -189,6 +189,45 @@ export const coloresDeFamilia = (familia: string, items: Item[]): string[] => {
     return [...vistos.values()].sort((a, b) => a.localeCompare(b, 'es'));
 };
 
+/** Las marcas que esa familia ya tiene. Falta la otra mitad del par: el botón
+ *  de guardar exige color Y marca, y solo se ofrecían los colores. */
+export const marcasDeFamilia = (familia: string, items: Item[]): string[] => {
+    const q = normStr(familia);
+    const vistas = new Map<string, string>();
+    for (const i of items) {
+        const f = i.familia?.trim() || familiaDe(i.name);
+        if (normStr(f) !== q) continue;
+        const m = i.brand?.trim();
+        if (m && !vistas.has(normStr(m))) vistas.set(normStr(m), m);
+    }
+    return [...vistas.values()].sort((a, b) => a.localeCompare(b, 'es'));
+};
+
+/**
+ * El nombre corregido con la ortografía de la familia elegida.
+ *
+ *   "Peludora"       + familia "Pulidora" → "Pulidora"
+ *   "lechada beige"  + familia "Lechada"  → "Lechada beige"
+ *
+ * Si el bodeguero eligió la familia Pulidora habiendo escrito "Peludora", ya
+ * dijo cuál es la palabra buena. Guardar el error de dedo después de eso es
+ * quedarse con la peor de las dos versiones.
+ */
+export const nombreCorregido = (nombre: string, familia: string): string => {
+    const fam = familia.trim();
+    if (!fam || fam.includes(' · ')) return nombre.trim();
+    const palabras = nombre.trim().split(/\s+/).filter(Boolean);
+    if (palabras.length === 0) return fam;
+    // Solo se toca la primera palabra: el resto es lo que distingue a este ítem
+    // de sus hermanos y no hay por qué tocarlo.
+    //
+    // La comparación es EXACTA, no normalizada. Si fuera normalizada, "lechada
+    // beige" con familia "Lechada" se daría por bueno y quedaría en minúscula —
+    // y la mayúscula también es ortografía de la familia.
+    if (palabras[0] === fam) return nombre.trim();
+    return [fam, ...palabras.slice(1)].join(' ');
+};
+
 export const clusterGenera = (items: Item[]): GenusCluster[] => {
     // familiaDe y no getGenus: así "Lechada gris claro" y "Lechada veige"
     // caen en el mismo grupo, no solo las que traen paréntesis.
