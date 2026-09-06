@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Item, Movement, Personnel, PurchaseOrder, MovementType, PurchaseOrderStatus, Project, InventoryType , LoteResultado } from '../types';
+import { looseMatch } from '../utils/genus';
 import { generateInventoryAnalysis } from '../services/geminiService';
 import { askCopilot, parseExitIntent, parseCreationIntent, parseEditIntent, ParsedExit, ParsedEdit, PendingMovement } from '../services/copilotService';
 
@@ -641,7 +642,7 @@ const MovementRow: React.FC<{
     const chosen = pm.matchedItem ?? (sel[idx] ? items.find(i => i.id === sel[idx]) ?? null : null);
 
     const filteredItems = search.trim()
-        ? items.filter(i => i.name.toLowerCase().includes(search.toLowerCase()))
+        ? items.filter(i => looseMatch(i.name, search))
         : items;
 
     const handleSelect = (id: string) => { onSelect(idx, id); setMode('idle'); setSearch(''); };

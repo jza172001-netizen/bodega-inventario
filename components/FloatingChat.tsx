@@ -340,19 +340,29 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         // de decidir en el aviso de parecidos.
         const fam = familia?.trim() || familiaDe(wizardCreateName);
         if (wizardCreateType === InventoryType.ELECTRICAL_TOOL || wizardCreateType === InventoryType.HAND_TOOL) {
-            const valid = wizardSpecies.filter(s => s.brand.trim() && s.color.trim());
+            // Color y marca solo son obligatorios en las ELÉCTRICAS: ahí es lo
+            // único que distingue a un taladro de otro taladro. Un martillo o una
+            // espátula no tienen por qué tenerlos, y exigirlos obligaba a inventar
+            // «(N · N)» — que es lo que quedó en la bodega: "Almadana (N · N)".
+            const exigeEspecie = wizardCreateType === InventoryType.ELECTRICAL_TOOL;
+            const conDatos = wizardSpecies.filter(s => s.brand.trim() || s.color.trim());
+            const valid = exigeEspecie
+                ? wizardSpecies.filter(s => s.brand.trim() && s.color.trim())
+                : (conDatos.length > 0 ? conDatos : [{ brand: '', color: '' }]);
             if (valid.length === 0) return;
             const newEntries: [string, number][] = [];
             for (const sp of valid) {
+                const variante = [sp.color.trim(), sp.brand.trim()].filter(Boolean).join(' · ');
                 const newItem = onCreateItem({
-                    name: `${wizardCreateName.trim()} (${sp.color.trim()} · ${sp.brand.trim()})`,
+                    name: variante ? `${wizardCreateName.trim()} (${variante})` : wizardCreateName.trim(),
                     inventoryType: wizardCreateType,
                     quantity: wizardCreateQty,
                     unit: wizardCreateUnit.trim() || 'unidades',
                     category: CATEGORY_BY_TYPE[wizardCreateType],
                     subCategory, familia: fam,
                     minStock: 0, price: 0,
-                    brand: sp.brand.trim(), color: sp.color.trim(),
+                    ...(sp.brand.trim() ? { brand: sp.brand.trim() } : {}),
+                    ...(sp.color.trim() ? { color: sp.color.trim() } : {}),
                 });
                 newEntries.push([newItem.id, wizardCreateQty]);
             }
@@ -994,17 +1004,17 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                             )}
                                             {(type === InventoryType.ELECTRICAL_TOOL || type === InventoryType.HAND_TOOL) && (
                                                 <div className="space-y-1.5">
-                                                    <p className="text-[9px] font-black text-blue-500 uppercase tracking-wider">Especies (color + marca)</p>
+                                                    <p className="text-[9px] font-black text-blue-500 uppercase tracking-wider">{type === InventoryType.ELECTRICAL_TOOL ? 'Especies (color + marca)' : 'Color y marca (opcional)'}</p>
                                                     {wizardSpecies.map((sp, idx) => (
                                                         <div key={idx} className="relative pr-6">
                                                             <div className="flex flex-col gap-1">
                                                                 <input value={sp.color}
                                                                     onChange={e => setWizardSpecies(prev => prev.map((s, i) => i === idx ? { ...s, color: e.target.value } : s))}
-                                                                    placeholder="Color *"
+                                                                    placeholder={type === InventoryType.ELECTRICAL_TOOL ? "Color *" : "Color"}
                                                                     className="w-full border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
                                                                 <input value={sp.brand}
                                                                     onChange={e => setWizardSpecies(prev => prev.map((s, i) => i === idx ? { ...s, brand: e.target.value } : s))}
-                                                                    placeholder="Marca *"
+                                                                    placeholder={type === InventoryType.ELECTRICAL_TOOL ? "Marca *" : "Marca"}
                                                                     className="w-full border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
                                                             </div>
                                                             {wizardSpecies.length > 1 && (
@@ -1094,7 +1104,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                                     Cancelar
                                                 </button>
                                                 <button onClick={handleWizardCreateItem}
-                                                    disabled={!wizardCreateName.trim() || ((type === InventoryType.ELECTRICAL_TOOL || type === InventoryType.HAND_TOOL) && !wizardSpecies.some(s => s.brand.trim() && s.color.trim()))}
+                                                    disabled={!wizardCreateName.trim() || (type === InventoryType.ELECTRICAL_TOOL && !wizardSpecies.some(s => s.brand.trim() && s.color.trim()))}
                                                     className="flex-1 py-1.5 text-xs font-black bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white rounded-lg transition-all">
                                                     ✓ Guardar y seleccionar
                                                 </button>

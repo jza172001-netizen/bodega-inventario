@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { Movement, Item, Personnel, Project, InventoryType, ReturnCondition, UserRole } from '../types';
-import { buildConsolidatedPickupUrl, buildConsolidatedPickupText } from '../services/whatsappService';
+import { buildConsolidatedPickupUrl, buildConsolidatedPickupText, buildOwnPickupUrl, buildOwnPickupText } from '../services/whatsappService';
 import { ReturnToolModal } from './ReturnToolModal';
 import { ConfirmDialog } from './ConfirmDialog';
 
@@ -71,17 +71,49 @@ export const PickupView: React.FC<Props> = ({
             .sort((a, b) => a.name.localeCompare(b.name, 'es'));
     }, [filtered, personMap]);
 
-    const pendingItems = useMemo(() => pending.map(m => ({
+    // Antes esto se armaba sobre `pending` (toda la bodega) mientras la pantalla
+    // mostraba `filtered`: los chips de tipo no acortaban el mensaje y el
+    // bodeguero mandaba cosas que ni estaba viendo.
+    const pendingItems = useMemo(() => filtered.map(m => ({
         itemName:    itemMap.get(m.itemId)?.name    ?? 'Herramienta',
         qty:         m.quantity,
         workerName:  personMap.get(m.personnelId ?? '')?.name ?? 'Sin asignar',
         projectName: m.projectId ? projectMap.get(m.projectId)?.name : undefined,
-    })), [pending, itemMap, personMap, projectMap]);
+    })), [filtered, itemMap, personMap, projectMap]);
 
     const waUrl = useMemo(() => {
-        if (!selectedRecipient?.phone || pending.length === 0) return null;
+        if (!selectedRecipient?.phone || pendingItems.length === 0) return null;
         return buildConsolidatedPickupUrl(pendingItems, selectedRecipient.phone, selectedRecipient.name);
-    }, [pendingItems, selectedRecipient, pending.length]);
+    }, [pendingItems, selectedRecipient]);
+
+    /**
+     * Modo del aviso. `tenedor` le escribe a CADA UNO lo suyo; `mensajero` manda
+     * a un tercero la lista completa. Antes solo existía el segundo, sin decirlo:
+     * marcar la herramienta de Ferney y avisarle a Abel parecía un error de la app.
+     */
+    const [modoAviso, setModoAviso] = useState<'tenedor' | 'mensajero'>('tenedor');
+    const [avisandoA, setAvisandoA] = useState<{ persona: Personnel; url: string; texto: string } | null>(null);
+
+    /** Cada quien con lo suyo, y solo los que tienen teléfono. */
+    const porTenedor = useMemo(() => {
+        const map = new Map<string, Movement[]>();
+        for (const m of filtered) {
+            if (!m.personnelId) continue;
+            if (!map.has(m.personnelId)) map.set(m.personnelId, []);
+            map.get(m.personnelId)!.push(m);
+        }
+        return [...map.entries()]
+            .map(([id, ms]) => ({
+                persona: personMap.get(id),
+                loans: ms.map((m): { itemName: string; qty: number; projectName?: string } => ({
+                    itemName: itemMap.get(m.itemId)?.name ?? 'Herramienta',
+                    qty: m.quantity,
+                    projectName: m.projectId ? projectMap.get(m.projectId)?.name : undefined,
+                })),
+            }))
+            .filter((x): x is { persona: Personnel; loans: { itemName: string; qty: number; projectName?: string }[] } => !!x.persona)
+            .sort((a, b) => a.persona.name.localeCompare(b.persona.name, 'es'));
+    }, [filtered, personMap, itemMap, projectMap]);
 
     const [confirmandoAviso, setConfirmandoAviso] = useState(false);
 
@@ -109,7 +141,56 @@ export const PickupView: React.FC<Props> = ({
                     </p>
                 </div>
                 <div className="bg-green-50 border border-green-100 rounded-2xl p-3 space-y-2">
-                    <p className="text-[10px] font-black text-green-700 uppercase tracking-widest">¿Quién va a recoger?</p>
+                    <div className="flex gap-1 bg-white border border-green-200 rounded-xl p-1">
+                        {([
+                            ['tenedor',   'Avisarle a quien la tiene'],
+                            ['mensajero', 'Mandar a alguien a recogerlas'],
+                        ] as const).map(([k, label]) => (
+                            <button key={k} type="button"
+                                onClick={() => { setModoAviso(k); onBehaviorLog?.('FILTER', `Modo de aviso: ${label}`); }}
+                                className={`flex-1 py-1.5 text-[10px] font-black rounded-lg transition-all ${
+                                    modoAviso === k ? 'bg-green-600 text-white' : 'text-gray-500 hover:bg-green-50'
+                                }`}>
+                                {label}
+                            </button>
+                        ))}
+                    </div>
+
+                    {modoAviso === 'tenedor' ? (
+                        <div className="space-y-1.5">
+                            <p className="text-[10px] font-black text-green-700 uppercase tracking-widest">
+                                A cada uno lo suyo
+                            </p>
+                            {porTenedor.length === 0 && (
+                                <p className="text-xs text-gray-400 py-1">Nada marcado con trabajador asignado.</p>
+                            )}
+                            {porTenedor.map(({ persona, loans }) => (
+                                <button key={persona.id} type="button"
+                                    disabled={!persona.phone}
+                                    onClick={() => setAvisandoA({
+                                        persona,
+                                        url: buildOwnPickupUrl(persona.phone!, persona.name, loans),
+                                        texto: buildOwnPickupText(persona.name, loans),
+                                    })}
+                                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-left transition-all ${
+                                        persona.phone
+                                            ? 'bg-white border border-green-200 hover:border-green-400'
+                                            : 'bg-gray-50 border border-gray-200 opacity-60 cursor-not-allowed'
+                                    }`}>
+                                    <span className="flex-1 min-w-0">
+                                        <span className="block text-sm font-bold text-gray-800 truncate">{persona.name}</span>
+                                        <span className="block text-[10px] text-gray-400">
+                                            {loans.length} herramienta{loans.length !== 1 ? 's' : ''}
+                                            {!persona.phone && ' · sin teléfono'}
+                                        </span>
+                                    </span>
+                                    {persona.phone && <span className="text-sm flex-shrink-0">📲</span>}
+                                </button>
+                            ))}
+                        </div>
+                    ) : (
+                    <>
+                    <p className="text-[10px] font-black text-green-700 uppercase tracking-widest">¿A quién le encargamos recogerlas?</p>
                     <select
                         value={selectedRecipient?.id ?? ''}
                         onChange={e => {
@@ -139,8 +220,10 @@ export const PickupView: React.FC<Props> = ({
                                 : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                         }`}
                     >
-                        📲 {selectedRecipient ? `Avisar a ${selectedRecipient.name.split(' ')[0]}` : 'Selecciona un trabajador'}
+                        📲 {selectedRecipient ? `Encargarle a ${selectedRecipient.name.split(' ')[0]}` : 'Selecciona un trabajador'}
                     </button>
+                    </>
+                    )}
                 </div>
             </div>
 
@@ -237,6 +320,19 @@ export const PickupView: React.FC<Props> = ({
                         window.open(waUrl, '_blank', 'noopener,noreferrer');
                     }}
                     onClose={() => setConfirmandoAviso(false)}
+                />
+            )}
+
+            {avisandoA && (
+                <ConfirmDialog
+                    title={`Avisar a ${avisandoA.persona.name}`}
+                    message={`Se le va a enviar al ${avisandoA.persona.phone}\n\nEsto es lo que va a recibir:\n────────────────\n${avisandoA.texto}`}
+                    confirmLabel="Sí, enviar"
+                    onConfirm={() => {
+                        onAuditLog?.('PICKUP_NOTIFIED', `Le avisó a ${avisandoA.persona.name} por sus propias herramientas`);
+                        window.open(avisandoA.url, '_blank', 'noopener,noreferrer');
+                    }}
+                    onClose={() => setAvisandoA(null)}
                 />
             )}
 

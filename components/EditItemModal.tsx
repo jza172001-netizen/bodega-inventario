@@ -24,12 +24,16 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, o
     const [color, setColor] = useState('');
     const [brand, setBrand] = useState('');
     const [requiresReturnNote, setRequiresReturnNote] = useState(false);
+    // La familia era invisible acá: solo sobrevivía por el spread del ítem, así
+    // que un ítem mal agrupado no se podía arreglar desde ninguna parte.
+    const [familia, setFamilia] = useState('');
 
     const UNIT_OPTIONS = ['unidades', 'pares', 'caja', 'bolsa', 'rollo', 'pliego', 'litro', 'ml', 'galón', 'kg', 'g', 'ton', 'm', 'cm', 'mm', 'km', 'm²', 'm³', 'yarda'];
 
     useEffect(() => {
         if (itemToEdit) {
             setName(itemToEdit.name);
+            setFamilia(itemToEdit.familia ?? '');
             setCategory(itemToEdit.category);
             setSubCategory(itemToEdit.subCategory);
             setAccessories(itemToEdit.accessories ?? []);
@@ -57,8 +61,13 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, o
             quantity,
             minStock,
             unit,
-            color: inventoryType === InventoryType.ELECTRICAL_TOOL ? (color || undefined) : undefined,
-            brand: inventoryType === InventoryType.ELECTRICAL_TOOL ? (brand || undefined) : undefined,
+            // Esto borraba el color y la marca de TODO lo que no fuera herramienta
+            // eléctrica. Una manual creada desde el chat —que los pide obligatorios—
+            // los perdía con solo abrirle el lápiz y guardar, y el nombre se quedaba
+            // con el «(Amarillo · Dwalt)» de un color que el ítem ya no tenía.
+            color: color || undefined,
+            brand: brand || undefined,
+            familia: familia.trim() || undefined,
             requiresReturnNote: requiresReturnNote || undefined,
         };
         onEditItem(updatedItem);
@@ -116,19 +125,25 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, o
                                 <input type="text" value={unit} onChange={e => setUnit(e.target.value)} required className="w-full input-style"/>
                             )}
                         </div>
-                        {inventoryType === InventoryType.ELECTRICAL_TOOL && (
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Color (Opcional)</label>
-                                <input type="text" value={color} onChange={e => setColor(e.target.value)} className="w-full input-style"/>
-                            </div>
-                        )}
-                    </div>
-                    {inventoryType === InventoryType.ELECTRICAL_TOOL && (
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Marca (Opcional)</label>
-                            <input type="text" value={brand} onChange={e => setBrand(e.target.value)} className="w-full input-style" placeholder="Ej: Stanley, DeWalt, Bosch..."/>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Color (Opcional)</label>
+                            <input type="text" value={color} onChange={e => setColor(e.target.value)} className="w-full input-style"/>
                         </div>
-                    )}
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Marca (Opcional)</label>
+                        <input type="text" value={brand} onChange={e => setBrand(e.target.value)} className="w-full input-style" placeholder="Ej: Stanley, DeWalt, Bosch..."/>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Familia
+                            <span className="block text-xs font-normal text-gray-500">
+                                Con qué otros se agrupa. Vacío = la app la deduce del nombre.
+                            </span>
+                        </label>
+                        <input type="text" value={familia} onChange={e => setFamilia(e.target.value)}
+                            className="w-full input-style" placeholder="Ej: Lechada, Taladro, Clavos"/>
+                    </div>
                     {(inventoryType === InventoryType.ELECTRICAL_TOOL || inventoryType === InventoryType.HAND_TOOL) && (
                         <AccessoriesEditor value={accessories} onChange={setAccessories} items={items} />
                     )}
