@@ -14,18 +14,68 @@ import { familiaDe, accesorioDeFamilia, palabraDeAccesorio } from '../utils/genu
  *
  *   🔁 vuelve con la herramienta      📦 se gasta y descuenta stock
  */
-export const AccesoriosDeItem: React.FC<{ item?: Item; className?: string }> = ({ item, className }) => {
+interface ChipsProps {
+    item?: Item;
+    className?: string;
+    /** Con esto los chips se pueden corregir y quitar. Sin esto solo se leen. */
+    onEditItem?: (item: Item) => void;
+    onBehaviorLog?: (action: string, detail: string) => void;
+}
+
+export const AccesoriosDeItem: React.FC<ChipsProps> = ({ item, className, onEditItem, onBehaviorLog }) => {
     const accs = item?.accessories ?? [];
     if (accs.length === 0) return null;
+    const sePuedeTocar = !!(item && onEditItem);
+
+    // Ojo: nada de estado de React acá dentro. `LoanRow` se define dentro de
+    // `LoansView`, así que React lo remonta en cada render y cualquier estado
+    // local se borraría — es lo que hacía que el menú flotante de accesorios se
+    // cerrara solo. Por eso el ✕ está siempre a la vista y la cantidad va en un
+    // <select> nativo, gobernado por los datos del ítem.
+    const cambiar = (i: number, cambio: Partial<Accessory> | null) => {
+        if (!item || !onEditItem) return;
+        const antes = accs[i];
+        const nuevas = cambio === null
+            ? accs.filter((_, j) => j !== i)
+            : accs.map((a, j) => j === i ? { ...a, ...cambio } : a);
+        onEditItem({ ...item, accessories: nuevas });
+        onBehaviorLog?.('ACTION', cambio === null
+            ? `Quitó el accesorio "${antes.nombre}" de "${item.name}"`
+            : `Cambió el accesorio "${antes.nombre}" de "${item.name}" a ×${cambio.cantidad}`);
+    };
+
     return (
         <div className={`flex flex-wrap gap-1 ${className ?? ''}`}>
             {accs.map((a, i) => (
-                <span key={i}
+                <span key={`${a.itemId ?? a.nombre}-${i}`}
                     title={a.itemId ? 'Se gasta: descuenta stock' : 'Vuelve con la herramienta'}
-                    className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                    className={`inline-flex items-center gap-1 text-[9px] font-bold rounded-full ${
+                        sePuedeTocar ? 'pl-1.5 pr-0.5 py-0.5' : 'px-1.5 py-0.5'} ${
                         a.itemId ? 'bg-orange-50 text-orange-700 border border-orange-200'
                                  : 'bg-gray-100 text-gray-600 border border-gray-200'}`}>
-                    {a.itemId ? '📦' : '🔁'} {a.nombre}{a.itemId && (a.cantidad ?? 1) > 1 ? ` ×${a.cantidad}` : ''}
+                    {a.itemId ? '📦' : '🔁'} {a.nombre}
+                    {/* La cantidad solo tiene sentido en lo que se gasta: una maleta
+                        que vuelve con la herramienta es una, y ya. */}
+                    {a.itemId && sePuedeTocar ? (
+                        <select value={a.cantidad ?? 1}
+                            onClick={e => e.stopPropagation()}
+                            onChange={e => cambiar(i, { cantidad: Number(e.target.value) })}
+                            title="Cuántos salen con la herramienta"
+                            className="bg-transparent text-[9px] font-bold text-orange-800 border-0 focus:outline-none cursor-pointer -mr-0.5">
+                            {Array.from({ length: 20 }, (_, n) => n + 1).map(n =>
+                                <option key={n} value={n}>×{n}</option>)}
+                        </select>
+                    ) : a.itemId && (a.cantidad ?? 1) > 1 ? `×${a.cantidad}` : null}
+                    {sePuedeTocar && (
+                        <button type="button"
+                            onClick={e => { e.stopPropagation(); cambiar(i, null); }}
+                            title={`Quitar ${a.nombre}`}
+                            className={`w-4 h-4 flex items-center justify-center rounded-full text-[10px] leading-none transition-colors ${
+                                a.itemId ? 'text-orange-400 hover:bg-orange-200 hover:text-orange-900'
+                                         : 'text-gray-400 hover:bg-gray-300 hover:text-gray-800'}`}>
+                            ✕
+                        </button>
+                    )}
                 </span>
             ))}
         </div>
