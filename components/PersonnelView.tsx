@@ -243,6 +243,7 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
                 person={editPerson}
                 onClose={() => setEditPerson(null)}
                 onSave={p => { onEditPersonnel?.(p); setEditPerson(null); }}
+                allPersonnel={personnel}
             />
         </>
     );

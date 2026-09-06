@@ -8,18 +8,25 @@ interface EditPersonnelModalProps {
     person: Personnel | null;
     onClose: () => void;
     onSave: (updated: Personnel) => void;
+    /** Todo el personal: de acá salen los oficiales a los que se puede asignar. */
+    allPersonnel?: Personnel[];
 }
 
-export const EditPersonnelModal: React.FC<EditPersonnelModalProps> = ({ isOpen, person, onClose, onSave }) => {
+export const EditPersonnelModal: React.FC<EditPersonnelModalProps> = ({ isOpen, person, onClose, onSave, allPersonnel = [] }) => {
     const [name, setName] = useState('');
     const [phone, setPhone] = useState('');
     const [isTeamLeader, setIsTeamLeader] = useState(false);
+    // Se podía marcar a alguien COMO oficial, pero no decir de qué oficial es un
+    // trabajador — ni quitárselo. Por eso Jhon jader y Rafael quedaron en la
+    // cuadrilla de Alex (asignados solos por la app) sin forma de sacarlos.
+    const [teamLeaderId, setTeamLeaderId] = useState('');
 
     useEffect(() => {
         if (person) {
             setName(person.name);
             setPhone(person.phone ?? '');
             setIsTeamLeader(person.isTeamLeader ?? false);
+            setTeamLeaderId(person.teamLeaderId ?? '');
         }
     }, [person]);
 
@@ -28,7 +35,14 @@ export const EditPersonnelModal: React.FC<EditPersonnelModalProps> = ({ isOpen, 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!name.trim()) { alert('El nombre es requerido.'); return; }
-        onSave({ ...person, name: name.trim(), phone: phone.trim() || undefined, isTeamLeader: isTeamLeader ? true : undefined });
+        onSave({
+            ...person,
+            name: name.trim(),
+            phone: phone.trim() || undefined,
+            isTeamLeader: isTeamLeader ? true : undefined,
+            // Un oficial no puede ser de la cuadrilla de otro.
+            teamLeaderId: isTeamLeader ? undefined : (teamLeaderId || undefined),
+        });
         onClose();
     };
 
@@ -90,6 +104,28 @@ export const EditPersonnelModal: React.FC<EditPersonnelModalProps> = ({ isOpen, 
                             </span>
                         </button>
                     </div>
+                    {!isTeamLeader && (
+                        <div>
+                            <label htmlFor="editLeader" className="block text-sm font-medium text-gray-700 mb-1">
+                                ¿De qué oficial es?
+                                <span className="block text-xs font-normal text-gray-500">
+                                    Sus salidas se ven también en la ficha del oficial.
+                                </span>
+                            </label>
+                            <select
+                                id="editLeader"
+                                value={teamLeaderId}
+                                onChange={e => setTeamLeaderId(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white"
+                            >
+                                <option value="">— De ninguno —</option>
+                                {allPersonnel
+                                    .filter(p => p.isTeamLeader && p.id !== person.id)
+                                    .sort((a, b) => a.name.localeCompare(b.name, 'es'))
+                                    .map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                            </select>
+                        </div>
+                    )}
                     <div className="flex justify-end space-x-3 pt-4">
                         <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Cancelar</button>
                         <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Guardar</button>
