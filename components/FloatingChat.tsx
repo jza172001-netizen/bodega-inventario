@@ -7,10 +7,14 @@ import { suggestQuestions } from '../services/warehouseQA';
 import { scoreMatch } from '../utils/search';
 import { AccesoriosDeItem } from './AccesoriosDeItem';
 import { ArbolFamilias } from './ArbolFamilias';
+import { COMO_SE_HACE } from '../services/comoSeHace';
 import { unidadesCon } from '../utils/unidades';
 import { getGenus, familiaDe, esParecido, familiaCanonica, familiasParecidas, coloresDeFamilia, marcasDeFamilia, nombreCorregido } from '../utils/genus';
 import { tonoDe, raizDeColor, coloresUnificados } from '../utils/colores';
 import { medidaDe } from '../utils/medida';
+
+/** Las preguntas de uso, tal cual las responde el asistente. */
+const PREGUNTAS_DE_AYUDA = COMO_SE_HACE.map(c => c.pregunta);
 
 interface FloatingChatProps {
     items: Item[];
@@ -779,7 +783,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                     <div className="flex gap-2">
                         <button onClick={cancelWizard} className="px-3 py-2 text-xs text-tinta-tenue hover:text-tinta-suave border border-papel-borde rounded-xl">Cancelar</button>
                         <button onClick={() => setWizardStep(wizardIsAddMode ? 'enter_items' : 'select_worker')} disabled={wizardData.selectedTypes.length === 0}
-                            className="flex-1 py-2 bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-tenue text-tinta font-bold rounded-xl text-xs transition-all">
+                            className="flex-1 py-2 bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-suave text-tinta font-bold rounded-xl text-xs transition-all">
                             Siguiente →
                         </button>
                     </div>
@@ -838,7 +842,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                     <div className="flex gap-2">
                         <button onClick={() => setWizardStep('select_worker')} className="px-3 py-2 text-xs text-tinta-tenue hover:text-tinta-suave border border-papel-borde rounded-xl">← Atrás</button>
                         <button onClick={() => setWizardStep('select_project')} disabled={!wizardData.newWorkerName.trim()}
-                            className="flex-1 py-2 bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-tenue text-tinta font-bold rounded-xl text-xs transition-all">
+                            className="flex-1 py-2 bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-suave text-tinta font-bold rounded-xl text-xs transition-all">
                             Siguiente →
                         </button>
                     </div>
@@ -910,7 +914,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                 setWizardStep('select_project');
                             }}
                             disabled={!wizardSubWorkerName.trim()}
-                            className="flex-1 py-2 bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-tenue text-tinta font-bold rounded-xl text-xs transition-all">
+                            className="flex-1 py-2 bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-suave text-tinta font-bold rounded-xl text-xs transition-all">
                             Guardar y continuar →
                         </button>
                     </div>
@@ -967,7 +971,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                     <div className="flex gap-2">
                         <button onClick={() => setWizardStep('select_project')} className="px-3 py-2 text-xs text-tinta-tenue hover:text-tinta-suave border border-papel-borde rounded-xl">← Atrás</button>
                         <button onClick={() => setWizardStep('enter_items')} disabled={!wizardData.newProjectName.trim()}
-                            className="flex-1 py-2 bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-tenue text-tinta font-bold rounded-xl text-xs transition-all">
+                            className="flex-1 py-2 bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-suave text-tinta font-bold rounded-xl text-xs transition-all">
                             Siguiente →
                         </button>
                     </div>
@@ -1155,8 +1159,8 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                                             <button onClick={() => { setWizardCreateFamilia(`${sugerida} · ${wizardCreateName.trim()}`); setRestoDecidido(true); }}
                                                                 className={`px-2 py-1 rounded-full text-[10px] font-black transition-all ${
                                                                     elegida.includes(' · ')
-                                                                        ? 'bg-atencion text-tinta'
-                                                                        : 'bg-papel text-atencion border border-atencion hover:border-atencion'}`}>
+                                                                        ? 'bg-atencion text-papel'
+                                                                        : 'bg-papel text-papel border border-atencion hover:border-atencion'}`}>
                                                                 Es diferente a esas
                                                             </button>
                                                         </div>
@@ -1251,7 +1255,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                                             <p className="text-[11px] font-bold text-tinta-suave">{it.name}</p>
                                                             <div className="flex gap-1">
                                                                 <button onClick={() => usarItemExistente(it)}
-                                                                    className="flex-1 py-1 text-[10px] font-black bg-bien hover:bg-bien text-tinta rounded-lg">
+                                                                    className="flex-1 py-1 text-[10px] font-black bg-bien hover:bg-bien text-papel rounded-lg">
                                                                     Es la misma
                                                                 </button>
                                                                 {/* Hereda el grupo del que ya existe: así las dos quedan juntas. */}
@@ -1275,7 +1279,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                                 </button>
                                                 <button onClick={handleWizardCreateItem}
                                                     disabled={!wizardCreateName.trim() || (type === InventoryType.ELECTRICAL_TOOL && !wizardSpecies.some(s => s.brand.trim() && s.color.trim()))}
-                                                    className="flex-1 py-1.5 text-xs font-black bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-tenue text-tinta rounded-lg transition-all">
+                                                    className="flex-1 py-1.5 text-xs font-black bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-suave text-tinta rounded-lg transition-all">
                                                     ✓ Guardar y seleccionar
                                                 </button>
                                             </div>
@@ -1293,7 +1297,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                     <div className="flex gap-2">
                         <button onClick={() => setWizardStep(wizardIsAddMode ? 'select_types' : 'select_project')} className="px-3 py-2 text-xs text-tinta-tenue hover:text-tinta-suave border border-papel-borde rounded-xl">← Atrás</button>
                         <button onClick={() => setWizardStep('confirm')} disabled={wizardSel.size === 0}
-                            className="flex-1 py-2 bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-tenue text-tinta font-bold rounded-xl text-xs transition-all">
+                            className="flex-1 py-2 bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-suave text-tinta font-bold rounded-xl text-xs transition-all">
                             {wizardIsAddMode ? 'Confirmar →' : 'Revisar →'}
                         </button>
                     </div>
@@ -1502,7 +1506,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                 </button>
                                 <button onClick={handleLoanCreateItem}
                                     disabled={!loanCreateName.trim() || ((loanInvType === InventoryType.ELECTRICAL_TOOL || loanInvType === InventoryType.HAND_TOOL) && !loanCreateSpecies.some(s => s.brand.trim() && s.color.trim()))}
-                                    className="flex-1 py-1.5 text-xs font-black bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-tenue text-tinta rounded-lg transition-all">
+                                    className="flex-1 py-1.5 text-xs font-black bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-suave text-tinta rounded-lg transition-all">
                                     ✓ Guardar y seleccionar
                                 </button>
                             </div>
@@ -1540,7 +1544,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             </div>
 
             <button onClick={confirmLoan} disabled={!loanPersonnelId || loanSelected.size === 0}
-                className="w-full py-2.5 bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-tenue text-tinta font-black rounded-xl text-sm transition-all">
+                className="w-full py-2.5 bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-suave text-tinta font-black rounded-xl text-sm transition-all">
                 ✅ {loanInvType && !LOAN_TYPES.has(loanInvType) ? 'Confirmar salida' : 'Confirmar préstamo'}{loanSelected.size > 0 ? ` (${loanSelected.size})` : ''}
             </button>
         </div>
@@ -1560,7 +1564,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                 <div className="grid grid-cols-2 gap-1.5">
                     {(Object.entries(TYPE_LABELS) as [InventoryType, string][]).map(([type, label]) => (
                         <button key={type} onClick={() => setCreateInvType(type)}
-                            className={`py-2 rounded-xl text-xs font-bold border transition-all ${createInvType === type ? 'bg-bien text-papel border-bien' : 'bg-papel text-tinta-suave border-papel-borde hover:border-bien'}`}>
+                            className={`py-2 rounded-xl text-xs font-bold border transition-all ${createInvType === type ? 'bg-bien text-papel border-bien' : 'bg-papel text-papel border-papel-borde hover:border-bien'}`}>
                             {label}
                         </button>
                     ))}
@@ -1632,11 +1636,15 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
 
             <button onClick={confirmCreate}
                 disabled={!createInvType || !createName.trim() || ((createInvType === InventoryType.ELECTRICAL_TOOL || createInvType === InventoryType.HAND_TOOL) && !createSpecies.some(s => s.brand.trim() && s.color.trim()))}
-                className="w-full py-2.5 bg-bien hover:bg-bien disabled:bg-papel-borde disabled:text-tinta-tenue text-papel font-black rounded-xl text-sm transition-all">
+                className="w-full py-2.5 bg-bien hover:bg-bien disabled:bg-papel-borde disabled:text-papel text-papel font-black rounded-xl text-sm transition-all">
                 ✅ {(createInvType === InventoryType.ELECTRICAL_TOOL || createInvType === InventoryType.HAND_TOOL) ? `Guardar ${createSpecies.filter(s => s.brand.trim() && s.color.trim()).length} ítem(s)` : 'Guardar ítem'}
             </button>
         </div>
     );
+
+    // La ayuda vive acá adentro, no en la barra lateral: cuando uno no sabe qué
+    // hacer, le pregunta al asistente — es el sitio donde ya se está parado.
+    const [ayuda, setAyuda] = useState(false);
 
     // ── Render ───────────────────────────────────────────────────────────────
 
@@ -1677,7 +1685,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                     {!inAction && (
                         <div className="px-3 pt-3 pb-1 flex gap-2 flex-shrink-0">
                             <button onClick={startWizard}
-                                className="flex-1 py-2 pb-2.5 bg-tinta hover:bg-tinta text-tinta rounded-xl flex flex-col items-center justify-center gap-0.5 transition-all shadow-sm">
+                                className="flex-1 py-2 pb-2.5 bg-tinta hover:bg-tinta text-papel rounded-xl flex flex-col items-center justify-center gap-0.5 transition-all shadow-sm">
                                 <span className="font-bold text-xs">🚀 Despacho</span>
                                 <span className="text-[9px] opacity-70 leading-tight text-center px-1">Salidas grandes · varios tipos a la vez</span>
                             </button>
@@ -1687,7 +1695,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                 <span className="text-[9px] opacity-70 leading-tight text-center px-1">Un ítem rápido · herramienta o consumible</span>
                             </button>
                             <button onClick={startAddMode}
-                                className="flex-1 py-2 pb-2.5 bg-bien hover:bg-bien text-tinta rounded-xl flex flex-col items-center justify-center gap-0.5 transition-all shadow-sm">
+                                className="flex-1 py-2 pb-2.5 bg-bien hover:bg-bien text-papel rounded-xl flex flex-col items-center justify-center gap-0.5 transition-all shadow-sm">
                                 <span className="font-bold text-xs">➕ Agregar</span>
                                 <span className="text-[9px] opacity-70 leading-tight text-center px-1">Agrega ítems nuevos al inventario</span>
                             </button>
@@ -1718,19 +1726,38 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                     )}
                                     <div ref={bottomRef}/>
                                 </div>
-                                {sugerencias.length > 0 && (
-                                    <div className="border-t border-papel-borde px-3 py-2 flex gap-1.5 overflow-x-auto scrollbar-hide flex-shrink-0">
-                                        {sugerencias.map(q => (
+                                {/* Las sugerencias de siempre, con un «?» chiquito pegado
+                                    a la izquierda. Tocándolo, esos mismos chips pasan a
+                                    ser las preguntas de ayuda — y se vuelve con otro
+                                    toque. La ayuda no se toma el chat: usa su renglón. */}
+                                <div className="border-t border-papel-borde px-3 py-2 flex gap-1.5 items-center flex-shrink-0">
+                                    <button
+                                        onClick={() => { setAyuda(a => !a); onBehaviorLog?.('BUTTON', ayuda ? 'Cerró ayuda del chat' : 'Abrió ayuda del chat'); }}
+                                        title={ayuda ? 'Volver a las sugerencias' : 'Cómo se hace cada cosa'}
+                                        className={`flex-shrink-0 w-7 h-7 rounded-full text-xs font-black border transition-colors ${ayuda
+                                            ? 'bg-tinta text-papel border-tinta'
+                                            : 'bg-papel text-tinta-tenue border-papel-borde hover:text-tinta hover:border-marca'}`}
+                                    >
+                                        {ayuda ? '✕' : '?'}
+                                    </button>
+                                    <div className="flex gap-1.5 overflow-x-auto scrollbar-hide min-w-0">
+                                        {(ayuda ? PREGUNTAS_DE_AYUDA : sugerencias).map(q => (
                                             <button
                                                 key={q}
-                                                onClick={() => { onBehaviorLog?.('CHAT_SUGGESTION', `Tocó sugerencia: ${q}`); handleSend(q); }}
-                                                className="flex-shrink-0 px-3 py-1.5 rounded-full bg-marca-suave hover:bg-marca-suave text-marca-oscuro text-xs font-bold border border-marca-borde transition-colors whitespace-nowrap"
+                                                onClick={() => {
+                                                    onBehaviorLog?.(ayuda ? 'CHAT_AYUDA' : 'CHAT_SUGGESTION', `Tocó ${ayuda ? 'ayuda' : 'sugerencia'}: ${q}`);
+                                                    setAyuda(false);
+                                                    handleSend(q);
+                                                }}
+                                                className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-bold border transition-colors whitespace-nowrap ${ayuda
+                                                    ? 'bg-papel-hondo text-tinta-suave border-papel-borde hover:border-tinta'
+                                                    : 'bg-marca-suave text-marca-oscuro border-marca-borde'}`}
                                             >
                                                 {q}
                                             </button>
                                         ))}
                                     </div>
-                                )}
+                                </div>
                                 <div className="border-t border-papel-borde px-3 py-2 flex gap-2 items-end flex-shrink-0">
                                     <textarea value={input} onChange={e => setInput(e.target.value)}
                                         onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(input); } }}
@@ -1738,7 +1765,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                         className="flex-1 resize-none border border-papel-borde rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-marca"
                                         style={{ maxHeight: '80px' }} />
                                     <button onClick={() => handleSend(input)} disabled={!input.trim() || loading}
-                                        className="h-9 w-9 flex items-center justify-center bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-tenue text-tinta rounded-xl transition-all flex-shrink-0">
+                                        className="h-9 w-9 flex items-center justify-center bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-suave text-tinta rounded-xl transition-all flex-shrink-0">
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
                                         </svg>

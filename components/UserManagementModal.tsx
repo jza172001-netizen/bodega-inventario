@@ -172,7 +172,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                                         <div>
                                             <p className="font-black text-tinta uppercase text-xs tracking-tighter">{user.name}</p>
                                             <p className="text-[10px] text-tinta-tenue font-bold tracking-widest lowercase">@{user.username}</p>
-                                            <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase inline-block mt-1 ${user.role === UserRole.OWNER ? 'bg-marca text-tinta' : 'bg-papel-hondo text-tinta-tenue'}`}>
+                                            <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase inline-block mt-1 ${user.role === UserRole.OWNER ? 'bg-marca text-tinta' : 'bg-papel-hondo text-tinta-suave'}`}>
                                                 {user.role === UserRole.OWNER ? 'Admin Supremo' : 'Bodeguero'}
                                             </span>
                                         </div>

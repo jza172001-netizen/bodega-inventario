@@ -163,7 +163,7 @@ export const OrderListView: React.FC<Props> = ({
                         placeholder="bultos, kg…"
                         className="flex-1 min-w-0 text-sm border border-papel-borde rounded-xl px-2 py-2 focus:outline-none focus:ring-2 focus:ring-marca" />
                     <button onClick={agregar} disabled={!texto.trim()}
-                        className="px-4 py-2 text-sm font-black bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-tenue text-tinta rounded-xl flex-shrink-0">
+                        className="px-4 py-2 text-sm font-black bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-suave text-tinta rounded-xl flex-shrink-0">
                         Anotar
                     </button>
                 </div>
@@ -237,7 +237,7 @@ export const OrderListView: React.FC<Props> = ({
                                             onClick={() => { setAnadiendoColor(a => !a); setColorNuevo(''); }}
                                             title="Añadir un color que no está"
                                             className={`w-6 h-6 flex items-center justify-center rounded-full border text-sm font-black leading-none transition-all ${
-                                                anadiendoColor ? 'border-marca bg-marca text-tinta' : 'border-papel-borde bg-papel text-tinta-tenue hover:border-marca hover:text-marca-oscuro'}`}>
+                                                anadiendoColor ? 'border-marca bg-marca text-tinta' : 'border-papel-borde bg-papel text-tinta-suave hover:border-marca hover:text-tinta-suave'}`}>
                                             +
                                         </button>
                                         {colores.map(c => {
@@ -268,7 +268,7 @@ export const OrderListView: React.FC<Props> = ({
                                                     className="flex-1 min-w-0 text-sm border border-papel-borde rounded-xl px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-marca" />
                                                 <button type="button" onClick={() => ponerColor(colorNuevo)}
                                                     disabled={!colorNuevo.trim()}
-                                                    className="px-3 py-1.5 text-xs font-black bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-tenue text-tinta rounded-xl flex-shrink-0">
+                                                    className="px-3 py-1.5 text-xs font-black bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-suave text-tinta rounded-xl flex-shrink-0">
                                                     Poner
                                                 </button>
                                             </div>
@@ -291,7 +291,7 @@ export const OrderListView: React.FC<Props> = ({
                                         <button onClick={() => setEditando(null)}
                                             className="px-3 py-1.5 text-xs font-bold text-tinta-tenue border border-papel-borde rounded-xl">Cancelar</button>
                                         <button onClick={() => guardarEdicion(n)} disabled={!borrador.texto.trim()}
-                                            className="flex-1 py-1.5 text-xs font-black bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-tenue text-tinta rounded-xl">
+                                            className="flex-1 py-1.5 text-xs font-black bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-suave text-tinta rounded-xl">
                                             Guardar
                                         </button>
                                     </div>

@@ -129,7 +129,7 @@ export const MultiUserConfirmModal: React.FC<Props> = ({ title, message, users, 
                                             Cancelar
                                         </button>
                                         <button type="submit" disabled={!selectedUserId || !currentPassword || isLoading}
-                                            className="flex-1 py-2 bg-alerta hover:bg-alerta disabled:bg-papel-borde disabled:text-tinta-tenue text-papel font-black rounded-xl text-sm transition-all">
+                                            className="flex-1 py-2 bg-alerta hover:bg-alerta disabled:bg-papel-borde disabled:text-papel text-papel font-black rounded-xl text-sm transition-all">
                                             {isLoading ? 'Verificando…' : 'Confirmar'}
                                         </button>
                                     </div>

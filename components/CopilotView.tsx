@@ -370,7 +370,7 @@ const CopilotView: React.FC<CopilotViewProps> = ({
                     className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-black border transition-all ${
                         activePanel === 'loan'
                             ? 'bg-marca text-tinta border-marca'
-                            : 'bg-papel text-marca-oscuro border-marca-borde hover:bg-marca-suave'
+                            : 'bg-papel text-tinta-suave border-marca-borde hover:bg-marca-suave'
                     }`}
                 >
                     📦 Asignar herramienta
@@ -379,8 +379,8 @@ const CopilotView: React.FC<CopilotViewProps> = ({
                     onClick={() => openPanel(activePanel === 'create' ? null : 'create')}
                     className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-black border transition-all ${
                         activePanel === 'create'
-                            ? 'bg-bien text-tinta border-bien'
-                            : 'bg-papel text-bien border-bien hover:bg-bien-suave'
+                            ? 'bg-bien text-papel border-bien'
+                            : 'bg-papel text-papel border-bien hover:bg-bien-suave'
                     }`}
                 >
                     ➕ Agregar al inventario
@@ -467,7 +467,7 @@ const CopilotView: React.FC<CopilotViewProps> = ({
                     </div>
 
                     <button onClick={confirmLoan} disabled={!loanPersonnelId || loanSelected.size === 0}
-                        className="w-full py-2.5 bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-tenue text-tinta font-black rounded-xl text-sm transition-all">
+                        className="w-full py-2.5 bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-suave text-tinta font-black rounded-xl text-sm transition-all">
                         ✅ Confirmar préstamo {loanSelected.size > 0 && `(${loanSelected.size} ítem${loanSelected.size !== 1 ? 's' : ''})`}
                     </button>
                 </div>
@@ -488,7 +488,7 @@ const CopilotView: React.FC<CopilotViewProps> = ({
                             {(Object.entries(TYPE_LABELS) as [InventoryType, string][]).map(([type, label]) => (
                                 <button key={type} onClick={() => setCreateInvType(type)}
                                     className={`py-2 rounded-xl text-xs font-bold border transition-all ${
-                                        createInvType === type ? 'bg-bien text-papel border-bien' : 'bg-papel text-tinta-suave border-papel-borde hover:border-bien'
+                                        createInvType === type ? 'bg-bien text-papel border-bien' : 'bg-papel text-papel border-papel-borde hover:border-bien'
                                     }`}>
                                     {label}
                                 </button>
@@ -535,7 +535,7 @@ const CopilotView: React.FC<CopilotViewProps> = ({
                     </div>
 
                     <button onClick={confirmCreate} disabled={!createInvType || !createName.trim()}
-                        className="w-full py-2.5 bg-bien hover:bg-bien disabled:bg-papel-borde disabled:text-tinta-tenue text-tinta font-black rounded-xl text-sm transition-all">
+                        className="w-full py-2.5 bg-bien hover:bg-bien disabled:bg-papel-borde disabled:text-papel text-papel font-black rounded-xl text-sm transition-all">
                         ✅ Guardar ítem
                     </button>
                 </div>
@@ -550,7 +550,7 @@ const CopilotView: React.FC<CopilotViewProps> = ({
                             rows={2}
                             className="flex-1 resize-none border border-papel-borde rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-marca focus:border-transparent" />
                         <button onClick={() => handleSend(input)} disabled={!input.trim() || loading}
-                            className="h-[3.5rem] px-5 bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-tenue text-tinta font-bold rounded-xl transition-all flex-shrink-0">
+                            className="h-[3.5rem] px-5 bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-suave text-tinta font-bold rounded-xl transition-all flex-shrink-0">
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
                             </svg>
@@ -629,7 +629,7 @@ const ExitConfirmCard: React.FC<ExitConfirmCardProps> = ({
             </div>
             <div className="flex gap-2">
                 <button onClick={onConfirm} disabled={!canConfirm}
-                    className="flex-1 py-2 bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-tenue text-tinta font-bold rounded-xl text-sm transition-all">
+                    className="flex-1 py-2 bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-suave text-tinta font-bold rounded-xl text-sm transition-all">
                     ✅ Confirmar y registrar
                 </button>
                 <button onClick={onCancel} className="px-4 py-2 border border-papel-borde text-tinta-tenue hover:bg-papel-hondo rounded-xl text-sm font-semibold">✕</button>

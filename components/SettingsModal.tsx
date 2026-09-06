@@ -115,8 +115,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ config, onChange, 
                                             matResetStep === 0
                                                 ? 'bg-atencion-suave text-atencion hover:bg-atencion-suave'
                                                 : matResetStep === 1
-                                                    ? 'bg-atencion text-papel hover:bg-atencion'
-                                                    : 'bg-atencion text-papel hover:bg-atencion'
+                                                    ? 'bg-atencion text-tinta-tenue hover:bg-atencion'
+                                                    : 'bg-atencion text-tinta-tenue hover:bg-atencion'
                                         }`}>
                                             {['🗂 Restablecer solo materiales', '⚠️ ¿Seguro? Borra ítems y movimientos', '🔴 Confirmar — acción irreversible'][matResetStep]}
                                         </button>
@@ -141,8 +141,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ config, onChange, 
                                                 resetStep === 0
                                                     ? 'bg-alerta-suave text-alerta hover:bg-alerta-suave'
                                                     : resetStep === 1
-                                                        ? 'bg-alerta text-papel hover:bg-alerta'
-                                                        : 'bg-alerta text-papel hover:bg-alerta'
+                                                        ? 'bg-alerta text-tinta-tenue hover:bg-alerta'
+                                                        : 'bg-alerta text-tinta-tenue hover:bg-alerta'
                                             }`}>
                                             {resetLabels[resetStep]}
                                         </button>

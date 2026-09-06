@@ -1240,9 +1240,10 @@ const App: React.FC = () => {
                     </nav>
                 </div>
 
-                {/* Help & tutorial footer */}
+                {/* Ayuda salió de acá: ahora vive dentro del asistente, en el «?» de
+                    su encabezado. La vista sigue existiendo, solo no ocupa un renglón
+                    de la barra. */}
                 <div className="flex-shrink-0 px-2 py-3 border-t border-papel-borde space-y-1">
-                    <NavItem icon={QuestionMarkIcon} label="Ayuda ❓" onClick={() => selectView('help')} isActive={currentView === 'help'} />
                     <button
                         onClick={() => { addBehaviorLog('BUTTON', 'Abrió: Configuración'); setSettingsOpen(true); }}
                         className="w-full flex items-center text-left px-4 py-2.5 text-xs font-semibold rounded-xl text-tinta-tenue hover:bg-papel-hondo hover:text-tinta-suave transition-all"
@@ -1286,6 +1287,7 @@ const App: React.FC = () => {
                                 movements={movements}
                                 personnel={personnel}
                                 purchaseOrders={purchaseOrders}
+                                auditLogs={auditLogs}
                                 onNavigate={(v, tab) => selectView(v as View, tab as KardexTab | undefined)}
                                 onBehaviorLog={addBehaviorLog}
                                 onAuditLog={addAuditLog}
@@ -1320,6 +1322,9 @@ const App: React.FC = () => {
                                 onOpenInvoiceReader={() => { setInvoiceReaderOpen(true); addBehaviorLog('BUTTON', 'Abrió Leer factura'); }}
                                 onAddProject={handleAddProject}
                                 onDeleteProject={handleDeleteProject}
+                                onAssignProject={handleAssignProjectToLoan}
+                                onCreateProject={handleCreateProjectByName}
+                                onTransferLoan={handleTransferLoan}
                                 showEconomicValues={appConfig.showEconomicValues}
                                 onBehaviorLog={addBehaviorLog}
                             />
@@ -1498,11 +1503,11 @@ const PickupNavIcon: React.FC<{ className?: string }> = ({ className }) => (
 );
 
 const NavItem: React.FC<{ icon: React.ElementType, label: string, onClick: () => void, isActive: boolean, badge?: number }> = ({ icon: Icon, label, onClick, isActive, badge }) => (
-    <button onClick={onClick} className={`w-full flex items-center text-left px-4 py-3 text-sm font-semibold rounded-xl transition-all duration-200 ${isActive ? 'bg-marca text-tinta shadow-lg' : 'text-tinta-tenue hover:bg-papel-hondo hover:text-tinta'}`}>
+    <button onClick={onClick} className={`w-full flex items-center text-left px-4 py-3 text-sm font-semibold rounded-xl transition-all duration-200 ${isActive ? 'bg-marca text-tinta shadow-lg' : 'text-tinta-suave hover:bg-papel-hondo hover:text-tinta'}`}>
         <Icon className={`w-5 h-5 mr-3 ${isActive ? 'text-tinta' : 'text-tinta-tenue'}`} />
         <span className="flex-1">{label}</span>
         {badge != null && badge > 0 && (
-            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${isActive ? 'bg-papel text-marca-oscuro' : 'bg-atencion text-papel'}`}>
+            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${isActive ? 'bg-papel text-marca-oscuro' : 'bg-atencion text-tinta-tenue'}`}>
                 {badge}
             </span>
         )}

@@ -180,7 +180,7 @@ export const InvoiceReaderModal: React.FC<InvoiceReaderModalProps> = ({ isOpen, 
                                     <button
                                         onClick={handlePasteProcess}
                                         disabled={!pasteText.trim()}
-                                        className="w-full py-3 bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-tenue text-tinta font-bold rounded-xl transition-all"
+                                        className="w-full py-3 bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-suave text-tinta font-bold rounded-xl transition-all"
                                     >
                                         Procesar texto →
                                     </button>
@@ -332,7 +332,7 @@ export const InvoiceReaderModal: React.FC<InvoiceReaderModalProps> = ({ isOpen, 
                             <button
                                 onClick={handleImport}
                                 disabled={selectedCount === 0}
-                                className="px-6 py-2.5 bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-tenue text-tinta font-bold rounded-xl transition-all"
+                                className="px-6 py-2.5 bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-suave text-tinta font-bold rounded-xl transition-all"
                             >
                                 Agregar {selectedCount > 0 ? selectedCount : ''} al inventario
                             </button>

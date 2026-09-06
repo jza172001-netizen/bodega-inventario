@@ -78,11 +78,16 @@ const loadWeeklyLog = (): WeeklyLog => {
     } catch { return { week: getWeekKey(), sent: {} }; }
 };
 
+/**
+ * Solo herramienta.
+ *
+ * Un recordatorio es para que algo VUELVA, y un consumible no vuelve: se
+ * gastó. Recordarle a alguien que consumió cuatro unidades de lechada no le
+ * pide nada — y llenaba la lista de gente que no tiene nada pendiente.
+ */
 const CATEGORY_BTNS = [
-    { key: InventoryType.HAND_TOOL,       label: '🔨 Manual',      active: 'bg-atencion hover:bg-atencion' },
-    { key: InventoryType.ELECTRICAL_TOOL, label: '⚡ Eléctrica',   active: 'bg-atencion hover:bg-atencion' },
-    { key: InventoryType.PPE,             label: '🦺 EPP',         active: 'bg-atencion hover:bg-atencion' },
-    { key: InventoryType.SINGLE_USE,      label: '📦 Consumibles', active: 'bg-marca hover:bg-marca' },
+    { key: InventoryType.HAND_TOOL,       label: '🔨 Manual',    active: 'bg-atencion hover:bg-atencion' },
+    { key: InventoryType.ELECTRICAL_TOOL, label: '⚡ Eléctrica', active: 'bg-atencion hover:bg-atencion' },
 ] as const;
 
 export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, readOnly = false, onBehaviorLog, onAuditLog }) => {
@@ -125,11 +130,12 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
         isConsumable(itemMap.get(m.itemId))
     );
 
-    // Una persona entra a la lista si tiene algo pendiente O si consumió algo
-    // hace poco: las dos cosas ameritan un mensaje, aunque sean mensajes distintos.
+    // Entra quien tiene algo PRESTADO, y nadie más. Antes también entraba quien
+    // solo hubiera consumido algo, y la lista se llenaba de renglones que decían
+    // "1 ud consumidas · sin préstamos": gente a la que no hay nada que pedirle.
     const groups: PersonGroup[] = [];
     const seen = new Set<string>();
-    for (const mov of [...activeLoans, ...recentConsumos]) {
+    for (const mov of activeLoans) {
         const person = personnel.find(p => p.id === mov.personnelId);
         if (!person || seen.has(person.id)) continue;
         seen.add(person.id);
@@ -330,9 +336,7 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
         // Math.max() de un arreglo vacío da -Infinity.
         const maxDays = g.loans.length > 0 ? Math.max(...g.loans.map(m => daysSince(m.timestamp))) : 0;
         const unidadesConsumidas = g.consumos.reduce((s, m) => s + m.quantity, 0);
-        const itemNames = g.loans.length > 0
-            ? g.loans.map(m => itemMap.get(m.itemId)?.name ?? '—').join(', ')
-            : `${unidadesConsumidas} ud consumidas · sin préstamos`;
+        const itemNames = g.loans.map(m => itemMap.get(m.itemId)?.name ?? '—').join(', ');
         const lastRemindedTs = g.loans.map(m => log[m.id]).filter(Boolean).sort().reverse()[0];
         const daysSinceReminder = lastRemindedTs ? daysSince(lastRemindedTs) : null;
 
@@ -357,9 +361,6 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
                                 {maxDays}d fuera
                             </span>
                         )}
-                        {unidadesConsumidas > 0 && g.loans.length > 0 && (
-                            <span className="text-[10px] font-semibold text-bien">• {unidadesConsumidas} ud consumidas</span>
-                        )}
                         {g.person.phone && <span className="text-[10px] text-tinta-tenue">{g.person.phone}</span>}
                         {daysSinceReminder !== null && (
                             <span className="text-[10px] text-bien">• recordado hace {daysSinceReminder}d</span>
@@ -370,7 +371,7 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
                     <div className="flex flex-col gap-1 flex-shrink-0">
                         <button onClick={() => { onBehaviorLog?.('BUTTON', `Pidió recordatorio semana: ${g.person.name}`); confirmarEnvio(g, 7, 'all'); }}
                             className={`flex items-center gap-1 px-3 py-2 text-xs font-black rounded-xl transition-all ${
-                                g.isDue ? 'bg-bien hover:bg-bien text-papel' : 'bg-bien-suave hover:bg-bien-suave text-bien'
+                                g.isDue ? 'bg-bien hover:bg-bien text-papel' : 'bg-bien-suave hover:bg-bien-suave text-papel'
                             }`}>
                             📲 Semana
                         </button>
@@ -460,8 +461,8 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
                                 !hasPhoneUsers
                                     ? 'bg-papel-hondo text-tinta-tenue cursor-not-allowed'
                                     : generalDone
-                                        ? 'bg-bien hover:bg-bien text-papel opacity-70'
-                                        : 'bg-bien hover:bg-bien text-papel'
+                                        ? 'bg-bien hover:bg-bien text-tinta-tenue opacity-70'
+                                        : 'bg-bien hover:bg-bien text-tinta-tenue'
                             }`}
                             title={generalDone ? 'Todos recordados esta semana — toca para re-enviar' : `Recordar a los ${totalWithPhone} trabajadores`}
                         >

@@ -145,7 +145,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ users, onLoginSuccess, onF
                             onClick={() => onLoginSuccess(UserRole.VISITOR, 'Visitante')}
                             className="w-full flex items-center gap-4 p-5 bg-papel border-2 border-papel-borde hover:border-tinta-tenue hover:shadow-md rounded-2xl text-left transition-all group shadow-sm"
                         >
-                            <div className="w-14 h-14 rounded-xl bg-papel-borde flex items-center justify-center text-papel text-2xl flex-shrink-0 group-hover:scale-105 transition-transform">
+                            <div className="w-14 h-14 rounded-xl bg-papel-borde flex items-center justify-center text-tinta-suave text-2xl flex-shrink-0 group-hover:scale-105 transition-transform">
                                 👁️
                             </div>
                             <div>

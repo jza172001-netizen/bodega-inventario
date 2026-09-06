@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { Movement, Item, Personnel, Project, InventoryType, ReturnCondition, UserRole } from '../types';
-import { buildConsolidatedPickupUrl, buildConsolidatedPickupText, buildOwnPickupUrl, buildOwnPickupText } from '../services/whatsappService';
+import { buildConsolidatedPickupUrl, buildConsolidatedPickupText } from '../services/whatsappService';
 import { ReturnToolModal } from './ReturnToolModal';
 import { ConfirmDialog } from './ConfirmDialog';
 
@@ -91,29 +91,8 @@ export const PickupView: React.FC<Props> = ({
      * a un tercero la lista completa. Antes solo existía el segundo, sin decirlo:
      * marcar la herramienta de Ferney y avisarle a Abel parecía un error de la app.
      */
-    const [modoAviso, setModoAviso] = useState<'tenedor' | 'mensajero'>('tenedor');
-    const [avisandoA, setAvisandoA] = useState<{ persona: Personnel; url: string; texto: string } | null>(null);
 
     /** Cada quien con lo suyo, y solo los que tienen teléfono. */
-    const porTenedor = useMemo(() => {
-        const map = new Map<string, Movement[]>();
-        for (const m of filtered) {
-            if (!m.personnelId) continue;
-            if (!map.has(m.personnelId)) map.set(m.personnelId, []);
-            map.get(m.personnelId)!.push(m);
-        }
-        return [...map.entries()]
-            .map(([id, ms]) => ({
-                persona: personMap.get(id),
-                loans: ms.map((m): { itemName: string; qty: number; projectName?: string } => ({
-                    itemName: itemMap.get(m.itemId)?.name ?? 'Herramienta',
-                    qty: m.quantity,
-                    projectName: m.projectId ? projectMap.get(m.projectId)?.name : undefined,
-                })),
-            }))
-            .filter((x): x is { persona: Personnel; loans: { itemName: string; qty: number; projectName?: string }[] } => !!x.persona)
-            .sort((a, b) => a.persona.name.localeCompare(b.persona.name, 'es'));
-    }, [filtered, personMap, itemMap, projectMap]);
 
     const [confirmandoAviso, setConfirmandoAviso] = useState(false);
 
@@ -141,55 +120,10 @@ export const PickupView: React.FC<Props> = ({
                     </p>
                 </div>
                 <div className="bg-bien-suave border border-bien rounded-2xl p-3 space-y-2">
-                    <div className="flex gap-1 bg-papel border border-bien rounded-xl p-1">
-                        {([
-                            ['tenedor',   'Avisarle a quien la tiene'],
-                            ['mensajero', 'Mandar a alguien a recogerlas'],
-                        ] as const).map(([k, label]) => (
-                            <button key={k} type="button"
-                                onClick={() => { setModoAviso(k); onBehaviorLog?.('FILTER', `Modo de aviso: ${label}`); }}
-                                className={`flex-1 py-1.5 text-[10px] font-black rounded-lg transition-all ${
-                                    modoAviso === k ? 'bg-bien text-papel' : 'text-tinta-tenue hover:bg-bien-suave'
-                                }`}>
-                                {label}
-                            </button>
-                        ))}
-                    </div>
-
-                    {modoAviso === 'tenedor' ? (
-                        <div className="space-y-1.5">
-                            <p className="text-[10px] font-black text-bien uppercase tracking-widest">
-                                A cada uno lo suyo
-                            </p>
-                            {porTenedor.length === 0 && (
-                                <p className="text-xs text-tinta-tenue py-1">Nada marcado con trabajador asignado.</p>
-                            )}
-                            {porTenedor.map(({ persona, loans }) => (
-                                <button key={persona.id} type="button"
-                                    disabled={!persona.phone}
-                                    onClick={() => setAvisandoA({
-                                        persona,
-                                        url: buildOwnPickupUrl(persona.phone!, persona.name, loans),
-                                        texto: buildOwnPickupText(persona.name, loans),
-                                    })}
-                                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-left transition-all ${
-                                        persona.phone
-                                            ? 'bg-papel border border-bien hover:border-bien'
-                                            : 'bg-papel-hondo border border-papel-borde opacity-60 cursor-not-allowed'
-                                    }`}>
-                                    <span className="flex-1 min-w-0">
-                                        <span className="block text-sm font-bold text-tinta truncate">{persona.name}</span>
-                                        <span className="block text-[10px] text-tinta-tenue">
-                                            {loans.length} herramienta{loans.length !== 1 ? 's' : ''}
-                                            {!persona.phone && ' · sin teléfono'}
-                                        </span>
-                                    </span>
-                                    {persona.phone && <span className="text-sm flex-shrink-0">📲</span>}
-                                </button>
-                            ))}
-                        </div>
-                    ) : (
-                    <>
+                    {/* Antes había dos modos y él lo vio redundante: "en el mandar a
+                        alguien ya podemos escoger a cualquier trabajador". Queda uno.
+                        Ojo con lo que cambia: el que se escoja recibe la lista COMPLETA,
+                        no solo lo suyo. */}
                     <p className="text-[10px] font-black text-bien uppercase tracking-widest">¿A quién le encargamos recogerlas?</p>
                     <select
                         value={selectedRecipient?.id ?? ''}
@@ -217,13 +151,11 @@ export const PickupView: React.FC<Props> = ({
                         className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-black text-sm transition-all w-full ${
                             waUrl
                                 ? 'bg-bien hover:bg-bien text-papel shadow-sm'
-                                : 'bg-papel-hondo text-tinta-tenue cursor-not-allowed'
+                                : 'bg-papel-hondo text-papel cursor-not-allowed'
                         }`}
                     >
                         📲 {selectedRecipient ? `Encargarle a ${selectedRecipient.name.split(' ')[0]}` : 'Selecciona un trabajador'}
                     </button>
-                    </>
-                    )}
                 </div>
             </div>
 
@@ -320,19 +252,6 @@ export const PickupView: React.FC<Props> = ({
                         window.open(waUrl, '_blank', 'noopener,noreferrer');
                     }}
                     onClose={() => setConfirmandoAviso(false)}
-                />
-            )}
-
-            {avisandoA && (
-                <ConfirmDialog
-                    title={`Avisar a ${avisandoA.persona.name}`}
-                    message={`Se le va a enviar al ${avisandoA.persona.phone}\n\nEsto es lo que va a recibir:\n────────────────\n${avisandoA.texto}`}
-                    confirmLabel="Sí, enviar"
-                    onConfirm={() => {
-                        onAuditLog?.('PICKUP_NOTIFIED', `Le avisó a ${avisandoA.persona.name} por sus propias herramientas`);
-                        window.open(avisandoA.url, '_blank', 'noopener,noreferrer');
-                    }}
-                    onClose={() => setAvisandoA(null)}
                 />
             )}
 

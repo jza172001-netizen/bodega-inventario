@@ -260,8 +260,8 @@ export const PersonnelDetailModal: React.FC<Props> = ({
                             onClick={() => handlePickupToggle(g)}
                             className={`text-[11px] font-bold px-2.5 py-1.5 rounded-lg transition-all ${
                                 isPending
-                                    ? 'bg-atencion text-tinta hover:bg-atencion'
-                                    : 'bg-atencion-suave text-atencion hover:bg-atencion-suave'
+                                    ? 'bg-atencion text-papel hover:bg-atencion'
+                                    : 'bg-atencion-suave text-papel hover:bg-atencion-suave'
                             }`}
                         >
                             {isPending ? '✕ No recoger' : '📍 Ir a recoger'}
@@ -275,7 +275,7 @@ export const PersonnelDetailModal: React.FC<Props> = ({
                             className={`text-[11px] font-bold px-2.5 py-1.5 rounded-lg transition-all ${
                                 isProjectOpen
                                     ? 'bg-marca text-tinta'
-                                    : 'bg-marca-suave text-marca-oscuro hover:bg-marca-suave'
+                                    : 'bg-marca-suave text-tinta-suave hover:bg-marca-suave'
                             }`}
                         >
                             📁 Proyecto
@@ -289,7 +289,7 @@ export const PersonnelDetailModal: React.FC<Props> = ({
                             className={`text-[11px] font-bold px-2.5 py-1.5 rounded-lg transition-all ${
                                 isTransferOpen
                                     ? 'bg-marca text-tinta'
-                                    : 'bg-marca-suave text-marca-oscuro hover:bg-marca-suave'
+                                    : 'bg-marca-suave text-tinta-suave hover:bg-marca-suave'
                             }`}
                         >
                             ↗️ Traspasar
@@ -455,11 +455,11 @@ export const PersonnelDetailModal: React.FC<Props> = ({
                         <button
                             key={t.key}
                             onClick={() => setTab(t.key)}
-                            className={`flex-shrink-0 flex items-center gap-1 px-3 py-2 text-xs font-black rounded-xl transition-all ${tab === t.key ? 'bg-marca text-tinta shadow-sm' : 'bg-papel text-tinta-tenue border border-papel-borde hover:border-marca-borde hover:text-marca-oscuro'}`}
+                            className={`flex-shrink-0 flex items-center gap-1 px-3 py-2 text-xs font-black rounded-xl transition-all ${tab === t.key ? 'bg-marca text-tinta shadow-sm' : 'bg-papel text-tinta-suave border border-papel-borde hover:border-marca-borde hover:text-tinta-suave'}`}
                         >
                             {t.label}
                             {t.count > 0 && (
-                                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${tab === t.key ? 'bg-marca text-tinta' : 'bg-papel-hondo text-tinta-tenue'}`}>
+                                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${tab === t.key ? 'bg-marca text-tinta' : 'bg-papel-hondo text-tinta-suave'}`}>
                                     {t.count}
                                 </span>
                             )}

@@ -1,12 +1,14 @@
 import React, { useMemo } from 'react';
-import { Item, Movement, Personnel, PurchaseOrder, PurchaseOrderStatus } from '../types';
+import { AuditLog, Item, Movement, Personnel, PurchaseOrder, PurchaseOrderStatus } from '../types';
 import StatisticsView from './StatisticsView';
+import { CotejoPanel } from './CotejoPanel';
 
 interface DashboardProps {
     items: Item[];
     movements: Movement[];
     purchaseOrders: PurchaseOrder[];
     personnel?: Personnel[];
+    auditLogs?: AuditLog[];
     onNavigate?: (view: string, tab?: string) => void;
     onBehaviorLog?: (action: string, detail: string) => void;
     onAuditLog?: (action: string, description: string) => void;
@@ -36,7 +38,7 @@ interface Pendiente {
  * poner los pendientes primero: sale un renglón tranquilo y los números suben
  * a ocupar ese lugar.
  */
-export const Dashboard: React.FC<DashboardProps> = ({ items, movements, purchaseOrders, personnel = [], onNavigate, onBehaviorLog, onAuditLog }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ items, movements, purchaseOrders, personnel = [], auditLogs = [], onNavigate, onBehaviorLog, onAuditLog }) => {
     const pendientes = useMemo<Pendiente[]>(() => {
         const dias = (d: Date) => Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
         const fuera = movements.filter(m => m.isLoan && !m.isReturned);
@@ -94,6 +96,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ items, movements, purchase
             )}
 
             <StatisticsView items={items} movements={movements} personnel={personnel} onNavigate={onNavigate} onAuditLog={onAuditLog} />
+
+            {/* El cotejo, al final del Resumen. Estaba solo dentro de Trazabilidad,
+                donde hay que acordarse de entrar. Él lo pidió acá y acá va. */}
+            <div className="pt-1">
+                <CotejoPanel items={items} movements={movements} personnel={personnel}
+                    auditLogs={auditLogs} onAuditLog={onAuditLog} />
+            </div>
         </div>
     );
 };

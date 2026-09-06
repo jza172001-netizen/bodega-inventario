@@ -44,6 +44,10 @@ interface KardexHubProps {
     // project handlers
     onAddProject: (p: Omit<Project, 'id'>) => void;
     onDeleteProject?: (id: string) => void;
+    /** Para la ficha de la persona dentro del detalle del proyecto. */
+    onAssignProject?: (movementId: string, projectId: string) => void;
+    onCreateProject?: (name: string) => Project;
+    onTransferLoan?: (movementId: string, newPersonnelId: string) => void;
     showEconomicValues?: boolean;
     onTabChange?: (tab: KardexTab) => void;
     onBehaviorLog?: (action: string, detail: string) => void;
@@ -71,7 +75,7 @@ export const KardexHub: React.FC<KardexHubProps> = ({
     openLogMovementModal, onDeleteMovement, onReturnLoan,
     onReturnItem, onMarkPendingPickup,
     openAddItemModal, onEditItem, onSaveItem, onCreateItem, onDeleteItem, onItemHistory, onOpenInvoiceReader,
-    onAddProject, onDeleteProject, showEconomicValues = false,
+    onAddProject, onDeleteProject, onAssignProject, onCreateProject, onTransferLoan, showEconomicValues = false,
 }) => {
     const [activeTab, setActiveTab] = useState<KardexTab>(initialTab);
     const [invType, setInvType] = useState<InventoryType | null>(initialInventoryType);
@@ -159,6 +163,7 @@ export const KardexHub: React.FC<KardexHubProps> = ({
                     onDeleteMovement={onDeleteMovement}
                     onReturnLoan={onReturnLoan}
                     onReturnWithForm={setDevolviendo}
+                    onMarkPendingPickup={onMarkPendingPickup}
                     onItemHistory={onItemHistory}
                     onGoBack={onGoBack}
                     userRole={userRole}
@@ -211,6 +216,12 @@ export const KardexHub: React.FC<KardexHubProps> = ({
                     onGoBack={onGoBack}
                     userRole={userRole}
                     showEconomicValues={showEconomicValues}
+                    onItemHistory={onItemHistory}
+                    onReturnLoan={onReturnItem}
+                    onMarkPendingPickup={onMarkPendingPickup}
+                    onAssignProject={onAssignProject}
+                    onCreateProject={onCreateProject}
+                    onTransferLoan={onTransferLoan}
                     onBehaviorLog={onBehaviorLog}
                 />
             )}

@@ -412,7 +412,7 @@ export const TraceabilityView: React.FC<Props> = ({
                                 { key: 'NEGOCIO', label: '📋 Negocio' },
                             ].map(f => (
                                 <button key={f.key} onClick={() => changeTypeFilter(f.key)}
-                                    className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold transition-all ${typeFilter === f.key ? 'bg-marca text-tinta' : 'bg-papel-hondo text-tinta-tenue hover:bg-papel-borde'}`}>
+                                    className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold transition-all ${typeFilter === f.key ? 'bg-marca text-tinta' : 'bg-papel-hondo text-tinta-suave hover:bg-papel-borde'}`}>
                                     {f.label}
                                 </button>
                             ))}
@@ -503,7 +503,7 @@ export const TraceabilityView: React.FC<Props> = ({
                             <p className="text-[10px] font-black text-tinta-tenue uppercase tracking-widest mb-3">Secciones más visitadas</p>
                             {sectionVisits.map(([section, count], i) => (
                                 <div key={section} className="flex items-center gap-3 py-1.5 border-b border-papel-borde last:border-0">
-                                    <span className={`w-5 h-5 flex items-center justify-center rounded-full text-[10px] font-black flex-shrink-0 ${i === 0 ? 'bg-marca text-tinta' : i === 1 ? 'bg-marca text-tinta' : 'bg-papel-hondo text-tinta-tenue'}`}>{i + 1}</span>
+                                    <span className={`w-5 h-5 flex items-center justify-center rounded-full text-[10px] font-black flex-shrink-0 ${i === 0 ? 'bg-marca text-tinta' : i === 1 ? 'bg-marca text-tinta' : 'bg-papel-hondo text-tinta-suave'}`}>{i + 1}</span>
                                     <span className="flex-1 text-xs font-semibold text-tinta-suave truncate">{section}</span>
                                     <span className="text-xs font-black text-marca-oscuro flex-shrink-0">{count}×</span>
                                 </div>

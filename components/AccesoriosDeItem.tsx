@@ -157,7 +157,7 @@ export const AgregarAccesorio: React.FC<AgregarProps> = ({ item, items, onEditIt
                         Cancelar
                     </button>
                     <button type="button" onClick={crearYEnganchar} disabled={!nombre.trim()}
-                        className="text-[11px] font-black px-2.5 py-1.5 rounded-lg bg-atencion disabled:bg-papel-borde disabled:text-tinta-tenue text-papel">
+                        className="text-[11px] font-black px-2.5 py-1.5 rounded-lg bg-atencion disabled:bg-papel-borde disabled:text-papel text-papel">
                         Crear
                     </button>
                 </div>
@@ -175,7 +175,9 @@ export const AgregarAccesorio: React.FC<AgregarProps> = ({ item, items, onEditIt
                 if (c) enganchar(c);
             }}
             title="Engancharle un consumible a esta herramienta"
-            className="flex-shrink-0 min-w-0 text-[11px] font-bold px-1.5 py-1.5 rounded-lg border border-papel-borde text-tinta-suave bg-papel max-w-[112px]"
+            // Encoge con la fila. Con `flex-shrink-0` dentro de un `flex-nowrap`
+            // no podía ceder ni un píxel y se salía de la tarjeta por la derecha.
+            className="flex-1 min-w-0 w-full text-[11px] font-bold px-1.5 py-1.5 rounded-lg border border-papel-borde text-tinta-suave bg-papel"
         >
             <option value="">+ Accesorio</option>
             {suyos.length > 0 && (

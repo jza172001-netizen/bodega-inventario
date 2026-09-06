@@ -39,6 +39,8 @@ interface MovementsViewProps {
     /** Abre el histórico del ítem, el mismo de Inventario. */
     onItemHistory?: (item: Item) => void;
     onDeleteMovement?: (id: string) => void;
+    /** Marcar (o desmarcar) el préstamo como «a recoger», igual que en Préstamos. */
+    onMarkPendingPickup?: (movementId: string, pending: boolean) => void;
     onGoBack: () => void;
     userRole?: UserRole;
     onBehaviorLog?: (action: string, detail: string) => void;
@@ -46,7 +48,7 @@ interface MovementsViewProps {
 
 export const MovementsView: React.FC<MovementsViewProps> = ({
     movements, items, personnel, filterType,
-    openLogMovementModal, onReturnLoan, onReturnWithForm, onDeleteMovement, onGoBack, onItemHistory,
+    openLogMovementModal, onReturnLoan, onReturnWithForm, onDeleteMovement, onMarkPendingPickup, onGoBack, onItemHistory,
     userRole = UserRole.EMPLOYEE, onBehaviorLog,
 }) => {
     const isOwner = userRole !== UserRole.VISITOR;
@@ -195,6 +197,15 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
                             <button onClick={() => onReturnWithForm ? onReturnWithForm(m) : onReturnLoan?.(m.id)}
                                 className="text-xs bg-marca text-tinta px-2.5 py-1.5 rounded-lg hover:bg-marca-fuerte font-bold">
                                 Devolver
+                            </button>
+                        )}
+                        {/* Acá solo se VEÍA el «📍 A recoger» de los que ya estaban
+                            marcados, pero no había cómo marcarlos: para eso tocaba
+                            irse a Préstamos. El mismo botón, en la misma lista. */}
+                        {isActiveLoan && onMarkPendingPickup && (
+                            <button onClick={() => { onBehaviorLog?.('ACTION', `${m.pendingPickup ? 'Canceló' : 'Marcó'} recoger desde Kardex: ${itemName}`); onMarkPendingPickup(m.id, !m.pendingPickup); }}
+                                className={`text-xs px-2.5 py-1.5 rounded-lg font-bold whitespace-nowrap ${m.pendingPickup ? 'bg-marca-suave text-marca-oscuro' : 'bg-papel-hondo hover:bg-marca-suave text-marca-oscuro'}`}>
+                                {m.pendingPickup ? '✕ Cancelar' : '📍 Recoger'}
                             </button>
                         )}
                         {onDeleteMovement && (!m.isLoan || m.isReturned) && (
