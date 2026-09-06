@@ -76,47 +76,47 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, o
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
-            <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-2xl m-4 max-h-[90vh] overflow-y-auto">
+            <div className="bg-papel rounded-xl shadow-2xl p-8 w-full max-w-2xl m-4 max-h-[90vh] overflow-y-auto">
                 <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-2xl font-bold text-gray-800">Editar Artículo</h2>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><XIcon className="w-6 h-6" /></button>
+                    <h2 className="text-2xl font-bold text-tinta">Editar Artículo</h2>
+                    <button onClick={onClose} className="text-tinta-tenue hover:text-tinta-suave"><XIcon className="w-6 h-6" /></button>
                 </div>
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Nombre del Artículo</label>
+                        <label className="block text-sm font-medium text-tinta-suave mb-1">Nombre del Artículo</label>
                         <input type="text" value={name} onChange={e => setName(e.target.value)} required className="w-full input-style"/>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
+                            <label className="block text-sm font-medium text-tinta-suave mb-1">Categoría</label>
                              <select value={category} onChange={e => setCategory(e.target.value)} className="w-full input-style">
                                 {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                             </select>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Sub-clasificación</label>
+                            <label className="block text-sm font-medium text-tinta-suave mb-1">Sub-clasificación</label>
                             <input type="text" value={subCategory} onChange={e => setSubCategory(e.target.value)} required className="w-full input-style"/>
                         </div>
                     </div>
                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Inventario</label>
+                        <label className="block text-sm font-medium text-tinta-suave mb-1">Tipo de Inventario</label>
                          <select value={inventoryType} onChange={e => setInventoryType(e.target.value as InventoryType)} className="w-full input-style">
                             {Object.values(InventoryType).map(t => <option key={t} value={t}>{t}</option>)}
                         </select>
                     </div>
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Cantidad</label>
+                            <label className="block text-sm font-medium text-tinta-suave mb-1">Cantidad</label>
                             <input type="number" value={quantity} onChange={e => setQuantity(Math.max(0, parseInt(e.target.value) || 0))} min="0" required className="w-full input-style"/>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Stock Mínimo</label>
+                            <label className="block text-sm font-medium text-tinta-suave mb-1">Stock Mínimo</label>
                             <input type="number" value={minStock} onChange={e => setMinStock(Math.max(0, parseInt(e.target.value) || 0))} min="0" required className="w-full input-style"/>
                         </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Unidad de Medida</label>
+                            <label className="block text-sm font-medium text-tinta-suave mb-1">Unidad de Medida</label>
                             {/* Lista para TODOS los tipos, no solo consumibles. Escrita a
                                 mano aparecían "und", "Und" y "unidades" como tres cosas
                                 distintas, y el consumo quedaba partido en tres. */}
@@ -125,18 +125,18 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, o
                             </select>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Color (Opcional)</label>
+                            <label className="block text-sm font-medium text-tinta-suave mb-1">Color (Opcional)</label>
                             <input type="text" value={color} onChange={e => setColor(e.target.value)} className="w-full input-style"/>
                         </div>
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Marca (Opcional)</label>
+                        <label className="block text-sm font-medium text-tinta-suave mb-1">Marca (Opcional)</label>
                         <input type="text" value={brand} onChange={e => setBrand(e.target.value)} className="w-full input-style" placeholder="Ej: Stanley, DeWalt, Bosch..."/>
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-tinta-suave mb-1">
                             Familia
-                            <span className="block text-xs font-normal text-gray-500">
+                            <span className="block text-xs font-normal text-tinta-tenue">
                                 Con qué otros se agrupa. Vacío = la app la deduce del nombre.
                             </span>
                         </label>
@@ -147,23 +147,23 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, o
                         <AccessoriesEditor value={accessories} onChange={setAccessories} items={items} />
                     )}
                     {(inventoryType === 'Herramienta Manual' || inventoryType === 'Herramienta Eléctrica') && (
-                        <div className="flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                        <div className="flex items-center gap-3 p-3 bg-atencion-suave border border-atencion rounded-xl">
                             <input
                                 type="checkbox"
                                 id="requiresReturnNote"
                                 checked={requiresReturnNote}
                                 onChange={e => setRequiresReturnNote(e.target.checked)}
-                                className="w-4 h-4 accent-amber-600 cursor-pointer"
+                                className="w-4 h-4 accent-atencion cursor-pointer"
                             />
-                            <label htmlFor="requiresReturnNote" className="text-sm text-amber-800 font-semibold cursor-pointer">
+                            <label htmlFor="requiresReturnNote" className="text-sm text-atencion font-semibold cursor-pointer">
                                 Exigir nota detallada al devolver
-                                <span className="block text-xs font-normal text-amber-600">Para taladros, pulidoras y herramientas con accesorios</span>
+                                <span className="block text-xs font-normal text-atencion">Para taladros, pulidoras y herramientas con accesorios</span>
                             </label>
                         </div>
                     )}
                     <div className="flex justify-end space-x-3 pt-4">
-                        <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Cancelar</button>
-                        <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Guardar Cambios</button>
+                        <button type="button" onClick={onClose} className="px-4 py-2 bg-papel-borde text-tinta rounded-md hover:bg-papel-borde">Cancelar</button>
+                        <button type="submit" className="px-4 py-2 bg-marca text-tinta rounded-md hover:bg-marca-fuerte">Guardar Cambios</button>
                     </div>
                 </form>
             </div>

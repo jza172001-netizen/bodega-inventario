@@ -125,14 +125,14 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
-            <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-lg m-4 max-h-[90vh] overflow-y-auto">
+            <div className="bg-papel rounded-xl shadow-2xl p-8 w-full max-w-lg m-4 max-h-[90vh] overflow-y-auto">
                 <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-2xl font-bold text-gray-800">Registrar Movimiento</h2>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><XIcon className="w-6 h-6" /></button>
+                    <h2 className="text-2xl font-bold text-tinta">Registrar Movimiento</h2>
+                    <button onClick={onClose} className="text-tinta-tenue hover:text-tinta-suave"><XIcon className="w-6 h-6" /></button>
                 </div>
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Fecha del movimiento</label>
+                        <label className="block text-sm font-medium text-tinta-suave mb-1">Fecha del movimiento</label>
                         <input
                             type="date"
                             value={movDate}
@@ -142,7 +142,7 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Artículo</label>
+                            <label className="block text-sm font-medium text-tinta-suave mb-1">Artículo</label>
                             <select
                                 value={itemId}
                                 onChange={e => {
@@ -158,13 +158,13 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
                                 {puedeCrear && <option value={NUEVO_ITEM}>➕ Crear artículo nuevo…</option>}
                             </select>
                             {selectedItem && isWithdrawal && (
-                                <p className={`text-xs mt-1 font-medium ${selectedItem.quantity === 0 ? 'text-red-600' : 'text-gray-500'}`}>
+                                <p className={`text-xs mt-1 font-medium ${selectedItem.quantity === 0 ? 'text-alerta' : 'text-tinta-tenue'}`}>
                                     Disponible: {selectedItem.quantity} {selectedItem.unit}
                                 </p>
                             )}
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Movimiento</label>
+                            <label className="block text-sm font-medium text-tinta-suave mb-1">Tipo de Movimiento</label>
                             <select value={type} onChange={e => setType(e.target.value as MovementType)} className="w-full input-style">
                                 {allowedMovementTypes.map(t => <option key={t} value={t}>{t}</option>)}
                             </select>
@@ -172,11 +172,11 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Cantidad</label>
+                            <label className="block text-sm font-medium text-tinta-suave mb-1">Cantidad</label>
                             <input type="number" value={quantity} onChange={e => setQuantity(Math.max(1, parseInt(e.target.value) || 1))} min="1" required className="w-full input-style"/>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Personal (Opcional)</label>
+                            <label className="block text-sm font-medium text-tinta-suave mb-1">Personal (Opcional)</label>
                             <select value={personnelId} onChange={e => setPersonnelId(e.target.value)} className="w-full input-style">
                                 <option value="">N/A</option>
                                 {[...personnel].sort((a, b) => a.name.localeCompare(b.name, 'es')).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -188,7 +188,7 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
                     {(type === MovementType.CHECK_OUT || type === MovementType.WASTE) && (
                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Proyecto (Opcional)</label>
+                                <label className="block text-sm font-medium text-tinta-suave mb-1">Proyecto (Opcional)</label>
                                 <select value={projectId} onChange={e => setProjectId(e.target.value)} className="w-full input-style">
                                     <option value="">Ninguno / General</option>
                                     {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -202,21 +202,21 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
                                             type="checkbox"
                                             checked={esPrestamo}
                                             onChange={e => { setIsLoan(e.target.checked); setIsLoanTocado(true); }}
-                                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                            className="h-4 w-4 text-marca-oscuro focus:ring-marca border-papel-borde rounded"
                                         />
-                                        <label htmlFor="isLoan" className="ml-2 block text-sm text-gray-900">
+                                        <label htmlFor="isLoan" className="ml-2 block text-sm text-tinta">
                                             ¿Es un préstamo? (Requiere devolución)
                                         </label>
                                     </div>
                                     {selectedItem && !isLoanTocado && (
-                                        <p className="text-[11px] text-gray-500 mt-1 ml-6">
+                                        <p className="text-[11px] text-tinta-tenue mt-1 ml-6">
                                             {vuelvePorTipo
                                                 ? '🔧 Es herramienta: se marca como préstamo y debe volver. Desmárcalo si se entrega definitivamente.'
                                                 : '📦 Es consumible/EPP: sale como gasto definitivo. Márcalo si sí debe devolverse (ej: arnés, careta).'}
                                         </p>
                                     )}
                                     {selectedItem && isLoanTocado && (
-                                        <p className="text-[11px] text-amber-600 font-semibold mt-1 ml-6">
+                                        <p className="text-[11px] text-atencion font-semibold mt-1 ml-6">
                                             ⚠️ Cambiaste el valor por defecto de este tipo de ítem.
                                         </p>
                                     )}
@@ -226,15 +226,15 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
                     )}
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Notas (Opcional)</label>
+                        <label className="block text-sm font-medium text-tinta-suave mb-1">Notas (Opcional)</label>
                         <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} className="w-full input-style" placeholder="Ej: Para el proyecto Edificio Central" />
                     </div>
                     {/* Pegada abajo: es la única acción que, si no se alcanza, deja
                         el formulario lleno y el trabajo perdido. En el celular quedaba
                         debajo de "Notas", fuera de la pantalla. */}
-                    <div className="sticky bottom-0 -mx-8 -mb-8 px-8 pt-4 pb-8 bg-white border-t border-gray-100 flex justify-end space-x-3">
-                        <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Cancelar</button>
-                        <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Guardar Movimiento</button>
+                    <div className="sticky bottom-0 -mx-8 -mb-8 px-8 pt-4 pb-8 bg-papel border-t border-papel-borde flex justify-end space-x-3">
+                        <button type="button" onClick={onClose} className="px-4 py-2 bg-papel-borde text-tinta rounded-md hover:bg-papel-borde">Cancelar</button>
+                        <button type="submit" className="px-4 py-2 bg-marca text-tinta rounded-md hover:bg-marca-fuerte">Guardar Movimiento</button>
                     </div>
                 </form>
             </div>

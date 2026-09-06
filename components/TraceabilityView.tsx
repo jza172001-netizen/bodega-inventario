@@ -26,59 +26,59 @@ const CONDITION_LABEL: Record<ReturnCondition, string> = {
 };
 
 const CONDITION_COLOR: Record<ReturnCondition, string> = {
-    good:              'bg-green-100 text-green-800',
-    worn:              'bg-yellow-100 text-yellow-800',
-    incomplete:        'bg-orange-100 text-orange-800',
-    damaged:           'bg-red-100 text-red-800',
-    needs_maintenance: 'bg-purple-100 text-purple-800',
+    good:              'bg-bien-suave text-bien',
+    worn:              'bg-atencion-suave text-atencion',
+    incomplete:        'bg-atencion-suave text-atencion',
+    damaged:           'bg-alerta-suave text-alerta',
+    needs_maintenance: 'bg-marca-suave text-marca-oscuro',
 };
 
 const ALL_CONDITIONS: ReturnCondition[] = ['good', 'worn', 'incomplete', 'damaged', 'needs_maintenance'];
 
 const BEHAVIOR_CATEGORY: Record<string, { label: string; icon: string; color: string; bg: string }> = {
-    SESSION: { label: 'Sesión',     icon: '🔐', color: 'text-indigo-700', bg: 'bg-indigo-50' },
-    NAV:     { label: 'Navegación', icon: '🧭', color: 'text-blue-700',   bg: 'bg-blue-50'   },
-    FILTER:  { label: 'Filtro',     icon: '🎛️', color: 'text-teal-700',   bg: 'bg-teal-50'   },
-    SEARCH:  { label: 'Búsqueda',   icon: '🔎', color: 'text-gray-700',   bg: 'bg-gray-50'   },
-    CHAT:    { label: 'Chatbot',    icon: '💬', color: 'text-purple-700', bg: 'bg-purple-50' },
-    BUTTON:  { label: 'Botón',      icon: '🖱️', color: 'text-orange-700', bg: 'bg-orange-50' },
-    ACTION:  { label: 'Acción',     icon: '✅', color: 'text-green-700',  bg: 'bg-green-50'  },
-    SCROLL:  { label: 'Scroll',     icon: '📜', color: 'text-slate-700',  bg: 'bg-slate-50'  },
+    SESSION: { label: 'Sesión',     icon: '🔐', color: 'text-marca-oscuro', bg: 'bg-marca-suave' },
+    NAV:     { label: 'Navegación', icon: '🧭', color: 'text-marca-oscuro',   bg: 'bg-marca-suave'   },
+    FILTER:  { label: 'Filtro',     icon: '🎛️', color: 'text-bien',   bg: 'bg-bien-suave'   },
+    SEARCH:  { label: 'Búsqueda',   icon: '🔎', color: 'text-tinta-suave',   bg: 'bg-papel-hondo'   },
+    CHAT:    { label: 'Chatbot',    icon: '💬', color: 'text-marca-oscuro', bg: 'bg-marca-suave' },
+    BUTTON:  { label: 'Botón',      icon: '🖱️', color: 'text-atencion', bg: 'bg-atencion-suave' },
+    ACTION:  { label: 'Acción',     icon: '✅', color: 'text-bien',  bg: 'bg-bien-suave'  },
+    SCROLL:  { label: 'Scroll',     icon: '📜', color: 'text-tinta-suave',  bg: 'bg-papel-hondo'  },
 };
 
 const AUDIT_CATEGORY: Record<string, { icon: string; color: string; bg: string }> = {
-    ITEM_CREATED:       { icon: '📦', color: 'text-green-700',  bg: 'bg-green-50'  },
-    ITEM_EDITED:        { icon: '✏️', color: 'text-blue-700',   bg: 'bg-blue-50'   },
-    ITEM_DELETED:       { icon: '🗑️', color: 'text-red-700',    bg: 'bg-red-50'    },
-    STOCK_OUT:          { icon: '📤', color: 'text-orange-700', bg: 'bg-orange-50' },
-    STOCK_IN:           { icon: '📥', color: 'text-green-700',  bg: 'bg-green-50'  },
-    PERSONNEL_CREATED:  { icon: '👷', color: 'text-green-700',  bg: 'bg-green-50'  },
-    PERSONNEL_EDITED:   { icon: '✏️', color: 'text-blue-700',   bg: 'bg-blue-50'   },
-    PERSONNEL_DELETED:  { icon: '🗑️', color: 'text-red-700',    bg: 'bg-red-50'    },
-    LOAN_CREATED:       { icon: '🔑', color: 'text-indigo-700', bg: 'bg-indigo-50' },
-    LOAN_RETURNED:      { icon: '✅', color: 'text-green-700',  bg: 'bg-green-50'  },
-    LOAN_TRANSFERRED:   { icon: '🔄', color: 'text-blue-700',   bg: 'bg-blue-50'   },
-    PICKUP_MARKED:      { icon: '📍', color: 'text-orange-700', bg: 'bg-orange-50' },
-    PICKUP_CANCELLED:   { icon: '✕',  color: 'text-red-700',    bg: 'bg-red-50'    },
-    PROJECT_CREATED:    { icon: '🏗️', color: 'text-green-700',  bg: 'bg-green-50'  },
-    PROJECT_DELETED:    { icon: '🗑️', color: 'text-red-700',    bg: 'bg-red-50'    },
-    USER_CREATED:       { icon: '👤', color: 'text-green-700',  bg: 'bg-green-50'  },
-    USER_DELETED:       { icon: '🗑️', color: 'text-red-700',    bg: 'bg-red-50'    },
-    USER_LOGIN:         { icon: '🔐', color: 'text-indigo-700', bg: 'bg-indigo-50' },
-    USER_LOGOUT:        { icon: '🔓', color: 'text-gray-700',   bg: 'bg-gray-50'   },
-    MOVEMENT_DELETED:   { icon: '⚠️', color: 'text-red-700',    bg: 'bg-red-50'    },
-    USER_SETUP:         { icon: '🔑', color: 'text-indigo-700', bg: 'bg-indigo-50' },
-    CONFIG_CHANGED:     { icon: '⚙️', color: 'text-blue-700',   bg: 'bg-blue-50'   },
-    DATA_EXPORTED:      { icon: '⬇️', color: 'text-amber-700',  bg: 'bg-amber-50'  },
-    DATA_IMPORTED:      { icon: '⬆️', color: 'text-amber-700',  bg: 'bg-amber-50'  },
-    LOAN_PROJECT_ASSIGNED: { icon: '🏗️', color: 'text-purple-700', bg: 'bg-purple-50' },
-    PO_CREATED:         { icon: '🛒', color: 'text-green-700',  bg: 'bg-green-50'  },
-    PO_STATUS_CHANGED:  { icon: '🚚', color: 'text-blue-700',   bg: 'bg-blue-50'   },
-    PO_DELETED:         { icon: '🗑️', color: 'text-red-700',    bg: 'bg-red-50'    },
-    WHATSAPP_SENT:      { icon: '📲', color: 'text-green-700',  bg: 'bg-green-50'  },
-    PICKUP_NOTIFIED:    { icon: '📲', color: 'text-orange-700', bg: 'bg-orange-50' },
-    REPORT_EXPORTED:    { icon: '📄', color: 'text-blue-700',   bg: 'bg-blue-50'   },
-    AUDIT_CLEARED:      { icon: '🧹', color: 'text-red-700',    bg: 'bg-red-50'    },
+    ITEM_CREATED:       { icon: '📦', color: 'text-bien',  bg: 'bg-bien-suave'  },
+    ITEM_EDITED:        { icon: '✏️', color: 'text-marca-oscuro',   bg: 'bg-marca-suave'   },
+    ITEM_DELETED:       { icon: '🗑️', color: 'text-alerta',    bg: 'bg-alerta-suave'    },
+    STOCK_OUT:          { icon: '📤', color: 'text-atencion', bg: 'bg-atencion-suave' },
+    STOCK_IN:           { icon: '📥', color: 'text-bien',  bg: 'bg-bien-suave'  },
+    PERSONNEL_CREATED:  { icon: '👷', color: 'text-bien',  bg: 'bg-bien-suave'  },
+    PERSONNEL_EDITED:   { icon: '✏️', color: 'text-marca-oscuro',   bg: 'bg-marca-suave'   },
+    PERSONNEL_DELETED:  { icon: '🗑️', color: 'text-alerta',    bg: 'bg-alerta-suave'    },
+    LOAN_CREATED:       { icon: '🔑', color: 'text-marca-oscuro', bg: 'bg-marca-suave' },
+    LOAN_RETURNED:      { icon: '✅', color: 'text-bien',  bg: 'bg-bien-suave'  },
+    LOAN_TRANSFERRED:   { icon: '🔄', color: 'text-marca-oscuro',   bg: 'bg-marca-suave'   },
+    PICKUP_MARKED:      { icon: '📍', color: 'text-atencion', bg: 'bg-atencion-suave' },
+    PICKUP_CANCELLED:   { icon: '✕',  color: 'text-alerta',    bg: 'bg-alerta-suave'    },
+    PROJECT_CREATED:    { icon: '🏗️', color: 'text-bien',  bg: 'bg-bien-suave'  },
+    PROJECT_DELETED:    { icon: '🗑️', color: 'text-alerta',    bg: 'bg-alerta-suave'    },
+    USER_CREATED:       { icon: '👤', color: 'text-bien',  bg: 'bg-bien-suave'  },
+    USER_DELETED:       { icon: '🗑️', color: 'text-alerta',    bg: 'bg-alerta-suave'    },
+    USER_LOGIN:         { icon: '🔐', color: 'text-marca-oscuro', bg: 'bg-marca-suave' },
+    USER_LOGOUT:        { icon: '🔓', color: 'text-tinta-suave',   bg: 'bg-papel-hondo'   },
+    MOVEMENT_DELETED:   { icon: '⚠️', color: 'text-alerta',    bg: 'bg-alerta-suave'    },
+    USER_SETUP:         { icon: '🔑', color: 'text-marca-oscuro', bg: 'bg-marca-suave' },
+    CONFIG_CHANGED:     { icon: '⚙️', color: 'text-marca-oscuro',   bg: 'bg-marca-suave'   },
+    DATA_EXPORTED:      { icon: '⬇️', color: 'text-atencion',  bg: 'bg-atencion-suave'  },
+    DATA_IMPORTED:      { icon: '⬆️', color: 'text-atencion',  bg: 'bg-atencion-suave'  },
+    LOAN_PROJECT_ASSIGNED: { icon: '🏗️', color: 'text-marca-oscuro', bg: 'bg-marca-suave' },
+    PO_CREATED:         { icon: '🛒', color: 'text-bien',  bg: 'bg-bien-suave'  },
+    PO_STATUS_CHANGED:  { icon: '🚚', color: 'text-marca-oscuro',   bg: 'bg-marca-suave'   },
+    PO_DELETED:         { icon: '🗑️', color: 'text-alerta',    bg: 'bg-alerta-suave'    },
+    WHATSAPP_SENT:      { icon: '📲', color: 'text-bien',  bg: 'bg-bien-suave'  },
+    PICKUP_NOTIFIED:    { icon: '📲', color: 'text-atencion', bg: 'bg-atencion-suave' },
+    REPORT_EXPORTED:    { icon: '📄', color: 'text-marca-oscuro',   bg: 'bg-marca-suave'   },
+    AUDIT_CLEARED:      { icon: '🧹', color: 'text-alerta',    bg: 'bg-alerta-suave'    },
 };
 
 /**
@@ -91,7 +91,7 @@ const AUDIT_CATEGORY: Record<string, { icon: string; color: string; bg: string }
 const categoriaDe = (log: { action: string; description: string }) => {
     if (log.description.startsWith('📤')) return AUDIT_CATEGORY.STOCK_OUT;
     if (log.description.startsWith('📥')) return AUDIT_CATEGORY.STOCK_IN;
-    return AUDIT_CATEGORY[log.action] ?? { icon: '•', color: 'text-gray-600', bg: 'bg-gray-50' };
+    return AUDIT_CATEGORY[log.action] ?? { icon: '•', color: 'text-tinta-suave', bg: 'bg-papel-hondo' };
 };
 
 type CombinedEntry =
@@ -345,20 +345,20 @@ export const TraceabilityView: React.FC<Props> = ({
 
     const IssueBar = ({ rate }: { rate: number }) => (
         <div className="flex items-center gap-2 min-w-0">
-            <div className="flex-1 bg-gray-100 rounded-full h-1.5 min-w-[60px]">
-                <div className={`h-1.5 rounded-full ${rate > 0.5 ? 'bg-red-500' : rate > 0.25 ? 'bg-orange-400' : 'bg-green-500'}`}
+            <div className="flex-1 bg-papel-hondo rounded-full h-1.5 min-w-[60px]">
+                <div className={`h-1.5 rounded-full ${rate > 0.5 ? 'bg-alerta' : rate > 0.25 ? 'bg-atencion' : 'bg-bien'}`}
                     style={{ width: `${Math.round(rate * 100)}%` }} />
             </div>
-            <span className={`text-xs font-black flex-shrink-0 ${rate > 0.5 ? 'text-red-600' : rate > 0.25 ? 'text-orange-600' : 'text-green-600'}`}>
+            <span className={`text-xs font-black flex-shrink-0 ${rate > 0.5 ? 'text-alerta' : rate > 0.25 ? 'text-atencion' : 'text-bien'}`}>
                 {Math.round(rate * 100)}%
             </span>
         </div>
     );
 
     return (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        <div className="bg-papel rounded-xl shadow-sm overflow-hidden">
             {/* Main tab bar */}
-            <div className="flex border-b border-gray-100 overflow-x-auto">
+            <div className="flex border-b border-papel-borde overflow-x-auto">
                 {([
                     { key: 'actividad',    label: 'Actividad',     icon: '🔔' },
                     { key: 'estadisticas', label: 'Estadísticas',  icon: '📊' },
@@ -366,7 +366,7 @@ export const TraceabilityView: React.FC<Props> = ({
                 ] as { key: MainTab; label: string; icon: string }[]).map(t => (
                     <button key={t.key} onClick={() => changeMainTab(t.key)}
                         className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-3 text-xs font-bold transition-all border-b-2 ${
-                            mainTab === t.key ? 'border-blue-600 text-blue-600 bg-blue-50' : 'border-transparent text-gray-500 hover:text-gray-700'
+                            mainTab === t.key ? 'border-marca text-marca-oscuro bg-marca-suave' : 'border-transparent text-tinta-tenue hover:text-tinta-suave'
                         }`}>
                         <span>{t.icon}</span>
                         <span className="hidden sm:inline">{t.label}</span>
@@ -382,16 +382,16 @@ export const TraceabilityView: React.FC<Props> = ({
                     <div className="px-4 pt-3">
                         <CotejoPanel items={items} movements={movements} personnel={personnel} auditLogs={auditLogs} />
                     </div>
-                    <div className="px-4 py-3 border-b border-gray-50 space-y-2">
+                    <div className="px-4 py-3 border-b border-papel-borde space-y-2">
                         {/* Actor filter */}
                         <div className="flex gap-2 overflow-x-auto scrollbar-hide">
                             <button onClick={() => changeActorFilter('')}
-                                className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-black transition-all ${!actorFilter ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                                className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-black transition-all ${!actorFilter ? 'bg-marca text-tinta' : 'bg-papel-hondo text-tinta-suave hover:bg-papel-borde'}`}>
                                 Todos
                             </button>
                             {allActors.map(actor => (
                                 <button key={actor} onClick={() => changeActorFilter(actorFilter === actor ? '' : actor)}
-                                    className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-black transition-all ${actorFilter === actor ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                                    className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-black transition-all ${actorFilter === actor ? 'bg-marca text-tinta' : 'bg-papel-hondo text-tinta-suave hover:bg-papel-borde'}`}>
                                     {actor}
                                 </button>
                             ))}
@@ -411,16 +411,16 @@ export const TraceabilityView: React.FC<Props> = ({
                                 { key: 'NEGOCIO', label: '📋 Negocio' },
                             ].map(f => (
                                 <button key={f.key} onClick={() => changeTypeFilter(f.key)}
-                                    className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold transition-all ${typeFilter === f.key ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                                    className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold transition-all ${typeFilter === f.key ? 'bg-marca text-tinta' : 'bg-papel-hondo text-tinta-tenue hover:bg-papel-borde'}`}>
                                     {f.label}
                                 </button>
                             ))}
                         </div>
                     </div>
 
-                    <div className="divide-y divide-gray-50 max-h-[60vh] overflow-y-auto">
+                    <div className="divide-y divide-papel-borde max-h-[60vh] overflow-y-auto">
                         {filteredEntries.length === 0 && (
-                            <p className="text-center py-12 text-gray-400 text-sm">Sin actividad para este filtro.</p>
+                            <p className="text-center py-12 text-tinta-tenue text-sm">Sin actividad para este filtro.</p>
                         )}
                         {filteredEntries.map(entry => {
                             const timeStr = entry.ts.toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' });
@@ -433,9 +433,9 @@ export const TraceabilityView: React.FC<Props> = ({
                                         <span className="text-base flex-shrink-0 mt-0.5">{cat.icon}</span>
                                         <div className="flex-1 min-w-0">
                                             <p className={`text-sm font-semibold ${cat.color} leading-snug`}>{l.detail}</p>
-                                            <div className="flex items-center gap-2 mt-0.5 flex-wrap text-[10px] text-gray-400">
+                                            <div className="flex items-center gap-2 mt-0.5 flex-wrap text-[10px] text-tinta-tenue">
                                                 <span>{timeStr}</span>
-                                                {l.actor && <><span>·</span><span className="font-semibold text-gray-500">{l.actor}</span></>}
+                                                {l.actor && <><span>·</span><span className="font-semibold text-tinta-tenue">{l.actor}</span></>}
                                                 <span className={`px-1.5 py-0.5 rounded-full font-black uppercase tracking-wide ${cat.bg} ${cat.color} border border-current border-opacity-20`} style={{ fontSize: '9px' }}>
                                                     {cat.label}
                                                 </span>
@@ -452,10 +452,10 @@ export const TraceabilityView: React.FC<Props> = ({
                                     <span className="text-base flex-shrink-0 mt-0.5">{meta.icon}</span>
                                     <div className="flex-1 min-w-0">
                                         <p className={`text-sm font-semibold ${meta.color} leading-snug`}>{log.description}</p>
-                                        <div className="flex items-center gap-2 mt-0.5 flex-wrap text-[10px] text-gray-400">
+                                        <div className="flex items-center gap-2 mt-0.5 flex-wrap text-[10px] text-tinta-tenue">
                                             <span>{timeStr}</span>
-                                            {log.actor && <><span>·</span><span className="font-semibold text-gray-500">{log.actor}</span></>}
-                                            <span className="px-1.5 py-0.5 rounded-full font-black uppercase tracking-wide bg-gray-100 text-gray-500" style={{ fontSize: '9px' }}>
+                                            {log.actor && <><span>·</span><span className="font-semibold text-tinta-tenue">{log.actor}</span></>}
+                                            <span className="px-1.5 py-0.5 rounded-full font-black uppercase tracking-wide bg-papel-hondo text-tinta-tenue" style={{ fontSize: '9px' }}>
                                                 Negocio
                                             </span>
                                         </div>
@@ -475,7 +475,7 @@ export const TraceabilityView: React.FC<Props> = ({
                     {/* Distribución por categoría */}
                     {categoryCounts.length > 0 && (
                         <div>
-                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Distribución por categoría</p>
+                            <p className="text-[10px] font-black text-tinta-tenue uppercase tracking-widest mb-3">Distribución por categoría</p>
                             {categoryCounts.map(([cat, count]) => {
                                 const meta = BEHAVIOR_CATEGORY[cat];
                                 const total = behaviorLogs.length || 1;
@@ -483,13 +483,13 @@ export const TraceabilityView: React.FC<Props> = ({
                                 return (
                                     <div key={cat} className="flex items-center gap-3 py-1.5">
                                         <span className="text-sm w-5 flex-shrink-0">{meta?.icon ?? '•'}</span>
-                                        <span className="text-xs font-semibold text-gray-600 w-20 flex-shrink-0">{meta?.label ?? cat}</span>
-                                        <div className="flex-1 bg-gray-100 rounded-full h-2">
-                                            <div className={`h-2 rounded-full ${meta?.bg.replace('bg-', 'bg-').replace('-50', '-400') ?? 'bg-blue-400'}`}
+                                        <span className="text-xs font-semibold text-tinta-suave w-20 flex-shrink-0">{meta?.label ?? cat}</span>
+                                        <div className="flex-1 bg-papel-hondo rounded-full h-2">
+                                            <div className={`h-2 rounded-full ${meta?.bg.replace('bg-', 'bg-').replace('-50', '-400') ?? 'bg-marca'}`}
                                                 style={{ width: `${pct}%` }} />
                                         </div>
-                                        <span className="text-xs font-black text-gray-700 w-10 text-right flex-shrink-0">{count}×</span>
-                                        <span className="text-[10px] text-gray-400 w-8 flex-shrink-0">{pct}%</span>
+                                        <span className="text-xs font-black text-tinta-suave w-10 text-right flex-shrink-0">{count}×</span>
+                                        <span className="text-[10px] text-tinta-tenue w-8 flex-shrink-0">{pct}%</span>
                                     </div>
                                 );
                             })}
@@ -499,12 +499,12 @@ export const TraceabilityView: React.FC<Props> = ({
                     {/* Secciones más visitadas */}
                     {sectionVisits.length > 0 && (
                         <div>
-                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Secciones más visitadas</p>
+                            <p className="text-[10px] font-black text-tinta-tenue uppercase tracking-widest mb-3">Secciones más visitadas</p>
                             {sectionVisits.map(([section, count], i) => (
-                                <div key={section} className="flex items-center gap-3 py-1.5 border-b border-gray-50 last:border-0">
-                                    <span className={`w-5 h-5 flex items-center justify-center rounded-full text-[10px] font-black flex-shrink-0 ${i === 0 ? 'bg-blue-500 text-white' : i === 1 ? 'bg-blue-300 text-white' : 'bg-gray-100 text-gray-500'}`}>{i + 1}</span>
-                                    <span className="flex-1 text-xs font-semibold text-gray-700 truncate">{section}</span>
-                                    <span className="text-xs font-black text-blue-600 flex-shrink-0">{count}×</span>
+                                <div key={section} className="flex items-center gap-3 py-1.5 border-b border-papel-borde last:border-0">
+                                    <span className={`w-5 h-5 flex items-center justify-center rounded-full text-[10px] font-black flex-shrink-0 ${i === 0 ? 'bg-marca text-tinta' : i === 1 ? 'bg-marca text-tinta' : 'bg-papel-hondo text-tinta-tenue'}`}>{i + 1}</span>
+                                    <span className="flex-1 text-xs font-semibold text-tinta-suave truncate">{section}</span>
+                                    <span className="text-xs font-black text-marca-oscuro flex-shrink-0">{count}×</span>
                                 </div>
                             ))}
                         </div>
@@ -513,17 +513,17 @@ export const TraceabilityView: React.FC<Props> = ({
                     {/* Filtros más usados */}
                     {filterUsage.length > 0 && (
                         <div>
-                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Filtros más usados</p>
+                            <p className="text-[10px] font-black text-tinta-tenue uppercase tracking-widest mb-3">Filtros más usados</p>
                             {filterUsage.map(([detail, count]) => (
-                                <div key={detail} className="flex items-center gap-3 py-1.5 border-b border-gray-50 last:border-0">
+                                <div key={detail} className="flex items-center gap-3 py-1.5 border-b border-papel-borde last:border-0">
                                     <span className="text-sm flex-shrink-0">🎛️</span>
-                                    <span className="flex-1 text-xs text-gray-600 truncate">{detail}</span>
+                                    <span className="flex-1 text-xs text-tinta-suave truncate">{detail}</span>
                                     <div className="flex items-center gap-1.5 flex-shrink-0">
-                                        <div className="w-14 bg-gray-100 rounded-full h-1.5">
-                                            <div className="h-1.5 rounded-full bg-teal-400"
+                                        <div className="w-14 bg-papel-hondo rounded-full h-1.5">
+                                            <div className="h-1.5 rounded-full bg-bien"
                                                 style={{ width: `${Math.round((count / (filterUsage[0]?.[1] ?? 1)) * 100)}%` }} />
                                         </div>
-                                        <span className="text-xs font-black text-gray-700 w-6 text-right">{count}×</span>
+                                        <span className="text-xs font-black text-tinta-suave w-6 text-right">{count}×</span>
                                     </div>
                                 </div>
                             ))}
@@ -533,15 +533,15 @@ export const TraceabilityView: React.FC<Props> = ({
                     {/* Horario de uso */}
                     {behaviorLogs.length > 0 && (
                         <div>
-                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Actividad por hora del día</p>
+                            <p className="text-[10px] font-black text-tinta-tenue uppercase tracking-widest mb-3">Actividad por hora del día</p>
                             <div className="flex items-end gap-0.5 h-16">
                                 {hourlyActivity.map((count, h) => (
                                     <div key={h} className="flex-1 flex flex-col items-center gap-0.5">
-                                        <div className="w-full bg-blue-500 rounded-t-sm transition-all"
+                                        <div className="w-full bg-marca rounded-t-sm transition-all"
                                             style={{ height: `${Math.round((count / maxHourly) * 52)}px`, opacity: count > 0 ? 1 : 0.15 }}
                                             title={`${h}:00 — ${count} eventos`} />
                                         {(h % 6 === 0) && (
-                                            <span className="text-[8px] text-gray-400 font-semibold">{h}h</span>
+                                            <span className="text-[8px] text-tinta-tenue font-semibold">{h}h</span>
                                         )}
                                     </div>
                                 ))}
@@ -551,28 +551,28 @@ export const TraceabilityView: React.FC<Props> = ({
 
                     {/* Actividad por usuario */}
                     <div>
-                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Actividad por usuario</p>
+                        <p className="text-[10px] font-black text-tinta-tenue uppercase tracking-widest mb-3">Actividad por usuario</p>
                         {actorStats.length === 0
-                            ? <p className="text-sm text-gray-400 text-center py-4">Sin datos aún.</p>
+                            ? <p className="text-sm text-tinta-tenue text-center py-4">Sin datos aún.</p>
                             : actorStats.map(s => {
                                 const catMeta = s.topCat ? BEHAVIOR_CATEGORY[s.topCat[0]] : null;
                                 return (
-                                    <div key={s.actor} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
-                                        <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 font-black text-sm flex items-center justify-center flex-shrink-0">
+                                    <div key={s.actor} className="flex items-center gap-3 py-2 border-b border-papel-borde last:border-0">
+                                        <div className="w-9 h-9 rounded-full bg-marca-suave text-marca-oscuro font-black text-sm flex items-center justify-center flex-shrink-0">
                                             {s.actor.charAt(0).toUpperCase()}
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-bold text-gray-900">{s.actor}</p>
-                                            <p className="text-[10px] text-gray-400">
+                                            <p className="text-sm font-bold text-tinta">{s.actor}</p>
+                                            <p className="text-[10px] text-tinta-tenue">
                                                 {s.count} eventos · {s.lastSeen.toLocaleDateString('es-CO')}
                                             </p>
                                             {catMeta && (
-                                                <p className="text-[10px] text-gray-500">
+                                                <p className="text-[10px] text-tinta-tenue">
                                                     Más: {catMeta.icon} {catMeta.label} ({s.topCat![1]}×)
                                                 </p>
                                             )}
                                         </div>
-                                        <span className="text-xl font-black text-indigo-600 flex-shrink-0">{s.count}</span>
+                                        <span className="text-xl font-black text-marca-oscuro flex-shrink-0">{s.count}</span>
                                     </div>
                                 );
                             })
@@ -581,20 +581,20 @@ export const TraceabilityView: React.FC<Props> = ({
 
                     {/* Acciones más frecuentes */}
                     <div>
-                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Acciones más frecuentes</p>
+                        <p className="text-[10px] font-black text-tinta-tenue uppercase tracking-widest mb-3">Acciones más frecuentes</p>
                         {actionCounts.length === 0
-                            ? <p className="text-sm text-gray-400 text-center py-4">Sin datos aún.</p>
+                            ? <p className="text-sm text-tinta-tenue text-center py-4">Sin datos aún.</p>
                             : actionCounts.slice(0, 15).map(([detail, count]) => (
-                                <div key={detail} className="flex items-center gap-3 py-1.5 border-b border-gray-50 last:border-0">
+                                <div key={detail} className="flex items-center gap-3 py-1.5 border-b border-papel-borde last:border-0">
                                     <div className="flex-1 min-w-0">
-                                        <p className="text-xs font-semibold text-gray-700 truncate">{detail}</p>
+                                        <p className="text-xs font-semibold text-tinta-suave truncate">{detail}</p>
                                     </div>
                                     <div className="flex items-center gap-2 flex-shrink-0">
-                                        <div className="w-20 bg-gray-100 rounded-full h-1.5">
-                                            <div className="h-1.5 rounded-full bg-blue-500"
+                                        <div className="w-20 bg-papel-hondo rounded-full h-1.5">
+                                            <div className="h-1.5 rounded-full bg-marca"
                                                 style={{ width: `${Math.round((count / (actionCounts[0]?.[1] ?? 1)) * 100)}%` }} />
                                         </div>
-                                        <span className="text-xs font-black text-gray-700 w-8 text-right">{count}×</span>
+                                        <span className="text-xs font-black text-tinta-suave w-8 text-right">{count}×</span>
                                     </div>
                                 </div>
                             ))
@@ -604,10 +604,10 @@ export const TraceabilityView: React.FC<Props> = ({
                     {/* Búsquedas */}
                     {searchQueries.length > 0 && (
                         <div>
-                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Últimas búsquedas</p>
+                            <p className="text-[10px] font-black text-tinta-tenue uppercase tracking-widest mb-3">Últimas búsquedas</p>
                             <div className="flex flex-wrap gap-2">
                                 {searchQueries.map(l => (
-                                    <span key={l.id} className="bg-gray-100 text-gray-700 text-xs font-semibold px-2 py-1 rounded-full">
+                                    <span key={l.id} className="bg-papel-hondo text-tinta-suave text-xs font-semibold px-2 py-1 rounded-full">
                                         🔎 {l.detail.replace('Buscó: ', '')}
                                     </span>
                                 ))}
@@ -618,12 +618,12 @@ export const TraceabilityView: React.FC<Props> = ({
                     {/* Mensajes de chatbot */}
                     {chatMessages.length > 0 && (
                         <div>
-                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Mensajes en el chatbot</p>
+                            <p className="text-[10px] font-black text-tinta-tenue uppercase tracking-widest mb-3">Mensajes en el chatbot</p>
                             <div className="space-y-2">
                                 {chatMessages.map(l => (
-                                    <div key={l.id} className="bg-purple-50 rounded-lg px-3 py-2">
-                                        <p className="text-xs text-purple-800 font-semibold">{l.detail.replace('Escribió en chatbot: ', '')}</p>
-                                        <p className="text-[10px] text-gray-400 mt-0.5">{l.actor} · {new Date(l.timestamp).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}</p>
+                                    <div key={l.id} className="bg-marca-suave rounded-lg px-3 py-2">
+                                        <p className="text-xs text-marca-oscuro font-semibold">{l.detail.replace('Escribió en chatbot: ', '')}</p>
+                                        <p className="text-[10px] text-tinta-tenue mt-0.5">{l.actor} · {new Date(l.timestamp).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}</p>
                                     </div>
                                 ))}
                             </div>
@@ -631,7 +631,7 @@ export const TraceabilityView: React.FC<Props> = ({
                     )}
 
                     {behaviorLogs.length === 0 && auditLogs.length === 0 && (
-                        <p className="text-sm text-gray-400 text-center py-8">Sin datos de actividad todavía.</p>
+                        <p className="text-sm text-tinta-tenue text-center py-8">Sin datos de actividad todavía.</p>
                     )}
                 </div>
             )}
@@ -639,7 +639,7 @@ export const TraceabilityView: React.FC<Props> = ({
             {/* ── HERRAMIENTAS ── */}
             {mainTab === 'herramientas' && (
                 <>
-                    <div className="flex border-b border-gray-100 overflow-x-auto">
+                    <div className="flex border-b border-papel-borde overflow-x-auto">
                         {([
                             { key: 'tools',    label: 'Por herramienta', icon: '🔧' },
                             { key: 'workers',  label: 'Por trabajador',  icon: '👷' },
@@ -648,7 +648,7 @@ export const TraceabilityView: React.FC<Props> = ({
                         ] as { key: HerramientasTab; label: string; icon: string }[]).map(t => (
                             <button key={t.key} onClick={() => setHerramientasTab(t.key)}
                                 className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold transition-all border-b-2 ${
-                                    herramientasTab === t.key ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-400 hover:text-gray-600'
+                                    herramientasTab === t.key ? 'border-marca text-marca-oscuro' : 'border-transparent text-tinta-tenue hover:text-tinta-suave'
                                 }`}>
                                 <span>{t.icon}</span>
                                 <span className="hidden sm:inline">{t.label}</span>
@@ -660,19 +660,19 @@ export const TraceabilityView: React.FC<Props> = ({
                         {returnedWithCondition.length === 0 ? (
                             <div className="text-center py-10">
                                 <p className="text-3xl mb-2">📊</p>
-                                <p className="font-bold text-gray-600">Sin devoluciones con condición aún</p>
-                                <p className="text-xs text-gray-400 mt-1">Los datos aparecen cuando se registran devoluciones con estado.</p>
+                                <p className="font-bold text-tinta-suave">Sin devoluciones con condición aún</p>
+                                <p className="text-xs text-tinta-tenue mt-1">Los datos aparecen cuando se registran devoluciones con estado.</p>
                             </div>
                         ) : (
                             <>
                                 {herramientasTab === 'tools' && (
                                     <div className="space-y-2">
-                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-3">% devoluciones con problema</p>
+                                        <p className="text-[10px] font-black text-tinta-tenue uppercase tracking-wider mb-3">% devoluciones con problema</p>
                                         {byTool.map(r => (
-                                            <div key={r.id} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
+                                            <div key={r.id} className="flex items-center gap-3 py-2 border-b border-papel-borde last:border-0">
                                                 <div className="flex-1 min-w-0">
-                                                    <p className="text-sm font-semibold text-gray-800 truncate">{r.item!.name}</p>
-                                                    <p className="text-[10px] text-gray-400">{r.returns} devolución{r.returns !== 1 ? 'es' : ''}</p>
+                                                    <p className="text-sm font-semibold text-tinta truncate">{r.item!.name}</p>
+                                                    <p className="text-[10px] text-tinta-tenue">{r.returns} devolución{r.returns !== 1 ? 'es' : ''}</p>
                                                 </div>
                                                 <div className="w-32 flex-shrink-0"><IssueBar rate={r.issueRate} /></div>
                                                 <div className="flex gap-1 flex-shrink-0 flex-wrap justify-end max-w-[120px]">
@@ -689,13 +689,13 @@ export const TraceabilityView: React.FC<Props> = ({
 
                                 {herramientasTab === 'workers' && (
                                     <div className="space-y-2">
-                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-3">Trabajadores con más problemas en devoluciones</p>
+                                        <p className="text-[10px] font-black text-tinta-tenue uppercase tracking-wider mb-3">Trabajadores con más problemas en devoluciones</p>
                                         {byWorker.map((r, i) => (
-                                            <div key={r.name} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
-                                                <span className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-black flex-shrink-0 ${i === 0 ? 'bg-red-100 text-red-700' : i === 1 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>{i + 1}</span>
+                                            <div key={r.name} className="flex items-center gap-3 py-2 border-b border-papel-borde last:border-0">
+                                                <span className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-black flex-shrink-0 ${i === 0 ? 'bg-alerta-suave text-alerta' : i === 1 ? 'bg-atencion-suave text-atencion' : 'bg-papel-hondo text-tinta-suave'}`}>{i + 1}</span>
                                                 <div className="flex-1 min-w-0">
-                                                    <p className="text-sm font-semibold text-gray-800 truncate">{r.name}</p>
-                                                    <p className="text-[10px] text-gray-400">{r.returns} dev. · {r.issues} con problemas</p>
+                                                    <p className="text-sm font-semibold text-tinta truncate">{r.name}</p>
+                                                    <p className="text-[10px] text-tinta-tenue">{r.returns} dev. · {r.issues} con problemas</p>
                                                 </div>
                                                 <div className="w-28 flex-shrink-0"><IssueBar rate={r.issueRate} /></div>
                                             </div>
@@ -705,13 +705,13 @@ export const TraceabilityView: React.FC<Props> = ({
 
                                 {herramientasTab === 'projects' && (
                                     <div className="space-y-2">
-                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-3">Obras con más herramientas dañadas</p>
+                                        <p className="text-[10px] font-black text-tinta-tenue uppercase tracking-wider mb-3">Obras con más herramientas dañadas</p>
                                         {byProject.map((r, i) => (
-                                            <div key={r.name} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
-                                                <span className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-black flex-shrink-0 ${i === 0 ? 'bg-red-100 text-red-700' : i === 1 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>{i + 1}</span>
+                                            <div key={r.name} className="flex items-center gap-3 py-2 border-b border-papel-borde last:border-0">
+                                                <span className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-black flex-shrink-0 ${i === 0 ? 'bg-alerta-suave text-alerta' : i === 1 ? 'bg-atencion-suave text-atencion' : 'bg-papel-hondo text-tinta-suave'}`}>{i + 1}</span>
                                                 <div className="flex-1 min-w-0">
-                                                    <p className="text-sm font-semibold text-gray-800 truncate">{r.name}</p>
-                                                    <p className="text-[10px] text-gray-400">{r.returns} dev. · {r.issues} con problemas</p>
+                                                    <p className="text-sm font-semibold text-tinta truncate">{r.name}</p>
+                                                    <p className="text-[10px] text-tinta-tenue">{r.returns} dev. · {r.issues} con problemas</p>
                                                 </div>
                                                 <div className="w-28 flex-shrink-0"><IssueBar rate={r.issueRate} /></div>
                                             </div>
@@ -722,31 +722,31 @@ export const TraceabilityView: React.FC<Props> = ({
                                 {herramientasTab === 'history' && (
                                     <div>
                                         <select value={selectedItemId} onChange={e => setSelectedItemId(e.target.value)}
-                                            className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-400">
+                                            className="w-full text-sm border border-papel-borde rounded-xl px-3 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-marca">
                                             <option value="">— Elegir herramienta —</option>
                                             {toolsWithHistory.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
                                         </select>
-                                        {selectedItemId && toolHistory.length === 0 && <p className="text-sm text-gray-400 text-center py-8">Sin devoluciones para esta herramienta.</p>}
+                                        {selectedItemId && toolHistory.length === 0 && <p className="text-sm text-tinta-tenue text-center py-8">Sin devoluciones para esta herramienta.</p>}
                                         {toolHistory.length > 0 && (
                                             <div className="relative pl-6">
-                                                <div className="absolute left-2 top-0 bottom-0 w-0.5 bg-gray-200" />
+                                                <div className="absolute left-2 top-0 bottom-0 w-0.5 bg-papel-borde" />
                                                 {toolHistory.map(m => {
                                                     const cond = m.returnCondition!;
                                                     const worker = personMap.get(m.personnelId ?? '')?.name ?? 'Sin asignar';
                                                     const proj = m.projectId ? projectMap.get(m.projectId)?.name : null;
                                                     return (
                                                         <div key={m.id} className="relative mb-5 last:mb-0">
-                                                            <div className={`absolute -left-[22px] w-4 h-4 rounded-full border-2 border-white flex items-center justify-center text-[10px] ${isIssue(cond) ? 'bg-red-400' : 'bg-green-400'}`} />
-                                                            <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                                                            <div className={`absolute -left-[22px] w-4 h-4 rounded-full border-2 border-papel flex items-center justify-center text-[10px] ${isIssue(cond) ? 'bg-alerta' : 'bg-bien'}`} />
+                                                            <div className="bg-papel-hondo rounded-xl p-3 border border-papel-borde">
                                                                 <div className="flex items-start justify-between gap-2">
                                                                     <div>
-                                                                        <p className="text-xs text-gray-400">{new Date(m.timestamp).toLocaleDateString('es-CO')}</p>
-                                                                        <p className="text-sm font-semibold text-gray-800 mt-0.5">👷 {worker}</p>
-                                                                        {proj && <p className="text-xs text-indigo-600 mt-0.5">📁 {proj}</p>}
+                                                                        <p className="text-xs text-tinta-tenue">{new Date(m.timestamp).toLocaleDateString('es-CO')}</p>
+                                                                        <p className="text-sm font-semibold text-tinta mt-0.5">👷 {worker}</p>
+                                                                        {proj && <p className="text-xs text-marca-oscuro mt-0.5">📁 {proj}</p>}
                                                                     </div>
                                                                     <span className={`text-[10px] font-black px-2 py-0.5 rounded-full flex-shrink-0 ${CONDITION_COLOR[cond]}`}>{CONDITION_LABEL[cond]}</span>
                                                                 </div>
-                                                                {m.returnNotes && <p className="text-xs text-gray-600 mt-2 bg-white rounded-lg px-2 py-1.5 border border-gray-100 italic">"{m.returnNotes}"</p>}
+                                                                {m.returnNotes && <p className="text-xs text-tinta-suave mt-2 bg-papel rounded-lg px-2 py-1.5 border border-papel-borde italic">"{m.returnNotes}"</p>}
                                                             </div>
                                                         </div>
                                                     );

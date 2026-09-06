@@ -174,22 +174,22 @@ export const LoansView: React.FC<LoansViewProps> = ({
         const marcadoPrestamo = !!mov.isLoan && !mov.isReturned;
 
         return (
-            <div className="py-2 border-l-2 border-gray-200 pl-3 flex items-center gap-2">
+            <div className="py-2 border-l-2 border-papel-borde pl-3 flex items-center gap-2">
                 <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-800 truncate">{getPersonName(mov.personnelId)}</p>
-                    <p className="text-xs text-gray-400">{new Date(mov.timestamp).toLocaleDateString('es-CO')}</p>
+                    <p className="text-sm font-semibold text-tinta truncate">{getPersonName(mov.personnelId)}</p>
+                    <p className="text-xs text-tinta-tenue">{new Date(mov.timestamp).toLocaleDateString('es-CO')}</p>
                 </div>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 bg-emerald-100 text-emerald-800">
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 bg-bien-suave text-bien">
                     ×{mov.quantity} {item?.unit ?? 'ud'}
                 </span>
                 {marcadoPrestamo && (
                     <>
-                        <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full flex-shrink-0">
+                        <span className="text-[10px] font-bold bg-atencion-suave text-atencion px-1.5 py-0.5 rounded-full flex-shrink-0">
                             marcado como préstamo
                         </span>
                         {isOwner && (
                             <button onClick={() => handleReturn(mov)}
-                                className="py-1 px-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold rounded-lg transition-all flex-shrink-0">
+                                className="py-1 px-2 bg-marca hover:bg-marca-fuerte text-tinta text-[10px] font-bold rounded-lg transition-all flex-shrink-0">
                                 ✓
                             </button>
                         )}
@@ -204,11 +204,11 @@ export const LoansView: React.FC<LoansViewProps> = ({
 
         const days = getDays(loan.timestamp);
         const isPending = !!loan.pendingPickup;
-        let rowClass = 'border-l-2 border-gray-200 pl-3';
-        let daysBadge = 'bg-green-100 text-green-800';
-        if (isPending)      { rowClass = 'border-l-2 border-indigo-400 pl-3'; daysBadge = 'bg-indigo-100 text-indigo-700'; }
-        else if (days > 14) { rowClass = 'border-l-2 border-red-400 pl-3';    daysBadge = 'bg-red-100 text-red-800'; }
-        else if (days > 7)  { rowClass = 'border-l-2 border-yellow-400 pl-3'; daysBadge = 'bg-yellow-100 text-yellow-800'; }
+        let rowClass = 'border-l-2 border-papel-borde pl-3';
+        let daysBadge = 'bg-bien-suave text-bien';
+        if (isPending)      { rowClass = 'border-l-2 border-marca pl-3'; daysBadge = 'bg-marca-suave text-marca-oscuro'; }
+        else if (days > 14) { rowClass = 'border-l-2 border-alerta pl-3';    daysBadge = 'bg-alerta-suave text-alerta'; }
+        else if (days > 7)  { rowClass = 'border-l-2 border-atencion pl-3'; daysBadge = 'bg-atencion-suave text-atencion'; }
 
         // El nombre va SOLO en su renglón. Antes competía en la misma línea con la
         // cantidad, los días, la etiqueta "Recoger", dos botones y un selector de
@@ -216,18 +216,22 @@ export const LoansView: React.FC<LoansViewProps> = ({
         // hilito encima de la fecha— y el botón de devolver se salía de la tarjeta.
         // Saber QUIÉN la tiene es la única razón por la que existe esta pantalla.
         return (
-            <div className={`py-2 ${rowClass} space-y-1.5`}>
+            <div className={`py-1.5 ${rowClass} space-y-1`}>
+                {/* El nombre, los días y la fecha en UN renglón. Cada préstamo
+                    gastaba 209 px para una línea de información: nombre arriba,
+                    fecha en otra, botones en otra y el selector en una cuarta.
+                    El `truncate` con `min-w-0` es lo que impide que el nombre
+                    invada lo de al lado — no hace falta partirlo en renglones. */}
                 <div className="flex items-baseline gap-2">
-                    <p className="flex-1 min-w-0 text-sm font-bold text-gray-900 truncate">
+                    <p className="min-w-0 text-sm font-bold text-tinta truncate" title={getPersonName(loan.personnelId)}>
                         {getPersonName(loan.personnelId)}
                     </p>
-                    {isPending && <span className="text-[10px] font-black bg-indigo-600 text-white px-1.5 py-0.5 rounded-full flex-shrink-0">Recoger</span>}
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${daysBadge}`}>{days}d</span>
+                    <span className="flex-1 min-w-0 text-[11px] text-tinta-tenue truncate">
+                        {new Date(loan.timestamp).toLocaleDateString('es-CO')} · ×{loan.quantity}
+                    </span>
+                    {isPending && <span className="text-[10px] font-black bg-marca text-tinta px-1.5 py-0.5 rounded-full flex-shrink-0">Recoger</span>}
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${daysBadge}`}>{days}d</span>
                 </div>
-
-                <p className="text-xs text-gray-400">
-                    {new Date(loan.timestamp).toLocaleDateString('es-CO')} · ×{loan.quantity}
-                </p>
 
                 {/* Lo que salió pegado a la herramienta. Acá se corrige y se quita:
                     antes solo se podía añadir, y un accesorio enganchado por error
@@ -235,21 +239,23 @@ export const LoansView: React.FC<LoansViewProps> = ({
                 <AccesoriosDeItem item={itemMap.get(loan.itemId)}
                     onEditItem={isOwner ? onEditItem : undefined} onBehaviorLog={onBehaviorLog} />
 
-                <div className="flex flex-wrap gap-1.5 items-center pt-0.5">
+                {/* Los tres en UNA línea. Envolviéndose gastaban 66 px de los 103
+                    de la fila: dos renglones de botones para dos botones. */}
+                <div className="flex flex-nowrap gap-1 items-center pt-0.5">
                     {isOwner && (
                         <button onClick={() => handleReturn(loan)}
-                            className="py-1.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-black rounded-lg transition-all">
+                            className="flex-shrink-0 py-1.5 px-2.5 bg-marca hover:bg-marca-fuerte text-tinta text-[11px] font-black rounded-lg transition-all">
                             ✓ Devolver
                         </button>
                     )}
                     {!isPending ? (
                         <button onClick={() => { onBehaviorLog?.('ACTION', `Marcó recoger: ${getItemName(loan.itemId)}`); onMarkPendingPickup(loan.id, true); }}
-                            className="py-1.5 px-3 bg-gray-100 hover:bg-indigo-50 text-indigo-600 text-[11px] font-bold rounded-lg transition-all">
-                            📍 A recoger
+                            className="flex-shrink-0 py-1.5 px-2.5 bg-papel-hondo hover:bg-marca-suave text-marca-oscuro text-[11px] font-bold rounded-lg transition-all">
+                            📍 Recoger
                         </button>
                     ) : (
                         <button onClick={() => { onMarkPendingPickup(loan.id, false); }}
-                            className="py-1.5 px-3 bg-indigo-50 text-indigo-500 text-[11px] font-bold rounded-lg transition-all">
+                            className="flex-shrink-0 py-1.5 px-2.5 bg-marca-suave text-marca-oscuro text-[11px] font-bold rounded-lg transition-all">
                             ✕ Cancelar
                         </button>
                     )}
@@ -267,10 +273,10 @@ export const LoansView: React.FC<LoansViewProps> = ({
 
     return (
         <div className="relative">
-            <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm pr-8">
-                <div className="flex items-center mb-4">
-                    <button onClick={onGoBack} className="mr-4 p-2 rounded-full hover:bg-gray-100">
-                        <ArrowLeftIcon className="w-5 h-5 text-gray-600" />
+            <div className="bg-papel p-2.5 md:p-6 rounded-2xl shadow-sm pr-8">
+                <div className="flex items-center mb-1.5 md:mb-4">
+                    <button onClick={onGoBack} className="mr-2 md:mr-4 p-1 md:p-2 rounded-full hover:bg-papel-hondo flex-shrink-0">
+                        <ArrowLeftIcon className="w-5 h-5 text-tinta-suave" />
                     </button>
                     <div className="flex-1 min-w-0">
                         {/* El toggle de lente. Ojo: NO es la flecha de la izquierda,
@@ -285,32 +291,34 @@ export const LoansView: React.FC<LoansViewProps> = ({
                             className="group flex items-center gap-2 text-left"
                             title="Cambiar entre préstamos y consumo"
                         >
-                            <h2 className="text-xl font-black text-gray-900 flex items-center gap-2">
+                            {/* No se puede quitar como el título de Inventario: ESTE es
+                                el botón que alterna préstamos y consumidos. Se compacta. */}
+                            <h2 className="text-sm md:text-xl font-black text-tinta flex items-center gap-1.5">
                                 {isConsumedLens
-                                    ? <span className="text-2xl leading-none">📦</span>
-                                    : <ClockIcon className="w-6 h-6 text-indigo-600" />}
-                                {isConsumedLens ? 'Elementos Consumidos' : 'Préstamos Activos'}
+                                    ? <span className="text-base md:text-2xl leading-none">📦</span>
+                                    : <ClockIcon className="w-4 h-4 md:w-6 md:h-6 text-marca-oscuro" />}
+                                {isConsumedLens ? 'Consumidos' : 'Préstamos'}
                             </h2>
-                            <span className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-gray-100 text-gray-500 text-xs font-black group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors">
+                            <span className="flex-shrink-0 w-5 h-5 md:w-6 md:h-6 flex items-center justify-center rounded-full bg-papel-hondo text-tinta-tenue text-xs font-black group-hover:bg-marca-suave group-hover:text-marca-oscuro transition-colors">
                                 ›
                             </span>
                         </button>
-                        <p className="text-xs text-gray-500">
+                        <p className="text-[11px] text-tinta-tenue leading-tight">
                             {isConsumedLens
-                                ? `${totalUnidades} unidad(es) consumidas · no vuelven a bodega`
-                                : `${totalUnidades} herramienta(s) fuera de bodega · agrupadas por ítem`}
+                                ? `${totalUnidades} consumidas · no vuelven`
+                                : `${totalUnidades} fuera de bodega`}
                         </p>
                     </div>
                 </div>
 
                 {/* Chips de tipo */}
-                <div className="flex gap-2 overflow-x-auto pb-1 mb-3 scrollbar-hide">
+                <div className="flex gap-1.5 overflow-x-auto pb-0.5 mb-1.5 md:mb-3 scrollbar-hide">
                     {INV_FILTERS.map(f => (
                         <button key={f.key} onClick={() => { setTypeFilter(f.key); onBehaviorLog?.('FILTER', `Filtro préstamos: ${f.label}`); }}
                             className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-black transition-all ${
                                 typeFilter === f.key
-                                    ? 'bg-indigo-600 text-white shadow-sm'
-                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                    ? 'bg-marca text-tinta shadow-sm'
+                                    : 'bg-papel-hondo text-tinta-suave hover:bg-papel-borde'
                             }`}>
                             {f.label}
                         </button>
@@ -319,26 +327,28 @@ export const LoansView: React.FC<LoansViewProps> = ({
 
                 {/* Búsqueda */}
                 {activeLoans.length > 0 && (
-                    <div className="relative mb-4">
-                        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="relative mb-1.5 md:mb-4">
+                        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-tinta-tenue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                         </svg>
                         <input type="text" value={search} onChange={e => setSearch(e.target.value)}
                             placeholder={isConsumedLens ? 'Buscar material o persona...' : 'Buscar herramienta o persona...'}
-                            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                            className="w-full pl-9 pr-3 py-2 text-sm border border-papel-borde rounded-xl focus:outline-none focus:ring-2 focus:ring-marca"
                             autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} />
                     </div>
                 )}
 
                 {activeLoans.length === 0 ? (
-                    <div className="text-center py-16 text-gray-400">
+                    <div className="text-center py-16 text-tinta-tenue">
                         <p className="text-4xl mb-3">{isConsumedLens ? '📦' : '🎉'}</p>
                         <p className="font-semibold">{isConsumedLens ? 'Sin consumo registrado' : '¡Todo está en bodega!'}</p>
                     </div>
                 ) : filteredLoans.length === 0 ? (
-                    <p className="text-center py-10 text-gray-400 text-sm">Sin resultados.</p>
+                    <p className="text-center py-10 text-tinta-tenue text-sm">Sin resultados.</p>
                 ) : (
-                    <div className="space-y-4">
+                    // Antes: 16 px entre familias, encabezado alto y más relleno
+                    // adentro — 209 px por herramienta para una línea de información.
+                    <div className="space-y-1.5">
                         {genusGroups.map(({ genus, species }) => {
                             const letter = genus.charAt(0).toUpperCase();
                             const isFirst = !seenGenusLetters.has(letter);
@@ -349,26 +359,26 @@ export const LoansView: React.FC<LoansViewProps> = ({
                             return (
                                 <div
                                     key={genus}
-                                    className="rounded-xl border border-gray-100 bg-gray-50 overflow-hidden"
+                                    className="rounded-xl border border-papel-borde bg-papel-hondo overflow-hidden"
                                     {...(isFirst ? { 'data-tool-letter': letter } : {})}
                                 >
                                     {/* Genus header */}
-                                    <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-100">
+                                    <div className="flex items-center justify-between px-3 py-1.5 bg-papel border-b border-papel-borde">
                                         <button type="button" className="min-w-0 flex-1 text-left"
                                             disabled={!onItemHistory || !species[0]}
                                             onClick={() => { if (species[0]) { onBehaviorLog?.('BUTTON', `Historial desde préstamos: ${genus}`); onItemHistory?.(species[0].item); } }}>
                                             {/* Desde Préstamos no había forma de ver el histórico de una
                                                 herramienta: onItemHistory llegaba a Historial y a Inventario,
                                                 pero no acá. */}
-                                            <p className="font-black text-gray-900 text-sm leading-snug">
-                                                {emoji} {genus}{onItemHistory && <span className="ml-1 text-gray-300 font-normal">›</span>}
+                                            <p className="font-black text-tinta text-sm leading-snug">
+                                                {emoji} {genus}{onItemHistory && <span className="ml-1 text-tinta-tenue font-normal">›</span>}
                                             </p>
                                             {species.length > 1 && (
-                                                <p className="text-[10px] text-gray-400">{species.length} especies</p>
+                                                <p className="text-[10px] text-tinta-tenue">{species.length} especies</p>
                                             )}
                                         </button>
                                         <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isConsumedLens ? 'bg-emerald-100 text-emerald-700' : 'bg-indigo-100 text-indigo-700'}`}>
+                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isConsumedLens ? 'bg-bien-suave text-bien' : 'bg-marca-suave text-marca-oscuro'}`}>
                                                 {totalLoans} {isConsumedLens
                                                     ? `consumida${totalLoans !== 1 ? 's' : ''}`
                                                     : `prestada${totalLoans !== 1 ? 's' : ''}`}
@@ -376,13 +386,13 @@ export const LoansView: React.FC<LoansViewProps> = ({
                                         </div>
                                     </div>
                                     {/* Species → Loan rows */}
-                                    <div className="px-4 py-2 space-y-3">
+                                    <div className="px-3 py-1.5 space-y-1.5">
                                         {species.map(({ item, loans }) => (
                                             <div key={item.id}>
                                                 {species.length > 1 && (
-                                                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-wide mb-1">
+                                                    <p className="text-[10px] font-black text-tinta-tenue uppercase tracking-wide mb-1">
                                                         {item.name.match(/\(([^)]+)\)/)?.[1] ?? item.name}
-                                                        <span className="ml-1 font-normal text-gray-400">· stock {item.quantity}</span>
+                                                        <span className="ml-1 font-normal text-tinta-tenue">· stock {item.quantity}</span>
                                                     </p>
                                                 )}
                                                 <div className="space-y-1">
@@ -413,8 +423,8 @@ export const LoansView: React.FC<LoansViewProps> = ({
                                 disabled={!active}
                                 className={`w-5 h-5 flex items-center justify-center text-[10px] font-black rounded-full transition-all ${
                                     active
-                                        ? 'text-indigo-600 hover:text-white hover:bg-indigo-500 cursor-pointer'
-                                        : 'text-gray-300 cursor-default'
+                                        ? 'text-marca-oscuro hover:text-tinta hover:bg-marca cursor-pointer'
+                                        : 'text-tinta-tenue cursor-default'
                                 }`}
                             >
                                 {letter}

@@ -49,9 +49,9 @@ export const AccessoriesEditor: React.FC<Props> = ({ value, onChange, items }) =
 
     return (
         <div className="space-y-2">
-            <label className="block text-sm font-medium text-gray-700">
+            <label className="block text-sm font-medium text-tinta-suave">
                 Accesorios
-                <span className="block text-xs font-normal text-gray-500">
+                <span className="block text-xs font-normal text-tinta-tenue">
                     Lo que sale con la herramienta. Los retornables se revisan al devolverla; los consumibles descuentan stock.
                 </span>
             </label>
@@ -59,7 +59,7 @@ export const AccessoriesEditor: React.FC<Props> = ({ value, onChange, items }) =
             {value.length > 0 && (
                 <div className="space-y-1.5">
                     {value.map((acc, idx) => (
-                        <div key={idx} className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5">
+                        <div key={idx} className="flex items-center gap-1.5 bg-papel-hondo border border-papel-borde rounded-lg px-2 py-1.5">
                             {acc.itemId ? (
                                 <>
                                     <span className="text-sm flex-shrink-0" title="Se gasta">📦</span>
@@ -69,7 +69,7 @@ export const AccessoriesEditor: React.FC<Props> = ({ value, onChange, items }) =
                                             const it = consumibles.find(c => c.id === e.target.value);
                                             cambiar(idx, { itemId: e.target.value, nombre: it?.name ?? acc.nombre });
                                         }}
-                                        className="flex-1 min-w-0 text-xs border border-gray-200 rounded-md px-1.5 py-1 bg-white"
+                                        className="flex-1 min-w-0 text-xs border border-papel-borde rounded-md px-1.5 py-1 bg-papel"
                                     >
                                         {consumibles.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                     </select>
@@ -77,7 +77,7 @@ export const AccessoriesEditor: React.FC<Props> = ({ value, onChange, items }) =
                                         type="number" min={1} value={acc.cantidad ?? 1}
                                         onFocus={e => e.target.select()}
                                         onChange={e => cambiar(idx, { cantidad: Math.max(1, parseInt(e.target.value) || 1) })}
-                                        className="w-12 text-xs text-center border border-gray-200 rounded-md px-1 py-1 bg-white flex-shrink-0"
+                                        className="w-12 text-xs text-center border border-papel-borde rounded-md px-1 py-1 bg-papel flex-shrink-0"
                                         title="Cuántos salen por cada herramienta"
                                     />
                                 </>
@@ -87,12 +87,12 @@ export const AccessoriesEditor: React.FC<Props> = ({ value, onChange, items }) =
                                     <input
                                         type="text" value={acc.nombre}
                                         onChange={e => cambiar(idx, { nombre: e.target.value })}
-                                        className="flex-1 min-w-0 text-xs border border-gray-200 rounded-md px-1.5 py-1 bg-white"
+                                        className="flex-1 min-w-0 text-xs border border-papel-borde rounded-md px-1.5 py-1 bg-papel"
                                     />
                                 </>
                             )}
                             <button type="button" onClick={() => quitar(idx)}
-                                className="text-gray-400 hover:text-red-500 px-1 flex-shrink-0" title="Quitar">✕</button>
+                                className="text-tinta-tenue hover:text-alerta px-1 flex-shrink-0" title="Quitar">✕</button>
                         </div>
                     ))}
                 </div>
@@ -105,16 +105,16 @@ export const AccessoriesEditor: React.FC<Props> = ({ value, onChange, items }) =
                     // Enter agregaría el accesorio Y enviaría el formulario del ítem: se corta acá.
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); agregarRetornable(); } }}
                     placeholder="Ej: Maleta, llave, cargador"
-                    className="flex-1 min-w-0 text-xs border border-gray-200 rounded-lg px-2 py-1.5"
+                    className="flex-1 min-w-0 text-xs border border-papel-borde rounded-lg px-2 py-1.5"
                 />
                 <button type="button" onClick={agregarRetornable}
-                    className="text-xs font-bold px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg flex-shrink-0">
+                    className="text-xs font-bold px-2.5 py-1.5 bg-papel-hondo hover:bg-papel-borde text-tinta-suave rounded-lg flex-shrink-0">
                     🔁 Vuelve
                 </button>
                 <button type="button" onClick={agregarConsumible}
                     disabled={consumibles.length === 0}
                     title={consumibles.length === 0 ? 'Primero creá un consumible en el inventario' : 'Agregar un consumible que sale con la herramienta'}
-                    className="text-xs font-bold px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 disabled:opacity-40 text-gray-700 rounded-lg flex-shrink-0">
+                    className="text-xs font-bold px-2.5 py-1.5 bg-papel-hondo hover:bg-papel-borde disabled:opacity-40 text-tinta-suave rounded-lg flex-shrink-0">
                     📦 Se gasta
                 </button>
             </div>

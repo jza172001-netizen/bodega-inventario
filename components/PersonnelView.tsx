@@ -84,16 +84,16 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
     return (
         <>
             <div className="relative">
-            <div className="bg-white p-6 rounded-xl shadow-md pr-10">
+            <div className="bg-papel p-6 rounded-xl shadow-md pr-10">
                 <div className="flex justify-between items-center mb-4">
                     <div className="flex items-center">
-                        <button onClick={onGoBack} className="mr-4 p-2 rounded-full hover:bg-gray-100">
-                            <ArrowLeftIcon className="w-6 h-6 text-gray-600" />
+                        <button onClick={onGoBack} className="mr-4 p-2 rounded-full hover:bg-papel-hondo">
+                            <ArrowLeftIcon className="w-6 h-6 text-tinta-suave" />
                         </button>
-                        <h2 className="text-xl font-semibold text-gray-800">Personal</h2>
+                        <h2 className="text-xl font-semibold text-tinta">Personal</h2>
                     </div>
                     {isOwner && (
-                        <button onClick={openAddPersonnelModal} className="flex items-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">
+                        <button onClick={openAddPersonnelModal} className="flex items-center bg-marca hover:bg-marca-fuerte text-tinta font-bold py-2 px-4 rounded-lg">
                             <PlusIcon className="w-5 h-5 mr-2" />
                             Añadir
                         </button>
@@ -119,20 +119,20 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
                             <div
                                 key={p.id}
                                 onClick={() => { onBehaviorLog?.('NAV', `Abrió detalle: ${p.name}`); setDetailPerson(p); }}
-                                className="p-4 border rounded-xl bg-gray-50 hover:bg-blue-50 hover:border-blue-200 cursor-pointer transition-all"
+                                className="p-4 border rounded-xl bg-papel-hondo hover:bg-marca-suave hover:border-marca-borde cursor-pointer transition-all"
                                 {...(isFirst ? { 'data-person-letter': letter } : {})}
                             >
                                 <div className="flex items-start justify-between gap-2">
                                     <div className="flex items-center space-x-3 min-w-0 flex-1">
-                                        <div className="w-10 h-10 rounded-full bg-blue-200 text-blue-600 flex items-center justify-center font-bold text-lg flex-shrink-0">
+                                        <div className="w-10 h-10 rounded-full bg-marca-suave text-marca-oscuro flex items-center justify-center font-bold text-lg flex-shrink-0">
                                             {p.name.charAt(0)}
                                         </div>
                                         <div className="min-w-0">
-                                            <span className="font-medium text-gray-700 truncate block" title={p.name}>{p.name}</span>
+                                            <span className="font-medium text-tinta-suave truncate block" title={p.name}>{p.name}</span>
                                             {p.phone ? (
-                                                <span className="text-[10px] text-gray-400 truncate block" translate="no">{p.phone}</span>
+                                                <span className="text-[10px] text-tinta-tenue truncate block" translate="no">{p.phone}</span>
                                             ) : (
-                                                <span className="text-[10px] text-gray-300 block">Sin teléfono</span>
+                                                <span className="text-[10px] text-tinta-tenue block">Sin teléfono</span>
                                             )}
                                         </div>
                                     </div>
@@ -143,14 +143,14 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
                                             <>
                                                 <button
                                                     onClick={e => openEdit(e, p)}
-                                                    className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                                    className="p-1.5 text-tinta-tenue hover:text-marca-oscuro hover:bg-marca-suave rounded-lg transition-colors"
                                                     title="Editar"
                                                 >
                                                     <EditIcon className="w-4 h-4" />
                                                 </button>
                                                 <button
                                                     onClick={e => handleDelete(e, p)}
-                                                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                    className="p-1.5 text-tinta-tenue hover:text-alerta hover:bg-alerta-suave rounded-lg transition-colors"
                                                     title="Eliminar"
                                                 >
                                                     <TrashIcon className="w-4 h-4" />
@@ -162,7 +162,7 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
 
                                 {subWorkers.length > 0 && (
                                     <div className="flex flex-wrap gap-1 mt-2">
-                                        <span className="text-[9px] font-bold bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-full">
+                                        <span className="text-[9px] font-bold bg-marca-suave text-marca-oscuro px-1.5 py-0.5 rounded-full">
                                             Oficial · {subWorkers.length} trabajador{subWorkers.length !== 1 ? 'es' : ''}
                                         </span>
                                         {/* Clicables: desde el oficial se llega a la ficha
@@ -170,20 +170,20 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
                                         {subWorkers.slice(0, 2).map(w => (
                                             <button key={w.id} type="button"
                                                 onClick={e => { e.stopPropagation(); setDetailPerson(w); }}
-                                                className="text-[9px] bg-gray-100 hover:bg-indigo-100 text-gray-600 hover:text-indigo-700 px-1.5 py-0.5 rounded-full truncate max-w-[80px] transition-colors">
+                                                className="text-[9px] bg-papel-hondo hover:bg-marca-suave text-tinta-suave hover:text-marca-oscuro px-1.5 py-0.5 rounded-full truncate max-w-[80px] transition-colors">
                                                 {w.name.split(' ')[0]}
                                             </button>
                                         ))}
-                                        {subWorkers.length > 2 && <span className="text-[9px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full">+{subWorkers.length - 2}</span>}
+                                        {subWorkers.length > 2 && <span className="text-[9px] bg-papel-hondo text-tinta-suave px-1.5 py-0.5 rounded-full">+{subWorkers.length - 2}</span>}
                                     </div>
                                 )}
                                 {activeItems.length > 0 && (
                                     <div className="flex flex-wrap gap-1 mt-2">
                                         {visibleChips.map((item, i) => (
-                                            <span key={i} className="text-[10px] font-semibold bg-yellow-100 text-yellow-800 border border-yellow-200 px-1.5 py-0.5 rounded-full truncate max-w-[120px]" title={item.name}>{item.name}</span>
+                                            <span key={i} className="text-[10px] font-semibold bg-atencion-suave text-atencion border border-atencion px-1.5 py-0.5 rounded-full truncate max-w-[120px]" title={item.name}>{item.name}</span>
                                         ))}
                                         {extra > 0 && (
-                                            <span className="text-[10px] font-semibold bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded-full">+{extra} más</span>
+                                            <span className="text-[10px] font-semibold bg-papel-borde text-tinta-suave px-1.5 py-0.5 rounded-full">+{extra} más</span>
                                         )}
                                     </div>
                                 )}
@@ -193,14 +193,14 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
                 </div>
 
                 {personnel.length === 0 && (
-                    <div className="text-center py-10 text-gray-500">
+                    <div className="text-center py-10 text-tinta-tenue">
                         <p>No hay personal registrado.</p>
                     </div>
                 )}
             </div>
 
             {/* Índice A-Z lateral derecho */}
-            <div translate="no" aria-hidden="true" className="fixed right-0 top-1/2 -translate-y-1/2 flex flex-col items-center gap-0.5 z-[60] bg-white rounded-l-lg py-1 px-1 shadow-md border-l border-gray-100 overflow-hidden">
+            <div translate="no" aria-hidden="true" className="fixed right-0 top-1/2 -translate-y-1/2 flex flex-col items-center gap-0.5 z-[60] bg-papel rounded-l-lg py-1 px-1 shadow-md border-l border-papel-borde overflow-hidden">
                 {ALPHABET.map(letter => {
                     const active = activeLetters.has(letter);
                     return (
@@ -211,8 +211,8 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
                             disabled={!active}
                             className={`w-5 h-5 flex items-center justify-center text-[10px] font-black rounded-full transition-all ${
                                 active
-                                    ? 'text-blue-600 hover:text-white hover:bg-blue-500 cursor-pointer'
-                                    : 'text-gray-300 cursor-default'
+                                    ? 'text-marca-oscuro hover:text-tinta hover:bg-marca cursor-pointer'
+                                    : 'text-tinta-tenue cursor-default'
                             }`}
                         >
                             {letter}

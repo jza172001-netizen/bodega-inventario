@@ -122,9 +122,9 @@ export const PickupView: React.FC<Props> = ({
 
     if (pending.length === 0) {
         return (
-            <div className="text-center py-24 text-gray-400">
+            <div className="text-center py-24 text-tinta-tenue">
                 <p className="text-4xl mb-3">✅</p>
-                <p className="font-semibold text-gray-600">Nada pendiente de recoger</p>
+                <p className="font-semibold text-tinta-suave">Nada pendiente de recoger</p>
                 <p className="text-sm mt-1">Cuando marques un préstamo como "Ir a recoger" aparecerá aquí.</p>
             </div>
         );
@@ -135,13 +135,13 @@ export const PickupView: React.FC<Props> = ({
             {/* Header */}
             <div className="space-y-3">
                 <div>
-                    <h1 className="text-xl font-black text-gray-900">📍 A Recoger</h1>
-                    <p className="text-xs text-gray-400 mt-0.5">
+                    <h1 className="text-xl font-black text-tinta">📍 A Recoger</h1>
+                    <p className="text-xs text-tinta-tenue mt-0.5">
                         {pending.length} herramienta{pending.length !== 1 ? 's' : ''} marcada{pending.length !== 1 ? 's' : ''} para recoger
                     </p>
                 </div>
-                <div className="bg-green-50 border border-green-100 rounded-2xl p-3 space-y-2">
-                    <div className="flex gap-1 bg-white border border-green-200 rounded-xl p-1">
+                <div className="bg-bien-suave border border-bien rounded-2xl p-3 space-y-2">
+                    <div className="flex gap-1 bg-papel border border-bien rounded-xl p-1">
                         {([
                             ['tenedor',   'Avisarle a quien la tiene'],
                             ['mensajero', 'Mandar a alguien a recogerlas'],
@@ -149,7 +149,7 @@ export const PickupView: React.FC<Props> = ({
                             <button key={k} type="button"
                                 onClick={() => { setModoAviso(k); onBehaviorLog?.('FILTER', `Modo de aviso: ${label}`); }}
                                 className={`flex-1 py-1.5 text-[10px] font-black rounded-lg transition-all ${
-                                    modoAviso === k ? 'bg-green-600 text-white' : 'text-gray-500 hover:bg-green-50'
+                                    modoAviso === k ? 'bg-bien text-papel' : 'text-tinta-tenue hover:bg-bien-suave'
                                 }`}>
                                 {label}
                             </button>
@@ -158,11 +158,11 @@ export const PickupView: React.FC<Props> = ({
 
                     {modoAviso === 'tenedor' ? (
                         <div className="space-y-1.5">
-                            <p className="text-[10px] font-black text-green-700 uppercase tracking-widest">
+                            <p className="text-[10px] font-black text-bien uppercase tracking-widest">
                                 A cada uno lo suyo
                             </p>
                             {porTenedor.length === 0 && (
-                                <p className="text-xs text-gray-400 py-1">Nada marcado con trabajador asignado.</p>
+                                <p className="text-xs text-tinta-tenue py-1">Nada marcado con trabajador asignado.</p>
                             )}
                             {porTenedor.map(({ persona, loans }) => (
                                 <button key={persona.id} type="button"
@@ -174,12 +174,12 @@ export const PickupView: React.FC<Props> = ({
                                     })}
                                     className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-left transition-all ${
                                         persona.phone
-                                            ? 'bg-white border border-green-200 hover:border-green-400'
-                                            : 'bg-gray-50 border border-gray-200 opacity-60 cursor-not-allowed'
+                                            ? 'bg-papel border border-bien hover:border-bien'
+                                            : 'bg-papel-hondo border border-papel-borde opacity-60 cursor-not-allowed'
                                     }`}>
                                     <span className="flex-1 min-w-0">
-                                        <span className="block text-sm font-bold text-gray-800 truncate">{persona.name}</span>
-                                        <span className="block text-[10px] text-gray-400">
+                                        <span className="block text-sm font-bold text-tinta truncate">{persona.name}</span>
+                                        <span className="block text-[10px] text-tinta-tenue">
                                             {loans.length} herramienta{loans.length !== 1 ? 's' : ''}
                                             {!persona.phone && ' · sin teléfono'}
                                         </span>
@@ -190,7 +190,7 @@ export const PickupView: React.FC<Props> = ({
                         </div>
                     ) : (
                     <>
-                    <p className="text-[10px] font-black text-green-700 uppercase tracking-widest">¿A quién le encargamos recogerlas?</p>
+                    <p className="text-[10px] font-black text-bien uppercase tracking-widest">¿A quién le encargamos recogerlas?</p>
                     <select
                         value={selectedRecipient?.id ?? ''}
                         onChange={e => {
@@ -198,7 +198,7 @@ export const PickupView: React.FC<Props> = ({
                             const p = personnel.find(x => x.id === e.target.value);
                             if (p) onBehaviorLog?.('ACTION', `Destinatario de recogida: ${p.name}`);
                         }}
-                        className="w-full text-sm border border-green-200 rounded-xl px-3 py-2 bg-white focus:ring-2 focus:ring-green-400 outline-none text-gray-700 font-semibold"
+                        className="w-full text-sm border border-bien rounded-xl px-3 py-2 bg-papel focus:ring-2 focus:ring-bien outline-none text-tinta-suave font-semibold"
                     >
                         <option value="">— Elegir trabajador —</option>
                         {[...personnel]
@@ -216,8 +216,8 @@ export const PickupView: React.FC<Props> = ({
                         onClick={() => setConfirmandoAviso(true)}
                         className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-black text-sm transition-all w-full ${
                             waUrl
-                                ? 'bg-green-600 hover:bg-green-700 text-white shadow-sm'
-                                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                ? 'bg-bien hover:bg-bien text-papel shadow-sm'
+                                : 'bg-papel-hondo text-tinta-tenue cursor-not-allowed'
                         }`}
                     >
                         📲 {selectedRecipient ? `Encargarle a ${selectedRecipient.name.split(' ')[0]}` : 'Selecciona un trabajador'}
@@ -233,8 +233,8 @@ export const PickupView: React.FC<Props> = ({
                     <button key={f.key} onClick={() => setTypeFilter(f.key)}
                         className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-black transition-all ${
                             typeFilter === f.key
-                                ? 'bg-indigo-600 text-white shadow-sm'
-                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                ? 'bg-marca text-tinta shadow-sm'
+                                : 'bg-papel-hondo text-tinta-suave hover:bg-papel-borde'
                         }`}>
                         {f.label}
                     </button>
@@ -242,18 +242,18 @@ export const PickupView: React.FC<Props> = ({
             </div>
 
             {filtered.length === 0 ? (
-                <p className="text-center py-10 text-gray-400 text-sm">Sin resultados para ese tipo.</p>
+                <p className="text-center py-10 text-tinta-tenue text-sm">Sin resultados para ese tipo.</p>
             ) : (
                 byWorker.map(({ name, loans }) => (
-                    <div key={name} className="bg-white rounded-2xl border border-indigo-100 overflow-hidden shadow-sm">
-                        <div className="bg-indigo-700 px-4 py-2.5 flex items-center gap-2">
-                            <span className="w-7 h-7 rounded-full bg-white/20 text-white flex items-center justify-center font-black text-sm">
+                    <div key={name} className="bg-papel rounded-2xl border border-marca-borde overflow-hidden shadow-sm">
+                        <div className="bg-marca-fuerte px-4 py-2.5 flex items-center gap-2">
+                            <span className="w-7 h-7 rounded-full bg-papel/20 text-tinta flex items-center justify-center font-black text-sm">
                                 {name.charAt(0)}
                             </span>
-                            <p className="text-sm font-black text-white">{name}</p>
-                            <span className="ml-auto text-xs font-bold text-indigo-200">{loans.length} ítem{loans.length !== 1 ? 's' : ''}</span>
+                            <p className="text-sm font-black text-tinta">{name}</p>
+                            <span className="ml-auto text-xs font-bold text-tinta">{loans.length} ítem{loans.length !== 1 ? 's' : ''}</span>
                         </div>
-                        <div className="divide-y divide-gray-50">
+                        <div className="divide-y divide-papel-borde">
                             {loans.map(m => {
                                 const it   = itemMap.get(m.itemId);
                                 const days = getDays(m.timestamp);
@@ -261,8 +261,8 @@ export const PickupView: React.FC<Props> = ({
                                 return (
                                     <div key={m.id} className="flex items-center gap-3 px-4 py-3">
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-bold text-gray-900 truncate">{it?.name ?? 'Herramienta'}</p>
-                                            <p className="text-xs text-gray-500">
+                                            <p className="text-sm font-bold text-tinta truncate">{it?.name ?? 'Herramienta'}</p>
+                                            <p className="text-xs text-tinta-tenue">
                                                 x{m.quantity} · {days}d fuera{proj ? ` · ${proj}` : ''}
                                             </p>
                                         </div>
@@ -270,13 +270,13 @@ export const PickupView: React.FC<Props> = ({
                                             {isOwner && (
                                                 <button
                                                     onClick={() => setCancelingPickup({ movementId: m.id, itemName: it?.name ?? 'esta herramienta' })}
-                                                    className="text-xs px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold rounded-xl transition-all"
+                                                    className="text-xs px-2.5 py-1.5 bg-papel-hondo hover:bg-papel-borde text-tinta-suave font-bold rounded-xl transition-all"
                                                     title="Quitar de la lista">
                                                     ✕
                                                 </button>
                                             )}
                                             <button onClick={() => { onBehaviorLog?.('BUTTON', `Confirmó recogida: ${it?.name ?? 'herramienta'}`); setReturningMovement(m); }}
-                                                className="text-xs px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-all">
+                                                className="text-xs px-2.5 py-1.5 bg-marca hover:bg-marca-fuerte text-tinta font-bold rounded-xl transition-all">
                                                 ✓ Recogida
                                             </button>
                                         </div>
@@ -288,7 +288,7 @@ export const PickupView: React.FC<Props> = ({
                 ))
             )}
 
-            <p className="text-[10px] text-gray-400 text-center">
+            <p className="text-[10px] text-tinta-tenue text-center">
                 Elige el trabajador y toca "📲 Avisar" para enviar la lista por WhatsApp.
             </p>
 

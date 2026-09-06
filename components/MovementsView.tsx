@@ -154,35 +154,35 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
         const esCargaInicial = (m.notes ?? '').startsWith('Carga inicial');
 
         return (
-            <div key={m.id} className="flex items-start gap-3 px-4 py-3 hover:bg-gray-50/50">
+            <div key={m.id} className="flex items-start gap-3 px-4 py-3 hover:bg-papel-hondo/50">
                 <div className="flex-1 min-w-0">
                     {/* El trabajador manda: probando en la bodega, lo que se busca
                         es de QUIÉN es cada cosa, no cómo se llama el ítem. */}
                     <div className="flex items-baseline gap-1.5 flex-wrap">
-                        <span className="text-sm font-black text-indigo-700">{personName || 'Sin asignar'}</span>
-                        <span className="text-xs text-gray-400">×{m.quantity}</span>
+                        <span className="text-sm font-black text-marca-oscuro">{personName || 'Sin asignar'}</span>
+                        <span className="text-xs text-tinta-tenue">×{m.quantity}</span>
                     </div>
                     <button
                         type="button"
                         onClick={() => { const it = itemMap.get(m.itemId); if (it && onItemHistory) { onBehaviorLog?.('BUTTON', `Ver historial desde Kardex: ${it.name}`); onItemHistory(it); } }}
                         disabled={!onItemHistory || !itemMap.get(m.itemId)}
-                        className="text-sm font-semibold text-gray-700 truncate max-w-full text-left hover:text-blue-600 hover:underline disabled:hover:text-gray-700 disabled:hover:no-underline">
+                        className="text-sm font-semibold text-tinta-suave truncate max-w-full text-left hover:text-marca-oscuro hover:underline disabled:hover:text-tinta-suave disabled:hover:no-underline">
                         {itemName}
                     </button>
                     <div className="flex flex-wrap gap-1 mt-1">
-                        {isActiveLoan && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">🔑 Préstamo activo</span>}
-                        {isReturned   && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-green-100 text-green-700">✅ Devuelta</span>}
-                        {isCheckOut   && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-700">📤 Salida</span>}
-                        {isCheckIn && !esCargaInicial && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">📥 Entrada</span>}
-                        {esCargaInicial && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">📦 Carga inicial</span>}
-                        {m.pendingPickup && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700">📍 A recoger</span>}
+                        {isActiveLoan && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-marca-suave text-marca-oscuro">🔑 Préstamo activo</span>}
+                        {isReturned   && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-bien-suave text-bien">✅ Devuelta</span>}
+                        {isCheckOut   && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-atencion-suave text-atencion">📤 Salida</span>}
+                        {isCheckIn && !esCargaInicial && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-marca-suave text-marca-oscuro">📥 Entrada</span>}
+                        {esCargaInicial && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-papel-hondo text-tinta-tenue">📦 Carga inicial</span>}
+                        {m.pendingPickup && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-atencion-suave text-atencion">📍 A recoger</span>}
                     </div>
-                    <div className="flex items-center gap-1.5 mt-1 flex-wrap text-[10px] text-gray-400">
+                    <div className="flex items-center gap-1.5 mt-1 flex-wrap text-[10px] text-tinta-tenue">
                         {/* Con la devolución se muestran las dos fechas: cuándo salió
                             y cuándo volvió. Solo la de salida no dejaba saber si lo
                             que se devolvió fue hoy o hace un mes. */}
                         <span>{m.returnedAt ? `Salió ${timeStr}` : timeStr}</span>
-                        {m.returnedAt && <><span>·</span><span className="font-bold text-green-600">Devuelta {fmt(m.returnedAt)}</span></>}
+                        {m.returnedAt && <><span>·</span><span className="font-bold text-bien">Devuelta {fmt(m.returnedAt)}</span></>}
                         {m.returnCondition && <><span>·</span><span>{CONDITION_LABEL[m.returnCondition] ?? m.returnCondition}</span></>}
                         {m.notes && <><span>·</span><span className="italic truncate max-w-[140px]">{m.notes}</span></>}
                     </div>
@@ -193,13 +193,13 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
                             // Con formulario si se puede: devolver sin preguntar se
                             // salta el estado y la revisión de accesorios.
                             <button onClick={() => onReturnWithForm ? onReturnWithForm(m) : onReturnLoan?.(m.id)}
-                                className="text-xs bg-indigo-600 text-white px-2.5 py-1.5 rounded-lg hover:bg-indigo-700 font-bold">
+                                className="text-xs bg-marca text-tinta px-2.5 py-1.5 rounded-lg hover:bg-marca-fuerte font-bold">
                                 Devolver
                             </button>
                         )}
                         {onDeleteMovement && (!m.isLoan || m.isReturned) && (
                             <button onClick={() => { onBehaviorLog?.('ACTION', `Eliminó movimiento: ${itemName}`); onDeleteMovement(m.id); }}
-                                className="text-red-400 hover:text-red-600 p-1">
+                                className="text-tinta-tenue hover:text-alerta p-1">
                                 <TrashIcon className="w-4 h-4" />
                             </button>
                         )}
@@ -211,16 +211,16 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
     }, [isOwner, onReturnLoan, onReturnWithForm, onDeleteMovement, onBehaviorLog, onItemHistory, itemMap, personnelMap]);
 
     return (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="bg-papel rounded-xl shadow-sm border border-papel-borde overflow-hidden">
             {/* Header */}
-            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
+            <div className="px-4 py-3 border-b border-papel-borde flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
-                    <button onClick={onGoBack} className="p-2 rounded-full hover:bg-gray-100">
-                        <ArrowLeftIcon className="w-5 h-5 text-gray-600" />
+                    <button onClick={onGoBack} className="p-2 rounded-full hover:bg-papel-hondo">
+                        <ArrowLeftIcon className="w-5 h-5 text-tinta-suave" />
                     </button>
                     <div>
-                        <h2 className="text-base font-black text-gray-900">Historial de herramientas</h2>
-                        <p className="text-xs text-gray-400">
+                        <h2 className="text-base font-black text-tinta">Historial de herramientas</h2>
+                        <p className="text-xs text-tinta-tenue">
                             {byDate.length} movimiento{byDate.length !== 1 ? 's' : ''}
                             {byDate.length !== allMovements.length && ` (de ${allMovements.length})`}
                         </p>
@@ -228,7 +228,7 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
                 </div>
                 {openLogMovementModal && isOwner && (
                     <button onClick={openLogMovementModal}
-                        className="flex items-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-3 rounded-xl text-xs gap-1.5">
+                        className="flex items-center bg-marca hover:bg-marca-fuerte text-tinta font-bold py-2 px-3 rounded-xl text-xs gap-1.5">
                         <TruckIcon className="w-4 h-4" />
                         Registrar
                     </button>
@@ -236,13 +236,13 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
             </div>
 
             {/* Filter chips */}
-            <div className="flex gap-2 overflow-x-auto px-4 py-3 border-b border-gray-50 scrollbar-hide">
+            <div className="flex gap-2 overflow-x-auto px-4 py-3 border-b border-papel-borde scrollbar-hide">
                 {FILTERS.map(f => (
                     <button key={f.key} onClick={() => { setFilter(f.key); onBehaviorLog?.('FILTER', `Filtro historial: ${f.label}`); }}
                         className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-black transition-all ${
                             filter === f.key
-                                ? 'bg-indigo-600 text-white shadow-sm'
-                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                ? 'bg-marca text-tinta shadow-sm'
+                                : 'bg-papel-hondo text-tinta-suave hover:bg-papel-borde'
                         }`}>
                         {f.label}
                     </button>
@@ -250,13 +250,13 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
             </div>
 
             {/* Rango de fechas + agrupación */}
-            <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-50 flex-wrap">
+            <div className="flex items-center gap-2 px-4 py-2 border-b border-papel-borde flex-wrap">
                 <div className="flex-1 min-w-0">
                     <PeriodPicker value={periodo} onChange={setPeriodo} onBehaviorLog={onBehaviorLog} />
                 </div>
                 <button onClick={() => setGroupByTool(g => !g)}
                     className={`ml-auto flex-shrink-0 text-xs font-black px-3 py-1.5 rounded-full transition-all ${
-                        groupByTool ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        groupByTool ? 'bg-marca text-tinta' : 'bg-papel-hondo text-tinta-suave hover:bg-papel-borde'
                     }`}>
                     {groupByTool ? '📦 Por herramienta' : '📋 Cronológico'}
                 </button>
@@ -266,50 +266,50 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
             {groupByTool ? (
                 <div>
                     {toolGroups.length === 0 && (
-                        <p className="text-center py-12 text-gray-400 text-sm">Sin movimientos.</p>
+                        <p className="text-center py-12 text-tinta-tenue text-sm">Sin movimientos.</p>
                     )}
                     {toolGroups.map(({ familia, grupo, movements: ms }, idx) => (
                         <div key={familia}>
                             {/* Encabezado de grupo, solo cuando cambia */}
                             {(idx === 0 || toolGroups[idx - 1].grupo !== grupo) && (
                                 <div className="flex items-baseline gap-2 px-4 pt-4 pb-1">
-                                    <p className="text-[11px] font-black text-indigo-700 uppercase tracking-widest">{grupo}</p>
-                                    <span className="flex-1 border-b border-gray-200" />
+                                    <p className="text-[11px] font-black text-marca-oscuro uppercase tracking-widest">{grupo}</p>
+                                    <span className="flex-1 border-b border-papel-borde" />
                                 </div>
                             )}
-                            <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
-                                <p className="text-sm font-black text-gray-800">{familia}</p>
-                                <span className="text-[10px] font-bold bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">
+                            <div className="px-4 py-2 bg-papel-hondo border-b border-papel-borde flex items-center gap-2">
+                                <p className="text-sm font-black text-tinta">{familia}</p>
+                                <span className="text-[10px] font-bold bg-marca-suave text-marca-oscuro px-2 py-0.5 rounded-full">
                                     {ms.length} mov.
                                 </span>
                             </div>
-                            <div className="divide-y divide-gray-50">
+                            <div className="divide-y divide-papel-borde">
                                 {ms.map(m => renderMovementRow(m))}
                             </div>
                         </div>
                     ))}
                 </div>
             ) : (
-                <div className="divide-y divide-gray-50">
+                <div className="divide-y divide-papel-borde">
                     {paged.length === 0 && (
-                        <p className="text-center py-12 text-gray-400 text-sm">Sin movimientos.</p>
+                        <p className="text-center py-12 text-tinta-tenue text-sm">Sin movimientos.</p>
                     )}
                     {paged.map(m => renderMovementRow(m))}
                 </div>
             )}
 
             {totalPages > 1 && (
-                <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
-                    <p className="text-xs text-gray-500">
+                <div className="flex items-center justify-between px-4 py-3 border-t border-papel-borde">
+                    <p className="text-xs text-tinta-tenue">
                         {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} de {filtered.length}
                     </p>
                     <div className="flex gap-2">
                         <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
-                            className="px-3 py-1 text-xs font-medium rounded-lg border border-gray-200 disabled:opacity-40 hover:bg-gray-50">
+                            className="px-3 py-1 text-xs font-medium rounded-lg border border-papel-borde disabled:opacity-40 hover:bg-papel-hondo">
                             ← Ant.
                         </button>
                         <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}
-                            className="px-3 py-1 text-xs font-medium rounded-lg border border-gray-200 disabled:opacity-40 hover:bg-gray-50">
+                            className="px-3 py-1 text-xs font-medium rounded-lg border border-papel-borde disabled:opacity-40 hover:bg-papel-hondo">
                             Sig. →
                         </button>
                     </div>

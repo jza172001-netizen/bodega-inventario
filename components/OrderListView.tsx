@@ -138,44 +138,44 @@ export const OrderListView: React.FC<Props> = ({
     return (
         <div className="space-y-4 max-w-2xl mx-auto pb-8">
             <div>
-                <h1 className="text-xl font-black text-gray-900">🧾 Lista de pedidos</h1>
-                <p className="text-xs text-gray-400 mt-0.5">
+                <h1 className="text-xl font-black text-tinta">🧾 Lista de pedidos</h1>
+                <p className="text-xs text-tinta-tenue mt-0.5">
                     Lo que hay que comprar. No toca el inventario: acá se anota, nada más.
                 </p>
             </div>
 
             {/* ── La libreta ─────────────────────────────────────────────── */}
-            <div className="bg-white border border-gray-200 rounded-2xl p-3 space-y-2">
+            <div className="bg-papel border border-papel-borde rounded-2xl p-3 space-y-2">
                 <div className="flex gap-1.5">
                     <input type="text" value={texto}
                         onChange={e => setTexto(e.target.value)}
                         onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); agregar(); } }}
                         placeholder="Ej: lechada gris, clavos de 3"
-                        className="flex-1 min-w-0 text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                        className="flex-1 min-w-0 text-sm border border-papel-borde rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-marca" />
                 </div>
                 <div className="flex gap-1.5">
                     <input type="number" value={cantidad} min={0}
                         onChange={e => setCantidad(e.target.value)}
                         placeholder="Cuántos"
-                        className="w-24 text-sm border border-gray-200 rounded-xl px-2 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                        className="w-24 text-sm border border-papel-borde rounded-xl px-2 py-2 focus:outline-none focus:ring-2 focus:ring-marca" />
                     <input type="text" value={unidad}
                         onChange={e => setUnidad(e.target.value)}
                         placeholder="bultos, kg…"
-                        className="flex-1 min-w-0 text-sm border border-gray-200 rounded-xl px-2 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                        className="flex-1 min-w-0 text-sm border border-papel-borde rounded-xl px-2 py-2 focus:outline-none focus:ring-2 focus:ring-marca" />
                     <button onClick={agregar} disabled={!texto.trim()}
-                        className="px-4 py-2 text-sm font-black bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white rounded-xl flex-shrink-0">
+                        className="px-4 py-2 text-sm font-black bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-tenue text-tinta rounded-xl flex-shrink-0">
                         Anotar
                     </button>
                 </div>
             </div>
 
             {pendientes.length === 0 && compradas.length === 0 ? (
-                <div className="text-center py-12 text-gray-400">
+                <div className="text-center py-12 text-tinta-tenue">
                     <p className="text-3xl mb-2">🧾</p>
                     <p className="text-sm">Todavía no hay nada anotado.</p>
                 </div>
             ) : (
-                <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+                <div className="bg-papel border border-papel-borde rounded-2xl overflow-hidden">
                     {pendientes.map(n => {
                         if (editando === n.id) {
                             // Las variantes que esa familia ya tiene en la bodega, no una
@@ -212,18 +212,18 @@ export const OrderListView: React.FC<Props> = ({
                             // escoger "Blanco" sin escribirlo, y ya pintado.
                             const restoDeLaPaleta = PALETA.filter(c => !vistos.has(raizDeColor(c)));
                             return (
-                                <div key={n.id} className="px-3 py-2.5 border-b border-gray-50 last:border-0 bg-blue-50/40 space-y-2">
+                                <div key={n.id} className="px-3 py-2.5 border-b border-papel-borde last:border-0 bg-marca-suave/40 space-y-2">
                                     <input type="text" value={borrador.texto} autoFocus
                                         onChange={e => setBorrador(b => ({ ...b, texto: e.target.value }))}
                                         onKeyDown={e => { if (e.key === 'Enter') guardarEdicion(n); if (e.key === 'Escape') setEditando(null); }}
-                                        className="w-full text-sm font-semibold border border-blue-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                                        className="w-full text-sm font-semibold border border-marca-borde rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-marca bg-papel" />
                                     <div className="flex gap-1.5">
                                         <input type="number" value={borrador.cantidad} min={0} placeholder="Cant."
                                             onChange={e => setBorrador(b => ({ ...b, cantidad: e.target.value }))}
-                                            className="w-20 flex-shrink-0 text-sm border border-gray-200 rounded-xl px-2 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                                            className="w-20 flex-shrink-0 text-sm border border-papel-borde rounded-xl px-2 py-2 focus:outline-none focus:ring-2 focus:ring-marca bg-papel" />
                                         <select value={borrador.unidad}
                                             onChange={e => setBorrador(b => ({ ...b, unidad: e.target.value }))}
-                                            className="flex-1 min-w-0 text-sm border border-gray-200 rounded-xl px-2 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white">
+                                            className="flex-1 min-w-0 text-sm border border-papel-borde rounded-xl px-2 py-2 focus:outline-none focus:ring-2 focus:ring-marca bg-papel">
                                             <option value="">Sin unidad</option>
                                             {unidadesCon(borrador.unidad).map(u => <option key={u} value={u}>{u}</option>)}
                                         </select>
@@ -232,12 +232,12 @@ export const OrderListView: React.FC<Props> = ({
                                         variante: si no, para la Estopa no había dónde poner
                                         nada. Y el «+» va de primero, a la izquierda. */}
                                     <div className="flex flex-wrap gap-1 items-center">
-                                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider mr-0.5">¿Cuál?</span>
+                                        <span className="text-[10px] font-black text-tinta-tenue uppercase tracking-wider mr-0.5">¿Cuál?</span>
                                         <button type="button"
                                             onClick={() => { setAnadiendoColor(a => !a); setColorNuevo(''); }}
                                             title="Añadir un color que no está"
                                             className={`w-6 h-6 flex items-center justify-center rounded-full border text-sm font-black leading-none transition-all ${
-                                                anadiendoColor ? 'border-blue-500 bg-blue-600 text-white' : 'border-gray-300 bg-white text-gray-500 hover:border-blue-400 hover:text-blue-600'}`}>
+                                                anadiendoColor ? 'border-marca bg-marca text-tinta' : 'border-papel-borde bg-papel text-tinta-tenue hover:border-marca hover:text-marca-oscuro'}`}>
                                             +
                                         </button>
                                         {colores.map(c => {
@@ -246,7 +246,7 @@ export const OrderListView: React.FC<Props> = ({
                                                 <button key={c} type="button"
                                                     onClick={() => setBorrador(b => ({ ...b, color: puesto ? '' : c }))}
                                                     className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold border transition-all ${
-                                                        puesto ? 'border-blue-500 bg-white text-blue-700' : 'border-gray-200 bg-white text-gray-600 hover:border-blue-300'}`}>
+                                                        puesto ? 'border-marca bg-papel text-marca-oscuro' : 'border-papel-borde bg-papel text-tinta-suave hover:border-marca-borde'}`}>
                                                     {tonoDe(c) && <span className="w-2.5 h-2.5 rounded-full border border-black/10"
                                                         style={{ backgroundColor: tonoDe(c)! }} />}
                                                     {c}
@@ -256,7 +256,7 @@ export const OrderListView: React.FC<Props> = ({
                                     </div>
 
                                     {anadiendoColor && (
-                                        <div className="rounded-xl border border-dashed border-blue-300 bg-white p-2 space-y-2">
+                                        <div className="rounded-xl border border-dashed border-marca-borde bg-papel p-2 space-y-2">
                                             <div className="flex gap-1.5">
                                                 <input type="text" value={colorNuevo} autoFocus
                                                     placeholder="Escribe el color (ej: blanco)"
@@ -265,10 +265,10 @@ export const OrderListView: React.FC<Props> = ({
                                                         if (e.key === 'Enter') { e.preventDefault(); ponerColor(colorNuevo); }
                                                         if (e.key === 'Escape') { setAnadiendoColor(false); setColorNuevo(''); }
                                                     }}
-                                                    className="flex-1 min-w-0 text-sm border border-gray-200 rounded-xl px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                                                    className="flex-1 min-w-0 text-sm border border-papel-borde rounded-xl px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-marca" />
                                                 <button type="button" onClick={() => ponerColor(colorNuevo)}
                                                     disabled={!colorNuevo.trim()}
-                                                    className="px-3 py-1.5 text-xs font-black bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white rounded-xl flex-shrink-0">
+                                                    className="px-3 py-1.5 text-xs font-black bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-tenue text-tinta rounded-xl flex-shrink-0">
                                                     Poner
                                                 </button>
                                             </div>
@@ -277,7 +277,7 @@ export const OrderListView: React.FC<Props> = ({
                                                 <div className="flex flex-wrap gap-1">
                                                     {restoDeLaPaleta.map(c => (
                                                         <button key={c} type="button" onClick={() => ponerColor(c)}
-                                                            className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold border border-gray-200 bg-white text-gray-600 hover:border-blue-400">
+                                                            className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold border border-papel-borde bg-papel text-tinta-suave hover:border-marca">
                                                             <span className="w-2.5 h-2.5 rounded-full border border-black/10"
                                                                 style={{ backgroundColor: tonoDe(c)! }} />
                                                             {c}
@@ -289,9 +289,9 @@ export const OrderListView: React.FC<Props> = ({
                                     )}
                                     <div className="flex gap-2">
                                         <button onClick={() => setEditando(null)}
-                                            className="px-3 py-1.5 text-xs font-bold text-gray-500 border border-gray-200 rounded-xl">Cancelar</button>
+                                            className="px-3 py-1.5 text-xs font-bold text-tinta-tenue border border-papel-borde rounded-xl">Cancelar</button>
                                         <button onClick={() => guardarEdicion(n)} disabled={!borrador.texto.trim()}
-                                            className="flex-1 py-1.5 text-xs font-black bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white rounded-xl">
+                                            className="flex-1 py-1.5 text-xs font-black bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-tenue text-tinta rounded-xl">
                                             Guardar
                                         </button>
                                     </div>
@@ -299,14 +299,14 @@ export const OrderListView: React.FC<Props> = ({
                             );
                         }
                         return (
-                            <div key={n.id} className="flex items-center gap-2 px-3 py-2.5 border-b border-gray-50 last:border-0">
+                            <div key={n.id} className="flex items-center gap-2 px-3 py-2.5 border-b border-papel-borde last:border-0">
                                 <button onClick={() => onToggleNote(n)}
-                                    className="w-5 h-5 flex-shrink-0 rounded-md border-2 border-gray-300 hover:border-green-500 transition-colors" />
+                                    className="w-5 h-5 flex-shrink-0 rounded-md border-2 border-papel-borde hover:border-bien transition-colors" />
                                 {/* Tocar el renglón lo abre para corregirlo. Antes solo se
                                     podía marcar como comprado o borrar: para cambiar 3 bultos
                                     por 5 tocaba borrarlo y escribirlo de nuevo. */}
                                 <button onClick={() => abrirEdicion(n)} className="flex-1 min-w-0 text-left">
-                                    <p className="text-sm font-semibold text-gray-800 truncate flex items-center gap-1.5">
+                                    <p className="text-sm font-semibold text-tinta truncate flex items-center gap-1.5">
                                         {n.color && tonoDe(n.color) && (
                                             <span className="w-2.5 h-2.5 rounded-full border border-black/10 flex-shrink-0"
                                                 style={{ backgroundColor: tonoDe(n.color)! }} />
@@ -314,29 +314,29 @@ export const OrderListView: React.FC<Props> = ({
                                         <span className="truncate">{n.texto}</span>
                                     </p>
                                     {(n.cantidad != null || n.color) && (
-                                        <p className="text-[11px] text-gray-400 truncate">
+                                        <p className="text-[11px] text-tinta-tenue truncate">
                                             {[n.cantidad != null ? `${n.cantidad} ${n.unidad ?? ''}`.trim() : null, n.color]
                                                 .filter(Boolean).join(' · ')}
                                         </p>
                                     )}
                                 </button>
                                 <button onClick={() => abrirEdicion(n)}
-                                    className="text-gray-300 hover:text-blue-500 px-1 flex-shrink-0 text-sm" title="Corregir">✎</button>
+                                    className="text-tinta-tenue hover:text-marca-oscuro px-1 flex-shrink-0 text-sm" title="Corregir">✎</button>
                                 <button onClick={() => onDeleteNote(n)}
-                                    className="text-gray-300 hover:text-red-500 px-1 flex-shrink-0 text-sm">✕</button>
+                                    className="text-tinta-tenue hover:text-alerta px-1 flex-shrink-0 text-sm">✕</button>
                             </div>
                         );
                     })}
                     {compradas.length > 0 && (
-                        <div className="bg-gray-50 px-3 py-2">
-                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-1">Ya comprado</p>
+                        <div className="bg-papel-hondo px-3 py-2">
+                            <p className="text-[10px] font-black text-tinta-tenue uppercase tracking-wider mb-1">Ya comprado</p>
                             {compradas.map(n => (
                                 <div key={n.id} className="flex items-center gap-2 py-1">
                                     <button onClick={() => onToggleNote(n)}
-                                        className="w-5 h-5 flex-shrink-0 rounded-md bg-green-500 text-white text-[11px] font-black">✓</button>
-                                    <p className="flex-1 min-w-0 text-sm text-gray-400 line-through truncate">{n.texto}</p>
+                                        className="w-5 h-5 flex-shrink-0 rounded-md bg-bien text-papel text-[11px] font-black">✓</button>
+                                    <p className="flex-1 min-w-0 text-sm text-tinta-tenue line-through truncate">{n.texto}</p>
                                     <button onClick={() => onDeleteNote(n)}
-                                        className="text-gray-300 hover:text-red-500 px-1 flex-shrink-0 text-sm">✕</button>
+                                        className="text-tinta-tenue hover:text-alerta px-1 flex-shrink-0 text-sm">✕</button>
                                 </div>
                             ))}
                         </div>
@@ -346,7 +346,7 @@ export const OrderListView: React.FC<Props> = ({
 
             {pendientes.length > 0 && (
                 <button onClick={compartir}
-                    className="w-full py-2.5 text-sm font-black bg-green-600 hover:bg-green-700 text-white rounded-xl">
+                    className="w-full py-2.5 text-sm font-black bg-bien hover:bg-bien text-papel rounded-xl">
                     📲 Compartir la lista
                 </button>
             )}
@@ -354,32 +354,32 @@ export const OrderListView: React.FC<Props> = ({
             {/* ── Lo que la app propone ──────────────────────────────────── */}
             <div className="pt-2 space-y-2">
                 <div>
-                    <h2 className="text-sm font-black text-gray-900">Lo que más se gastó</h2>
-                    <p className="text-[11px] text-gray-400 mb-2">
+                    <h2 className="text-sm font-black text-tinta">Lo que más se gastó</h2>
+                    <p className="text-[11px] text-tinta-tenue mb-2">
                         Para decidir qué pedir. El número del nombre es la medida, no la cantidad.
                     </p>
                     <PeriodPicker value={periodo} onChange={setPeriodo} onBehaviorLog={onBehaviorLog} />
                 </div>
 
                 {sugerencias.length === 0 ? (
-                    <p className="text-xs text-gray-400 py-4 text-center">Sin consumo en este período.</p>
+                    <p className="text-xs text-tinta-tenue py-4 text-center">Sin consumo en este período.</p>
                 ) : sugerencias.map(f => (
-                    <div key={f.familia} className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-                        <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
-                            <p className="text-sm font-black text-gray-900 flex-1 truncate">{f.familia}</p>
-                            <span className="text-[11px] font-bold text-gray-400">{f.total} gastados</span>
+                    <div key={f.familia} className="bg-papel border border-papel-borde rounded-2xl overflow-hidden">
+                        <div className="px-3 py-2 bg-papel-hondo border-b border-papel-borde flex items-center gap-2">
+                            <p className="text-sm font-black text-tinta flex-1 truncate">{f.familia}</p>
+                            <span className="text-[11px] font-bold text-tinta-tenue">{f.total} gastados</span>
                         </div>
                         {f.materiales.map(mat => (
-                            <div key={mat.material} className="px-3 py-2 border-b border-gray-50 last:border-0">
+                            <div key={mat.material} className="px-3 py-2 border-b border-papel-borde last:border-0">
                                 {mat.material !== '—' && (
-                                    <p className="text-[10px] font-black text-indigo-600 uppercase tracking-wider mb-1">{mat.material}</p>
+                                    <p className="text-[10px] font-black text-marca-oscuro uppercase tracking-wider mb-1">{mat.material}</p>
                                 )}
                                 {mat.medidas.map(m => (
                                     <div key={m.medida} className="flex items-center gap-2 py-1">
-                                        <span className="text-xs font-bold text-gray-700 w-12 flex-shrink-0">
+                                        <span className="text-xs font-bold text-tinta-suave w-12 flex-shrink-0">
                                             {m.medida === '—' ? '' : m.medida}
                                         </span>
-                                        <span className="flex-1 text-xs text-gray-500">{m.unidades} {m.unidad}</span>
+                                        <span className="flex-1 text-xs text-tinta-tenue">{m.unidades} {m.unidad}</span>
                                         <button
                                             onClick={() => {
                                                 const t = [f.familia, mat.material !== '—' ? mat.material : '', m.medida !== '—' ? m.medida : '']
@@ -387,7 +387,7 @@ export const OrderListView: React.FC<Props> = ({
                                                 onAddNote(t, m.unidades, m.unidad, f.familia);
                                                 onBehaviorLog?.('ACTION', `Pasó a la lista de pedidos: ${t}`);
                                             }}
-                                            className="text-[10px] font-black px-2 py-1 rounded-lg border border-gray-200 text-gray-500 hover:border-blue-400 hover:text-blue-600 flex-shrink-0">
+                                            className="text-[10px] font-black px-2 py-1 rounded-lg border border-papel-borde text-tinta-tenue hover:border-marca hover:text-marca-oscuro flex-shrink-0">
                                             + Agregar
                                         </button>
                                     </div>

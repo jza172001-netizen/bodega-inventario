@@ -312,20 +312,20 @@ const CopilotView: React.FC<CopilotViewProps> = ({
     return (
         <div className="flex flex-col h-full max-h-[calc(100vh-9rem)]">
             <div className="mb-3">
-                <h1 className="text-2xl font-black text-gray-800">Asistente de Bodega</h1>
-                <p className="text-gray-500 text-sm mt-0.5">Registra salidas, crea proyectos, trabajadores e ítems con lenguaje natural.</p>
+                <h1 className="text-2xl font-black text-tinta">Asistente de Bodega</h1>
+                <p className="text-tinta-tenue text-sm mt-0.5">Registra salidas, crea proyectos, trabajadores e ítems con lenguaje natural.</p>
             </div>
 
             <div className="flex flex-wrap gap-2 mb-3">
                 {QUICK.map(q => (
                     <button key={q.q} onClick={() => handleSend(q.q)}
-                        className="px-3 py-1.5 bg-white border border-gray-200 hover:border-blue-400 hover:bg-blue-50 text-gray-600 hover:text-blue-700 rounded-full text-xs font-semibold transition-all">
+                        className="px-3 py-1.5 bg-papel border border-papel-borde hover:border-marca hover:bg-marca-suave text-tinta-suave hover:text-marca-oscuro rounded-full text-xs font-semibold transition-all">
                         {q.label}
                     </button>
                 ))}
             </div>
 
-            <div className="flex-1 overflow-y-auto bg-white rounded-2xl border border-gray-200 shadow-sm p-4 space-y-4 min-h-[250px]">
+            <div className="flex-1 overflow-y-auto bg-papel rounded-2xl border border-papel-borde shadow-sm p-4 space-y-4 min-h-[250px]">
                 {messages.map(msg => (
                     <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                         {msg.parsedExit && !msg.confirmed ? (
@@ -346,7 +346,7 @@ const CopilotView: React.FC<CopilotViewProps> = ({
                                 onSelect={(type) => handlePendingItemType(msg.id, msg.pendingItemCreate!.name, msg.pendingItemCreate!.unit, type)} />
                         ) : (
                             <div className={`max-w-[85%] px-4 py-2.5 rounded-2xl text-sm whitespace-pre-wrap leading-relaxed ${
-                                msg.role === 'user' ? 'bg-blue-600 text-white rounded-br-sm' : 'bg-gray-100 text-gray-800 rounded-bl-sm'
+                                msg.role === 'user' ? 'bg-marca text-tinta rounded-br-sm' : 'bg-papel-hondo text-tinta rounded-bl-sm'
                             }`}>
                                 {msg.text.replace(/\*\*(.+?)\*\*/g, '$1')}
                             </div>
@@ -355,8 +355,8 @@ const CopilotView: React.FC<CopilotViewProps> = ({
                 ))}
                 {loading && (
                     <div className="flex justify-start">
-                        <div className="bg-gray-100 rounded-2xl rounded-bl-sm px-4 py-3 flex gap-1.5 items-center">
-                            {[0,1,2].map(i => <span key={i} className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: `${i*0.15}s` }} />)}
+                        <div className="bg-papel-hondo rounded-2xl rounded-bl-sm px-4 py-3 flex gap-1.5 items-center">
+                            {[0,1,2].map(i => <span key={i} className="w-2 h-2 rounded-full bg-papel-borde animate-bounce" style={{ animationDelay: `${i*0.15}s` }} />)}
                         </div>
                     </div>
                 )}
@@ -369,8 +369,8 @@ const CopilotView: React.FC<CopilotViewProps> = ({
                     onClick={() => openPanel(activePanel === 'loan' ? null : 'loan')}
                     className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-black border transition-all ${
                         activePanel === 'loan'
-                            ? 'bg-blue-600 text-white border-blue-600'
-                            : 'bg-white text-blue-700 border-blue-200 hover:bg-blue-50'
+                            ? 'bg-marca text-tinta border-marca'
+                            : 'bg-papel text-marca-oscuro border-marca-borde hover:bg-marca-suave'
                     }`}
                 >
                     📦 Asignar herramienta
@@ -379,8 +379,8 @@ const CopilotView: React.FC<CopilotViewProps> = ({
                     onClick={() => openPanel(activePanel === 'create' ? null : 'create')}
                     className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-black border transition-all ${
                         activePanel === 'create'
-                            ? 'bg-green-600 text-white border-green-600'
-                            : 'bg-white text-green-700 border-green-200 hover:bg-green-50'
+                            ? 'bg-bien text-tinta border-bien'
+                            : 'bg-papel text-bien border-bien hover:bg-bien-suave'
                     }`}
                 >
                     ➕ Agregar al inventario
@@ -389,17 +389,17 @@ const CopilotView: React.FC<CopilotViewProps> = ({
 
             {/* ── Panel: Asignar herramienta ── */}
             {activePanel === 'loan' && (
-                <div className="mt-2 bg-blue-50 border border-blue-200 rounded-2xl p-4 space-y-3 max-h-[60vh] overflow-y-auto">
+                <div className="mt-2 bg-marca-suave border border-marca-borde rounded-2xl p-4 space-y-3 max-h-[60vh] overflow-y-auto">
                     <div className="flex items-center justify-between">
-                        <p className="text-xs font-black text-blue-700 uppercase tracking-wide">📦 Asignar herramienta a trabajador</p>
-                        <button onClick={closePanel} className="text-blue-400 hover:text-blue-700 text-lg leading-none">✕</button>
+                        <p className="text-xs font-black text-marca-oscuro uppercase tracking-wide">📦 Asignar herramienta a trabajador</p>
+                        <button onClick={closePanel} className="text-tinta-tenue hover:text-marca-oscuro text-lg leading-none">✕</button>
                     </div>
 
                     {/* Trabajador */}
                     <div>
-                        <label className="text-[10px] font-black text-blue-600 uppercase tracking-wide block mb-1">Trabajador *</label>
+                        <label className="text-[10px] font-black text-marca-oscuro uppercase tracking-wide block mb-1">Trabajador *</label>
                         <select value={loanPersonnelId} onChange={e => setLoanPersonnelId(e.target.value)}
-                            className="w-full text-sm border border-blue-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400">
+                            className="w-full text-sm border border-marca-borde rounded-xl px-3 py-2 bg-papel focus:outline-none focus:ring-2 focus:ring-marca">
                             <option value="">— Elegir trabajador —</option>
                             {sortedPersonnel.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                         </select>
@@ -407,12 +407,12 @@ const CopilotView: React.FC<CopilotViewProps> = ({
 
                     {/* Tipo de herramienta */}
                     <div>
-                        <label className="text-[10px] font-black text-blue-600 uppercase tracking-wide block mb-1">Tipo de herramienta *</label>
+                        <label className="text-[10px] font-black text-marca-oscuro uppercase tracking-wide block mb-1">Tipo de herramienta *</label>
                         <div className="flex gap-2">
                             {([InventoryType.HAND_TOOL, InventoryType.ELECTRICAL_TOOL] as InventoryType[]).map(t => (
                                 <button key={t} onClick={() => { setLoanInvType(t); setLoanSelected(new Map()); }}
                                     className={`flex-1 py-2 rounded-xl text-xs font-black border transition-all ${
-                                        loanInvType === t ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-400'
+                                        loanInvType === t ? 'bg-marca text-tinta border-marca' : 'bg-papel text-tinta-suave border-papel-borde hover:border-marca'
                                     }`}>
                                     {t === InventoryType.HAND_TOOL ? '🔨 Manual' : '⚡ Eléctrica'}
                                 </button>
@@ -423,30 +423,30 @@ const CopilotView: React.FC<CopilotViewProps> = ({
                     {/* Lista de herramientas disponibles */}
                     {loanInvType && (
                         <div>
-                            <label className="text-[10px] font-black text-blue-600 uppercase tracking-wide block mb-1">
-                                Herramientas disponibles * {loanSelected.size > 0 && <span className="normal-case font-normal text-blue-500">({loanSelected.size} seleccionada{loanSelected.size !== 1 ? 's' : ''})</span>}
+                            <label className="text-[10px] font-black text-marca-oscuro uppercase tracking-wide block mb-1">
+                                Herramientas disponibles * {loanSelected.size > 0 && <span className="normal-case font-normal text-marca-oscuro">({loanSelected.size} seleccionada{loanSelected.size !== 1 ? 's' : ''})</span>}
                             </label>
                             {availableForLoan.length === 0 ? (
-                                <p className="text-xs text-gray-400 text-center py-4">No hay herramientas de este tipo en stock.</p>
+                                <p className="text-xs text-tinta-tenue text-center py-4">No hay herramientas de este tipo en stock.</p>
                             ) : (
                                 <div className="space-y-1 max-h-40 overflow-y-auto">
                                     {availableForLoan.map(item => {
                                         const isSelected = loanSelected.has(item.id);
                                         const qty = loanSelected.get(item.id) ?? 1;
                                         return (
-                                            <div key={item.id} className={`flex items-center gap-2 px-3 py-2 rounded-xl border transition-all ${isSelected ? 'bg-blue-100 border-blue-300' : 'bg-white border-gray-200 hover:border-blue-300'}`}>
+                                            <div key={item.id} className={`flex items-center gap-2 px-3 py-2 rounded-xl border transition-all ${isSelected ? 'bg-marca-suave border-marca-borde' : 'bg-papel border-papel-borde hover:border-marca-borde'}`}>
                                                 <input type="checkbox" checked={isSelected}
                                                     onChange={() => toggleLoanItem(item.id, 1)}
-                                                    className="w-4 h-4 accent-blue-600 flex-shrink-0 cursor-pointer" />
-                                                <span className="flex-1 text-sm text-gray-800 truncate cursor-pointer" onClick={() => toggleLoanItem(item.id, 1)}>
+                                                    className="w-4 h-4 accent-marca flex-shrink-0 cursor-pointer" />
+                                                <span className="flex-1 text-sm text-tinta truncate cursor-pointer" onClick={() => toggleLoanItem(item.id, 1)}>
                                                     {item.name}
                                                 </span>
-                                                <span className="text-[10px] text-gray-400 flex-shrink-0">{item.quantity} en stock</span>
+                                                <span className="text-[10px] text-tinta-tenue flex-shrink-0">{item.quantity} en stock</span>
                                                 {isSelected && (
                                                     <input type="number" value={qty} min={1} max={item.quantity}
                                                         onChange={e => setLoanQty(item.id, parseInt(e.target.value) || 1)}
                                                         onClick={e => e.stopPropagation()}
-                                                        className="w-12 text-xs text-center border border-blue-300 rounded-lg px-1 py-0.5 bg-white focus:outline-none" />
+                                                        className="w-12 text-xs text-center border border-marca-borde rounded-lg px-1 py-0.5 bg-papel focus:outline-none" />
                                                 )}
                                             </div>
                                         );
@@ -458,16 +458,16 @@ const CopilotView: React.FC<CopilotViewProps> = ({
 
                     {/* Proyecto (opcional) */}
                     <div>
-                        <label className="text-[10px] font-black text-blue-600 uppercase tracking-wide block mb-1">Proyecto (opcional)</label>
+                        <label className="text-[10px] font-black text-marca-oscuro uppercase tracking-wide block mb-1">Proyecto (opcional)</label>
                         <select value={loanProjectId} onChange={e => setLoanProjectId(e.target.value)}
-                            className="w-full text-sm border border-blue-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400">
+                            className="w-full text-sm border border-marca-borde rounded-xl px-3 py-2 bg-papel focus:outline-none focus:ring-2 focus:ring-marca">
                             <option value="">— Sin proyecto —</option>
                             {activeProjects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                         </select>
                     </div>
 
                     <button onClick={confirmLoan} disabled={!loanPersonnelId || loanSelected.size === 0}
-                        className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-black rounded-xl text-sm transition-all">
+                        className="w-full py-2.5 bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-tenue text-tinta font-black rounded-xl text-sm transition-all">
                         ✅ Confirmar préstamo {loanSelected.size > 0 && `(${loanSelected.size} ítem${loanSelected.size !== 1 ? 's' : ''})`}
                     </button>
                 </div>
@@ -475,20 +475,20 @@ const CopilotView: React.FC<CopilotViewProps> = ({
 
             {/* ── Panel: Agregar al inventario ── */}
             {activePanel === 'create' && (
-                <div className="mt-2 bg-green-50 border border-green-200 rounded-2xl p-4 space-y-3">
+                <div className="mt-2 bg-bien-suave border border-bien rounded-2xl p-4 space-y-3">
                     <div className="flex items-center justify-between">
-                        <p className="text-xs font-black text-green-700 uppercase tracking-wide">➕ Agregar al inventario</p>
-                        <button onClick={closePanel} className="text-green-400 hover:text-green-700 text-lg leading-none">✕</button>
+                        <p className="text-xs font-black text-bien uppercase tracking-wide">➕ Agregar al inventario</p>
+                        <button onClick={closePanel} className="text-tinta-tenue hover:text-bien text-lg leading-none">✕</button>
                     </div>
 
                     {/* Tipo */}
                     <div>
-                        <label className="text-[10px] font-black text-green-700 uppercase tracking-wide block mb-1">Tipo *</label>
+                        <label className="text-[10px] font-black text-bien uppercase tracking-wide block mb-1">Tipo *</label>
                         <div className="grid grid-cols-2 gap-1.5">
                             {(Object.entries(TYPE_LABELS) as [InventoryType, string][]).map(([type, label]) => (
                                 <button key={type} onClick={() => setCreateInvType(type)}
                                     className={`py-2 rounded-xl text-xs font-bold border transition-all ${
-                                        createInvType === type ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-200 hover:border-green-400'
+                                        createInvType === type ? 'bg-bien text-papel border-bien' : 'bg-papel text-tinta-suave border-papel-borde hover:border-bien'
                                     }`}>
                                     {label}
                                 </button>
@@ -498,9 +498,9 @@ const CopilotView: React.FC<CopilotViewProps> = ({
 
                     {/* Aviso para herramientas eléctricas */}
                     {createInvType === InventoryType.ELECTRICAL_TOOL && (
-                        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-                            <span className="text-amber-500 text-sm flex-shrink-0">⚠️</span>
-                            <p className="text-[11px] text-amber-800 leading-snug">
+                        <div className="flex items-start gap-2 bg-atencion-suave border border-atencion rounded-xl px-3 py-2">
+                            <span className="text-atencion text-sm flex-shrink-0">⚠️</span>
+                            <p className="text-[11px] text-atencion leading-snug">
                                 Para herramientas eléctricas incluí color, marca y número en el nombre para trazabilidad exacta.<br/>
                                 <span className="font-bold">Ej: "Taladro 3 verde Stanley"</span>
                             </p>
@@ -509,33 +509,33 @@ const CopilotView: React.FC<CopilotViewProps> = ({
 
                     {/* Nombre */}
                     <div>
-                        <label className="text-[10px] font-black text-green-700 uppercase tracking-wide block mb-1">Nombre *</label>
+                        <label className="text-[10px] font-black text-bien uppercase tracking-wide block mb-1">Nombre *</label>
                         <input type="text" value={createName} onChange={e => setCreateName(e.target.value)}
                             placeholder={createInvType === InventoryType.ELECTRICAL_TOOL ? 'Ej: Taladro 3 verde Stanley' : 'Ej: Palustres, Cascos, Tornillos M8...'}
-                            className="w-full text-sm border border-green-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400" />
+                            className="w-full text-sm border border-bien rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-bien" />
                     </div>
 
                     {/* Cantidad y unidad */}
                     <div className="grid grid-cols-2 gap-2">
                         <div>
-                            <label className="text-[10px] font-black text-green-700 uppercase tracking-wide block mb-1">Cantidad</label>
+                            <label className="text-[10px] font-black text-bien uppercase tracking-wide block mb-1">Cantidad</label>
                             <input type="number" value={createQty} min={1} onChange={e => setCreateQty(Math.max(1, parseInt(e.target.value) || 1))}
-                                className="w-full text-sm border border-green-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400" />
+                                className="w-full text-sm border border-bien rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-bien" />
                         </div>
                         <div>
-                            <label className="text-[10px] font-black text-green-700 uppercase tracking-wide block mb-1">Unidad</label>
+                            <label className="text-[10px] font-black text-bien uppercase tracking-wide block mb-1">Unidad</label>
                             {/* Lista, no texto libre: escrito a mano salían "und", "Und" y
                                 "unidades" como tres unidades distintas. Era el último
                                 lugar de la app donde la unidad se escribía. */}
                             <select value={createUnit} onChange={e => setCreateUnit(e.target.value)}
-                                className="w-full text-sm border border-green-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400 bg-white">
+                                className="w-full text-sm border border-bien rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-bien bg-papel">
                                 {unidadesCon(createUnit).map(u => <option key={u} value={u}>{u}</option>)}
                             </select>
                         </div>
                     </div>
 
                     <button onClick={confirmCreate} disabled={!createInvType || !createName.trim()}
-                        className="w-full py-2.5 bg-green-600 hover:bg-green-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-black rounded-xl text-sm transition-all">
+                        className="w-full py-2.5 bg-bien hover:bg-bien disabled:bg-papel-borde disabled:text-tinta-tenue text-tinta font-black rounded-xl text-sm transition-all">
                         ✅ Guardar ítem
                     </button>
                 </div>
@@ -548,15 +548,15 @@ const CopilotView: React.FC<CopilotViewProps> = ({
                         <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown}
                             placeholder='Ej: "saqué 5 cascos para proyecto X, trabajador Y" · "crea el proyecto Torre"'
                             rows={2}
-                            className="flex-1 resize-none border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                            className="flex-1 resize-none border border-papel-borde rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-marca focus:border-transparent" />
                         <button onClick={() => handleSend(input)} disabled={!input.trim() || loading}
-                            className="h-[3.5rem] px-5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold rounded-xl transition-all flex-shrink-0">
+                            className="h-[3.5rem] px-5 bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-tenue text-tinta font-bold rounded-xl transition-all flex-shrink-0">
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
                             </svg>
                         </button>
                     </div>
-                    <p className="text-[10px] text-gray-400 mt-1.5 text-center">Enter para enviar · Shift+Enter para nueva línea</p>
+                    <p className="text-[10px] text-tinta-tenue mt-1.5 text-center">Enter para enviar · Shift+Enter para nueva línea</p>
                 </>
             )}
         </div>
@@ -566,12 +566,12 @@ const CopilotView: React.FC<CopilotViewProps> = ({
 // ─── PendingItemTypeCard ─────────────────────────────────────────────────────
 
 const PendingItemTypeCard: React.FC<{ name: string; unit: string; onSelect: (t: InventoryType) => void }> = ({ name, onSelect }) => (
-    <div className="w-full max-w-sm bg-white border border-gray-200 rounded-2xl rounded-bl-sm p-4 shadow-sm">
-        <p className="text-sm font-semibold text-gray-700 mb-3">¿Qué tipo de ítem es <span className="text-blue-600">"{name}"</span>?</p>
+    <div className="w-full max-w-sm bg-papel border border-papel-borde rounded-2xl rounded-bl-sm p-4 shadow-sm">
+        <p className="text-sm font-semibold text-tinta-suave mb-3">¿Qué tipo de ítem es <span className="text-marca-oscuro">"{name}"</span>?</p>
         <div className="grid grid-cols-2 gap-2">
             {(Object.entries(TYPE_LABELS) as [InventoryType, string][]).map(([type, label]) => (
                 <button key={type} onClick={() => onSelect(type)}
-                    className="py-2 px-3 border border-gray-200 hover:border-blue-400 hover:bg-blue-50 rounded-xl text-xs font-semibold text-gray-700 transition-all text-left">
+                    className="py-2 px-3 border border-papel-borde hover:border-marca hover:bg-marca-suave rounded-xl text-xs font-semibold text-tinta-suave transition-all text-left">
                     {label}
                 </button>
             ))}
@@ -596,8 +596,8 @@ const ExitConfirmCard: React.FC<ExitConfirmCardProps> = ({
 }) => {
     const canConfirm = exit.movements.some((pm, idx) => pm.matchedItem || sel[idx]);
     return (
-        <div className="w-full max-w-[92%] bg-white border border-blue-200 rounded-2xl rounded-bl-sm shadow-md p-4">
-            <p className="text-xs font-black text-blue-500 uppercase tracking-widest mb-3">📋 Confirmar salidas</p>
+        <div className="w-full max-w-[92%] bg-papel border border-marca-borde rounded-2xl rounded-bl-sm shadow-md p-4">
+            <p className="text-xs font-black text-marca-oscuro uppercase tracking-widest mb-3">📋 Confirmar salidas</p>
             <div className="space-y-2 mb-3">
                 {exit.movements.map((pm, idx) => (
                     <MovementRow key={idx} pm={pm} idx={idx} items={items} sel={sel} onSelect={onSelect} onCreateItem={onCreateItem} />
@@ -605,34 +605,34 @@ const ExitConfirmCard: React.FC<ExitConfirmCardProps> = ({
             </div>
             <div className="mb-2">
                 {exit.matchedProject ? (
-                    <span className="inline-flex items-center gap-1 text-xs text-gray-600 bg-gray-50 px-3 py-1 rounded-full border border-gray-200">
+                    <span className="inline-flex items-center gap-1 text-xs text-tinta-suave bg-papel-hondo px-3 py-1 rounded-full border border-papel-borde">
                         📌 <span className="font-semibold">{exit.matchedProject.name}</span>
                     </span>
                 ) : exit.rawProject ? (
                     <div className="flex items-center gap-2">
-                        <span className="text-xs text-amber-600">📌 Proyecto "{exit.rawProject}" no existe.</span>
-                        <button onClick={() => onCreateProject(exit.rawProject)} className="text-xs font-black text-blue-600 hover:underline">+ Crear</button>
+                        <span className="text-xs text-atencion">📌 Proyecto "{exit.rawProject}" no existe.</span>
+                        <button onClick={() => onCreateProject(exit.rawProject)} className="text-xs font-black text-marca-oscuro hover:underline">+ Crear</button>
                     </div>
                 ) : null}
             </div>
             <div className="mb-3">
                 {exit.matchedPersonnel ? (
-                    <span className="inline-flex items-center gap-1 text-xs text-gray-600 bg-gray-50 px-3 py-1 rounded-full border border-gray-200">
+                    <span className="inline-flex items-center gap-1 text-xs text-tinta-suave bg-papel-hondo px-3 py-1 rounded-full border border-papel-borde">
                         👤 <span className="font-semibold">{exit.matchedPersonnel.name}</span>
                     </span>
                 ) : exit.rawPersonnel ? (
                     <div className="flex items-center gap-2">
-                        <span className="text-xs text-amber-600">👤 Trabajador "{exit.rawPersonnel}" no existe.</span>
-                        <button onClick={() => onCreatePersonnel(exit.rawPersonnel)} className="text-xs font-black text-blue-600 hover:underline">+ Crear</button>
+                        <span className="text-xs text-atencion">👤 Trabajador "{exit.rawPersonnel}" no existe.</span>
+                        <button onClick={() => onCreatePersonnel(exit.rawPersonnel)} className="text-xs font-black text-marca-oscuro hover:underline">+ Crear</button>
                     </div>
                 ) : null}
             </div>
             <div className="flex gap-2">
                 <button onClick={onConfirm} disabled={!canConfirm}
-                    className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold rounded-xl text-sm transition-all">
+                    className="flex-1 py-2 bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-tenue text-tinta font-bold rounded-xl text-sm transition-all">
                     ✅ Confirmar y registrar
                 </button>
-                <button onClick={onCancel} className="px-4 py-2 border border-gray-200 text-gray-500 hover:bg-gray-50 rounded-xl text-sm font-semibold">✕</button>
+                <button onClick={onCancel} className="px-4 py-2 border border-papel-borde text-tinta-tenue hover:bg-papel-hondo rounded-xl text-sm font-semibold">✕</button>
             </div>
         </div>
     );
@@ -657,19 +657,19 @@ const MovementRow: React.FC<{
     const handleSelect = (id: string) => { onSelect(idx, id); setMode('idle'); setSearch(''); };
 
     return (
-        <div className="flex items-start gap-3 p-2.5 rounded-xl bg-gray-50">
-            <span className={`mt-0.5 w-3 h-3 rounded-full flex-shrink-0 ${chosen ? 'bg-green-400' : pm.candidates.length ? 'bg-amber-400' : 'bg-red-300'}`} />
+        <div className="flex items-start gap-3 p-2.5 rounded-xl bg-papel-hondo">
+            <span className={`mt-0.5 w-3 h-3 rounded-full flex-shrink-0 ${chosen ? 'bg-bien' : pm.candidates.length ? 'bg-atencion' : 'bg-alerta'}`} />
             <div className="flex-1 min-w-0">
                 <div className="flex items-baseline gap-2">
-                    <span className="text-sm font-black text-gray-700">{pm.quantity}</span>
-                    <span className="text-sm text-gray-500 italic truncate">"{pm.rawName}"</span>
+                    <span className="text-sm font-black text-tinta-suave">{pm.quantity}</span>
+                    <span className="text-sm text-tinta-tenue italic truncate">"{pm.rawName}"</span>
                 </div>
 
                 {chosen ? (
                     <div className="flex items-center gap-2 mt-0.5">
-                        <p className="text-xs text-green-700 font-semibold">→ {chosen.name}</p>
+                        <p className="text-xs text-bien font-semibold">→ {chosen.name}</p>
                         <button onClick={() => { setMode('browse'); setSearch(''); }}
-                            className="text-[10px] text-gray-400 hover:text-blue-500 underline">cambiar</button>
+                            className="text-[10px] text-tinta-tenue hover:text-marca-oscuro underline">cambiar</button>
                     </div>
                 ) : mode === 'browse' ? (
                     <div className="mt-1 space-y-1">
@@ -679,62 +679,62 @@ const MovementRow: React.FC<{
                             value={search}
                             onChange={e => setSearch(e.target.value)}
                             placeholder="Buscar ítem..."
-                            className="w-full text-xs border border-blue-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                            className="w-full text-xs border border-marca-borde rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-marca"
                         />
                         <div className="max-h-32 overflow-y-auto space-y-0.5">
                             {filteredItems.slice(0, 20).map(i => (
                                 <button key={i.id} onClick={() => handleSelect(i.id)}
-                                    className="w-full text-left text-xs px-2 py-1 rounded-lg hover:bg-blue-50 hover:text-blue-700 text-gray-700 transition-colors">
+                                    className="w-full text-left text-xs px-2 py-1 rounded-lg hover:bg-marca-suave hover:text-marca-oscuro text-tinta-suave transition-colors">
                                     {i.name}
-                                    <span className="ml-1 text-gray-400">({i.quantity} {i.unit})</span>
+                                    <span className="ml-1 text-tinta-tenue">({i.quantity} {i.unit})</span>
                                 </button>
                             ))}
-                            {filteredItems.length === 0 && <p className="text-xs text-gray-400 px-2">Sin resultados</p>}
+                            {filteredItems.length === 0 && <p className="text-xs text-tinta-tenue px-2">Sin resultados</p>}
                         </div>
-                        <div className="flex gap-1 pt-1 border-t border-gray-100">
+                        <div className="flex gap-1 pt-1 border-t border-papel-borde">
                             <button onClick={() => setMode('create')}
-                                className="text-[10px] font-black text-green-600 hover:underline">+ Crear ítem nuevo</button>
-                            <span className="text-gray-300">·</span>
+                                className="text-[10px] font-black text-bien hover:underline">+ Crear ítem nuevo</button>
+                            <span className="text-tinta-tenue">·</span>
                             <button onClick={() => setMode('idle')}
-                                className="text-[10px] text-gray-400 hover:underline">Cancelar</button>
+                                className="text-[10px] text-tinta-tenue hover:underline">Cancelar</button>
                         </div>
                     </div>
                 ) : mode === 'create' ? (
                     <div className="mt-1 space-y-1">
-                        <p className="text-[10px] text-gray-500">¿Qué tipo de ítem es <span className="font-bold">"{pm.rawName}"</span>?</p>
+                        <p className="text-[10px] text-tinta-tenue">¿Qué tipo de ítem es <span className="font-bold">"{pm.rawName}"</span>?</p>
                         <div className="grid grid-cols-2 gap-1">
                             {(Object.entries(TYPE_LABELS) as [InventoryType, string][]).map(([type, label]) => (
                                 <button key={type} onClick={() => { onCreateItem(idx, pm.rawName, pm.unit, type); setMode('idle'); }}
-                                    className="py-1 px-2 border border-gray-200 hover:border-blue-400 hover:bg-blue-50 rounded-lg text-[10px] font-semibold text-gray-600 transition-all text-left">
+                                    className="py-1 px-2 border border-papel-borde hover:border-marca hover:bg-marca-suave rounded-lg text-[10px] font-semibold text-tinta-suave transition-all text-left">
                                     {label}
                                 </button>
                             ))}
                         </div>
                         <button onClick={() => setMode('browse')}
-                            className="text-[10px] text-gray-400 hover:underline">← Volver a la lista</button>
+                            className="text-[10px] text-tinta-tenue hover:underline">← Volver a la lista</button>
                     </div>
                 ) : pm.candidates.length > 0 ? (
                     <div className="mt-1 space-y-1">
                         <div className="flex flex-wrap gap-1">
-                            <p className="text-xs text-amber-600 w-full mb-0.5">¿Cuál de estos?</p>
+                            <p className="text-xs text-atencion w-full mb-0.5">¿Cuál de estos?</p>
                             {pm.candidates.map(c => (
                                 <button key={c.id} onClick={() => onSelect(idx, c.id)}
-                                    className={`text-xs px-2 py-0.5 rounded-full border transition-all ${sel[idx] === c.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'}`}>
+                                    className={`text-xs px-2 py-0.5 rounded-full border transition-all ${sel[idx] === c.id ? 'bg-marca text-tinta border-marca' : 'bg-papel text-tinta-suave border-papel-borde hover:border-marca'}`}>
                                     {c.name}
                                 </button>
                             ))}
                         </div>
                         <button onClick={() => { setMode('browse'); setSearch(''); }}
-                            className="text-[10px] text-gray-400 hover:text-blue-500 underline">Ver todos los ítems</button>
+                            className="text-[10px] text-tinta-tenue hover:text-marca-oscuro underline">Ver todos los ítems</button>
                     </div>
                 ) : (
                     <div className="flex items-center gap-2 mt-0.5">
-                        <p className="text-xs text-red-500">No encontrado</p>
+                        <p className="text-xs text-alerta">No encontrado</p>
                         <button onClick={() => { setMode('browse'); setSearch(''); }}
-                            className="text-xs font-black text-blue-600 hover:underline">Seleccionar</button>
-                        <span className="text-gray-300 text-xs">·</span>
+                            className="text-xs font-black text-marca-oscuro hover:underline">Seleccionar</button>
+                        <span className="text-tinta-tenue text-xs">·</span>
                         <button onClick={() => setMode('create')}
-                            className="text-xs font-black text-green-600 hover:underline">+ Crear</button>
+                            className="text-xs font-black text-bien hover:underline">+ Crear</button>
                     </div>
                 )}
             </div>
@@ -748,22 +748,22 @@ const EditConfirmCard: React.FC<{ edit: ParsedEdit; onConfirm: () => void; onCan
     const currentVal = edit.field === 'brand' ? edit.item.brand : edit.item.color;
     const fieldLabel = edit.field === 'brand' ? 'Marca' : 'Color';
     return (
-        <div className="w-full max-w-[92%] bg-white border border-purple-200 rounded-2xl rounded-bl-sm shadow-md p-4">
-            <p className="text-xs font-black text-purple-500 uppercase tracking-widest mb-3">✏️ Actualizar herramienta</p>
-            <p className="text-sm font-semibold text-gray-800 mb-1">{edit.item.name}</p>
-            <div className="flex items-center gap-2 text-sm text-gray-600 mb-4">
+        <div className="w-full max-w-[92%] bg-papel border border-marca-borde rounded-2xl rounded-bl-sm shadow-md p-4">
+            <p className="text-xs font-black text-marca-oscuro uppercase tracking-widest mb-3">✏️ Actualizar herramienta</p>
+            <p className="text-sm font-semibold text-tinta mb-1">{edit.item.name}</p>
+            <div className="flex items-center gap-2 text-sm text-tinta-suave mb-4">
                 <span className="font-semibold">{fieldLabel}:</span>
-                <span className="text-gray-400 line-through">{currentVal || '—'}</span>
+                <span className="text-tinta-tenue line-through">{currentVal || '—'}</span>
                 <span>→</span>
-                <span className="font-bold text-purple-700">{edit.newValue}</span>
+                <span className="font-bold text-marca-oscuro">{edit.newValue}</span>
             </div>
             <div className="flex gap-2">
                 <button onClick={onConfirm}
-                    className="flex-1 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-sm transition-all">
+                    className="flex-1 py-2 bg-marca hover:bg-marca-fuerte text-tinta font-bold rounded-xl text-sm transition-all">
                     ✅ Confirmar
                 </button>
                 <button onClick={onCancel}
-                    className="px-4 py-2 border border-gray-200 text-gray-500 hover:bg-gray-50 rounded-xl text-sm font-semibold">
+                    className="px-4 py-2 border border-papel-borde text-tinta-tenue hover:bg-papel-hondo rounded-xl text-sm font-semibold">
                     ✕
                 </button>
             </div>

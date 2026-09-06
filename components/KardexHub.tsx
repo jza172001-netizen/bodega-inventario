@@ -94,34 +94,36 @@ export const KardexHub: React.FC<KardexHubProps> = ({
     return (
         <div className="flex flex-col gap-0">
             {/* Tab bar */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-3 overflow-hidden">
+            <div className="bg-papel rounded-xl shadow-sm border border-papel-borde mb-1.5 overflow-hidden">
                 <div className="flex">
                     {TABS.map(tab => (
                         <button
                             key={tab.id}
                             onClick={() => handleTabClick(tab.id)}
-                            className={`flex-1 flex flex-col items-center py-2.5 px-1 text-xs font-bold transition-all border-b-2 ${
+                            className={`flex-1 flex items-center justify-center gap-1 py-2 px-1 text-xs font-bold transition-all border-b-2 ${
                                 activeTab === tab.id
-                                    ? 'border-blue-600 text-blue-600 bg-blue-50'
-                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                                    ? 'border-marca text-marca-oscuro bg-marca-suave'
+                                    : 'border-transparent text-tinta-tenue hover:text-tinta-suave hover:bg-papel-hondo'
                             }`}
                         >
-                            <span className="text-base mb-0.5">{tab.icon}</span>
-                            <span className="text-[10px] leading-tight">{tab.label}</span>
+                            {/* En una línea, no apilados: el icono encima de la palabra
+                                gastaba 106 px de las 844 que tiene el celular. */}
+                            <span className="text-sm">{tab.icon}</span>
+                            <span className="text-[11px] leading-none">{tab.label}</span>
                         </button>
                     ))}
                 </div>
 
                 {activeTab === 'inventory' && (
-                    <div className="flex gap-1.5 px-3 py-2 border-t border-gray-100 overflow-x-auto">
+                    <div className="flex gap-1.5 px-3 py-1.5 border-t border-papel-borde overflow-x-auto">
                         {INV_TYPES.map(t => (
                             <button
                                 key={String(t.type)}
                                 onClick={() => { setInvType(t.type); onBehaviorLog?.('FILTER', `Filtro inventario: ${t.label}`); }}
                                 className={`flex-shrink-0 text-xs font-semibold px-3 py-1 rounded-full border transition-all ${
                                     invType === t.type
-                                        ? 'bg-blue-600 text-white border-blue-600'
-                                        : 'bg-white text-gray-600 border-gray-200 hover:border-blue-400'
+                                        ? 'bg-marca text-tinta border-marca'
+                                        : 'bg-papel text-tinta-suave border-papel-borde hover:border-marca'
                                 }`}
                             >
                                 {t.label}

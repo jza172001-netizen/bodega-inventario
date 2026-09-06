@@ -71,7 +71,7 @@ export const PeriodPicker: React.FC<Props> = ({ value, onChange, onBehaviorLog }
                         <button key={p.key} type="button"
                             onClick={() => { setPersonalizado(false); onChange(p.build()); onBehaviorLog?.('FILTER', `Período: ${p.label}`); }}
                             className={`px-2.5 py-1 rounded-full text-[11px] font-black transition-all ${
-                                activo ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:border-blue-400'
+                                activo ? 'bg-marca text-tinta' : 'bg-papel text-tinta-suave border border-papel-borde hover:border-marca'
                             }`}>
                             {p.label}
                         </button>
@@ -80,7 +80,7 @@ export const PeriodPicker: React.FC<Props> = ({ value, onChange, onBehaviorLog }
                 <button type="button"
                     onClick={() => setPersonalizado(v => !v)}
                     className={`px-2.5 py-1 rounded-full text-[11px] font-black transition-all ${
-                        personalizado ? 'bg-gray-800 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-400'
+                        personalizado ? 'bg-tinta text-papel' : 'bg-papel text-tinta-suave border border-papel-borde hover:border-tinta-tenue'
                     }`}>
                     Fechas…
                 </button>
@@ -90,11 +90,11 @@ export const PeriodPicker: React.FC<Props> = ({ value, onChange, onBehaviorLog }
                 <div className="flex items-center gap-1.5">
                     <input type="date" value={desde}
                         onChange={e => { setDesde(e.target.value); aplicarPersonalizado(e.target.value, hasta); }}
-                        className="flex-1 min-w-0 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white" />
-                    <span className="text-[11px] text-gray-400">→</span>
+                        className="flex-1 min-w-0 text-xs border border-papel-borde rounded-lg px-2 py-1.5 bg-papel" />
+                    <span className="text-[11px] text-tinta-tenue">→</span>
                     <input type="date" value={hasta}
                         onChange={e => { setHasta(e.target.value); aplicarPersonalizado(desde, e.target.value); }}
-                        className="flex-1 min-w-0 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white" />
+                        className="flex-1 min-w-0 text-xs border border-papel-borde rounded-lg px-2 py-1.5 bg-papel" />
                 </div>
             )}
         </div>

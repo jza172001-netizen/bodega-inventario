@@ -97,34 +97,34 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onFinish }) =>
 
     return (
         <div className="fixed inset-0 bg-black/70 z-[100] flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
+            <div className="bg-papel rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
                 {/* Progress */}
                 <div className="px-6 pt-5 pb-3">
                     <div className="flex gap-1.5 mb-1">
                         {STEPS.map((_, i) => (
-                            <div key={i} className={`flex-1 h-1.5 rounded-full transition-all duration-300 ${i <= step ? 'bg-blue-500' : 'bg-gray-200'}`} />
+                            <div key={i} className={`flex-1 h-1.5 rounded-full transition-all duration-300 ${i <= step ? 'bg-marca' : 'bg-papel-borde'}`} />
                         ))}
                     </div>
-                    <p className="text-[10px] text-gray-400 font-semibold text-right">Paso {step + 1} de {STEPS.length}</p>
+                    <p className="text-[10px] text-tinta-tenue font-semibold text-right">Paso {step + 1} de {STEPS.length}</p>
                 </div>
 
                 {/* Content */}
                 <div className="flex-1 overflow-y-auto px-6 pb-2">
                     <div className="text-5xl mb-3 text-center">{current.icon}</div>
-                    <h2 className="text-xl font-black text-gray-900 text-center mb-4">{current.title}</h2>
+                    <h2 className="text-xl font-black text-tinta text-center mb-4">{current.title}</h2>
 
                     {current.intro && (
-                        <p className="text-sm text-gray-600 leading-relaxed mb-4 whitespace-pre-line">{current.intro}</p>
+                        <p className="text-sm text-tinta-suave leading-relaxed mb-4 whitespace-pre-line">{current.intro}</p>
                     )}
 
                     {current.items && (
                         <div className="space-y-2.5 mb-4">
                             {current.items.map((item, i) => (
-                                <div key={i} className="flex gap-3 p-3 bg-gray-50 rounded-xl">
+                                <div key={i} className="flex gap-3 p-3 bg-papel-hondo rounded-xl">
                                     <span className="text-xl flex-shrink-0 mt-0.5">{item.icon}</span>
                                     <div>
-                                        <p className="text-sm font-bold text-gray-800">{item.label}</p>
-                                        <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{item.desc}</p>
+                                        <p className="text-sm font-bold text-tinta">{item.label}</p>
+                                        <p className="text-xs text-tinta-tenue mt-0.5 leading-relaxed">{item.desc}</p>
                                     </div>
                                 </div>
                             ))}
@@ -132,26 +132,26 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onFinish }) =>
                     )}
 
                     {current.tip && (
-                        <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-2">
-                            <p className="text-xs text-blue-700 leading-relaxed">{current.tip}</p>
+                        <div className="bg-marca-suave border border-marca-borde rounded-xl p-3 mb-2">
+                            <p className="text-xs text-marca-oscuro leading-relaxed">{current.tip}</p>
                         </div>
                     )}
                 </div>
 
                 {/* Footer */}
-                <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between gap-3">
+                <div className="px-6 py-4 border-t border-papel-borde flex items-center justify-between gap-3">
                     {!isFirst ? (
-                        <button onClick={() => setStep(s => s - 1)} className="text-sm text-gray-400 hover:text-gray-600 font-semibold px-3 py-2">
+                        <button onClick={() => setStep(s => s - 1)} className="text-sm text-tinta-tenue hover:text-tinta-suave font-semibold px-3 py-2">
                             ← Anterior
                         </button>
                     ) : (
-                        <button onClick={onFinish} className="text-sm text-gray-400 hover:text-gray-500 font-semibold px-3 py-2">
+                        <button onClick={onFinish} className="text-sm text-tinta-tenue hover:text-tinta-tenue font-semibold px-3 py-2">
                             Saltar tutorial
                         </button>
                     )}
                     <button
                         onClick={() => isLast ? onFinish() : setStep(s => s + 1)}
-                        className="flex-1 max-w-[200px] py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm transition-all"
+                        className="flex-1 max-w-[200px] py-3 bg-marca hover:bg-marca-fuerte text-tinta font-bold rounded-xl text-sm transition-all"
                     >
                         {isLast ? '¡Empezar a usar la app! 🚀' : 'Siguiente →'}
                     </button>

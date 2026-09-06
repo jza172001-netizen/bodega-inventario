@@ -88,16 +88,16 @@ export const AddPurchaseOrderModal: React.FC<AddPurchaseOrderModalProps> = ({ is
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
-            <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-2xl m-4 max-h-[90vh] overflow-y-auto">
+            <div className="bg-papel rounded-xl shadow-2xl p-8 w-full max-w-2xl m-4 max-h-[90vh] overflow-y-auto">
                 <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-2xl font-bold text-gray-800">Crear Orden de Compra</h2>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><XIcon className="w-6 h-6" /></button>
+                    <h2 className="text-2xl font-bold text-tinta">Crear Orden de Compra</h2>
+                    <button onClick={onClose} className="text-tinta-tenue hover:text-tinta-suave"><XIcon className="w-6 h-6" /></button>
                 </div>
-                 {lowStockItems.length > 0 && <div className="mb-4 p-3 bg-yellow-50 rounded-lg">
-                    <h3 className="font-semibold text-yellow-800 mb-2">Sugerencias (Stock Bajo)</h3>
+                 {lowStockItems.length > 0 && <div className="mb-4 p-3 bg-atencion-suave rounded-lg">
+                    <h3 className="font-semibold text-atencion mb-2">Sugerencias (Stock Bajo)</h3>
                     <div className="flex flex-wrap gap-2">
                         {lowStockItems.map(item => (
-                            <button key={item.id} type="button" onClick={() => addLowStockItem(item)} className="px-2 py-1 bg-yellow-200 text-yellow-900 text-xs font-medium rounded-full hover:bg-yellow-300">
+                            <button key={item.id} type="button" onClick={() => addLowStockItem(item)} className="px-2 py-1 bg-atencion-suave text-atencion text-xs font-medium rounded-full hover:bg-atencion">
                                 {item.name}
                             </button>
                         ))}
@@ -106,53 +106,53 @@ export const AddPurchaseOrderModal: React.FC<AddPurchaseOrderModalProps> = ({ is
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Proveedor</label>
+                            <label className="block text-sm font-medium text-tinta-suave mb-1">Proveedor</label>
                             <input type="text" value={supplier} onChange={e => setSupplier(e.target.value)} required className="w-full input-style"/>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Fecha de Entrega Estimada</label>
+                            <label className="block text-sm font-medium text-tinta-suave mb-1">Fecha de Entrega Estimada</label>
                             <input type="date" value={expectedDeliveryDate} onChange={e => setExpectedDeliveryDate(e.target.value)} className="w-full input-style"/>
                         </div>
                     </div>
                     <div>
-                        <h3 className="text-lg font-medium text-gray-800 mb-2 border-b pb-2">Artículos a Ordenar</h3>
+                        <h3 className="text-lg font-medium text-tinta mb-2 border-b pb-2">Artículos a Ordenar</h3>
                         <div className="space-y-3">
                         {orderItems.map((item, index) => (
                             <div key={item.tempId} className="grid grid-cols-12 gap-2 items-center">
                                 <div className="col-span-5">
-                                    <label className={`text-sm font-medium text-gray-700 mb-1 ${index !== 0 ? 'hidden' : 'block'}`}>Artículo</label>
+                                    <label className={`text-sm font-medium text-tinta-suave mb-1 ${index !== 0 ? 'hidden' : 'block'}`}>Artículo</label>
                                     <select value={item.itemId} onChange={e => handleItemChange(item.tempId, 'itemId', e.target.value)} className="w-full input-style">
                                         <option value="">Seleccionar...</option>
                                         {items.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
                                     </select>
                                 </div>
                                 <div className="col-span-3">
-                                    <label className={`text-sm font-medium text-gray-700 mb-1 ${index !== 0 ? 'hidden' : 'block'}`}>Cantidad</label>
+                                    <label className={`text-sm font-medium text-tinta-suave mb-1 ${index !== 0 ? 'hidden' : 'block'}`}>Cantidad</label>
                                     <input type="number" min="1" value={item.quantity} onChange={e => handleItemChange(item.tempId, 'quantity', parseInt(e.target.value) || 1)} className="w-full input-style" />
                                 </div>
                                  <div className="col-span-3">
-                                    <label className={`text-sm font-medium text-gray-700 mb-1 ${index !== 0 ? 'hidden' : 'block'}`}>Precio U.</label>
+                                    <label className={`text-sm font-medium text-tinta-suave mb-1 ${index !== 0 ? 'hidden' : 'block'}`}>Precio U.</label>
                                     <input type="text" value={item.priceStr} onChange={e => handleItemChange(item.tempId, 'priceStr', e.target.value)} className="w-full input-style" />
                                 </div>
                                 <div className="col-span-1 self-end">
-                                    {orderItems.length > 1 && <button type="button" onClick={() => removeOrderItemRow(item.tempId)} className="text-red-500 hover:text-red-700 p-2">
+                                    {orderItems.length > 1 && <button type="button" onClick={() => removeOrderItemRow(item.tempId)} className="text-alerta hover:text-alerta p-2">
                                         <XIcon className="w-4 h-4" />
                                     </button>}
                                 </div>
                             </div>
                         ))}
                         </div>
-                        <button type="button" onClick={addOrderItemRow} className="mt-2 flex items-center text-sm text-blue-600 hover:text-blue-800 font-medium">
+                        <button type="button" onClick={addOrderItemRow} className="mt-2 flex items-center text-sm text-marca-oscuro hover:text-marca-oscuro font-medium">
                            <PlusIcon className="w-4 h-4 mr-1" /> Añadir Artículo
                         </button>
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Notas</label>
+                        <label className="block text-sm font-medium text-tinta-suave mb-1">Notas</label>
                         <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className="w-full input-style" />
                     </div>
                     <div className="flex justify-end space-x-3 pt-4">
-                        <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Cancelar</button>
-                        <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Guardar Orden</button>
+                        <button type="button" onClick={onClose} className="px-4 py-2 bg-papel-borde text-tinta rounded-md hover:bg-papel-borde">Cancelar</button>
+                        <button type="submit" className="px-4 py-2 bg-marca text-tinta rounded-md hover:bg-marca-fuerte">Guardar Orden</button>
                     </div>
                 </form>
             </div>

@@ -128,27 +128,27 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
     const PersonRow: React.FC<{ h: Hit & { kind: 'person' }; showCat?: boolean }> = ({ h, showCat }) => (
         <button
             onClick={() => { onBehaviorLog?.('SEARCH_SELECT', `Seleccionó personal: ${h.person.name}`); onNavigate('kardex', 'loans'); onClose(); }}
-            className="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-gray-50 transition-colors"
+            className="w-full text-left px-4 py-3 hover:bg-marca-suave border-b border-papel-borde transition-colors"
         >
             <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-sm">👷</span>
-                        <span className="font-semibold text-gray-900 text-sm">{h.person.name}</span>
+                        <span className="font-semibold text-tinta text-sm">{h.person.name}</span>
                         {showCat && (
-                            <span className="text-[9px] font-black bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full uppercase tracking-wide">Personal</span>
+                            <span className="text-[9px] font-black bg-marca-suave text-marca-oscuro px-1.5 py-0.5 rounded-full uppercase tracking-wide">Personal</span>
                         )}
                     </div>
-                    {h.person.phone && <p className="text-xs text-gray-400 mt-0.5">{h.person.phone}</p>}
+                    {h.person.phone && <p className="text-xs text-tinta-tenue mt-0.5">{h.person.phone}</p>}
                     {h.loanItems.length > 0 ? (
-                        <p className="text-xs text-yellow-700 font-semibold mt-1">
+                        <p className="text-xs text-atencion font-semibold mt-1">
                             🔑 Tiene: {h.loanItems.map(i => i.name).join(', ')}
                         </p>
                     ) : (
-                        <p className="text-xs text-green-600 mt-1">✅ Sin préstamos activos</p>
+                        <p className="text-xs text-bien mt-1">✅ Sin préstamos activos</p>
                     )}
                 </div>
-                <span className="text-[10px] text-blue-400 font-semibold flex-shrink-0 mt-0.5">Ver préstamos →</span>
+                <span className="text-[10px] text-tinta-tenue font-semibold flex-shrink-0 mt-0.5">Ver préstamos →</span>
             </div>
         </button>
     );
@@ -156,54 +156,54 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
     const ItemRow: React.FC<{ h: Hit & { kind: 'item' }; showCat?: boolean }> = ({ h, showCat }) => (
         <button
             onClick={() => { onBehaviorLog?.('SEARCH_SELECT', `Seleccionó ítem: ${h.item.name}`); onNavigate('kardex', 'inventory'); onClose(); }}
-            className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-50 transition-colors"
+            className="w-full text-left px-4 py-3 hover:bg-papel-hondo border-b border-papel-borde transition-colors"
         >
             <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-sm">{TYPE_LABEL[h.item.inventoryType]}</span>
-                        <span className="font-semibold text-gray-900 text-sm truncate">{h.item.name}</span>
+                        <span className="font-semibold text-tinta text-sm truncate">{h.item.name}</span>
                         {showCat && (
-                            <span className="text-[9px] font-black bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full uppercase tracking-wide">
+                            <span className="text-[9px] font-black bg-papel-hondo text-tinta-suave px-1.5 py-0.5 rounded-full uppercase tracking-wide">
                                 {CAT_NAME[h.item.inventoryType]}
                             </span>
                         )}
                     </div>
-                    <p className="text-xs text-gray-500 mt-0.5">{h.item.subCategory}</p>
+                    <p className="text-xs text-tinta-tenue mt-0.5">{h.item.subCategory}</p>
                     {h.holders.length > 0 && (
-                        <p className="text-xs text-yellow-700 font-semibold mt-1">
+                        <p className="text-xs text-atencion font-semibold mt-1">
                             🔑 Con {h.holders.join(', ')}
                         </p>
                     )}
                     {h.recent.length > 0 && (
-                        <p className="text-[10px] text-gray-400 mt-1">
+                        <p className="text-[10px] text-tinta-tenue mt-1">
                             Último mov: {new Date(h.recent[0].timestamp).toLocaleDateString('es-CO')} · {h.recent[0].type}
                         </p>
                     )}
                 </div>
                 <div className="flex-shrink-0 text-right">
-                    <span className={`text-lg font-black ${h.item.quantity === 0 ? 'text-red-500' : h.item.quantity <= h.item.minStock && h.item.minStock > 0 ? 'text-orange-500' : 'text-green-600'}`}>
+                    <span className={`text-lg font-black ${h.item.quantity === 0 ? 'text-alerta' : h.item.quantity <= h.item.minStock && h.item.minStock > 0 ? 'text-atencion' : 'text-bien'}`}>
                         {h.item.quantity}
                     </span>
-                    <p className="text-[10px] text-gray-400">{h.item.unit}</p>
+                    <p className="text-[10px] text-tinta-tenue">{h.item.unit}</p>
                 </div>
             </div>
         </button>
     );
 
     const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-        <p className="px-4 pt-3 pb-1 text-[10px] font-black text-gray-400 uppercase tracking-widest bg-gray-50/60">{children}</p>
+        <p className="px-4 pt-3 pb-1 text-[10px] font-black text-tinta-tenue uppercase tracking-widest bg-papel-hondo/60">{children}</p>
     );
 
     return (
         <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 px-4" onClick={closeWithLog}>
             <div
-                className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden"
+                className="w-full max-w-lg bg-papel rounded-2xl shadow-2xl border border-papel-borde overflow-hidden"
                 onClick={e => e.stopPropagation()}
             >
                 {/* Search input */}
-                <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
-                    <svg className="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="flex items-center gap-3 px-4 py-3 border-b border-papel-borde">
+                    <svg className="w-5 h-5 text-tinta-tenue flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
                     </svg>
                     <input
@@ -212,13 +212,13 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                         value={query}
                         onChange={e => setQuery(e.target.value)}
                         placeholder="Buscar herramienta, material o persona..."
-                        className="flex-1 text-sm text-gray-800 placeholder-gray-400 outline-none"
+                        className="flex-1 text-sm text-tinta placeholder-tinta-tenue outline-none"
                         autoComplete="off"
                         autoCorrect="off"
                         autoCapitalize="off"
                         spellCheck={false}
                     />
-                    <button onClick={closeWithLog} className="text-gray-400 hover:text-gray-600 text-xs font-semibold px-2 py-1 rounded-lg hover:bg-gray-100">
+                    <button onClick={closeWithLog} className="text-tinta-tenue hover:text-tinta-suave text-xs font-semibold px-2 py-1 rounded-lg hover:bg-papel-hondo">
                         ESC
                     </button>
                 </div>
@@ -226,12 +226,12 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                 {/* Results */}
                 <div className="max-h-[60vh] overflow-y-auto">
                     {q.length < 2 && (
-                        <p className="text-center py-10 text-gray-400 text-sm">Escribe al menos 2 caracteres…</p>
+                        <p className="text-center py-10 text-tinta-tenue text-sm">Escribe al menos 2 caracteres…</p>
                     )}
                     {q.length >= 2 && !hasResults && (
                         <div className="text-center py-10 px-6">
-                            <p className="text-gray-400 text-sm">Nada se parece a «{q}».</p>
-                            <p className="text-gray-300 text-xs mt-1">Probá con menos letras.</p>
+                            <p className="text-tinta-tenue text-sm">Nada se parece a «{q}».</p>
+                            <p className="text-tinta-tenue text-xs mt-1">Probá con menos letras.</p>
                         </div>
                     )}
 

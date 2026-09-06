@@ -216,8 +216,8 @@ export const PersonnelDetailModal: React.FC<Props> = ({
     const ToolCard = ({ g }: { g: LoanGroup }) => {
         const d = daysSince(g.date);
         const isPending = g.pendingPickup;
-        const colorClass = isPending ? 'border-orange-200 bg-orange-50' : d > 14 ? 'border-red-200 bg-red-50' : d > 7 ? 'border-yellow-200 bg-yellow-50' : 'border-blue-100 bg-blue-50';
-        const badgeClass = isPending ? 'bg-orange-100 text-orange-700' : d > 14 ? 'bg-red-100 text-red-700' : d > 7 ? 'bg-yellow-100 text-yellow-700' : 'bg-blue-100 text-blue-700';
+        const colorClass = isPending ? 'border-atencion bg-atencion-suave' : d > 14 ? 'border-alerta bg-alerta-suave' : d > 7 ? 'border-atencion bg-atencion-suave' : 'border-marca-borde bg-marca-suave';
+        const badgeClass = isPending ? 'bg-atencion-suave text-atencion' : d > 14 ? 'bg-alerta-suave text-alerta' : d > 7 ? 'bg-atencion-suave text-atencion' : 'bg-marca-suave text-marca-oscuro';
         const key = groupKey(g);
         const proj = projectName(g.projectId);
 
@@ -231,20 +231,20 @@ export const PersonnelDetailModal: React.FC<Props> = ({
                 {/* Main row */}
                 <div className="flex items-start justify-between p-3 gap-2">
                     <div className="min-w-0 flex-1">
-                        <p className="font-semibold text-gray-800 text-sm leading-snug">{itemName(g.itemId)}</p>
-                        <p className="text-xs text-gray-400 mt-0.5">
+                        <p className="font-semibold text-tinta text-sm leading-snug">{itemName(g.itemId)}</p>
+                        <p className="text-xs text-tinta-tenue mt-0.5">
                             {g.totalQty} {itemUnit(g.itemId)} · {g.date.toLocaleDateString('es-CO')}
                             {esOficial && verCuadrilla && g.personnelId !== person.id && (
-                                <span className="ml-1 font-black text-indigo-600">· {nombreDe(g.personnelId)}</span>
+                                <span className="ml-1 font-black text-marca-oscuro">· {nombreDe(g.personnelId)}</span>
                             )}
                         </p>
                         {/* Lo que salió pegado a la herramienta. */}
                         <AccesoriosDeItem item={items.find(i => i.id === g.itemId)} className="mt-1" />
                         {proj && (
-                            <p className="text-xs text-indigo-600 font-semibold mt-0.5 truncate">📁 {proj}</p>
+                            <p className="text-xs text-marca-oscuro font-semibold mt-0.5 truncate">📁 {proj}</p>
                         )}
                         {isPending && (
-                            <p className="text-xs font-black text-orange-600 mt-0.5">📍 Pendiente de recoger</p>
+                            <p className="text-xs font-black text-atencion mt-0.5">📍 Pendiente de recoger</p>
                         )}
                     </div>
                     <span className={`flex-shrink-0 text-xs font-black px-2.5 py-1 rounded-full ${badgeClass}`}>
@@ -260,8 +260,8 @@ export const PersonnelDetailModal: React.FC<Props> = ({
                             onClick={() => handlePickupToggle(g)}
                             className={`text-[11px] font-bold px-2.5 py-1.5 rounded-lg transition-all ${
                                 isPending
-                                    ? 'bg-orange-500 text-white hover:bg-orange-600'
-                                    : 'bg-orange-100 text-orange-700 hover:bg-orange-200'
+                                    ? 'bg-atencion text-tinta hover:bg-atencion'
+                                    : 'bg-atencion-suave text-atencion hover:bg-atencion-suave'
                             }`}
                         >
                             {isPending ? '✕ No recoger' : '📍 Ir a recoger'}
@@ -274,8 +274,8 @@ export const PersonnelDetailModal: React.FC<Props> = ({
                             onClick={() => togglePanel(g, 'project')}
                             className={`text-[11px] font-bold px-2.5 py-1.5 rounded-lg transition-all ${
                                 isProjectOpen
-                                    ? 'bg-indigo-600 text-white'
-                                    : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
+                                    ? 'bg-marca text-tinta'
+                                    : 'bg-marca-suave text-marca-oscuro hover:bg-marca-suave'
                             }`}
                         >
                             📁 Proyecto
@@ -288,8 +288,8 @@ export const PersonnelDetailModal: React.FC<Props> = ({
                             onClick={() => togglePanel(g, 'transfer')}
                             className={`text-[11px] font-bold px-2.5 py-1.5 rounded-lg transition-all ${
                                 isTransferOpen
-                                    ? 'bg-purple-600 text-white'
-                                    : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                                    ? 'bg-marca text-tinta'
+                                    : 'bg-marca-suave text-marca-oscuro hover:bg-marca-suave'
                             }`}
                         >
                             ↗️ Traspasar
@@ -300,7 +300,7 @@ export const PersonnelDetailModal: React.FC<Props> = ({
                     {onReturnLoan && (
                         <button
                             onClick={() => handleReturn(g)}
-                            className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white transition-all"
+                            className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg bg-bien hover:bg-bien text-papel transition-all"
                         >
                             ✓ Devolver
                         </button>
@@ -309,14 +309,14 @@ export const PersonnelDetailModal: React.FC<Props> = ({
 
                 {/* Project panel */}
                 {isProjectOpen && (
-                    <div className="border-t border-indigo-100 bg-indigo-50 px-3 py-3 space-y-2">
-                        <p className="text-[11px] font-black text-indigo-700 uppercase tracking-wide">Asignar proyecto</p>
+                    <div className="border-t border-marca-borde bg-marca-suave px-3 py-3 space-y-2">
+                        <p className="text-[11px] font-black text-marca-oscuro uppercase tracking-wide">Asignar proyecto</p>
                         {projects.length > 0 && (
                             <div className="flex gap-2">
                                 <select
                                     value={selectedProject}
                                     onChange={e => setSelectedProject(e.target.value)}
-                                    className="flex-1 text-xs border border-indigo-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
+                                    className="flex-1 text-xs border border-marca-borde rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-marca bg-papel"
                                 >
                                     <option value="">— Elegir proyecto —</option>
                                     {[...projects].sort((a, b) => a.name.localeCompare(b.name, 'es')).map(p => (
@@ -326,26 +326,26 @@ export const PersonnelDetailModal: React.FC<Props> = ({
                                 <button
                                     onClick={() => handleAssignProject(g)}
                                     disabled={!selectedProject}
-                                    className="text-xs font-bold px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg disabled:opacity-40 transition-all"
+                                    className="text-xs font-bold px-3 py-1.5 bg-marca hover:bg-marca-fuerte text-tinta rounded-lg disabled:opacity-40 transition-all"
                                 >
                                     Asignar
                                 </button>
                             </div>
                         )}
-                        <p className="text-[10px] text-indigo-500 font-semibold">O crear proyecto nuevo:</p>
+                        <p className="text-[10px] text-marca-oscuro font-semibold">O crear proyecto nuevo:</p>
                         <div className="flex gap-2">
                             <input
                                 type="text"
                                 value={newProjectName}
                                 onChange={e => setNewProjectName(e.target.value)}
                                 placeholder="Nombre del proyecto..."
-                                className="flex-1 text-xs border border-indigo-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                className="flex-1 text-xs border border-marca-borde rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-marca"
                                 onKeyDown={e => { if (e.key === 'Enter') handleCreateAndAssign(g); }}
                             />
                             <button
                                 onClick={() => handleCreateAndAssign(g)}
                                 disabled={!newProjectName.trim()}
-                                className="text-xs font-bold px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg disabled:opacity-40 transition-all"
+                                className="text-xs font-bold px-3 py-1.5 bg-marca hover:bg-marca-fuerte text-tinta rounded-lg disabled:opacity-40 transition-all"
                             >
                                 Crear
                             </button>
@@ -355,13 +355,13 @@ export const PersonnelDetailModal: React.FC<Props> = ({
 
                 {/* Transfer panel */}
                 {isTransferOpen && (
-                    <div className="border-t border-purple-100 bg-purple-50 px-3 py-3 space-y-2">
-                        <p className="text-[11px] font-black text-purple-700 uppercase tracking-wide">Traspasar a otro trabajador</p>
+                    <div className="border-t border-marca-borde bg-marca-suave px-3 py-3 space-y-2">
+                        <p className="text-[11px] font-black text-marca-oscuro uppercase tracking-wide">Traspasar a otro trabajador</p>
                         <div className="flex gap-2">
                             <select
                                 value={selectedPerson}
                                 onChange={e => setSelectedPerson(e.target.value)}
-                                className="flex-1 text-xs border border-purple-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-purple-400 bg-white"
+                                className="flex-1 text-xs border border-marca-borde rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-marca bg-papel"
                             >
                                 <option value="">— Elegir trabajador —</option>
                                 {otherPersonnel.map(p => (
@@ -371,7 +371,7 @@ export const PersonnelDetailModal: React.FC<Props> = ({
                             <button
                                 onClick={() => handleTransfer(g)}
                                 disabled={!selectedPerson}
-                                className="text-xs font-bold px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-40 transition-all"
+                                className="text-xs font-bold px-3 py-1.5 bg-marca hover:bg-marca-fuerte text-tinta rounded-lg disabled:opacity-40 transition-all"
                             >
                                 Traspasar
                             </button>
@@ -384,23 +384,23 @@ export const PersonnelDetailModal: React.FC<Props> = ({
 
     const ConsumptionTable = ({ rows }: { rows: { item: Item; total: number; lastDate: Date }[] }) => (
         rows.length === 0 ? (
-            <p className="text-gray-400 text-sm text-center py-12">Sin registros en este período.</p>
+            <p className="text-tinta-tenue text-sm text-center py-12">Sin registros en este período.</p>
         ) : (
             <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                     <thead>
-                        <tr className="text-left text-[10px] font-black text-gray-400 uppercase tracking-wider">
+                        <tr className="text-left text-[10px] font-black text-tinta-tenue uppercase tracking-wider">
                             <th className="pb-3">Ítem</th>
                             <th className="pb-3 text-center">Total</th>
                             <th className="pb-3 text-right">Última salida</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-50">
+                    <tbody className="divide-y divide-papel-borde">
                         {rows.map(({ item, total, lastDate }) => (
-                            <tr key={item.id} className="hover:bg-gray-50">
-                                <td className="py-2.5 font-medium text-gray-800">{item.name}</td>
-                                <td className="py-2.5 text-center font-black text-blue-600">{total} <span className="font-normal text-gray-400 text-xs">{item.unit}</span></td>
-                                <td className="py-2.5 text-right text-gray-400 text-xs">{lastDate.toLocaleDateString('es-CO')}</td>
+                            <tr key={item.id} className="hover:bg-papel-hondo">
+                                <td className="py-2.5 font-medium text-tinta">{item.name}</td>
+                                <td className="py-2.5 text-center font-black text-marca-oscuro">{total} <span className="font-normal text-tinta-tenue text-xs">{item.unit}</span></td>
+                                <td className="py-2.5 text-right text-tinta-tenue text-xs">{lastDate.toLocaleDateString('es-CO')}</td>
                             </tr>
                         ))}
                     </tbody>
@@ -411,55 +411,55 @@ export const PersonnelDetailModal: React.FC<Props> = ({
 
     return (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+            <div className="bg-papel rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
                 {/* Header */}
-                <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
+                <div className="flex items-center justify-between px-6 py-5 border-b border-papel-borde">
                     <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center font-black text-xl">
+                        <div className="w-12 h-12 rounded-2xl bg-marca-suave text-marca-oscuro flex items-center justify-center font-black text-xl">
                             {person.name.charAt(0).toUpperCase()}
                         </div>
                         <div>
-                            <h2 className="text-lg font-black text-gray-900">{person.name}</h2>
-                            <p className="text-xs text-gray-400">
+                            <h2 className="text-lg font-black text-tinta">{person.name}</h2>
+                            <p className="text-xs text-tinta-tenue">
                                 {myMovements.length} movimientos en total
                                 {esOficial && verCuadrilla && ` · ${person.name} y su cuadrilla`}
                             </p>
                         </div>
                     </div>
-                    <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl text-gray-400 hover:text-gray-600">
+                    <button onClick={onClose} className="p-2 hover:bg-papel-hondo rounded-xl text-tinta-tenue hover:text-tinta-suave">
                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
                     </button>
                 </div>
 
                 {esOficial && (
-                    <div className="px-4 pt-3 bg-gray-50">
-                        <div className="flex gap-1 bg-gray-200/70 rounded-xl p-1">
+                    <div className="px-4 pt-3 bg-papel-hondo">
+                        <div className="flex gap-1 bg-papel-borde/70 rounded-xl p-1">
                             {([[false, `Solo ${person.name.split(' ')[0]}`], [true, 'Toda la cuadrilla']] as const).map(([v, label]) => (
                                 <button key={String(v)} type="button" onClick={() => setVerCuadrilla(v)}
                                     className={`flex-1 py-1.5 text-[11px] font-black rounded-lg transition-all ${
-                                        verCuadrilla === v ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+                                        verCuadrilla === v ? 'bg-papel text-tinta shadow-sm' : 'text-tinta-tenue'
                                     }`}>
                                     {label}
                                 </button>
                             ))}
                         </div>
-                        <p className="text-[10px] text-gray-400 mt-1 px-1 truncate">
+                        <p className="text-[10px] text-tinta-tenue mt-1 px-1 truncate">
                             {cuadrilla.map(p => p.name).join(' · ')}
                         </p>
                     </div>
                 )}
 
                 {/* Tabs */}
-                <div className="flex gap-1.5 px-4 py-3 bg-gray-50 border-b border-gray-100 overflow-x-auto">
+                <div className="flex gap-1.5 px-4 py-3 bg-papel-hondo border-b border-papel-borde overflow-x-auto">
                     {TABS.map(t => (
                         <button
                             key={t.key}
                             onClick={() => setTab(t.key)}
-                            className={`flex-shrink-0 flex items-center gap-1 px-3 py-2 text-xs font-black rounded-xl transition-all ${tab === t.key ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-gray-500 border border-gray-200 hover:border-blue-300 hover:text-blue-600'}`}
+                            className={`flex-shrink-0 flex items-center gap-1 px-3 py-2 text-xs font-black rounded-xl transition-all ${tab === t.key ? 'bg-marca text-tinta shadow-sm' : 'bg-papel text-tinta-tenue border border-papel-borde hover:border-marca-borde hover:text-marca-oscuro'}`}
                         >
                             {t.label}
                             {t.count > 0 && (
-                                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${tab === t.key ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-500'}`}>
+                                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${tab === t.key ? 'bg-marca text-tinta' : 'bg-papel-hondo text-tinta-tenue'}`}>
                                     {t.count}
                                 </span>
                             )}
@@ -479,7 +479,7 @@ export const PersonnelDetailModal: React.FC<Props> = ({
                         activeManual.length === 0 ? (
                             <div className="text-center py-12">
                                 <p className="text-2xl mb-2">✅</p>
-                                <p className="text-gray-500 text-sm">No tiene herramienta manual prestada.</p>
+                                <p className="text-tinta-tenue text-sm">No tiene herramienta manual prestada.</p>
                             </div>
                         ) : (
                             <div className="space-y-3">
@@ -492,7 +492,7 @@ export const PersonnelDetailModal: React.FC<Props> = ({
                         activeElectric.length === 0 ? (
                             <div className="text-center py-12">
                                 <p className="text-2xl mb-2">✅</p>
-                                <p className="text-gray-500 text-sm">No tiene herramienta eléctrica prestada.</p>
+                                <p className="text-tinta-tenue text-sm">No tiene herramienta eléctrica prestada.</p>
                             </div>
                         ) : (
                             <div className="space-y-3">

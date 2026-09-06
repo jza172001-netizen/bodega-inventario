@@ -135,15 +135,15 @@ export const CotejoPanel: React.FC<Props> = ({ items, movements, personnel, audi
     const Bloque = ({ titulo, explica, lista }: { titulo: string; explica: string; lista: string[] }) => {
         if (lista.length === 0) return null;
         return (
-            <div className="border border-amber-200 bg-amber-50 rounded-xl p-3 space-y-1">
-                <p className="text-xs font-black text-amber-900">{titulo} · {lista.length}</p>
-                <p className="text-[11px] text-amber-700">{explica}</p>
+            <div className="border border-atencion bg-atencion-suave rounded-xl p-3 space-y-1">
+                <p className="text-xs font-black text-atencion">{titulo} · {lista.length}</p>
+                <p className="text-[11px] text-atencion">{explica}</p>
                 <ul className="space-y-0.5 pt-1">
                     {lista.slice(0, 12).map((x, i) => (
-                        <li key={i} className="text-[11px] text-gray-700">· {x}</li>
+                        <li key={i} className="text-[11px] text-tinta-suave">· {x}</li>
                     ))}
                     {lista.length > 12 && (
-                        <li className="text-[11px] text-gray-400">…y {lista.length - 12} más</li>
+                        <li className="text-[11px] text-tinta-tenue">…y {lista.length - 12} más</li>
                     )}
                 </ul>
             </div>
@@ -153,55 +153,55 @@ export const CotejoPanel: React.FC<Props> = ({ items, movements, personnel, audi
     return (
         <div className="space-y-2">
             <div>
-                <h3 className="text-sm font-black text-gray-900">Cotejo con la bitácora</h3>
-                <p className="text-[11px] text-gray-400">
+                <h3 className="text-sm font-black text-tinta">Cotejo con la bitácora</h3>
+                <p className="text-[11px] text-tinta-tenue">
                     Lo que hay en la bodega contra lo que dice que pasó. Si algo no cuadra, sale acá.
                 </p>
             </div>
 
             {/* Cotejo contra la nube: se pide, no corre solo, porque baja todo. */}
-            <div className="border border-gray-200 rounded-xl p-3 space-y-2">
+            <div className="border border-papel-borde rounded-xl p-3 space-y-2">
                 <div className="flex items-center gap-2">
                     <div className="flex-1 min-w-0">
-                        <p className="text-xs font-black text-gray-800">Este teléfono contra la base</p>
-                        <p className="text-[11px] text-gray-400">
+                        <p className="text-xs font-black text-tinta">Este teléfono contra la base</p>
+                        <p className="text-[11px] text-tinta-tenue">
                             Lo que la bitácora no puede ver: que los dos muestren cosas distintas.
                         </p>
                     </div>
                     <button type="button" onClick={cotejarConLaBase}
                         disabled={contraste.estado === 'mirando'}
-                        className="text-[11px] font-black px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-black disabled:bg-gray-300 text-white flex-shrink-0">
+                        className="text-[11px] font-black px-3 py-1.5 rounded-lg bg-tinta hover:bg-black disabled:bg-papel-borde text-papel flex-shrink-0">
                         {contraste.estado === 'mirando' ? 'Mirando…' : 'Cotejar'}
                     </button>
                 </div>
 
                 {contraste.estado === 'error' && (
-                    <p className="text-[11px] text-red-600">No se pudo leer la base. ¿Hay señal?</p>
+                    <p className="text-[11px] text-alerta">No se pudo leer la base. ¿Hay señal?</p>
                 )}
                 {contraste.estado === 'listo' && contraste.difs.length === 0 && (
-                    <p className="text-[11px] font-bold text-green-700">✅ Coinciden. Nada que reportar.</p>
+                    <p className="text-[11px] font-bold text-bien">✅ Coinciden. Nada que reportar.</p>
                 )}
                 {contraste.estado === 'listo' && contraste.difs.length > 0 && (
-                    <div className="border border-red-200 bg-red-50 rounded-lg p-2 space-y-0.5">
-                        <p className="text-[11px] font-black text-red-800">
+                    <div className="border border-alerta bg-alerta-suave rounded-lg p-2 space-y-0.5">
+                        <p className="text-[11px] font-black text-alerta">
                             {contraste.difs.length} diferencia{contraste.difs.length !== 1 ? 's' : ''}
                         </p>
                         {contraste.difs.slice(0, 12).map((d, i) => (
-                            <p key={i} className="text-[11px] text-gray-700">
+                            <p key={i} className="text-[11px] text-tinta-suave">
                                 · <strong>{d.que}</strong>: {d.detalle}
                             </p>
                         ))}
                         {contraste.difs.length > 12 && (
-                            <p className="text-[11px] text-gray-400">…y {contraste.difs.length - 12} más</p>
+                            <p className="text-[11px] text-tinta-tenue">…y {contraste.difs.length - 12} más</p>
                         )}
                     </div>
                 )}
             </div>
 
             {total === 0 ? (
-                <div className="border border-green-200 bg-green-50 rounded-xl p-3">
-                    <p className="text-xs font-bold text-green-800">✅ Todo cuadra</p>
-                    <p className="text-[11px] text-green-700 mt-0.5">
+                <div className="border border-bien bg-bien-suave rounded-xl p-3">
+                    <p className="text-xs font-bold text-bien">✅ Todo cuadra</p>
+                    <p className="text-[11px] text-bien mt-0.5">
                         Nada vive sin explicación y ninguna cuadrilla se armó sola.
                     </p>
                 </div>

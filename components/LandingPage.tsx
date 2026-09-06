@@ -11,63 +11,63 @@ interface LandingPageProps {
 }
 
 const Feature: React.FC<{ icon: React.ElementType; title: string; description: string }> = ({ icon: Icon, title, description }) => (
-    <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20 hover:bg-white/20 transition-all duration-200">
-        <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center mb-4">
-            <Icon className="w-6 h-6 text-white" />
+    <div className="bg-papel/10 backdrop-blur-sm rounded-2xl p-6 border border-papel/20 hover:bg-papel/20 transition-all duration-200">
+        <div className="w-12 h-12 bg-papel/20 rounded-xl flex items-center justify-center mb-4">
+            <Icon className="w-6 h-6 text-papel" />
         </div>
-        <h3 className="text-lg font-bold text-white mb-2">{title}</h3>
-        <p className="text-blue-100 text-sm leading-relaxed">{description}</p>
+        <h3 className="text-lg font-bold text-papel mb-2">{title}</h3>
+        <p className="text-papel text-sm leading-relaxed">{description}</p>
     </div>
 );
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onVisitorLogin }) => (
-    <div className="min-h-screen bg-gradient-to-br from-blue-800 via-blue-700 to-indigo-800 flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-tinta via-tinta to-tinta-suave flex flex-col">
         <header className="flex items-center justify-between px-8 py-6">
             <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                    <InventoryIcon className="w-6 h-6 text-white" />
+                <div className="w-10 h-10 bg-papel/20 rounded-xl flex items-center justify-center">
+                    <InventoryIcon className="w-6 h-6 text-papel" />
                 </div>
-                <span className="text-white font-black text-xl tracking-tighter uppercase">Bodega Pro</span>
+                <span className="text-papel font-black text-xl tracking-tighter uppercase">Bodega Pro</span>
             </div>
             <button
                 onClick={onGetStarted}
-                className="px-5 py-2.5 bg-white/20 hover:bg-white/30 text-white font-bold rounded-xl border border-white/30 transition-all text-sm"
+                className="px-5 py-2.5 bg-papel/20 hover:bg-papel/30 text-papel font-bold rounded-xl border border-papel/30 transition-all text-sm"
             >
                 Iniciar sesión
             </button>
         </header>
 
         <main className="flex-1 flex flex-col items-center justify-center px-6 py-12 text-center">
-            <div className="inline-flex items-center gap-2 bg-white/10 text-blue-100 text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-full border border-white/20 mb-8">
-                <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+            <div className="inline-flex items-center gap-2 bg-papel/10 text-papel text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-full border border-papel/20 mb-8">
+                <span className="w-2 h-2 bg-bien rounded-full animate-pulse" />
                 Sistema activo
             </div>
 
-            <h1 className="text-5xl md:text-6xl font-black text-white tracking-tighter mb-6 max-w-3xl leading-tight">
+            <h1 className="text-5xl md:text-6xl font-black text-papel tracking-tighter mb-6 max-w-3xl leading-tight">
                 Control total de<br />
-                <span className="text-blue-200">tu almacén.</span>
+                <span className="text-tinta-tenue">tu almacén.</span>
             </h1>
 
-            <p className="text-blue-100 text-lg md:text-xl max-w-xl mb-10 leading-relaxed">
+            <p className="text-papel text-lg md:text-xl max-w-xl mb-10 leading-relaxed">
                 Inventario en tiempo real, trazabilidad completa de movimientos, préstamos, órdenes de compra y análisis de consumo.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 items-center">
                 <button
                     onClick={onGetStarted}
-                    className="px-8 py-4 bg-white text-blue-700 font-black text-lg rounded-2xl hover:bg-blue-50 transition-all duration-200 shadow-2xl shadow-blue-900/40 hover:scale-105 active:scale-95 min-w-[220px]"
+                    className="px-8 py-4 bg-papel text-marca-oscuro font-black text-lg rounded-2xl hover:bg-marca-suave transition-all duration-200 shadow-2xl shadow-marca/40 hover:scale-105 active:scale-95 min-w-[220px]"
                 >
                     🔑 Ingresar como Bodeguero
                 </button>
                 <button
                     onClick={onVisitorLogin}
-                    className="px-8 py-4 bg-white/15 hover:bg-white/25 text-white font-bold text-lg rounded-2xl border border-white/30 transition-all duration-200 hover:scale-105 active:scale-95 min-w-[220px]"
+                    className="px-8 py-4 bg-papel/15 hover:bg-papel/25 text-papel font-bold text-lg rounded-2xl border border-papel/30 transition-all duration-200 hover:scale-105 active:scale-95 min-w-[220px]"
                 >
                     👁 Ver como Visitante
                 </button>
             </div>
 
-            <p className="text-blue-200/60 text-xs mt-4">
+            <p className="text-tinta-tenue/60 text-xs mt-4">
                 Visitante: solo lectura · sin contraseña
             </p>
         </main>
@@ -97,7 +97,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onVisito
             </div>
         </section>
 
-        <footer className="text-center text-blue-300 text-xs pb-6">
+        <footer className="text-center text-tinta-tenue text-xs pb-6">
             © {new Date().getFullYear()} Bodega Pro — Sistema de gestión de almacén
         </footer>
     </div>
