@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Item, Movement, Personnel, PurchaseOrder, MovementType, PurchaseOrderStatus, Project, InventoryType } from '../types';
+import { Item, Movement, Personnel, PurchaseOrder, MovementType, PurchaseOrderStatus, Project, InventoryType , LoteResultado } from '../types';
 import { generateInventoryAnalysis } from '../services/geminiService';
 import { askCopilot, parseExitIntent, parseCreationIntent, parseEditIntent, ParsedExit, ParsedEdit, PendingMovement } from '../services/copilotService';
 
@@ -11,7 +11,7 @@ interface CopilotViewProps {
     projects: Project[];
     /** Devuelve cuántos quedaron realmente registrados: la app puede rechazar
      *  una salida por stock insuficiente. */
-    onLogMovements: (movements: Array<Omit<Movement, 'id'>>) => number;
+    onLogMovements: (movements: Array<Omit<Movement, 'id'>>) => LoteResultado;
     onCreateItem: (item: Omit<Item, 'id'>) => Item;
     onCreateProject: (project: Omit<Project, 'id'>) => Project;
     onCreatePersonnel: (person: Omit<Personnel, 'id'>) => Personnel;
@@ -133,7 +133,7 @@ const CopilotView: React.FC<CopilotViewProps> = ({
             isLoan: LOAN_TYPES.has(items.find(i => i.id === itemId)?.inventoryType ?? InventoryType.HAND_TOOL),
             isReturned: false,
         }));
-        const ok = onLogMovements(movs);
+        const ok = onLogMovements(movs).ok;
         const workerName = sortedPersonnel.find(p => p.id === loanPersonnelId)?.name ?? 'trabajador';
         const itemNames = [...loanSelected.keys()].map(id => items.find(i => i.id === id)?.name ?? id);
         if (ok === 0) {
@@ -239,7 +239,7 @@ const CopilotView: React.FC<CopilotViewProps> = ({
             return { itemId: item.id, type: MovementType.CHECK_OUT, quantity: pm.quantity, timestamp: new Date(), personnelId: exit.matchedPersonnel?.id, projectId: exit.matchedProject?.id, notes: '', isLoan: LOAN_TYPES.has(item.inventoryType), isReturned: false };
         }).filter(Boolean) as Array<Omit<Movement, 'id'>>;
         if (!toLog.length) { addBot('No hay materiales confirmados para registrar.'); return; }
-        const ok = onLogMovements(toLog);
+        const ok = onLogMovements(toLog).ok;
         setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, confirmed: true } : m));
         if (ok === 0) {
             addBot(`❌ No se registró ninguna salida: la bodega rechazó las ${toLog.length} por falta de stock.`);
