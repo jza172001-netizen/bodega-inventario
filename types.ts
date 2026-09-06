@@ -69,6 +69,9 @@ export interface Item {
     accessories?: Accessory[];
     /** Familia confirmada por el usuario. Sin ella se usa la sugerencia del nombre. */
     familia?: string;
+    /** Cuándo se tocó por última vez. Es lo que decide quién gana cuando dos
+     *  teléfonos traen la misma fila distinta. Ver `masReciente` en App.tsx. */
+    updatedAt?: Date;
 }
 
 export interface Project {
@@ -96,6 +99,7 @@ export interface Movement {
      *  vuelto y en qué estado, nunca cuándo: una devolución de hoy seguía
      *  apareciendo en el historial con la fecha de su salida. */
     returnedAt?: Date;
+    updatedAt?: Date;
 }
 
 export interface Personnel {
@@ -104,6 +108,7 @@ export interface Personnel {
     phone?: string;
     isTeamLeader?: boolean;
     teamLeaderId?: string;
+    updatedAt?: Date;
 }
 
 export interface PurchaseOrderItem {
