@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Personnel, Movement, Item, Project, MovementType, InventoryType, ReturnCondition } from '../types';
+import { PeriodPicker, Periodo, periodoPorDefecto } from './PeriodPicker';
 import { ReturnToolModal } from './ReturnToolModal';
 
 interface Props {
@@ -31,7 +32,6 @@ type LoanGroup = {
     personnelId?: string;
 };
 
-const currentYear = new Date().getFullYear();
 const daysSince = (d: Date) => Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
 
 export const PersonnelDetailModal: React.FC<Props> = ({
@@ -58,6 +58,10 @@ export const PersonnelDetailModal: React.FC<Props> = ({
     );
     const esOficial = !!person.isTeamLeader && cuadrilla.length > 0;
     const [verCuadrilla, setVerCuadrilla] = useState(true);
+    // El consumo estaba clavado al AÑO CALENDARIO: en enero no se veía nada y en
+    // diciembre se veía todo revuelto. Lo que sirve para decidir es la semana,
+    // la quincena o el mes.
+    const [periodo, setPeriodo] = useState<Periodo>(periodoPorDefecto());
 
     /** A quiénes mira esta ficha ahora mismo. */
     const idsEnFoco = useMemo(() => {
@@ -105,18 +109,18 @@ export const PersonnelDetailModal: React.FC<Props> = ({
     const activeManual = useMemo(() => {
         const ids = itemByType(InventoryType.HAND_TOOL);
         return groupLoans(liveMovements.filter(m => m.isLoan && !m.isReturned && ids.has(m.itemId)));
-    }, [liveMovements, items]);
+    }, [liveMovements, items, periodo]);
 
     const activeElectric = useMemo(() => {
         const ids = itemByType(InventoryType.ELECTRICAL_TOOL);
         return groupLoans(liveMovements.filter(m => m.isLoan && !m.isReturned && ids.has(m.itemId)));
-    }, [liveMovements, items]);
+    }, [liveMovements, items, periodo]);
 
     const consumoYear = useMemo(() => {
         const consumoIds = itemByType(InventoryType.SINGLE_USE);
         const checkouts = liveMovements.filter(m =>
             m.type === MovementType.CHECK_OUT && !m.isLoan && consumoIds.has(m.itemId) &&
-            new Date(m.timestamp).getFullYear() === currentYear
+            new Date(m.timestamp) >= periodo.from && new Date(m.timestamp) <= periodo.to
         );
         const grouped: Record<string, { item: Item; total: number; lastDate: Date }> = {};
         checkouts.forEach(m => {
@@ -128,13 +132,13 @@ export const PersonnelDetailModal: React.FC<Props> = ({
             if (ts > grouped[m.itemId].lastDate) grouped[m.itemId].lastDate = ts;
         });
         return Object.values(grouped).sort((a, b) => b.total - a.total);
-    }, [liveMovements, items]);
+    }, [liveMovements, items, periodo]);
 
     const eppYear = useMemo(() => {
         const eppIds = itemByType(InventoryType.PPE);
         const checkouts = liveMovements.filter(m =>
             m.type === MovementType.CHECK_OUT && !m.isLoan && eppIds.has(m.itemId) &&
-            new Date(m.timestamp).getFullYear() === currentYear
+            new Date(m.timestamp) >= periodo.from && new Date(m.timestamp) <= periodo.to
         );
         const grouped: Record<string, { item: Item; total: number; lastDate: Date }> = {};
         checkouts.forEach(m => {
@@ -146,7 +150,7 @@ export const PersonnelDetailModal: React.FC<Props> = ({
             if (ts > grouped[m.itemId].lastDate) grouped[m.itemId].lastDate = ts;
         });
         return Object.values(grouped).sort((a, b) => b.total - a.total);
-    }, [liveMovements, items]);
+    }, [liveMovements, items, periodo]);
 
     const itemName = (id: string) => items.find(i => i.id === id)?.name ?? 'Ítem eliminado';
     const itemUnit = (id: string) => items.find(i => i.id === id)?.unit ?? 'und';
@@ -377,14 +381,14 @@ export const PersonnelDetailModal: React.FC<Props> = ({
 
     const ConsumptionTable = ({ rows }: { rows: { item: Item; total: number; lastDate: Date }[] }) => (
         rows.length === 0 ? (
-            <p className="text-gray-400 text-sm text-center py-12">Sin registros este año.</p>
+            <p className="text-gray-400 text-sm text-center py-12">Sin registros en este período.</p>
         ) : (
             <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                     <thead>
                         <tr className="text-left text-[10px] font-black text-gray-400 uppercase tracking-wider">
                             <th className="pb-3">Ítem</th>
-                            <th className="pb-3 text-center">Total año</th>
+                            <th className="pb-3 text-center">Total</th>
                             <th className="pb-3 text-right">Última salida</th>
                         </tr>
                     </thead>
@@ -459,6 +463,12 @@ export const PersonnelDetailModal: React.FC<Props> = ({
                         </button>
                     ))}
                 </div>
+
+                {(tab === 'consumo' || tab === 'epp') && (
+                    <div className="px-4 pt-3">
+                        <PeriodPicker value={periodo} onChange={setPeriodo} />
+                    </div>
+                )}
 
                 {/* Content */}
                 <div className="flex-1 overflow-y-auto p-5">

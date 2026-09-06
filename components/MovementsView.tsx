@@ -2,6 +2,7 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { Movement, Item, Personnel, InventoryType, MovementType, UserRole } from '../types';
 import { getGenus } from '../utils/genus';
+import { PeriodPicker, TODO, Periodo } from './PeriodPicker';
 import { TruckIcon } from './icons/TruckIcon';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
 import { TrashIcon } from './icons/TrashIcon';
@@ -51,8 +52,10 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
     const isOwner = userRole !== UserRole.VISITOR;
     const [page, setPage] = useState(0);
     const [filter, setFilter] = useState<FilterKey>('');
-    const [dateFrom, setDateFrom] = useState('');
-    const [dateTo, setDateTo]     = useState('');
+    // Antes solo había dos casillas de fecha en blanco: para ver "los últimos 21
+    // días" tocaba calcular la fecha a mano. Ahora el rango tiene botones, y las
+    // casillas siguen ahí para el caso raro.
+    const [periodo, setPeriodo] = useState<Periodo>(TODO);
     const [groupByTool, setGroupByTool] = useState(false);
     const bottomSentinelRef = useRef<HTMLDivElement>(null);
 
@@ -99,12 +102,10 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
         });
     }, [allMovements, filter]);
 
-    const byDate = useMemo(() => {
-        let list = filtered;
-        if (dateFrom) list = list.filter(m => fechaRelevante(m) >= new Date(dateFrom));
-        if (dateTo)   list = list.filter(m => fechaRelevante(m) <= new Date(dateTo + 'T23:59:59'));
-        return list;
-    }, [filtered, dateFrom, dateTo]);
+    const byDate = useMemo(() => filtered.filter(m => {
+        const f = fechaRelevante(m);
+        return f >= periodo.from && f <= periodo.to;
+    }), [filtered, periodo]);
 
     /**
      * Agrupa por FAMILIA, no por ítem exacto: "Guantes (Negro · Nn)" y
@@ -130,7 +131,7 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
             || a.familia.localeCompare(b.familia, 'es'));
     }, [byDate, groupByTool, itemMap]);
 
-    useEffect(() => { setPage(0); }, [filter, filterType, dateFrom, dateTo, groupByTool]);
+    useEffect(() => { setPage(0); }, [filter, filterType, periodo, groupByTool]);
 
     const totalPages = Math.ceil(byDate.length / PAGE_SIZE);
     const paged = useMemo(
@@ -248,19 +249,11 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
                 ))}
             </div>
 
-            {/* Date range + group toggle */}
+            {/* Rango de fechas + agrupación */}
             <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-50 flex-wrap">
-                <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-                    className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-300 text-gray-600" />
-                <span className="text-xs text-gray-400">—</span>
-                <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-                    className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-300 text-gray-600" />
-                {(dateFrom || dateTo) && (
-                    <button onClick={() => { setDateFrom(''); setDateTo(''); }}
-                        className="text-xs text-indigo-500 font-semibold hover:text-indigo-700">
-                        Limpiar
-                    </button>
-                )}
+                <div className="flex-1 min-w-0">
+                    <PeriodPicker value={periodo} onChange={setPeriodo} onBehaviorLog={onBehaviorLog} />
+                </div>
                 <button onClick={() => setGroupByTool(g => !g)}
                     className={`ml-auto flex-shrink-0 text-xs font-black px-3 py-1.5 rounded-full transition-all ${
                         groupByTool ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
