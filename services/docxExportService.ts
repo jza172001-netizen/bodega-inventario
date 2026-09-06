@@ -120,12 +120,17 @@ export async function exportReportAsDocx(opts: {
     const today = new Date().toLocaleDateString('es-CO');
 
     const logoBuffer = await fetchLogo();
-    const logoRunLg: ImageRun | null = logoBuffer
-        ? new ImageRun({ data: logoBuffer, transformation: { width: 90, height: 35 }, type: 'png' })
-        : null;
-    const logoRunSm: ImageRun | null = logoBuffer
-        ? new ImageRun({ data: logoBuffer, transformation: { width: 55, height: 22 }, type: 'png' })
-        : null;
+    // El logo salía diminuto en la portada. Y de paso venía achatado: el archivo
+    // es de 1750×608 (2.88 de ancho por cada alto) y estaba puesto en 90×35, que
+    // es 2.57 — o sea aplastado a lo alto. Estas medidas respetan la proporción.
+    const ALTO_POR_ANCHO = 608 / 1750;
+    const logoDe = (ancho: number) => new ImageRun({
+        data: logoBuffer!,
+        transformation: { width: ancho, height: Math.round(ancho * ALTO_POR_ANCHO) },
+        type: 'png',
+    });
+    const logoRunLg: ImageRun | null = logoBuffer ? logoDe(230) : null;
+    const logoRunSm: ImageRun | null = logoBuffer ? logoDe(110) : null;
 
     // ── Data prep ────────────────────────────────────────────────────
     const itemMap = new Map(items.map(i => [i.id, i]));

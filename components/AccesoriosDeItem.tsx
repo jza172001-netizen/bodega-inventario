@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { Item, InventoryType, Accessory } from '../types';
 import { unidadesCon } from '../utils/unidades';
+import { familiaDe, accesorioDeFamilia, palabraDeAccesorio } from '../utils/genus';
 
 /**
  * Lo que sale pegado a una herramienta, dicho donde el bodeguero está mirando.
@@ -54,10 +55,19 @@ export const AgregarAccesorio: React.FC<AgregarProps> = ({ item, items, onEditIt
     const [nombre, setNombre] = useState('');
     const [unidad, setUnidad] = useState('unidades');
 
-    const consumibles = items
+    // El taladro pide brocas y la pulidora discos. Lo que le corresponde a esta
+    // familia va arriba; el resto queda abajo, sin esconderse.
+    const familia = item.familia?.trim() || familiaDe(item.name);
+    const propios = new Set(accesorioDeFamilia(familia, items));
+
+    const disponibles = items
         .filter(i => i.inventoryType === InventoryType.SINGLE_USE || i.inventoryType === InventoryType.PPE)
         .filter(i => !(item.accessories ?? []).some(a => a.itemId === i.id))
         .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+
+    const suyos = disponibles.filter(i => propios.has(i.id));
+    const demas = disponibles.filter(i => !propios.has(i.id));
+    const consumibles = [...suyos, ...demas];
 
     const enganchar = (it: Item) => {
         const acc: Accessory = { nombre: it.name, itemId: it.id, cantidad: 1 };
@@ -82,7 +92,7 @@ export const AgregarAccesorio: React.FC<AgregarProps> = ({ item, items, onEditIt
             <div className="w-full border border-orange-200 bg-orange-50 rounded-lg p-2 space-y-1.5"
                 onClick={e => e.stopPropagation()}>
                 <p className="text-[10px] font-black text-orange-800">Nuevo accesorio para {item.name}</p>
-                <input type="text" value={nombre} autoFocus
+                <input type="text" value={nombre || palabraDeAccesorio(familia)} autoFocus
                     onChange={e => setNombre(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); crearYEnganchar(); } }}
                     placeholder="Ej: Disco, Broca"
@@ -118,9 +128,16 @@ export const AgregarAccesorio: React.FC<AgregarProps> = ({ item, items, onEditIt
             className="text-[11px] font-bold px-2 py-1.5 rounded-lg border border-gray-200 text-gray-600 bg-white max-w-[130px]"
         >
             <option value="">+ Accesorio</option>
-            {consumibles.map(c => (
-                <option key={c.id} value={c.id}>{c.name} · {c.quantity} {c.unit}</option>
-            ))}
+            {suyos.length > 0 && (
+                <optgroup label={`Para ${familia.toLowerCase()}`}>
+                    {suyos.map(c => <option key={c.id} value={c.id}>{c.name} · {c.quantity} {c.unit}</option>)}
+                </optgroup>
+            )}
+            {demas.length > 0 && (
+                <optgroup label={suyos.length > 0 ? 'Todo lo demás' : 'Consumibles'}>
+                    {demas.map(c => <option key={c.id} value={c.id}>{c.name} · {c.quantity} {c.unit}</option>)}
+                </optgroup>
+            )}
             {onCreateItem && <option value="__nuevo__">➕ Crear uno nuevo…</option>}
         </select>
     );

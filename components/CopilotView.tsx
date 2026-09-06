@@ -3,6 +3,7 @@ import { Item, Movement, Personnel, PurchaseOrder, MovementType, PurchaseOrderSt
 import { looseMatch } from '../utils/genus';
 import { generateInventoryAnalysis } from '../services/geminiService';
 import { askCopilot, parseExitIntent, parseCreationIntent, parseEditIntent, ParsedExit, ParsedEdit, PendingMovement } from '../services/copilotService';
+import { unidadesCon } from '../utils/unidades';
 
 interface CopilotViewProps {
     items: Item[];
@@ -523,9 +524,13 @@ const CopilotView: React.FC<CopilotViewProps> = ({
                         </div>
                         <div>
                             <label className="text-[10px] font-black text-green-700 uppercase tracking-wide block mb-1">Unidad</label>
-                            <input type="text" value={createUnit} onChange={e => setCreateUnit(e.target.value)}
-                                placeholder="unidades"
-                                className="w-full text-sm border border-green-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400" />
+                            {/* Lista, no texto libre: escrito a mano salían "und", "Und" y
+                                "unidades" como tres unidades distintas. Era el último
+                                lugar de la app donde la unidad se escribía. */}
+                            <select value={createUnit} onChange={e => setCreateUnit(e.target.value)}
+                                className="w-full text-sm border border-green-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400 bg-white">
+                                {unidadesCon(createUnit).map(u => <option key={u} value={u}>{u}</option>)}
+                            </select>
                         </div>
                     </div>
 

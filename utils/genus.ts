@@ -62,11 +62,21 @@ export const editDistance = (a: string, b: string): number => {
     return dp[a.length][b.length];
 };
 
+/**
+ * ¿Estas dos familias son la misma? La agrupación del inventario se apoya acá.
+ *
+ * Usa la regla del buscador universal, igual que `esParecido`: una sola forma de
+ * decidir si dos palabras son la misma en toda la app. Antes tenía su propia
+ * copia con margen de una letra, y por eso el inventario mostraba "Extension" y
+ * "Extensiones" como dos familias, y no habría juntado nunca un "Peludora".
+ *
+ * `looseMatch` está definido más abajo; en tiempo de ejecución ya existe cuando
+ * esto se llama, porque solo corre al agrupar.
+ */
 export const sameGenus = (a: string, b: string): boolean => {
     const na = normStr(a), nb = normStr(b);
     if (na === nb) return true;
-    if (Math.abs(na.length - nb.length) > 2) return false;
-    return editDistance(na, nb) === 1;
+    return looseMatch(na, nb) || looseMatch(nb, na);
 };
 
 /**
@@ -135,8 +145,19 @@ export const esParecido = (nombre: string, otro: Item, familiaConfirmada?: strin
     const a = normStr(fa), b = normStr(fb);
     if (!a || !b) return false;
     if (a === b) return true;
-    // Un error de dedo en la primera palabra: "Palustre" vs "Palustra".
-    return Math.abs(a.length - b.length) <= 2 && editDistance(a, b) <= 1;
+    // Una sola regla de parecido en toda la app, y es la del buscador universal.
+    //
+    // Acá había una copia: distancia de edición ≤ 1. Con ese margen fijo, el
+    // error que Juli tuvo de verdad —"Peludora" por "Pulidora"— no se pillaba,
+    // porque son DOS letras cambiadas (e→u, u→i). `looseMatch` ya resolvía
+    // exactamente eso ("una palabra corta admite un error; una larga, dos"), así
+    // que lo que se buscaba escribiendo se junta también al agrupar. Si mañana
+    // se afina el buscador, la autocorrección se afina con él.
+    //
+    // Probado contra las 40 familias de la bodega: el único par que junta de más
+    // es "extension" con "extensiones", que en efecto son lo mismo. Y sigue
+    // separando lo que debe: "pala" de "palustre", "martillo" de "tornillo".
+    return looseMatch(a, b) || looseMatch(b, a);
 };
 
 /**
@@ -226,6 +247,53 @@ export const nombreCorregido = (nombre: string, familia: string): string => {
     // y la mayúscula también es ortografía de la familia.
     if (palabras[0] === fam) return nombre.trim();
     return [fam, ...palabras.slice(1)].join(' ');
+};
+
+/**
+ * Qué accesorio le corresponde a esta familia de herramienta.
+ *
+ * Lo dijo el bodeguero: "para los taladros son casi todos brocas, de diferentes
+ * tipos; y pulidoras, todo discos de diferentes tipos". El accesorio es
+ * predecible por la familia, y hoy el selector muestra la lista completa de
+ * consumibles sin orden — para engancharle una broca a un taladro hay que
+ * buscarla entre lechadas, clavos y bombillos.
+ *
+ * Manda lo APRENDIDO: lo que ya tienen enganchado las otras herramientas de la
+ * misma familia. La lista de abajo es solo el arranque, para el primer día en
+ * que todavía no hay nada que aprender.
+ */
+const ARRANQUE: Record<string, string> = {
+    taladro:  'broca',
+    pulidora: 'disco',
+    radial:   'disco',
+    lijadora: 'lija',
+    soldador: 'electrodo',
+    tronzadora: 'disco',
+    sierra:   'disco',
+};
+
+export const accesorioDeFamilia = (familia: string, items: Item[]): string[] => {
+    const fam = normStr(familia);
+
+    // 1) Lo que ya engancharon las hermanas de esta misma familia.
+    const aprendidos = new Set<string>();
+    for (const i of items) {
+        const f = normStr(i.familia?.trim() || familiaDe(i.name));
+        if (f !== fam) continue;
+        for (const a of i.accessories ?? []) if (a.itemId) aprendidos.add(a.itemId);
+    }
+    if (aprendidos.size > 0) return [...aprendidos];
+
+    // 2) Primer día: se siembra con la palabra que usa la bodega.
+    const palabra = ARRANQUE[fam];
+    if (!palabra) return [];
+    return items.filter(i => normStr(i.name).startsWith(palabra)).map(i => i.id);
+};
+
+/** La palabra con la que arranca un accesorio nuevo de esta familia. */
+export const palabraDeAccesorio = (familia: string): string => {
+    const p = ARRANQUE[normStr(familia)];
+    return p ? p.charAt(0).toUpperCase() + p.slice(1) + ' ' : '';
 };
 
 export const clusterGenera = (items: Item[]): GenusCluster[] => {

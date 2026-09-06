@@ -39,6 +39,11 @@ const TONOS: Record<string, string> = {
  */
 export const raizDeColor = (color: string): string => {
     const c = normStr(color);
+    // Ojo: la regla es de GÉNERO, no de terminación. "Naranja" y "violeta"
+    // terminan en a y no son femeninos de nada — convertirlas daba "naranjo" y
+    // "violeto", que no son colores y se quedaban sin su punto. Por eso primero
+    // se mira si la palabra ya es un color conocida tal cual.
+    if (TONOS[c]) return c;
     return c.replace(/a$/, 'o');
 };
 
