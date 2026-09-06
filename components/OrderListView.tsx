@@ -1,7 +1,10 @@
 
 import React, { useMemo, useState } from 'react';
 import { Item, Movement, OrderNote, Personnel } from '../types';
-import { familiaDe } from '../utils/genus';
+import { familiaDe, normStr } from '../utils/genus';
+import { construirArbol } from '../utils/arbol';
+import { tonoDe } from '../utils/colores';
+import { unidadesCon } from '../utils/unidades';
 import { getConsumption } from '../utils/inventory';
 import { materialDe, medidaDe } from '../utils/medida';
 import { PeriodPicker, Periodo, periodoPorDefecto } from './PeriodPicker';
@@ -13,6 +16,7 @@ interface Props {
     personnel: Personnel[];
     onAddNote: (texto: string, cantidad?: number, unidad?: string, familia?: string) => void;
     onToggleNote: (n: OrderNote) => void;
+    onUpdateNote: (n: OrderNote, cambios: Partial<OrderNote>) => void;
     onDeleteNote: (n: OrderNote) => void;
     onBehaviorLog?: (action: string, detail: string) => void;
 }
@@ -29,8 +33,35 @@ interface Props {
  * clavos": se compran de acero o de hierro, y de dos, tres o cuatro pulgadas.
  */
 export const OrderListView: React.FC<Props> = ({
-    notes, items, movements, personnel, onAddNote, onToggleNote, onDeleteNote, onBehaviorLog,
+    notes, items, movements, personnel, onAddNote, onToggleNote, onUpdateNote, onDeleteNote, onBehaviorLog,
 }) => {
+    // El renglón que se está corrigiendo, con lo escrito hasta ahora.
+    const [editando, setEditando] = useState<string | null>(null);
+    const [borrador, setBorrador] = useState<{ texto: string; cantidad: string; unidad: string; color: string }>(
+        { texto: '', cantidad: '', unidad: '', color: '' });
+
+    const abrirEdicion = (n: OrderNote) => {
+        setEditando(n.id);
+        setBorrador({
+            texto: n.texto,
+            cantidad: n.cantidad != null ? String(n.cantidad) : '',
+            unidad: n.unidad ?? '',
+            color: n.color ?? '',
+        });
+    };
+
+    const guardarEdicion = (n: OrderNote) => {
+        const texto = borrador.texto.trim();
+        if (!texto) return;
+        onUpdateNote(n, {
+            texto,
+            cantidad: borrador.cantidad.trim() === '' ? undefined : Number(borrador.cantidad),
+            unidad: borrador.unidad.trim() || undefined,
+            color: borrador.color.trim() || undefined,
+        });
+        onBehaviorLog?.('ACTION', `Editó el pedido "${n.texto}"`);
+        setEditando(null);
+    };
     const [texto, setTexto] = useState('');
     const [cantidad, setCantidad] = useState('');
     const [unidad, setUnidad] = useState('');
@@ -132,20 +163,95 @@ export const OrderListView: React.FC<Props> = ({
                 </div>
             ) : (
                 <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-                    {pendientes.map(n => (
-                        <div key={n.id} className="flex items-center gap-2 px-3 py-2.5 border-b border-gray-50 last:border-0">
-                            <button onClick={() => onToggleNote(n)}
-                                className="w-5 h-5 flex-shrink-0 rounded-md border-2 border-gray-300 hover:border-green-500 transition-colors" />
-                            <div className="flex-1 min-w-0">
-                                <p className="text-sm font-semibold text-gray-800 truncate">{n.texto}</p>
-                                {n.cantidad != null && (
-                                    <p className="text-[11px] text-gray-400">{n.cantidad} {n.unidad ?? ''}</p>
-                                )}
+                    {pendientes.map(n => {
+                        if (editando === n.id) {
+                            // Las variantes que esa familia ya tiene en la bodega, no una
+                            // paleta inventada. Y salen del árbol, no del campo `color`:
+                            // la lechada no tiene el color guardado en su campo, lo tiene
+                            // ESCRITO en el nombre ("Lechada veige"), que es justo lo que
+                            // Juli señaló. Para la lechada salen gris y veige; para los
+                            // clavos, acero y hierro. Cuando la variante es un color de
+                            // verdad, el chip va pintado de ese color.
+                            const familia = (n.familia?.trim() || familiaDe(n.texto));
+                            const colores = construirArbol(
+                                    items.filter(i => normStr(i.familia?.trim() || familiaDe(i.name)) === normStr(familia)))
+                                .flatMap(a => a.ramas.map(r => r.variante))
+                                .filter(v => v !== '—');
+                            return (
+                                <div key={n.id} className="px-3 py-2.5 border-b border-gray-50 last:border-0 bg-blue-50/40 space-y-2">
+                                    <input type="text" value={borrador.texto} autoFocus
+                                        onChange={e => setBorrador(b => ({ ...b, texto: e.target.value }))}
+                                        onKeyDown={e => { if (e.key === 'Enter') guardarEdicion(n); if (e.key === 'Escape') setEditando(null); }}
+                                        className="w-full text-sm font-semibold border border-blue-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                                    <div className="flex gap-1.5">
+                                        <input type="number" value={borrador.cantidad} min={0} placeholder="Cant."
+                                            onChange={e => setBorrador(b => ({ ...b, cantidad: e.target.value }))}
+                                            className="w-20 flex-shrink-0 text-sm border border-gray-200 rounded-xl px-2 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                                        <select value={borrador.unidad}
+                                            onChange={e => setBorrador(b => ({ ...b, unidad: e.target.value }))}
+                                            className="flex-1 min-w-0 text-sm border border-gray-200 rounded-xl px-2 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white">
+                                            <option value="">Sin unidad</option>
+                                            {unidadesCon(borrador.unidad).map(u => <option key={u} value={u}>{u}</option>)}
+                                        </select>
+                                    </div>
+                                    {colores.length > 0 && (
+                                        <div className="flex flex-wrap gap-1 items-center">
+                                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider mr-0.5">¿Cuál?</span>
+                                            {colores.map(c => {
+                                                const puesto = borrador.color.toLowerCase() === c.toLowerCase();
+                                                return (
+                                                    <button key={c} type="button"
+                                                        onClick={() => setBorrador(b => ({ ...b, color: puesto ? '' : c }))}
+                                                        className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold border transition-all ${
+                                                            puesto ? 'border-blue-500 bg-white text-blue-700' : 'border-gray-200 bg-white text-gray-600 hover:border-blue-300'}`}>
+                                                        {tonoDe(c) && <span className="w-2.5 h-2.5 rounded-full border border-black/10"
+                                                            style={{ backgroundColor: tonoDe(c)! }} />}
+                                                        {c}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                    <div className="flex gap-2">
+                                        <button onClick={() => setEditando(null)}
+                                            className="px-3 py-1.5 text-xs font-bold text-gray-500 border border-gray-200 rounded-xl">Cancelar</button>
+                                        <button onClick={() => guardarEdicion(n)} disabled={!borrador.texto.trim()}
+                                            className="flex-1 py-1.5 text-xs font-black bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white rounded-xl">
+                                            Guardar
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        }
+                        return (
+                            <div key={n.id} className="flex items-center gap-2 px-3 py-2.5 border-b border-gray-50 last:border-0">
+                                <button onClick={() => onToggleNote(n)}
+                                    className="w-5 h-5 flex-shrink-0 rounded-md border-2 border-gray-300 hover:border-green-500 transition-colors" />
+                                {/* Tocar el renglón lo abre para corregirlo. Antes solo se
+                                    podía marcar como comprado o borrar: para cambiar 3 bultos
+                                    por 5 tocaba borrarlo y escribirlo de nuevo. */}
+                                <button onClick={() => abrirEdicion(n)} className="flex-1 min-w-0 text-left">
+                                    <p className="text-sm font-semibold text-gray-800 truncate flex items-center gap-1.5">
+                                        {n.color && tonoDe(n.color) && (
+                                            <span className="w-2.5 h-2.5 rounded-full border border-black/10 flex-shrink-0"
+                                                style={{ backgroundColor: tonoDe(n.color)! }} />
+                                        )}
+                                        <span className="truncate">{n.texto}</span>
+                                    </p>
+                                    {(n.cantidad != null || n.color) && (
+                                        <p className="text-[11px] text-gray-400 truncate">
+                                            {[n.cantidad != null ? `${n.cantidad} ${n.unidad ?? ''}`.trim() : null, n.color]
+                                                .filter(Boolean).join(' · ')}
+                                        </p>
+                                    )}
+                                </button>
+                                <button onClick={() => abrirEdicion(n)}
+                                    className="text-gray-300 hover:text-blue-500 px-1 flex-shrink-0 text-sm" title="Corregir">✎</button>
+                                <button onClick={() => onDeleteNote(n)}
+                                    className="text-gray-300 hover:text-red-500 px-1 flex-shrink-0 text-sm">✕</button>
                             </div>
-                            <button onClick={() => onDeleteNote(n)}
-                                className="text-gray-300 hover:text-red-500 px-1 flex-shrink-0 text-sm">✕</button>
-                        </div>
-                    ))}
+                        );
+                    })}
                     {compradas.length > 0 && (
                         <div className="bg-gray-50 px-3 py-2">
                             <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-1">Ya comprado</p>
