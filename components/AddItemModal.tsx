@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Item, UserRole, InventoryType, Accessory } from '../types';
 import { AccessoriesEditor } from './AccessoriesEditor';
 import { CATEGORIES } from '../constants';
+import { unidadesCon } from '../utils/unidades';
 import { XIcon } from './icons/XIcon';
 
 interface AddItemModalProps {
@@ -41,11 +42,6 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onA
 
     const esHerramienta = inventoryType === InventoryType.ELECTRICAL_TOOL || inventoryType === InventoryType.HAND_TOOL;
 
-    // Primero las que se usan de verdad en la bodega. Los clavos van por LIBRA:
-    // una caja puede traer 50 clavos, pero sacar una caja es sacar una libra.
-    const UNIT_OPTIONS = ['unidades', 'libras', 'kilos', 'gramos', 'litros', 'mililitros',
-        'caja', 'bolsa', 'pares', 'rollo', 'pliego', 'galón', 'ton',
-        'm', 'cm', 'mm', 'km', 'm²', 'm³', 'yarda'];
 
 
     // Limpieza también al abrir: cubre el caso de haber cerrado a medias
@@ -139,13 +135,9 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onA
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Unidad de Medida</label>
-                            {inventoryType === InventoryType.SINGLE_USE ? (
-                                <select value={unit} onChange={e => setUnit(e.target.value)} className="w-full input-style">
-                                    {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
-                                </select>
-                            ) : (
-                                <input type="text" value={unit} onChange={e => setUnit(e.target.value)} required className="w-full input-style" placeholder="Ej: unidades" />
-                            )}
+                            <select value={unit} onChange={e => setUnit(e.target.value)} required className="w-full input-style">
+                                {unidadesCon(unit).map(u => <option key={u} value={u}>{u}</option>)}
+                            </select>
                         </div>
                         {inventoryType === InventoryType.ELECTRICAL_TOOL && (
                             <div>
