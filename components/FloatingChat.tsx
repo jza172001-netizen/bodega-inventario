@@ -7,7 +7,9 @@ import { suggestQuestions } from '../services/warehouseQA';
 import { scoreMatch } from '../utils/search';
 import { AccesoriosDeItem } from './AccesoriosDeItem';
 import { unidadesCon } from '../utils/unidades';
-import { getGenus, familiaDe, esParecido, familiaCanonica, familiasParecidas, coloresDeFamilia } from '../utils/genus';
+import { getGenus, familiaDe, esParecido, familiaCanonica, familiasParecidas, coloresDeFamilia, marcasDeFamilia, nombreCorregido } from '../utils/genus';
+import { tonoDe, raizDeColor, coloresUnificados } from '../utils/colores';
+import { medidaDe } from '../utils/medida';
 
 interface FloatingChatProps {
     items: Item[];
@@ -129,6 +131,16 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     // bodega nadie usa. Lo que sí usa es la familia — las lechadas, los clavos,
     // los taladros — y es lo que hay que preguntarle.
     const [wizardCreateFamilia, setWizardCreateFamilia] = useState('');
+    /**
+     * Qué es lo que sobra del nombre después de la familia.
+     *
+     * En "Lechada beige", el "beige" es el COLOR — no parte del nombre. En
+     * "Clavos 2", el 2 son las pulgadas. La app no puede saber cuál es cuál, y
+     * adivinar mal deja el color metido dentro del nombre y el ítem sin color,
+     * que es exactamente el desorden que hay hoy en la bodega.
+     * Se pregunta una vez y se guarda donde corresponde.
+     */
+    const [restoDecidido, setRestoDecidido] = useState(false);
     // Cuando el nombre se parece a algo que ya existe, se para antes de crear y
     // se pregunta. Unir por parecido sin preguntar juntaría cosas distintas.
     /**
@@ -282,7 +294,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         setWizardCreateBrand('');
         setWizardCreateColor('');
         setWizardCreateUnit('unidades');
-        setWizardCreateFamilia('');
+        { setWizardCreateFamilia(''); setRestoDecidido(false); };
         setParecidoPendiente(null);
         setWizardSpecies([{ brand: '', color: '' }]);
     };
@@ -337,6 +349,10 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         // "clavos" y "Clavos" quedan como dos familias distintas — y ya pasó.
         const famCruda = familia?.trim() || familiaDe(wizardCreateName);
         const famCanon = familiaCanonica(famCruda, items);
+        // Si eligió la familia "Pulidora" habiendo escrito "Peludora", ya dijo
+        // cuál es la palabra buena. Guardar el error de dedo después de eso es
+        // quedarse con la peor de las dos versiones.
+        const nombreBase = nombreCorregido(wizardCreateName, famCanon);
         // El grupo dejó de preguntarse. Si la familia ya vive en algún lado del
         // inventario, el ítem nuevo cae donde están sus hermanos.
         const hermano = items.find(i => (i.familia?.trim() || familiaDe(i.name)).toLowerCase() === famCanon.toLowerCase());
@@ -359,7 +375,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             for (const sp of valid) {
                 const variante = [sp.color.trim(), sp.brand.trim()].filter(Boolean).join(' · ');
                 const newItem = onCreateItem({
-                    name: variante ? `${wizardCreateName.trim()} (${variante})` : wizardCreateName.trim(),
+                    name: variante ? `${nombreBase} (${variante})` : nombreBase,
                     inventoryType: wizardCreateType,
                     quantity: wizardCreateQty,
                     unit: wizardCreateUnit.trim() || 'unidades',
@@ -379,7 +395,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             const color = wizardCreateColor.trim(), marca = wizardCreateBrand.trim();
             const variante = [color, marca].filter(Boolean).join(' · ');
             const newItem = onCreateItem({
-                name: variante ? `${wizardCreateName.trim()} (${variante})` : wizardCreateName.trim(),
+                name: variante ? `${nombreBase} (${variante})` : nombreBase,
                 inventoryType: wizardCreateType,
                 quantity: wizardCreateQty,
                 unit: wizardCreateUnit.trim() || 'unidades',
@@ -1079,7 +1095,24 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                                 const sugerida = familiaDe(wizardCreateName);
                                                 const candidatas = familiasParecidas(wizardCreateName, items);
                                                 const elegida = wizardCreateFamilia.trim();
-                                                const colores = elegida ? coloresDeFamilia(elegida, items) : [];
+                                                // Lo que sobra del nombre una vez quitada la familia.
+                                                const resto = elegida && !elegida.includes(' · ')
+                                                    ? wizardCreateName.trim().split(/\s+/).slice(1).join(' ')
+                                                    : '';
+                                                const colores = elegida ? coloresUnificados(coloresDeFamilia(elegida, items)) : [];
+                                                const marcas  = elegida ? marcasDeFamilia(elegida, items) : [];
+                                                // En una herramienta el color y la marca viven en `wizardSpecies`;
+                                                // en un consumible, en sus propios campos. El chip tiene que
+                                                // escribir donde el botón Guardar va a mirar.
+                                                const esHerramienta = type === InventoryType.ELECTRICAL_TOOL || type === InventoryType.HAND_TOOL;
+                                                const colorActual = esHerramienta ? (wizardSpecies[0]?.color ?? '') : wizardCreateColor;
+                                                const marcaActual = esHerramienta ? (wizardSpecies[0]?.brand ?? '') : wizardCreateBrand;
+                                                const ponerColor = (c: string) => esHerramienta
+                                                    ? setWizardSpecies(prev => prev.map((s, i) => i === 0 ? { ...s, color: c } : s))
+                                                    : setWizardCreateColor(c);
+                                                const ponerMarca = (m: string) => esHerramienta
+                                                    ? setWizardSpecies(prev => prev.map((s, i) => i === 0 ? { ...s, brand: m } : s))
+                                                    : setWizardCreateBrand(m);
                                                 if (!wizardCreateName.trim()) return null;
                                                 return (
                                                     <div className="space-y-1.5">
@@ -1090,7 +1123,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                                         </p>
                                                         <div className="flex flex-wrap gap-1">
                                                             {[...new Set([...candidatas, sugerida])].filter(Boolean).map(f => (
-                                                                <button key={f} onClick={() => setWizardCreateFamilia(f)}
+                                                                <button key={f} onClick={() => { setWizardCreateFamilia(f); setRestoDecidido(false); }}
                                                                     className={`px-2 py-1 rounded-full text-[10px] font-black transition-all ${
                                                                         elegida.toLowerCase() === f.toLowerCase()
                                                                             ? 'bg-blue-600 text-white'
@@ -1098,7 +1131,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                                                     {f}
                                                                 </button>
                                                             ))}
-                                                            <button onClick={() => setWizardCreateFamilia(`${sugerida} · ${wizardCreateName.trim()}`)}
+                                                            <button onClick={() => { setWizardCreateFamilia(`${sugerida} · ${wizardCreateName.trim()}`); setRestoDecidido(true); }}
                                                                 className={`px-2 py-1 rounded-full text-[10px] font-black transition-all ${
                                                                     elegida.includes(' · ')
                                                                         ? 'bg-orange-500 text-white'
@@ -1107,26 +1140,80 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                                             </button>
                                                         </div>
 
-                                                        {/* Los colores que esa familia YA tiene. Es la segunda
-                                                            pregunta: ¿es de un color existente o de otro? */}
+                                                        {/* Los colores y marcas que esa familia YA tiene.
+                                                            Tocarlos LLENA los campos: antes escribían en
+                                                            wizardCreateColor, que para una herramienta no lo
+                                                            mira nadie, así que el botón Guardar se quedaba
+                                                            gris para siempre por más chips que se tocaran. */}
+                                                        {/* ¿Y "beige" qué es? La app no puede saberlo, y meterlo
+                                                            en el nombre a ciegas deja el ítem sin color. */}
+                                                        {resto && !restoDecidido && (
+                                                            <div className="space-y-1 pt-0.5 border-t border-blue-100">
+                                                                <p className="text-[9px] font-black text-gray-500 uppercase tracking-wider">
+                                                                    «{resto}» ¿qué es?
+                                                                </p>
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    <button onClick={() => { ponerColor(resto); setWizardCreateName(elegida); setRestoDecidido(true); }}
+                                                                        className="px-2 py-1 rounded-full text-[10px] font-black bg-white text-gray-700 border border-gray-300 hover:border-gray-500">
+                                                                        Color
+                                                                    </button>
+                                                                    <button onClick={() => { ponerMarca(resto); setWizardCreateName(elegida); setRestoDecidido(true); }}
+                                                                        className="px-2 py-1 rounded-full text-[10px] font-black bg-white text-gray-700 border border-gray-300 hover:border-gray-500">
+                                                                        Marca
+                                                                    </button>
+                                                                    <button onClick={() => setRestoDecidido(true)}
+                                                                        className="px-2 py-1 rounded-full text-[10px] font-black bg-white text-gray-700 border border-gray-300 hover:border-gray-500">
+                                                                        Medida{medidaDe(wizardCreateName) ? ` (${medidaDe(wizardCreateName)})` : ''}
+                                                                    </button>
+                                                                    <button onClick={() => setRestoDecidido(true)}
+                                                                        className="px-2 py-1 rounded-full text-[10px] font-black bg-white text-gray-700 border border-gray-300 hover:border-gray-500">
+                                                                        Parte del nombre
+                                                                    </button>
+                                                                </div>
+                                                                <p className="text-[9px] text-gray-400">
+                                                                    La medida y el nombre se quedan escritos; el color y la marca se guardan en su casilla.
+                                                                </p>
+                                                            </div>
+                                                        )}
+
                                                         {colores.length > 0 && (
                                                             <div className="space-y-1 pt-0.5">
                                                                 <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider">
-                                                                    ¿Es de un color que ya existe?
+                                                                    ¿De qué color?
                                                                 </p>
                                                                 <div className="flex flex-wrap gap-1">
-                                                                    {colores.map(c => (
-                                                                        <button key={c} onClick={() => setWizardCreateColor(c)}
-                                                                            className={`px-2 py-1 rounded-full text-[10px] font-bold transition-all ${
-                                                                                wizardCreateColor.trim().toLowerCase() === c.toLowerCase()
-                                                                                    ? 'bg-gray-800 text-white'
-                                                                                    : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-400'}`}>
-                                                                            {c}
+                                                                    {colores.map(c => {
+                                                                        const puesto = raizDeColor(colorActual) === raizDeColor(c);
+                                                                        const tono = tonoDe(c);
+                                                                        return (
+                                                                            <button key={c} onClick={() => ponerColor(c)}
+                                                                                className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold transition-all border ${
+                                                                                    puesto ? 'border-gray-800 bg-gray-100 text-gray-900' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-400'}`}>
+                                                                                <span className="w-2.5 h-2.5 rounded-full border border-black/15 flex-shrink-0"
+                                                                                    style={{ backgroundColor: tono ?? 'transparent' }} />
+                                                                                {c}
+                                                                            </button>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        {marcas.length > 0 && (
+                                                            <div className="space-y-1 pt-0.5">
+                                                                <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider">
+                                                                    ¿De qué marca?
+                                                                </p>
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {marcas.map(m => (
+                                                                        <button key={m} onClick={() => ponerMarca(m)}
+                                                                            className={`px-2 py-1 rounded-full text-[10px] font-bold transition-all border ${
+                                                                                marcaActual.trim().toLowerCase() === m.toLowerCase()
+                                                                                    ? 'border-gray-800 bg-gray-100 text-gray-900'
+                                                                                    : 'border-gray-200 bg-white text-gray-600 hover:border-gray-400'}`}>
+                                                                            {m}
                                                                         </button>
                                                                     ))}
-                                                                    <span className="text-[10px] text-gray-400 self-center px-1">
-                                                                        …o escribí otro arriba
-                                                                    </span>
                                                                 </div>
                                                             </div>
                                                         )}
