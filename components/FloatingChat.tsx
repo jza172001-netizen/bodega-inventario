@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Item, Movement, Personnel, PurchaseOrder, Project, MovementType, InventoryType, RechazoStock, LoteResultado } from '../types';
+import { Item, Movement, Personnel, PurchaseOrder, Project, MovementType, InventoryType, RechazoStock, LoteResultado, AuditLog } from '../types';
 import { momentoDeFecha } from '../utils/date';
 import { askCopilot } from '../services/copilotService';
 import { suggestQuestions } from '../services/warehouseQA';
@@ -32,6 +32,16 @@ interface FloatingChatProps {
     onCreateProject: (p: Omit<Project, 'id'>) => Project;
     onCreatePersonnel: (p: Omit<Personnel, 'id'>) => Personnel;
     onBehaviorLog?: (action: string, detail: string) => void;
+    /**
+     * La bitácora, para poder mirarla sin salir del chat.
+     *
+     * El dato ya existía y estaba completo —cada acción con su hora y con quién
+     * la hizo—, pero vivía en Trazabilidad, que es otra pantalla y hay que
+     * acordarse de entrar. Estando despachando, la pregunta que aparece es
+     * "¿quién fue el último que movió esto?", y devolverse rompe lo que se
+     * estaba haciendo.
+     */
+    auditLogs?: AuditLog[];
 }
 
 type WizardStep = 'select_types' | 'select_worker' | 'create_worker' | 'select_sub_worker' | 'create_sub_worker' | 'select_project' | 'create_project' | 'enter_items' | 'confirm';
@@ -53,6 +63,7 @@ const TYPE_LABELS: Record<InventoryType, string> = {
     [InventoryType.HAND_TOOL]:       '🔨 H. Manual',
     [InventoryType.PPE]:             '🦺 EPP',
     [InventoryType.SINGLE_USE]:      '📦 Consumible',
+    [InventoryType.ACCESSORY]:       '🔩 Accesorio',
 };
 
 const CATEGORY_BY_TYPE: Record<InventoryType, string> = {
@@ -60,6 +71,7 @@ const CATEGORY_BY_TYPE: Record<InventoryType, string> = {
     [InventoryType.ELECTRICAL_TOOL]: 'Herramientas',
     [InventoryType.PPE]:             'Seguridad',
     [InventoryType.SINGLE_USE]:      'Materiales',
+    [InventoryType.ACCESSORY]:       'Accesorios',
 };
 
 type ChatMsg = { id: string; role: 'user' | 'bot'; text: string };
@@ -103,9 +115,11 @@ const INIT_WIZARD: WizardData = {
 export const FloatingChat: React.FC<FloatingChatProps> = ({
     items, movements, personnel, purchaseOrders, projects,
     onLogMovements, onCreateItem, onEditItem, onCreateProject, onCreatePersonnel,
-    onBehaviorLog,
+    onBehaviorLog, auditLogs = [],
 }) => {
     const [open, setOpen] = useState(false);
+    /** El historial de todos, desplegado dentro del chat. */
+    const [verHistorial, setVerHistorial] = useState(false);
     const [messages, setMessages] = useState<ChatMsg[]>([
         { id: uid(), role: 'bot', text: '¡Hola! Usa los botones de arriba para registrar salidas, asignar herramientas o agregar ítems al inventario.' },
     ]);
@@ -1725,6 +1739,33 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                         </div>
                                     )}
                                     <div ref={bottomRef}/>
+                                </div>
+                                {/* El historial de todos, sin salir del chat. Va
+                                    semitransparente y debajo de los botones: es una
+                                    consulta, no una acción — no compite con Despacho,
+                                    Rápido ni Agregar. */}
+                                {verHistorial && (
+                                    <div className="border-t border-papel-borde bg-papel-hondo max-h-56 overflow-y-auto flex-shrink-0">
+                                        {auditLogs.length === 0 ? (
+                                            <p className="px-3 py-3 text-xs text-tinta-tenue">Todavía no hay nada registrado.</p>
+                                        ) : auditLogs.slice(0, 60).map(l => (
+                                            <div key={l.id} className="px-3 py-2 border-b border-papel-borde last:border-0">
+                                                <p className="text-xs text-tinta">{l.description}</p>
+                                                <p className="text-[10px] text-tinta-tenue">
+                                                    {new Date(l.timestamp).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}
+                                                    {l.actor ? ` · ${l.actor}` : ''}
+                                                </p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                <div className="border-t border-papel-borde px-3 py-1.5 flex-shrink-0">
+                                    <button
+                                        onClick={() => { setVerHistorial(v => !v); onBehaviorLog?.('BUTTON', verHistorial ? 'Cerró historial en el chat' : 'Abrió historial en el chat'); }}
+                                        className="w-full text-[11px] font-bold text-tinta-tenue/70 hover:text-tinta-suave py-1 rounded-lg hover:bg-papel-hondo transition-colors"
+                                    >
+                                        {verHistorial ? '✕ Cerrar el historial' : '¿Deseas acceder al historial? →'}
+                                    </button>
                                 </div>
                                 {/* Las sugerencias de siempre, con un «?» chiquito pegado
                                     a la izquierda. Tocándolo, esos mismos chips pasan a

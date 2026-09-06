@@ -17,6 +17,8 @@ interface SettingsModalProps {
     onChange: (config: AppConfig) => void;
     onClose: () => void;
     userRole?: UserRole;
+    /** Abre la gestión de accesos. Solo el administrador la ve. */
+    onOpenUserManagement?: () => void;
     onResetAllData?: () => void;
     onResetMaterials?: () => void;
 }
@@ -36,7 +38,7 @@ const Toggle: React.FC<{ label: string; description: string; value: boolean; onT
     </div>
 );
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ config, onChange, onClose, userRole, onResetAllData, onResetMaterials }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ config, onChange, onClose, userRole, onResetAllData, onResetMaterials, onOpenUserManagement }) => {
     const [resetStep, setResetStep] = useState(0);
     const [matResetStep, setMatResetStep] = useState(0);
     const isOwner = userRole !== UserRole.VISITOR;
@@ -91,6 +93,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ config, onChange, 
                         onToggle={() => onChange({ ...config, showEconomicValues: !config.showEconomicValues })}
                     />
 
+                    {/* Gestión de accesos. El modal ya existía pero no tenía por
+                        dónde abrirse: la prop del encabezado estaba declarada y sin
+                        usar, así que crear un usuario era imposible desde la app. Va
+                        acá, en Configuración, y solo para el administrador. */}
+                    {userRole === UserRole.OWNER && onOpenUserManagement && (
+                        <>
+                            <p className="text-[10px] font-black text-tinta-tenue uppercase tracking-widest pt-5 pb-1">Personas que entran</p>
+                            <button
+                                onClick={onOpenUserManagement}
+                                className="w-full flex items-center justify-between gap-3 py-3 border-t border-papel-borde text-left"
+                            >
+                                <span className="min-w-0">
+                                    <span className="block text-sm font-bold text-tinta">Accesos a la app</span>
+                                    <span className="block text-xs text-tinta-tenue">
+                                        Crear o quitar accesos. Cada quien pone su propia contraseña la
+                                        primera vez que entra.
+                                    </span>
+                                </span>
+                                <span className="flex-shrink-0 text-xs font-black text-marca-oscuro">Abrir →</span>
+                            </button>
+                        </>
+                    )}
+
                     {isOwner && (onResetAllData || onResetMaterials) && (
                         <>
                             <p className="text-[10px] font-black text-tinta-tenue uppercase tracking-widest pt-5 pb-1">Zona de peligro</p>
@@ -115,8 +140,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ config, onChange, 
                                             matResetStep === 0
                                                 ? 'bg-atencion-suave text-atencion hover:bg-atencion-suave'
                                                 : matResetStep === 1
-                                                    ? 'bg-atencion text-tinta-tenue hover:bg-atencion'
-                                                    : 'bg-atencion text-tinta-tenue hover:bg-atencion'
+                                                    ? 'bg-atencion text-papel hover:bg-atencion'
+                                                    : 'bg-atencion text-papel hover:bg-atencion'
                                         }`}>
                                             {['🗂 Restablecer solo materiales', '⚠️ ¿Seguro? Borra ítems y movimientos', '🔴 Confirmar — acción irreversible'][matResetStep]}
                                         </button>
@@ -141,8 +166,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ config, onChange, 
                                                 resetStep === 0
                                                     ? 'bg-alerta-suave text-alerta hover:bg-alerta-suave'
                                                     : resetStep === 1
-                                                        ? 'bg-alerta text-tinta-tenue hover:bg-alerta'
-                                                        : 'bg-alerta text-tinta-tenue hover:bg-alerta'
+                                                        ? 'bg-alerta text-papel hover:bg-alerta'
+                                                        : 'bg-alerta text-papel hover:bg-alerta'
                                             }`}>
                                             {resetLabels[resetStep]}
                                         </button>

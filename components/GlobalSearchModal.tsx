@@ -19,6 +19,7 @@ const TYPE_LABEL: Record<InventoryType, string> = {
     [InventoryType.HAND_TOOL]:       '🔨',
     [InventoryType.PPE]:             '🦺',
     [InventoryType.SINGLE_USE]:      '📦',
+    [InventoryType.ACCESSORY]:       '🔩',
 };
 
 // Orden en que se pintan los grupos. Las herramientas primero porque son las
@@ -35,6 +36,7 @@ const CAT_NAME: Record<InventoryType, string> = {
     [InventoryType.ELECTRICAL_TOOL]: 'H. Eléctrica',
     [InventoryType.PPE]:             'EPP',
     [InventoryType.SINGLE_USE]:      'Consumibles',
+    [InventoryType.ACCESSORY]:       'Accesorios',
 };
 
 // Topes generosos: esto sugiere, no filtra. Cortar de más es lo que hacía que

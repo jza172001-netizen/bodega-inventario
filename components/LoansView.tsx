@@ -229,7 +229,11 @@ export const LoansView: React.FC<LoansViewProps> = ({
                     <span className="flex-1 min-w-0 text-[11px] text-tinta-tenue truncate">
                         {new Date(loan.timestamp).toLocaleDateString('es-CO')} · ×{loan.quantity}
                     </span>
-                    {isPending && <span className="text-[10px] font-black bg-marca text-tinta px-1.5 py-0.5 rounded-full flex-shrink-0">Recoger</span>}
+                    {/* Blanco sobre fondo fuerte: en amarillo con tinta encima el
+                        aviso se perdía entre lo demás y no se veía cuál estaba
+                        marcado. Este es el único renglón que hay que cazar de un
+                        vistazo, así que es el que más tiene que saltar. */}
+                    {isPending && <span className="text-[10px] font-black bg-atencion text-papel px-1.5 py-0.5 rounded-full flex-shrink-0">📍 Recoger</span>}
                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${daysBadge}`}>{days}d</span>
                 </div>
 
@@ -248,7 +252,10 @@ export const LoansView: React.FC<LoansViewProps> = ({
                             ✓ Devolver
                         </button>
                     )}
-                    {!isPending ? (
+                    {/* Marcar para recoger es una acción, no una vista: estaba por
+                        fuera del guardia de rol y el Visitante —que entra solo a
+                        mirar— podía mandar a recoger una herramienta. */}
+                    {isOwner && (!isPending ? (
                         <button onClick={() => { onBehaviorLog?.('ACTION', `Marcó recoger: ${getItemName(loan.itemId)}`); onMarkPendingPickup(loan.id, true); }}
                             className="flex-shrink-0 py-1.5 px-2.5 bg-papel-hondo hover:bg-marca-suave text-marca-oscuro text-[11px] font-bold rounded-lg transition-all">
                             📍 Recoger
@@ -258,7 +265,7 @@ export const LoansView: React.FC<LoansViewProps> = ({
                             className="flex-shrink-0 py-1.5 px-2.5 bg-marca-suave text-marca-oscuro text-[11px] font-bold rounded-lg transition-all">
                             ✕ Cancelar
                         </button>
-                    )}
+                    ))}
                     {isOwner && onEditItem && itemMap.get(loan.itemId) && (
                         <AgregarAccesorio item={itemMap.get(loan.itemId)!} items={items}
                             onCreateItem={onCreateItem}

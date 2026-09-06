@@ -66,11 +66,11 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onA
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!name.trim() || !subCategory.trim() || !unit.trim()) {
-            alert('El nombre, la sub-clasificación y la unidad son campos requeridos.');
+        if (!name.trim() || !unit.trim()) {
+            alert('El nombre y la unidad son campos requeridos.');
             return;
         }
-        
+
         onAddItem({
             name: name.trim(),
             category,
@@ -104,18 +104,12 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onA
                         <label className="block text-sm font-medium text-tinta-suave mb-1">Nombre del Artículo</label>
                         <input type="text" value={name} onChange={e => setName(e.target.value)} required className="w-full input-style" placeholder="Ej: Martillo de uña 20oz" />
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-tinta-suave mb-1">Categoría</label>
-                             <select value={category} onChange={e => setCategory(e.target.value)} className="w-full input-style">
-                                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-tinta-suave mb-1">Sub-clasificación</label>
-                            <input type="text" value={subCategory} onChange={e => setSubCategory(e.target.value)} required className="w-full input-style" placeholder="Ej: Herramientas de Golpe" />
-                        </div>
-                    </div>
+                    {/* "Categoría" y "Sub-clasificación" salen del formulario: en la
+                        bodega nadie las usa. Lo único que se usa para clasificar es
+                        el Tipo de Inventario. Los dos campos siguen existiendo en el
+                        dato para no romper lo ya guardado, pero dejan de pedirse —y
+                        con eso se acaban los encabezados inventados del inventario,
+                        que salían de la sub-clasificación ("GOLOE", "GENERAL"). */}
                      <div>
                         <label className="block text-sm font-medium text-tinta-suave mb-1">Tipo de Inventario</label>
                          <select value={inventoryType} onChange={e => setInventoryType(e.target.value as InventoryType)} className="w-full input-style">

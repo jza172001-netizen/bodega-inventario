@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { AuditLog, Item, Movement, Personnel, PurchaseOrder, PurchaseOrderStatus } from '../types';
 import StatisticsView from './StatisticsView';
 import { CotejoPanel } from './CotejoPanel';
+import { DañadasPanel } from './DañadasPanel';
 
 interface DashboardProps {
     items: Item[];
@@ -12,6 +13,8 @@ interface DashboardProps {
     onNavigate?: (view: string, tab?: string) => void;
     onBehaviorLog?: (action: string, detail: string) => void;
     onAuditLog?: (action: string, description: string) => void;
+    /** Marca el paso siguiente de una herramienta dañada. */
+    onRepararPaso?: (itemId: string, paso: 'enviada' | 'arreglada') => void;
 }
 
 /** Un renglón de «esto hay que hacerlo hoy». */
@@ -38,7 +41,7 @@ interface Pendiente {
  * poner los pendientes primero: sale un renglón tranquilo y los números suben
  * a ocupar ese lugar.
  */
-export const Dashboard: React.FC<DashboardProps> = ({ items, movements, purchaseOrders, personnel = [], auditLogs = [], onNavigate, onBehaviorLog, onAuditLog }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ items, movements, purchaseOrders, personnel = [], auditLogs = [], onNavigate, onBehaviorLog, onAuditLog, onRepararPaso }) => {
     const pendientes = useMemo<Pendiente[]>(() => {
         const dias = (d: Date) => Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
         const fuera = movements.filter(m => m.isLoan && !m.isReturned);
@@ -94,6 +97,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ items, movements, purchase
                     <p className="text-sm font-bold text-bien">Todo al día — nada pendiente</p>
                 </div>
             )}
+
+            {/* Las dañadas, arriba de los números: es lo que hay que hacer, no lo
+                que hay que mirar. */}
+            <DañadasPanel items={items} onPaso={onRepararPaso} />
 
             <StatisticsView items={items} movements={movements} personnel={personnel} onNavigate={onNavigate} onAuditLog={onAuditLog} />
 

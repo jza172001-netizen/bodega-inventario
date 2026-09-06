@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { Movement, Item, Personnel, InventoryType, MovementType, UserRole } from '../types';
-import { getGenus } from '../utils/genus';
+import { getGenus, looseMatch } from '../utils/genus';
 import { PeriodPicker, TODO, Periodo } from './PeriodPicker';
 import { TruckIcon } from './icons/TruckIcon';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
@@ -59,6 +59,7 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
     // casillas siguen ahí para el caso raro.
     const [periodo, setPeriodo] = useState<Periodo>(TODO);
     const [groupByTool, setGroupByTool] = useState(false);
+    const [busqueda, setBusqueda] = useState('');
     const bottomSentinelRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -110,6 +111,23 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
     }), [filtered, periodo]);
 
     /**
+     * El Historial era la única de las cuatro listas sin buscador: para hallar un
+     * movimiento tocaba desplazar cien renglones. Busca por herramienta y por
+     * persona, con la misma regla de parecido del buscador general — así
+     * "amrtilo" y "hektor" también caen.
+     */
+    const byDateSearched = useMemo(() => {
+        if (!busqueda.trim()) return byDate;
+        return byDate.filter(m => {
+            const it = itemMap.get(m.itemId);
+            const persona = m.personnelId ? personnel.find(p => p.id === m.personnelId)?.name ?? '' : '';
+            return looseMatch(it?.name ?? '', busqueda)
+                || looseMatch(getGenus(it?.name ?? ''), busqueda)
+                || looseMatch(persona, busqueda);
+        });
+    }, [byDate, busqueda, itemMap, personnel]);
+
+    /**
      * Agrupa por FAMILIA, no por ítem exacto: "Guantes (Negro · Nn)" y
      * "Guantes (Rojo · Nn)" son el mismo guante en dos colores, y verlos en dos
      * bloques separados no deja seguirle el rastro a los guantes.
@@ -117,7 +135,7 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
     const toolGroups = useMemo(() => {
         if (!groupByTool) return [];
         const map = new Map<string, { familia: string; grupo: string; movements: Movement[] }>();
-        for (const m of byDate) {
+        for (const m of byDateSearched) {
             const item = itemMap.get(m.itemId);
             if (!item) continue;
             const familia = getGenus(item.name);
@@ -131,14 +149,14 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
             // todavía no tiene grupo asignado.
             (a.grupo === 'General' ? 1 : b.grupo === 'General' ? -1 : a.grupo.localeCompare(b.grupo, 'es'))
             || a.familia.localeCompare(b.familia, 'es'));
-    }, [byDate, groupByTool, itemMap]);
+    }, [byDateSearched, groupByTool, itemMap]);
 
-    useEffect(() => { setPage(0); }, [filter, filterType, periodo, groupByTool]);
+    useEffect(() => { setPage(0); }, [filter, filterType, periodo, groupByTool, busqueda]);
 
-    const totalPages = Math.ceil(byDate.length / PAGE_SIZE);
+    const totalPages = Math.ceil(byDateSearched.length / PAGE_SIZE);
     const paged = useMemo(
-        () => byDate.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE),
-        [byDate, page],
+        () => byDateSearched.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE),
+        [byDateSearched, page],
     );
 
     const renderMovementRow = useCallback((m: Movement) => {
@@ -161,7 +179,18 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
                     {/* El trabajador manda: probando en la bodega, lo que se busca
                         es de QUIÉN es cada cosa, no cómo se llama el ítem. */}
                     <div className="flex items-baseline gap-1.5 flex-wrap">
-                        <span className="text-sm font-black text-marca-oscuro">{personName || 'Sin asignar'}</span>
+                        {/* "Sin asignar" solo tiene sentido cuando salió algo y nadie
+                            dijo para quién. En una ENTRADA no hay a quién asignar —
+                            la bodega recibe, no entrega—, y ver "Sin asignar" al lado
+                            de una salida que sí trae nombre se lee como un error de
+                            la app. Cada caso dice lo suyo. */}
+                        <span className="text-sm font-black text-marca-oscuro">
+                            {personName
+                                ? personName
+                                : esCargaInicial ? 'Carga inicial'
+                                : (m.type === MovementType.CHECK_IN || m.type === MovementType.PURCHASE) ? 'Entró a la bodega'
+                                : 'Sin asignar'}
+                        </span>
                         <span className="text-xs text-tinta-tenue">×{m.quantity}</span>
                     </div>
                     <button
@@ -177,7 +206,9 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
                         {isCheckOut   && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-atencion-suave text-atencion">📤 Salida</span>}
                         {isCheckIn && !esCargaInicial && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-marca-suave text-marca-oscuro">📥 Entrada</span>}
                         {esCargaInicial && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-papel-hondo text-tinta-tenue">📦 Carga inicial</span>}
-                        {m.pendingPickup && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-atencion-suave text-atencion">📍 A recoger</span>}
+                        {/* Mismo aviso y mismo color que en Préstamos: blanco sobre
+                            fondo fuerte. En tono suave se perdía. */}
+                        {m.pendingPickup && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-atencion text-papel">📍 A recoger</span>}
                     </div>
                     <div className="flex items-center gap-1.5 mt-1 flex-wrap text-[10px] text-tinta-tenue">
                         {/* Con la devolución se muestran las dos fechas: cuándo salió
@@ -232,8 +263,8 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
                     <div>
                         <h2 className="text-base font-black text-tinta">Historial de herramientas</h2>
                         <p className="text-xs text-tinta-tenue">
-                            {byDate.length} movimiento{byDate.length !== 1 ? 's' : ''}
-                            {byDate.length !== allMovements.length && ` (de ${allMovements.length})`}
+                            {byDateSearched.length} movimiento{byDateSearched.length !== 1 ? 's' : ''}
+                            {byDateSearched.length !== allMovements.length && ` (de ${allMovements.length})`}
                         </p>
                     </div>
                 </div>
@@ -260,7 +291,21 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
                 ))}
             </div>
 
-            {/* Rango de fechas + agrupación */}
+            {/* Buscador + rango de fechas + agrupación, en el mismo renglón: es la
+                fila con la que se maneja la lista, y el buscador no estaba. */}
+            <div className="px-4 pt-2">
+                <div className="relative">
+                    <input type="text" value={busqueda} onChange={e => setBusqueda(e.target.value)}
+                        placeholder="Buscar herramienta o persona…"
+                        className="w-full text-sm border border-papel-borde rounded-xl pl-3 pr-8 py-2 bg-papel focus:outline-none focus:ring-2 focus:ring-marca" />
+                    {busqueda && (
+                        <button type="button" onClick={() => setBusqueda('')}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-tinta-tenue hover:text-alerta text-sm font-black">
+                            ✕
+                        </button>
+                    )}
+                </div>
+            </div>
             <div className="flex items-center gap-2 px-4 py-2 border-b border-papel-borde flex-wrap">
                 <div className="flex-1 min-w-0">
                     <PeriodPicker value={periodo} onChange={setPeriodo} onBehaviorLog={onBehaviorLog} />

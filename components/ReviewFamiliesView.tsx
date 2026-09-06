@@ -178,7 +178,7 @@ export const ReviewFamiliesView: React.FC<Props> = ({ items, onEditItem, onGoBac
                                                 onClick={() => alternarCorreccion(c.item.id)}
                                                 className="w-full flex items-center gap-2 text-left text-xs">
                                                 <span className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 text-[10px] font-black ${
-                                                    se ? 'border-papel-borde bg-papel text-transparent' : 'border-atencion bg-atencion text-tinta-tenue'}`}>✓</span>
+                                                    se ? 'border-papel-borde bg-papel text-transparent' : 'border-atencion bg-atencion text-papel'}`}>✓</span>
                                                 <span className={`flex-1 min-w-0 truncate ${se ? 'text-tinta-tenue' : 'text-atencion'}`}>
                                                     <span className="line-through opacity-60">{c.item.name}</span>
                                                     {' → '}

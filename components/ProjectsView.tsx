@@ -5,6 +5,7 @@ import { PlusIcon } from './icons/PlusIcon';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
 import { PersonnelDetailModal } from './PersonnelDetailModal';
 import { TrashIcon } from './icons/TrashIcon';
+import { looseMatch } from '../utils/genus';
 
 interface ProjectsViewProps {
     projects: Project[];
@@ -38,6 +39,24 @@ const MOV_COLOR: Record<string, string> = {
     CHECK_IN:  'bg-marca-suave text-marca-oscuro',
     CHECK_OUT: 'bg-atencion-suave text-atencion',
     WASTE:     'bg-alerta-suave text-alerta',
+};
+
+/**
+ * Un número del encabezado del proyecto, que ahora sí lleva a alguna parte.
+ *
+ * Si la sección de destino no existe —un proyecto sin consumibles, por
+ * ejemplo— el chip se queda quieto y sin sombra de botón, para no prometer un
+ * salto que no va a pasar.
+ */
+const ChipResumen: React.FC<{ emoji: string; texto: string; destino: string; tono: 'marca' | 'atencion' }> = ({ emoji, texto, destino, tono }) => {
+    const color = tono === 'marca' ? 'bg-marca-suave text-marca-oscuro' : 'bg-atencion-suave text-atencion';
+    const irA = () => document.getElementById(destino)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return (
+        <button type="button" onClick={irA}
+            className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full transition-all hover:brightness-95 active:scale-95 ${color}`}>
+            <span>{emoji}</span>{texto}
+        </button>
+    );
 };
 
 const LOAN_TYPES = new Set([InventoryType.HAND_TOOL, InventoryType.ELECTRICAL_TOOL]);
@@ -156,26 +175,24 @@ const ProjectDetail: React.FC<{
                         {project.status === 'active' ? 'Activo' : 'Terminado'}
                     </span>
                 </div>
-                {/* Summary chips */}
+                {/* Los cuatro números de arriba eran letreros: se veían hundidos pero
+                    no llevaban a ninguna parte, y todo lo demás de esta pantalla sí
+                    responde. Ahora cada uno baja a su sección. */}
                 <div className="flex flex-wrap gap-2">
-                    <span className="flex items-center gap-1.5 text-xs font-bold bg-marca-suave text-marca-oscuro px-3 py-1.5 rounded-full">
-                        <span>👷</span>{workerSummary.length} persona{workerSummary.length !== 1 ? 's' : ''}
-                    </span>
-                    <span className="flex items-center gap-1.5 text-xs font-bold bg-atencion-suave text-atencion px-3 py-1.5 rounded-full">
-                        <span>🔑</span>{activeLoans.length} préstamo{activeLoans.length !== 1 ? 's' : ''} activo{activeLoans.length !== 1 ? 's' : ''}
-                    </span>
-                    <span className="flex items-center gap-1.5 text-xs font-bold bg-atencion-suave text-atencion px-3 py-1.5 rounded-full">
-                        <span>🔨</span>{toolsOut.length} uso{toolsOut.length !== 1 ? 's' : ''} de herramienta{toolsOut.length !== 1 ? 's' : ''}
-                    </span>
-                    <span className="flex items-center gap-1.5 text-xs font-bold bg-marca-suave text-marca-oscuro px-3 py-1.5 rounded-full">
-                        <span>📦</span>{consumablesUsed.reduce((s, c) => s + c.qty, 0)} consumibles
-                    </span>
+                    <ChipResumen emoji="👷" tono="marca" destino={`proy-${project.id}-personal`}
+                        texto={`${workerSummary.length} persona${workerSummary.length !== 1 ? 's' : ''}`} />
+                    <ChipResumen emoji="🔑" tono="atencion" destino={`proy-${project.id}-prestamos`}
+                        texto={`${activeLoans.length} préstamo${activeLoans.length !== 1 ? 's' : ''} activo${activeLoans.length !== 1 ? 's' : ''}`} />
+                    <ChipResumen emoji="🔨" tono="atencion" destino={`proy-${project.id}-prestamos`}
+                        texto={`${toolsOut.length} uso${toolsOut.length !== 1 ? 's' : ''} de herramienta${toolsOut.length !== 1 ? 's' : ''}`} />
+                    <ChipResumen emoji="📦" tono="marca" destino={`proy-${project.id}-consumidos`}
+                        texto={`${consumablesUsed.reduce((s, c) => s + c.qty, 0)} consumibles`} />
                 </div>
             </div>
 
             {/* Personal involucrado */}
             {workerSummary.length > 0 && (
-                <div className="bg-papel border border-papel-borde rounded-2xl shadow-sm overflow-hidden">
+                <div id={`proy-${project.id}-personal`} className="bg-papel border border-papel-borde rounded-2xl shadow-sm overflow-hidden scroll-mt-4">
                     <p className="text-[10px] font-black text-tinta-tenue uppercase tracking-widest px-5 pt-4 pb-2">👷 Personal involucrado</p>
                     <div className="divide-y divide-papel-borde">
                         {workerSummary.map(({ id, person, activeLoans: al, returnedLoans, consumables }) => (
@@ -217,7 +234,7 @@ const ProjectDetail: React.FC<{
 
             {/* Préstamos activos */}
             {activeLoans.length > 0 && (
-                <div className="bg-papel border border-atencion rounded-2xl shadow-sm overflow-hidden">
+                <div id={`proy-${project.id}-prestamos`} className="bg-papel border border-atencion rounded-2xl shadow-sm overflow-hidden scroll-mt-4">
                     <p className="text-[10px] font-black text-atencion uppercase tracking-widest px-5 pt-4 pb-2">🔑 Préstamos activos</p>
                     <div className="divide-y divide-atencion">
                         {activeLoans.map(m => {
@@ -248,7 +265,7 @@ const ProjectDetail: React.FC<{
 
             {/* Materiales consumidos */}
             {consumablesUsed.length > 0 && (
-                <div className="bg-papel border border-papel-borde rounded-2xl shadow-sm overflow-hidden">
+                <div id={`proy-${project.id}-consumidos`} className="bg-papel border border-papel-borde rounded-2xl shadow-sm overflow-hidden scroll-mt-4">
                     <p className="text-[10px] font-black text-tinta-tenue uppercase tracking-widest px-5 pt-4 pb-2">📦 Materiales consumidos</p>
                     <div className="divide-y divide-papel-borde">
                         {consumablesUsed.map((c, i) => (
@@ -347,6 +364,8 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
     const [newProjectName, setNewProjectName] = useState('');
     const [newProjectDesc, setNewProjectDesc] = useState('');
     const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+    // Cuarta lista con buscador, igual que Historial, Préstamos e Inventario.
+    const [busqueda, setBusqueda] = useState('');
 
     const projectStats = useMemo(() => {
         return projects.map(project => {
@@ -364,6 +383,12 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
             return { ...project, consumableCount, toolsCount, activeLoans, workerCount };
         });
     }, [projects, movements, items]);
+
+    const proyectosVisibles = useMemo(() => {
+        if (!busqueda.trim()) return projectStats;
+        return projectStats.filter(p =>
+            looseMatch(p.name, busqueda) || looseMatch(p.description ?? '', busqueda));
+    }, [projectStats, busqueda]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -430,15 +455,31 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                 </div>
             )}
 
+            {projects.length > 0 && (
+                <div className="relative">
+                    <input type="text" value={busqueda} onChange={e => setBusqueda(e.target.value)}
+                        placeholder="Buscar obra o proyecto…"
+                        className="w-full text-sm border border-papel-borde rounded-xl pl-3 pr-8 py-2 bg-papel focus:outline-none focus:ring-2 focus:ring-marca" />
+                    {busqueda && (
+                        <button type="button" onClick={() => setBusqueda('')}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-tinta-tenue hover:text-alerta text-sm font-black">✕</button>
+                    )}
+                </div>
+            )}
+
             {projects.length === 0 ? (
                 <div className="bg-papel border border-papel-borde rounded-2xl p-10 text-center shadow-sm">
                     <p className="text-4xl mb-3">🏗</p>
                     <p className="text-tinta-tenue text-sm font-semibold">Sin proyectos registrados</p>
                     <p className="text-tinta-tenue text-xs mt-1">Crea una obra para asociar movimientos y personal</p>
                 </div>
+            ) : proyectosVisibles.length === 0 ? (
+                <div className="bg-papel border border-papel-borde rounded-2xl p-10 text-center shadow-sm">
+                    <p className="text-tinta-tenue text-sm font-semibold">Ninguna obra se llama así</p>
+                </div>
             ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {projectStats.map(project => (
+                    {proyectosVisibles.map(project => (
                         <div key={project.id} className="bg-papel border border-papel-borde rounded-2xl p-5 hover:shadow-md transition-all cursor-pointer group">
                             <div onClick={() => { onBehaviorLog?.('NAV', `Abrió proyecto: ${project.name}`); setSelectedProjectId(project.id); }}>
                                 {/* La papelera va EN la fila, no flotando encima: estaba en

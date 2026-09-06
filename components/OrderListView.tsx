@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { Item, Movement, OrderNote, Personnel } from '../types';
-import { familiaDe, normStr } from '../utils/genus';
+import { familiaDe, normStr, looseMatch, getGenus } from '../utils/genus';
 import { construirArbol } from '../utils/arbol';
 import { PALETA, raizDeColor, tonoDe } from '../utils/colores';
 import { unidadesCon } from '../utils/unidades';
@@ -18,6 +18,11 @@ interface Props {
     onToggleNote: (n: OrderNote) => void;
     onUpdateNote: (n: OrderNote, cambios: Partial<OrderNote>) => void;
     onDeleteNote: (n: OrderNote) => void;
+    /**
+     * Confirmar lo que de verdad llegó: registra la entrada al inventario y
+     * marca el renglón como recibido. Si el ítem no existe todavía, lo crea.
+     */
+    onRecibirNote?: (n: OrderNote, cantidad: number, itemId?: string, nombreNuevo?: string) => void;
     onBehaviorLog?: (action: string, detail: string) => void;
 }
 
@@ -33,27 +38,41 @@ interface Props {
  * clavos": se compran de acero o de hierro, y de dos, tres o cuatro pulgadas.
  */
 export const OrderListView: React.FC<Props> = ({
-    notes, items, movements, personnel, onAddNote, onToggleNote, onUpdateNote, onDeleteNote, onBehaviorLog,
+    notes, items, movements, personnel, onAddNote, onToggleNote, onUpdateNote, onDeleteNote, onRecibirNote, onBehaviorLog,
 }) => {
     // El renglón que se está corrigiendo, con lo escrito hasta ahora.
     const [editando, setEditando] = useState<string | null>(null);
     const [borrador, setBorrador] = useState<{ texto: string; cantidad: string; unidad: string; color: string }>(
         { texto: '', cantidad: '', unidad: '', color: '' });
-    // El «+» abierto, con lo que se lleva escrito.
-    const [anadiendoColor, setAnadiendoColor] = useState(false);
+    /**
+     * El «+» abierto, y por cuál de los dos caminos.
+     *
+     * Antes solo servía para añadir un COLOR. Pero para los clavos las opciones
+     * que salen al lado del «¿Cuál?» son *acero* y *hierro*, que no son colores:
+     * son la denominación de la cosa. Si mañana llegan clavos de madera no había
+     * dónde ponerlos — el único camino pedía un color y ofrecía una paleta.
+     *
+     * `null` cerrado; 'elegir' pregunta cuál de los dos; 'color' pide un color y
+     * muestra la paleta; 'denominacion' pide una palabra y no muestra paleta
+     * ninguna. Los dos escriben en el mismo campo, que es el que la familia ya
+     * usa para distinguir sus variantes.
+     */
+    const [anadiendo, setAnadiendo] = useState<null | 'elegir' | 'color' | 'denominacion'>(null);
+    /** El renglón cuya llegada se está confirmando, con lo que se lleva puesto. */
+    const [recibiendo, setRecibiendo] = useState<{ id: string; cantidad: string; itemId: string } | null>(null);
     const [colorNuevo, setColorNuevo] = useState('');
 
     const ponerColor = (c: string) => {
         const v = c.trim();
         if (!v) return;
         setBorrador(b => ({ ...b, color: v }));
-        setAnadiendoColor(false);
+        setAnadiendo(null);
         setColorNuevo('');
     };
 
     const abrirEdicion = (n: OrderNote) => {
         setEditando(n.id);
-        setAnadiendoColor(false);
+        setAnadiendo(null);
         setColorNuevo('');
         setBorrador({
             texto: n.texto,
@@ -81,7 +100,10 @@ export const OrderListView: React.FC<Props> = ({
     const [periodo, setPeriodo] = useState<Periodo>(periodoPorDefecto());
 
     const pendientes = notes.filter(n => !n.comprado);
-    const compradas  = notes.filter(n => n.comprado);
+    // Tres estados, no dos: por comprar → comprado y esperando que llegue →
+    // recibido y adentro del inventario.
+    const compradas  = notes.filter(n => n.comprado && !n.recibido);
+    const recibidas  = notes.filter(n => n.comprado && n.recibido);
 
     const itemMap = useMemo(() => new Map(items.map(i => [i.id, i])), [items]);
     const nombreDe = (id?: string) => personnel.find(p => p.id === id)?.name ?? 'Sin asignar';
@@ -234,10 +256,10 @@ export const OrderListView: React.FC<Props> = ({
                                     <div className="flex flex-wrap gap-1 items-center">
                                         <span className="text-[10px] font-black text-tinta-tenue uppercase tracking-wider mr-0.5">¿Cuál?</span>
                                         <button type="button"
-                                            onClick={() => { setAnadiendoColor(a => !a); setColorNuevo(''); }}
-                                            title="Añadir un color que no está"
+                                            onClick={() => { setAnadiendo(a => a ? null : 'elegir'); setColorNuevo(''); }}
+                                            title="Añadir un color o una denominación que no está"
                                             className={`w-6 h-6 flex items-center justify-center rounded-full border text-sm font-black leading-none transition-all ${
-                                                anadiendoColor ? 'border-marca bg-marca text-tinta' : 'border-papel-borde bg-papel text-tinta-suave hover:border-marca hover:text-tinta-suave'}`}>
+                                                anadiendo ? 'border-marca bg-marca text-tinta' : 'border-papel-borde bg-papel text-tinta-suave hover:border-marca hover:text-tinta-suave'}`}>
                                             +
                                         </button>
                                         {colores.map(c => {
@@ -255,15 +277,34 @@ export const OrderListView: React.FC<Props> = ({
                                         })}
                                     </div>
 
-                                    {anadiendoColor && (
+                                    {/* El «+» ya no lleva derecho a "escribe el color".
+                                        Primero pregunta de qué se trata lo que falta:
+                                        un color, o una denominación como *madera* al
+                                        lado de *acero* y *hierro*. */}
+                                    {anadiendo === 'elegir' && (
+                                        <div className="rounded-xl border border-dashed border-marca-borde bg-papel p-2 flex gap-1.5">
+                                            <button type="button" onClick={() => setAnadiendo('color')}
+                                                className="flex-1 py-2 text-xs font-black bg-papel-hondo hover:bg-marca-suave text-tinta-suave rounded-xl">
+                                                🎨 Un color
+                                            </button>
+                                            <button type="button" onClick={() => setAnadiendo('denominacion')}
+                                                className="flex-1 py-2 text-xs font-black bg-papel-hondo hover:bg-marca-suave text-tinta-suave rounded-xl">
+                                                🏷 Otra denominación
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {(anadiendo === 'color' || anadiendo === 'denominacion') && (
                                         <div className="rounded-xl border border-dashed border-marca-borde bg-papel p-2 space-y-2">
                                             <div className="flex gap-1.5">
                                                 <input type="text" value={colorNuevo} autoFocus
-                                                    placeholder="Escribe el color (ej: blanco)"
+                                                    placeholder={anadiendo === 'color'
+                                                        ? 'Escribe el color (ej: blanco)'
+                                                        : 'Escribe la denominación (ej: madera)'}
                                                     onChange={e => setColorNuevo(e.target.value)}
                                                     onKeyDown={e => {
                                                         if (e.key === 'Enter') { e.preventDefault(); ponerColor(colorNuevo); }
-                                                        if (e.key === 'Escape') { setAnadiendoColor(false); setColorNuevo(''); }
+                                                        if (e.key === 'Escape') { setAnadiendo(null); setColorNuevo(''); }
                                                     }}
                                                     className="flex-1 min-w-0 text-sm border border-papel-borde rounded-xl px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-marca" />
                                                 <button type="button" onClick={() => ponerColor(colorNuevo)}
@@ -272,8 +313,9 @@ export const OrderListView: React.FC<Props> = ({
                                                     Poner
                                                 </button>
                                             </div>
-                                            {/* O tocar uno de los que la app ya sabe pintar, sin escribirlo. */}
-                                            {restoDeLaPaleta.length > 0 && (
+                                            {/* La paleta solo en el camino del color: para una
+                                                denominación no hay nada que pintar. */}
+                                            {anadiendo === 'color' && restoDeLaPaleta.length > 0 && (
                                                 <div className="flex flex-wrap gap-1">
                                                     {restoDeLaPaleta.map(c => (
                                                         <button key={c} type="button" onClick={() => ponerColor(c)}
@@ -329,12 +371,98 @@ export const OrderListView: React.FC<Props> = ({
                     })}
                     {compradas.length > 0 && (
                         <div className="bg-papel-hondo px-3 py-2">
-                            <p className="text-[10px] font-black text-tinta-tenue uppercase tracking-wider mb-1">Ya comprado</p>
-                            {compradas.map(n => (
+                            {/* Comprado NO es recibido. Acá viven los que ya se
+                                pagaron y todavía no han llegado — o llegaron y nadie
+                                lo ha confirmado. Confirmar es lo único que mueve el
+                                inventario. */}
+                            <p className="text-[10px] font-black text-atencion uppercase tracking-wider mb-1">
+                                Comprado · falta confirmar qué llegó ({compradas.length})
+                            </p>
+                            {compradas.map(n => {
+                                const abierto = recibiendo?.id === n.id;
+                                if (abierto && onRecibirNote) {
+                                    const parecidos = items
+                                        .filter(i => looseMatch(i.name, n.texto) || looseMatch(getGenus(i.name), n.texto))
+                                        .slice(0, 8);
+                                    const resto = items.filter(i => !parecidos.some(p => p.id === i.id))
+                                        .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+                                    return (
+                                        <div key={n.id} className="rounded-xl border border-atencion bg-papel p-2 my-1 space-y-2">
+                                            <p className="text-[11px] font-black text-atencion">¿Qué llegó de «{n.texto}»?</p>
+                                            <div className="flex gap-1.5">
+                                                <input type="number" min={0} autoFocus value={recibiendo.cantidad}
+                                                    onChange={e => setRecibiendo(r => r && { ...r, cantidad: e.target.value })}
+                                                    placeholder="Cant."
+                                                    className="w-24 flex-shrink-0 text-sm border border-papel-borde rounded-xl px-2 py-2 bg-papel" />
+                                                <select value={recibiendo.itemId}
+                                                    onChange={e => setRecibiendo(r => r && { ...r, itemId: e.target.value })}
+                                                    className="flex-1 min-w-0 text-sm border border-papel-borde rounded-xl px-2 py-2 bg-papel">
+                                                    <option value="">➕ Crear «{n.texto}» en el inventario</option>
+                                                    {parecidos.length > 0 && (
+                                                        <optgroup label="Se parece a">
+                                                            {parecidos.map(i => <option key={i.id} value={i.id}>{i.name} · {i.quantity} {i.unit}</option>)}
+                                                        </optgroup>
+                                                    )}
+                                                    <optgroup label="Todo el inventario">
+                                                        {resto.map(i => <option key={i.id} value={i.id}>{i.name} · {i.quantity} {i.unit}</option>)}
+                                                    </optgroup>
+                                                </select>
+                                            </div>
+                                            <p className="text-[10px] text-tinta-tenue">
+                                                Se pidió {n.cantidad != null ? `${n.cantidad} ${n.unidad ?? ''}`.trim() : 'sin cantidad'}.
+                                                Poné lo que de verdad llegó — si llegó menos, va menos.
+                                            </p>
+                                            <div className="flex gap-2">
+                                                <button onClick={() => setRecibiendo(null)}
+                                                    className="px-3 py-1.5 text-xs font-bold text-tinta-tenue border border-papel-borde rounded-xl">Cancelar</button>
+                                                <button
+                                                    disabled={!Number(recibiendo.cantidad)}
+                                                    onClick={() => {
+                                                        onRecibirNote(n, Number(recibiendo.cantidad), recibiendo.itemId || undefined, n.texto);
+                                                        setRecibiendo(null);
+                                                    }}
+                                                    className="flex-1 py-1.5 text-xs font-black bg-bien disabled:bg-papel-borde disabled:text-tinta-suave text-papel rounded-xl">
+                                                    📥 Entró a la bodega
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                }
+                                return (
+                                    <div key={n.id} className="flex items-center gap-2 py-1">
+                                        <button onClick={() => onToggleNote(n)} title="Volver a pendiente"
+                                            className="w-5 h-5 flex-shrink-0 rounded-md bg-bien text-papel text-[11px] font-black">✓</button>
+                                        <p className="flex-1 min-w-0 text-sm text-tinta-tenue truncate">
+                                            {n.texto}
+                                            {n.cantidad != null && <span className="text-[11px] text-tinta-tenue"> · se pidieron {n.cantidad} {n.unidad ?? ''}</span>}
+                                        </p>
+                                        {onRecibirNote && (
+                                            <button
+                                                onClick={() => setRecibiendo({ id: n.id, cantidad: n.cantidad != null ? String(n.cantidad) : '', itemId: '' })}
+                                                className="flex-shrink-0 text-[11px] font-black px-2 py-1 rounded-lg bg-atencion text-papel">
+                                                📥 Llegó
+                                            </button>
+                                        )}
+                                        <button onClick={() => onDeleteNote(n)}
+                                            className="text-tinta-tenue hover:text-alerta px-1 flex-shrink-0 text-sm">✕</button>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    {recibidas.length > 0 && (
+                        <div className="bg-papel-hondo px-3 py-2 border-t border-papel-borde">
+                            <p className="text-[10px] font-black text-bien uppercase tracking-wider mb-1">
+                                Ya entró al inventario ({recibidas.length})
+                            </p>
+                            {recibidas.map(n => (
                                 <div key={n.id} className="flex items-center gap-2 py-1">
-                                    <button onClick={() => onToggleNote(n)}
-                                        className="w-5 h-5 flex-shrink-0 rounded-md bg-bien text-papel text-[11px] font-black">✓</button>
-                                    <p className="flex-1 min-w-0 text-sm text-tinta-tenue line-through truncate">{n.texto}</p>
+                                    <span className="w-5 h-5 flex-shrink-0 rounded-md bg-bien text-papel text-[11px] font-black flex items-center justify-center">📥</span>
+                                    <p className="flex-1 min-w-0 text-sm text-tinta-tenue line-through truncate">
+                                        {n.texto}
+                                        {n.recibidoQty != null && <span className="text-[11px] no-underline"> · llegaron {n.recibidoQty}</span>}
+                                    </p>
                                     <button onClick={() => onDeleteNote(n)}
                                         className="text-tinta-tenue hover:text-alerta px-1 flex-shrink-0 text-sm">✕</button>
                                 </div>

@@ -21,6 +21,21 @@ export enum InventoryType {
     ELECTRICAL_TOOL = 'Herramienta Eléctrica',
     PPE = 'Equipo de Protección Personal',
     SINGLE_USE = 'Material de Consumo',
+    /**
+     * El catálogo de accesorios: discos, brocas, y lo raro que trae una
+     * herramienta suelta (el soporte del láser, su caja).
+     *
+     * Es una lista APARTE, no una parte del inventario de consumibles. Antes
+     * "engancharle un accesorio" a una pulidora abría la lista completa de
+     * consumibles de la bodega —bombillos, estopa, gafas, clavos—, que no son
+     * accesorios de nada. Los accesorios se cuentan aparte porque son otra
+     * cosa: un disco no es una libra de clavos.
+     *
+     * Se gastan, como los consumibles, así que salen pegados a su herramienta
+     * y descuentan del suyo; pero viven en su propia lista y solo se pueden
+     * enganchar a herramientas eléctricas y manuales.
+     */
+    ACCESSORY = 'Accesorio',
 }
 
 export enum MovementType {
@@ -67,11 +82,39 @@ export interface Item {
     brand?: string;
     requiresReturnNote?: boolean;
     accessories?: Accessory[];
+    /**
+     * El ciclo de una herramienta dañada, con un humano confirmando cada paso.
+     *
+     * Antes devolver algo "dañado" guardaba la palabra en el movimiento y ahí
+     * moría: nadie volvía a acordarse de mandarla a arreglar, ni de reclamarla
+     * cuando ya estaba lista. Son dos olvidos distintos y los dos cuestan plata.
+     *
+     * Los tres estados son los tres momentos reales: se dañó y está acá; se
+     * mandó y está donde el técnico; volvió arreglada. La app NO los adelanta
+     * sola — cada paso lo marca el bodeguero, porque solo él sabe si la
+     * herramienta salió de verdad para el taller.
+     */
+    reparacion?: EstadoReparacion;
     /** Familia confirmada por el usuario. Sin ella se usa la sugerencia del nombre. */
     familia?: string;
     /** Cuándo se tocó por última vez. Es lo que decide quién gana cuando dos
      *  teléfonos traen la misma fila distinta. Ver `masReciente` en App.tsx. */
     updatedAt?: Date;
+}
+
+/** Un paso del ciclo de reparación, con la fecha en que se dio. */
+export interface EstadoReparacion {
+    estado: 'dañada' | 'enviada' | 'arreglada';
+    /** Cuándo se marcó dañada. Es la fecha con la que se cuentan los días. */
+    desde: Date;
+    /** Cuándo se mandó al taller. */
+    enviadaEl?: Date;
+    /** Cuándo volvió arreglada. */
+    devueltaEl?: Date;
+    /** Qué le pasó, en las palabras de quien la recibió. */
+    nota?: string;
+    /** Quién marcó el último paso. */
+    porQuien?: string;
 }
 
 export interface Project {
@@ -188,6 +231,24 @@ export interface OrderNote {
      *  texto para poder pintarlo del color que es, como en el resto de la app. */
     color?: string;
     comprado: boolean;
+    /**
+     * Ya llegó a la bodega y entró al inventario.
+     *
+     * "Comprado" y "recibido" no son lo mismo, y esa diferencia es justo la que
+     * la libreta no sabía anotar: se pide una cosa y llega otra, se piden 5 y
+     * llegan 3, o no llega nada. Marcar la compra no puede mover el inventario;
+     * confirmar lo que de verdad llegó, sí.
+     *
+     * Con esto la app deja de llevar solo la trazabilidad de lo que sale y
+     * empieza a llevar la de lo que entra, sin tener que cargar el inventario
+     * entero de golpe: se va completando pedido a pedido.
+     */
+    recibido?: boolean;
+    /** Cuánto llegó de verdad, que puede no ser lo que se pidió. */
+    recibidoQty?: number;
+    /** A qué ítem del inventario entró. */
+    itemId?: string;
+    recibidoAt?: Date;
     createdAt: Date;
     updatedAt?: Date;
 }

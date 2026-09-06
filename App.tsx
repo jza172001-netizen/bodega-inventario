@@ -46,6 +46,13 @@ import { WhatsAppIcon } from './components/icons/WhatsAppIcon';
 type View = 'dashboard' | 'kardex' | 'personnel' | 'copilot' | 'help' | 'whatsapp' | 'pickup' | 'traceability' | 'familias' | 'pedidos';
 type KardexTab = 'movements' | 'loans' | 'inventory' | 'projects';
 
+/**
+ * Las devoluciones que abren un arreglo. `worn` no entra: una herramienta
+ * desgastada sigue sirviendo y llenar la lista de dañadas con desgaste normal
+ * la vuelve ruido — y una lista que es ruido no se mira.
+ */
+const CONDICIONES_QUE_DAÑAN = new Set<string>(['damaged', 'incomplete', 'needs_maintenance']);
+
 const SESSION_KEY = 'bodega_session';
 const ONBOARDING_KEY = 'bodega_onboarding_v1';
 
@@ -84,6 +91,30 @@ const App: React.FC = () => {
         } catch { return ''; }
     });
     const [items, setItems] = useState<Item[]>(() => { const s = loadInitialData(); return s?.items ?? []; });
+    /**
+     * El inventario como está AHORA, contando lo que se acaba de crear en este
+     * mismo momento.
+     *
+     * `setItems` no cambia `items` hasta el render siguiente. Así que un ítem
+     * creado y despachado de una sola vez —que es exactamente lo que hace el
+     * asistente de Despacho— todavía no existía cuando su propio movimiento lo
+     * iba a buscar. Y sin ítem, `handleLogMovement` se saltaba las dos cosas
+     * que importan: no validaba el stock y no lo descontaba. El movimiento
+     * quedaba en el Kardex y la cantidad del ítem se quedaba quieta.
+     *
+     * De ahí salieron los cuatro descuadres del 5 y 6 de septiembre, y de ahí
+     * salió que "clavos 2 acero" pudiera despacharse teniendo 0 libras.
+     */
+    const itemsRef = React.useRef<Item[]>(items);
+    useEffect(() => { itemsRef.current = items; }, [items]);
+    /** El ítem vigente, mirando primero lo recién creado. */
+    const itemActual = (id?: string): Item | undefined =>
+        id ? (itemsRef.current.find(i => i.id === id) ?? items.find(i => i.id === id)) : undefined;
+    /** Deja el espejo al día sin esperar al próximo render. */
+    const anotarEnEspejo = (item: Item) => { itemsRef.current = [...itemsRef.current, item]; };
+    const ajustarEspejo = (id: string, quantity: number) => {
+        itemsRef.current = itemsRef.current.map(i => i.id === id ? { ...i, quantity } : i);
+    };
     const [movements, setMovements] = useState<Movement[]>(() => { const s = loadInitialData(); return s?.movements ?? []; });
     const [personnel, setPersonnel] = useState<Personnel[]>(() => {
         const s = loadInitialData();
@@ -542,6 +573,55 @@ const App: React.FC = () => {
         addAuditLog('ORDER_NOTE_ADDED', `Anotó para comprar: "${texto}"${cantidad ? ` ×${cantidad}` : ''}`);
     };
 
+    /**
+     * Lo que llegó de un pedido, entrando al inventario.
+     *
+     * Es el otro lado de la trazabilidad. Hasta hoy la app sabía contar lo que
+     * SALE; lo que entra había que cargarlo aparte y de golpe. Con esto se va
+     * completando pedido a pedido: llega el material, se dice cuánto llegó de
+     * verdad —que casi nunca es lo que se pidió— y eso queda como una Entrada
+     * en el Kardex, con su rastro en la bitácora.
+     *
+     * Si el ítem no existe todavía se crea en cero y la entrada le pone las
+     * unidades: así el Kardex nace cuadrado desde el primer movimiento, que es
+     * justo lo que les faltó a "clavos 2 acero" y "clavos hierro 2".
+     */
+    const handleRecibirOrderNote = (n: OrderNote, cantidad: number, itemId?: string, nombreNuevo?: string) => {
+        if (!cantidad || cantidad <= 0) return;
+        let destino = itemId ? itemActual(itemId) : undefined;
+        if (!destino) {
+            destino = handleAddItemSync({
+                name: (nombreNuevo ?? n.texto).trim(),
+                category: 'Materiales',
+                subCategory: '',
+                inventoryType: InventoryType.SINGLE_USE,
+                quantity: 0,
+                minStock: 0,
+                unit: n.unidad?.trim() || 'unidades',
+                familia: n.familia?.trim() || undefined,
+            });
+        }
+        const entro = handleLogMovement({
+            itemId: destino.id,
+            type: MovementType.CHECK_IN,
+            quantity: cantidad,
+            timestamp: new Date(),
+            isLoan: false,
+            isReturned: false,
+            notes: `Llegó del pedido: "${n.texto}"${n.cantidad != null ? ` (se habían pedido ${n.cantidad} ${n.unidad ?? ''})`.trimEnd() + '' : ''}`,
+        });
+        if (!entro) return;
+        const upd: OrderNote = {
+            ...n, recibido: true, recibidoQty: cantidad, itemId: destino.id,
+            recibidoAt: new Date(), updatedAt: new Date(),
+        };
+        setOrderNotes(prev => prev.map(x => x.id === n.id ? upd : x));
+        withSync(db.updateOrderNote(upd));
+        addAuditLog('ORDER_NOTE_RECEIVED',
+            `📥 Llegó del pedido "${n.texto}": ${cantidad} ${destino.unit} de "${destino.name}"` +
+            (n.cantidad != null && n.cantidad !== cantidad ? ` — se habían pedido ${n.cantidad}` : ''));
+    };
+
     const handleToggleOrderNote = (n: OrderNote) => {
         const upd = { ...n, comprado: !n.comprado, updatedAt: new Date() };
         setOrderNotes(prev => prev.map(x => x.id === n.id ? upd : x));
@@ -601,6 +681,14 @@ const App: React.FC = () => {
     // los ítems en cada render— ya no alimenta nada.
 
     const pendingPickupCount = movements.filter(m => m.isLoan && !m.isReturned && m.pendingPickup).length;
+    /** Las tres pantallas que salen por WhatsApp, juntas bajo un solo renglón. */
+    const GRUPO_WHATSAPP: View[] = ['whatsapp', 'pickup', 'pedidos'];
+    const [whatsappAbierto, setWhatsappAbierto] = useState(false);
+    // Si se entra a una de las tres desde otro lado (un enlace del Resumen, por
+    // ejemplo), el cajón se abre solo: si no, la barra no muestra dónde está uno.
+    useEffect(() => {
+        if (GRUPO_WHATSAPP.includes(effectiveView)) setWhatsappAbierto(true);
+    }, [effectiveView]); // eslint-disable-line react-hooks/exhaustive-deps
     const [isSidebarOpen, setSidebarOpen] = useState(true);
 
     const CONFIG_KEY = 'bodega_config';
@@ -768,7 +856,7 @@ const App: React.FC = () => {
         const extra: Omit<Movement, 'id'>[] = [];
         for (const m of batch) {
             if (m.type !== MovementType.CHECK_OUT) continue;
-            const herramienta = items.find(i => i.id === m.itemId);
+            const herramienta = itemActual(m.itemId);
             for (const acc of herramienta?.accessories ?? []) {
                 if (!acc.itemId) continue;                    // retornable: no es movimiento
                 const porUnidad = acc.cantidad ?? 1;
@@ -788,6 +876,7 @@ const App: React.FC = () => {
         const id = crypto.randomUUID();
         const newItem = { ...i, id };
         setItems(prev => [...prev, newItem]);
+        anotarEnEspejo(newItem);
         withSync(db.addItem(i, id));
         registrarApertura(newItem);
         addAuditLog('ITEM_CREATED', `Se agregó "${i.name}" al inventario`);
@@ -797,6 +886,7 @@ const App: React.FC = () => {
         const id = crypto.randomUUID();
         const newItem = { ...i, id };
         setItems(prev => [...prev, newItem]);
+        anotarEnEspejo(newItem);
         withSync(db.addItem(i, id));
         registrarApertura(newItem);
         addAuditLog('ITEM_CREATED', `Se agregó "${i.name}" al inventario`);
@@ -853,11 +943,13 @@ const App: React.FC = () => {
      */
     const handleLogMovements = (batch: Omit<Movement, 'id'>[]): LoteResultado => {
         const expandido = expandirAccesorios(batch);
-        const restante = new Map(items.map(i => [i.id, i.quantity]));
+        // Del espejo, no de `items`: si el lote incluye un ítem creado hace un
+        // instante, en `items` todavía no está y su salida entraba sin validar.
+        const restante = new Map(itemsRef.current.map(i => [i.id, i.quantity]));
         const rechazos: RechazoStock[] = [];
         let ok = 0;
         for (const m of expandido) {
-            const it = items.find(i => i.id === m.itemId);
+            const it = itemActual(m.itemId);
             const esSalida = m.type === MovementType.CHECK_OUT || m.type === MovementType.WASTE;
             const hay = restante.get(m.itemId) ?? 0;
             if (it && esSalida && m.quantity > hay) {
@@ -874,7 +966,7 @@ const App: React.FC = () => {
 
     const handleLogMovement = (m: Omit<Movement, 'id'>, stockDisponible?: number): boolean => {
         const ts = m.timestamp instanceof Date ? m.timestamp : new Date(m.timestamp ?? Date.now());
-        const currentItem = items.find(i => i.id === m.itemId);
+        const currentItem = itemActual(m.itemId);
         const isWithdrawal = m.type === MovementType.CHECK_OUT || m.type === MovementType.WASTE;
         // El stock contra el que se valida es el que va quedando en el lote, no el
         // del render — que es el mismo para todas las líneas.
@@ -893,12 +985,17 @@ const App: React.FC = () => {
             setItems(prev => prev.map(item =>
                 item.id === m.itemId ? { ...item, quantity: newQty } : item
             ));
+            ajustarEspejo(m.itemId, newQty);
             // Una sola transacción en el servidor: movimiento + stock, a prueba de race conditions
             withSync(db.logMovementWithStock({ ...m, timestamp: ts }, id, newQty));
         } else {
+            // Sin ítem no hay stock que mover. Antes esto se alcanzaba con un ítem
+            // recién creado y pasaba callado; ahora solo puede ser un movimiento
+            // huérfano de verdad, y queda dicho para que no vuelva a esconderse.
+            console.warn('[stock] Movimiento sin ítem en el inventario:', m.itemId);
             withSync(db.addMovement({ ...m, timestamp: ts }, id));
         }
-        const itemName   = items.find(i => i.id === m.itemId)?.name ?? 'herramienta';
+        const itemName   = currentItem?.name ?? 'herramienta';
         const personName = m.personnelId ? personnel.find(p => p.id === m.personnelId)?.name : undefined;
         if (m.isLoan) {
             addAuditLog('LOAN_CREATED', `Préstamo: "${itemName}"${personName ? ` → ${personName}` : ''}`);
@@ -931,6 +1028,7 @@ const App: React.FC = () => {
                     newQty = Math.max(0, wasWithdrawal ? item.quantity + mov.quantity : item.quantity - mov.quantity);
                     const qty = newQty;
                     setItems(prev => prev.map(i => i.id === item.id ? { ...i, quantity: qty } : i));
+                    ajustarEspejo(item.id, qty);
                 }
                 setMovements(prev => prev.filter(m => m.id !== id));
                 withSync(db.deleteMovementWithRevert(id, item?.id, newQty));
@@ -960,6 +1058,7 @@ const App: React.FC = () => {
             restoredQty = item.quantity + mov.quantity;
             const qty = restoredQty;
             setItems(prev => prev.map(i => i.id === item.id ? { ...i, quantity: qty } : i));
+            ajustarEspejo(item.id, qty);
         }
         withSync(db.returnLoanAndRestoreStock(
             id,
@@ -969,6 +1068,44 @@ const App: React.FC = () => {
             restoredQty,
         ));
         addAuditLog('LOAN_RETURNED', `Devuelta: "${itemName}"${personName ? ` de ${personName}` : ''}${condition ? ` — estado: ${condition}` : ''}`);
+
+        // Si volvió mal, arranca el ciclo de reparación. Antes el estado se
+        // guardaba en el movimiento y ahí se quedaba: nadie volvía a acordarse
+        // de mandarla a arreglar ni de reclamarla después.
+        if (item && CONDICIONES_QUE_DAÑAN.has(condition ?? '') && item.reparacion?.estado !== 'enviada') {
+            const conReparacion: Item = {
+                ...item,
+                reparacion: { estado: 'dañada', desde: new Date(), nota: notes || undefined, porQuien: userName || undefined },
+                updatedAt: new Date(),
+            };
+            setItems(prev => prev.map(i => i.id === item.id ? { ...i, reparacion: conReparacion.reparacion, updatedAt: conReparacion.updatedAt } : i));
+            itemsRef.current = itemsRef.current.map(i => i.id === item.id ? { ...i, reparacion: conReparacion.reparacion } : i);
+            withSync(db.updateItem(conReparacion));
+            addAuditLog('REPAIR_OPENED', `🔧 Quedó dañada: "${itemName}"${notes ? ` — ${notes}` : ''}`);
+        }
+    };
+
+    /**
+     * Los tres pasos del arreglo, cada uno confirmado por una persona.
+     *
+     * La app no adelanta ninguno sola: solo el bodeguero sabe si la herramienta
+     * de verdad salió para el taller y si de verdad volvió sirviendo.
+     */
+    const handleRepararPaso = (itemId: string, paso: 'enviada' | 'arreglada') => {
+        const item = itemActual(itemId);
+        if (!item?.reparacion) return;
+        const ahora = new Date();
+        const reparacion = paso === 'enviada'
+            ? { ...item.reparacion, estado: 'enviada' as const, enviadaEl: ahora, porQuien: userName || undefined }
+            : undefined;   // arreglada y de vuelta: sale de la lista de dañadas
+        const actualizado: Item = { ...item, reparacion, updatedAt: ahora };
+        setItems(prev => prev.map(i => i.id === itemId ? actualizado : i));
+        itemsRef.current = itemsRef.current.map(i => i.id === itemId ? actualizado : i);
+        withSync(db.updateItem(actualizado));
+        addAuditLog(paso === 'enviada' ? 'REPAIR_SENT' : 'REPAIR_DONE',
+            paso === 'enviada'
+                ? `🔧 Se mandó a arreglar: "${item.name}"`
+                : `✅ Volvió arreglada: "${item.name}"`);
     };
 
     const handleMarkPendingPickup = (id: string, pending: boolean) => {
@@ -1126,7 +1263,9 @@ const App: React.FC = () => {
     const handleAddUser = (u: AppUser) => {
         setUsers(prev => [...prev, u]);
         withSync(db.addUser(u));
-        addAuditLog('USER_CREATED', `Se creó usuario: "${u.username}" (${u.role})`);
+        // Por el nombre, no por el usuario: ahora el acceso nace sin usuario —lo
+        // elige la propia persona al entrar— y la bitácora decía `""`.
+        addAuditLog('USER_CREATED', `Se creó acceso para "${u.name}" (${u.role}) — pendiente de que ponga su contraseña`);
     };
 
     const handleEditUser = (u: AppUser) => {
@@ -1204,39 +1343,46 @@ const App: React.FC = () => {
                     <nav className="px-2 space-y-1">
                         <NavItem icon={DashboardIcon} label="Resumen" onClick={() => selectView('dashboard')} isActive={effectiveView === 'dashboard'} />
                         <NavItem icon={MovementsIcon} label="Kardex" onClick={() => selectView('kardex')} isActive={effectiveView === 'kardex'} />
-                        <NavItem icon={WhatsAppIcon} label="WhatsApp" onClick={() => selectView('whatsapp')} isActive={effectiveView === 'whatsapp'} />
-                        {userRole !== UserRole.VISITOR && (
-                            <>
-                                <NavItem icon={PersonnelIcon} label="Personal" onClick={() => selectView('personnel')} isActive={effectiveView === 'personnel'} />
-                                <NavItem icon={PickupNavIcon} label="A Recoger" onClick={() => selectView('pickup')} isActive={effectiveView === 'pickup'} badge={pendingPickupCount} />
-                                {/* Sin número: cuatro cosas anotadas para comprar no son
-                                    una alarma, son una libreta. El aviso naranja es el
-                                    mismo de "A Recoger", donde sí hay algo esperando. */}
-                                <NavItem
-                                    icon={({ className }: { className?: string }) => <span className={className}>🧾</span>}
-                                    label="Lista de pedidos"
-                                    onClick={() => selectView('pedidos')}
-                                    isActive={effectiveView === 'pedidos'}
-                                />
-                                {/* "Agrupar ítems" sale de la barra: de 77 ítems, 25 nunca
-                                    tuvieron familia confirmada y la separación no se usó ni
-                                    una vez — el árbol la deduce del nombre igual de bien, y
-                                    para un ítem suelto está el campo Familia al editarlo.
-                                    La pantalla NO se borra: la vista 'familias' y
-                                    ReviewFamiliesView siguen enteros, con su autocorrección.
-                                    Volver a enlazarla es poner acá el NavItem otra vez. */}
-                            </>
-                        )}
+                        {/* WhatsApp deja de ser un renglón y pasa a ser el cajón de las
+                            tres cosas que salen por WhatsApp: los recordatorios de
+                            herramientas, A Recoger y la Lista de pedidos. Eran tres
+                            renglones sueltos apuntando todos al mismo lado.
+
+                            Así la barra queda en cuatro entradas —Resumen, Kardex,
+                            WhatsApp y Personal— sin esconder nada detrás de un "más
+                            funciones" que hay que aprenderse. */}
                         <NavItem
-                            icon={({ className }: { className?: string }) => (
-                                <svg className={className} fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 14.25v2.25m3-4.5v4.5m3-6.75v6.75m3-9v9M6 20.25h12A2.25 2.25 0 0 0 20.25 18V6A2.25 2.25 0 0 0 18 3.75H6A2.25 2.25 0 0 0 3.75 6v12A2.25 2.25 0 0 0 6 20.25Z" />
-                                </svg>
-                            )}
-                            label="Trazabilidad"
-                            onClick={() => selectView('traceability')}
-                            isActive={effectiveView === 'traceability'}
+                            icon={WhatsAppIcon}
+                            label="WhatsApp"
+                            onClick={() => setWhatsappAbierto(a => !a)}
+                            isActive={GRUPO_WHATSAPP.includes(effectiveView)}
+                            badge={whatsappAbierto ? undefined : pendingPickupCount}
+                            chevron={whatsappAbierto ? 'abierto' : 'cerrado'}
                         />
+                        {whatsappAbierto && (
+                            <div className="pl-4 space-y-1">
+                                <SubNavItem label="Recordatorios" onClick={() => selectView('whatsapp')} isActive={effectiveView === 'whatsapp'} />
+                                {userRole !== UserRole.VISITOR && (
+                                    <>
+                                        <SubNavItem label="A Recoger" onClick={() => selectView('pickup')} isActive={effectiveView === 'pickup'} badge={pendingPickupCount} />
+                                        {/* Sin número: cuatro cosas anotadas para comprar no son
+                                            una alarma, son una libreta. El aviso naranja es el
+                                            mismo de "A Recoger", donde sí hay algo esperando. */}
+                                        <SubNavItem label="Lista de pedidos" onClick={() => selectView('pedidos')} isActive={effectiveView === 'pedidos'} />
+                                    </>
+                                )}
+                            </div>
+                        )}
+                        {userRole !== UserRole.VISITOR && (
+                            <NavItem icon={PersonnelIcon} label="Personal" onClick={() => selectView('personnel')} isActive={effectiveView === 'personnel'} />
+                        )}
+                        {/* "Agrupar ítems" sale de la barra: de 77 ítems, 25 nunca
+                            tuvieron familia confirmada y la separación no se usó ni
+                            una vez — el árbol la deduce del nombre igual de bien, y
+                            para un ítem suelto está el campo Familia al editarlo.
+                            La pantalla NO se borra: la vista 'familias' y
+                            ReviewFamiliesView siguen enteros, con su autocorrección.
+                            Volver a enlazarla es poner acá el NavItem otra vez. */}
                     </nav>
                 </div>
 
@@ -1244,11 +1390,26 @@ const App: React.FC = () => {
                     su encabezado. La vista sigue existiendo, solo no ocupa un renglón
                     de la barra. */}
                 <div className="flex-shrink-0 px-2 py-3 border-t border-papel-borde space-y-1">
+                    {/* Trazabilidad baja al pie, con Configuración y Cerrar sesión:
+                        no es una pantalla de trabajo diario, es a dónde se va uno a
+                        mirar qué pasó. */}
+                    <button
+                        onClick={() => selectView('traceability')}
+                        className={`w-full flex items-center text-left px-4 py-2.5 text-xs font-semibold rounded-xl transition-all ${
+                            effectiveView === 'traceability'
+                                ? 'bg-marca text-tinta'
+                                : 'text-tinta-tenue hover:bg-papel-hondo hover:text-tinta-suave'}`}
+                    >
+                        <svg className="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.9} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 14.25v2.25m3-4.5v4.5m3-6.75v6.75m3-9v9M6 20.25h12A2.25 2.25 0 0 0 20.25 18V6A2.25 2.25 0 0 0 18 3.75H6A2.25 2.25 0 0 0 3.75 6v12A2.25 2.25 0 0 0 6 20.25Z" />
+                        </svg>
+                        Trazabilidad
+                    </button>
                     <button
                         onClick={() => { addBehaviorLog('BUTTON', 'Abrió: Configuración'); setSettingsOpen(true); }}
                         className="w-full flex items-center text-left px-4 py-2.5 text-xs font-semibold rounded-xl text-tinta-tenue hover:bg-papel-hondo hover:text-tinta-suave transition-all"
                     >
-                        <svg className="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                        <svg className="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.9} viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
                             <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
                         </svg>
@@ -1258,7 +1419,7 @@ const App: React.FC = () => {
                         onClick={handleLogout}
                         className="w-full flex items-center text-left px-4 py-2.5 text-xs font-semibold rounded-xl text-tinta-tenue hover:bg-alerta-suave hover:text-alerta transition-all"
                     >
-                        <svg className="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                        <svg className="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.9} viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
                         </svg>
                         Cerrar sesión
@@ -1291,6 +1452,7 @@ const App: React.FC = () => {
                                 onNavigate={(v, tab) => selectView(v as View, tab as KardexTab | undefined)}
                                 onBehaviorLog={addBehaviorLog}
                                 onAuditLog={addAuditLog}
+                                onRepararPaso={userRole !== UserRole.VISITOR ? handleRepararPaso : undefined}
                             />
                         )}
                         {effectiveView === 'kardex' && (
@@ -1382,6 +1544,7 @@ const App: React.FC = () => {
                                 onToggleNote={handleToggleOrderNote}
                                 onUpdateNote={handleUpdateOrderNote}
                                 onDeleteNote={handleDeleteOrderNote}
+                                onRecibirNote={userRole !== UserRole.VISITOR ? handleRecibirOrderNote : undefined}
                                 onBehaviorLog={addBehaviorLog}
                             />
                         )}
@@ -1421,7 +1584,7 @@ const App: React.FC = () => {
             <EditItemModal isOpen={isEditModalOpen} onClose={() => setEditModalOpen(false)} onEditItem={handleEditItem} itemToEdit={itemToEdit} items={items} />
             <LogMovementModal isOpen={isLogMovementModalOpen} onClose={() => setLogMovementModalOpen(false)} onLogMovement={handleLogMovement} items={items} movements={movements} personnel={personnel} projects={projects} userRole={userRole} onCreateItem={handleAddItemSync} />
             <AddPersonnelModal isOpen={isAddPersonnelModalOpen} onClose={() => setAddPersonnelModalOpen(false)} onAddPersonnel={handleAddPersonnel} />
-            <ItemHistoryModal isOpen={isHistoryModalOpen} onClose={() => setHistoryModalOpen(false)} item={itemForHistory} movements={movements} personnel={personnel} projects={projects} onReturnItem={handleReturnItem} onTransferLoan={handleTransferLoan} onAssignProject={handleAssignProjectToLoan} />
+            <ItemHistoryModal isOpen={isHistoryModalOpen} onClose={() => setHistoryModalOpen(false)} item={itemForHistory} movements={movements} personnel={personnel} projects={projects} onReturnItem={handleReturnItem} onTransferLoan={handleTransferLoan} onAssignProject={handleAssignProjectToLoan} onMarkPendingPickup={handleMarkPendingPickup} userRole={userRole} />
             <UserManagementModal isOpen={isUserManagementOpen} onClose={() => setUserManagementOpen(false)} users={users} onAddUser={handleAddUser} onDeleteUser={handleDeleteUser} onEditUser={handleEditUser} />
             <InvoiceReaderModal isOpen={isInvoiceReaderOpen} onClose={() => setInvoiceReaderOpen(false)} onImport={(rows, invType) => handleImportItems(rows, invType)} />
             {isSettingsOpen && (
@@ -1432,6 +1595,7 @@ const App: React.FC = () => {
                     userRole={userRole}
                     onResetAllData={handleResetAllData}
                     onResetMaterials={handleResetMaterials}
+                    onOpenUserManagement={() => { addBehaviorLog('BUTTON', 'Abrió: Accesos a la app'); setSettingsOpen(false); setUserManagementOpen(true); }}
                 />
             )}
             {isSearchOpen && (
@@ -1483,6 +1647,7 @@ const App: React.FC = () => {
                     onCreateProject={handleAddProjectSync}
                     onCreatePersonnel={handleAddPersonnelSync}
                     onBehaviorLog={addBehaviorLog}
+                    auditLogs={auditLogs}
                 />
             )}
         </div>
@@ -1502,14 +1667,36 @@ const PickupNavIcon: React.FC<{ className?: string }> = ({ className }) => (
     </svg>
 );
 
-const NavItem: React.FC<{ icon: React.ElementType, label: string, onClick: () => void, isActive: boolean, badge?: number }> = ({ icon: Icon, label, onClick, isActive, badge }) => (
+const NavItem: React.FC<{ icon: React.ElementType, label: string, onClick: () => void, isActive: boolean, badge?: number, chevron?: 'abierto' | 'cerrado' }> = ({ icon: Icon, label, onClick, isActive, badge, chevron }) => (
     <button onClick={onClick} className={`w-full flex items-center text-left px-4 py-3 text-sm font-semibold rounded-xl transition-all duration-200 ${isActive ? 'bg-marca text-tinta shadow-lg' : 'text-tinta-suave hover:bg-papel-hondo hover:text-tinta'}`}>
-        <Icon className={`w-5 h-5 mr-3 ${isActive ? 'text-tinta' : 'text-tinta-tenue'}`} />
-        <span className="flex-1">{label}</span>
+        <Icon className={`w-5 h-5 mr-3 flex-shrink-0 ${isActive ? 'text-tinta' : 'text-tinta-tenue'}`} />
+        {/* `truncate` y `min-w-0`: sin eso la palabra se estiraba por debajo del
+            número y los dos quedaban montados. */}
+        <span className="flex-1 min-w-0 truncate text-left">{label}</span>
         {badge != null && badge > 0 && (
-            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${isActive ? 'bg-papel text-marca-oscuro' : 'bg-atencion text-tinta-tenue'}`}>
+            <span className={`ml-2 flex-shrink-0 text-[10px] font-black px-1.5 py-0.5 rounded-full ${isActive ? 'bg-papel text-marca-oscuro' : 'bg-atencion text-papel'}`}>
                 {badge}
             </span>
+        )}
+        {chevron && (
+            <svg className={`w-4 h-4 ml-1.5 flex-shrink-0 transition-transform ${chevron === 'abierto' ? 'rotate-180' : ''} ${isActive ? 'text-tinta' : 'text-tinta-tenue'}`}
+                fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+            </svg>
+        )}
+    </button>
+);
+
+/** Un renglón de adentro del cajón de WhatsApp. Sin icono: la sangría y el
+ *  punto ya dicen que cuelga del de arriba, y un emoji más solo hace ruido. */
+const SubNavItem: React.FC<{ label: string, onClick: () => void, isActive: boolean, badge?: number }> = ({ label, onClick, isActive, badge }) => (
+    <button onClick={onClick} className={`w-full flex items-center text-left pl-4 pr-3 py-2 text-xs font-bold rounded-lg transition-all ${isActive ? 'bg-marca-suave text-marca-oscuro' : 'text-tinta-tenue hover:bg-papel-hondo hover:text-tinta-suave'}`}>
+        <span className={`w-1.5 h-1.5 rounded-full mr-3 flex-shrink-0 ${isActive ? 'bg-marca-oscuro' : 'bg-papel-borde'}`} />
+        <span className="flex-1">{label}</span>
+        {/* El número va blanco sobre el fondo fuerte. En tinta tenue quedaba
+            oscuro sobre oscuro: se veía la pastilla y no se leía el número. */}
+        {badge != null && badge > 0 && (
+            <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-atencion text-papel">{badge}</span>
         )}
     </button>
 );

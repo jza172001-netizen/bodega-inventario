@@ -86,18 +86,8 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, o
                         <label className="block text-sm font-medium text-tinta-suave mb-1">Nombre del Artículo</label>
                         <input type="text" value={name} onChange={e => setName(e.target.value)} required className="w-full input-style"/>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-tinta-suave mb-1">Categoría</label>
-                             <select value={category} onChange={e => setCategory(e.target.value)} className="w-full input-style">
-                                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-tinta-suave mb-1">Sub-clasificación</label>
-                            <input type="text" value={subCategory} onChange={e => setSubCategory(e.target.value)} required className="w-full input-style"/>
-                        </div>
-                    </div>
+                    {/* Fuera del formulario, igual que al crear: no se usan. El valor
+                        guardado se respeta y se vuelve a mandar tal cual. */}
                      <div>
                         <label className="block text-sm font-medium text-tinta-suave mb-1">Tipo de Inventario</label>
                          <select value={inventoryType} onChange={e => setInventoryType(e.target.value as InventoryType)} className="w-full input-style">

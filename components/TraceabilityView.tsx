@@ -1,7 +1,6 @@
 
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { Movement, Item, Personnel, Project, ReturnCondition, InventoryType, AuditLog, BehaviorLog, AppUser, UserRole } from '../types';
-import { CotejoPanel } from './CotejoPanel';
 
 interface Props {
     movements: Movement[];
@@ -81,6 +80,10 @@ const AUDIT_CATEGORY: Record<string, { icon: string; color: string; bg: string }
     PICKUP_NOTIFIED:    { icon: '📲', color: 'text-atencion', bg: 'bg-atencion-suave' },
     REPORT_EXPORTED:    { icon: '📄', color: 'text-marca-oscuro',   bg: 'bg-marca-suave'   },
     AUDIT_CLEARED:      { icon: '🧹', color: 'text-alerta',    bg: 'bg-alerta-suave'    },
+    ORDER_NOTE_RECEIVED:{ icon: '📥', color: 'text-bien',  bg: 'bg-bien-suave'  },
+    REPAIR_OPENED:      { icon: '🔧', color: 'text-alerta',    bg: 'bg-alerta-suave'    },
+    REPAIR_SENT:        { icon: '🚚', color: 'text-atencion', bg: 'bg-atencion-suave' },
+    REPAIR_DONE:        { icon: '✅', color: 'text-bien',  bg: 'bg-bien-suave'  },
 };
 
 /**
@@ -378,11 +381,9 @@ export const TraceabilityView: React.FC<Props> = ({
             {/* ── ACTIVIDAD ── */}
             {mainTab === 'actividad' && (
                 <div>
-                    {/* El cotejo primero: si algo no cuadra, hay que verlo antes de
-                        ponerse a leer la lista de lo que pasó. */}
-                    <div className="px-4 pt-3">
-                        <CotejoPanel items={items} movements={movements} personnel={personnel} auditLogs={auditLogs} onAuditLog={onAuditLog} />
-                    </div>
+                    {/* El cotejo salió de acá: vive al final del Resumen, que es la
+                        pantalla que se abre todos los días. Estaba en los dos lados y
+                        el de acá era el que nadie miraba. */}
                     <div className="px-4 py-3 border-b border-papel-borde space-y-2">
                         {/* Actor filter */}
                         <div className="flex gap-2 overflow-x-auto scrollbar-hide">
