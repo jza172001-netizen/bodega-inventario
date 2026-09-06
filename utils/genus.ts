@@ -139,6 +139,56 @@ export const esParecido = (nombre: string, otro: Item, familiaConfirmada?: strin
     return Math.abs(a.length - b.length) <= 2 && editDistance(a, b) <= 1;
 };
 
+/**
+ * La familia de un ítem, escrita como YA está escrita en la bodega.
+ *
+ * Sin esto, `"clavos"` y `"Clavos"` conviven como dos familias distintas —y ya
+ * pasó: quedaron las dos en la base—. Basta con que alguien escriba una en
+ * minúscula un martes para partir en dos algo que el bodeguero ve como uno solo.
+ * La primera forma que se escribió manda; las siguientes se le suman.
+ */
+export const familiaCanonica = (familia: string, items: Item[]): string => {
+    const q = normStr(familia);
+    if (!q) return familia.trim();
+    for (const i of items) {
+        const f = i.familia?.trim();
+        if (f && normStr(f) === q) return f;
+    }
+    return familia.trim();
+};
+
+/**
+ * Las familias que ya existen y se parecen a lo que se está escribiendo.
+ * Es la lista que Juli quiere ver al escribir "lechada": las lechadas que ya
+ * tiene, para decidir si la nueva es una de ellas o algo aparte.
+ */
+export const familiasParecidas = (nombre: string, items: Item[]): string[] => {
+    const q = nombre.trim();
+    if (q.length < 3) return [];
+    const vistas = new Map<string, string>();
+    for (const i of items) {
+        const f = (i.familia?.trim() || familiaDe(i.name)).trim();
+        if (!f) continue;
+        const k = normStr(f);
+        if (vistas.has(k)) continue;
+        if (looseMatch(f, q) || looseMatch(q, f) || normStr(familiaDe(q)) === k) vistas.set(k, f);
+    }
+    return [...vistas.values()].sort((a, b) => a.localeCompare(b, 'es'));
+};
+
+/** Los colores que esa familia ya tiene en la bodega, sin repetir. */
+export const coloresDeFamilia = (familia: string, items: Item[]): string[] => {
+    const q = normStr(familia);
+    const vistos = new Map<string, string>();
+    for (const i of items) {
+        const f = i.familia?.trim() || familiaDe(i.name);
+        if (normStr(f) !== q) continue;
+        const c = i.color?.trim();
+        if (c && !vistos.has(normStr(c))) vistos.set(normStr(c), c);
+    }
+    return [...vistos.values()].sort((a, b) => a.localeCompare(b, 'es'));
+};
+
 export const clusterGenera = (items: Item[]): GenusCluster[] => {
     // familiaDe y no getGenus: así "Lechada gris claro" y "Lechada veige"
     // caen en el mismo grupo, no solo las que traen paréntesis.

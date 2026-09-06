@@ -5,7 +5,7 @@ import { momentoDeFecha } from '../utils/date';
 import { askCopilot } from '../services/copilotService';
 import { suggestQuestions } from '../services/warehouseQA';
 import { scoreMatch } from '../utils/search';
-import { getGenus, familiaDe, esParecido } from '../utils/genus';
+import { getGenus, familiaDe, esParecido, familiaCanonica, familiasParecidas, coloresDeFamilia } from '../utils/genus';
 
 interface FloatingChatProps {
     items: Item[];
@@ -122,7 +122,11 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     // El grupo (sub-clasificación). Antes se escribía 'General' a mano en los seis
     // puntos de creación del chatbot, así que TODO lo creado por acá caía en el
     // mismo montón y no había manera de agrupar nada en el histórico.
-    const [wizardCreateGroup, setWizardCreateGroup] = useState('');
+    // La familia que el bodeguero ELIGE. Antes acá vivía el "grupo" (Golpe,
+    // Albañilería, Acabados): una taxonomía que la app se inventó y que en la
+    // bodega nadie usa. Lo que sí usa es la familia — las lechadas, los clavos,
+    // los taladros — y es lo que hay que preguntarle.
+    const [wizardCreateFamilia, setWizardCreateFamilia] = useState('');
     // Cuando el nombre se parece a algo que ya existe, se para antes de crear y
     // se pregunta. Unir por parecido sin preguntar juntaría cosas distintas.
     /**
@@ -228,24 +232,6 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
      * bodeguero queda mirando una caja de texto sin saber qué escribir. Son
      * sugerencias: se toca una, o se escribe la propia.
      */
-    const GRUPOS_SUGERIDOS: Record<string, string[]> = {
-        [InventoryType.HAND_TOOL]:       ['Golpe', 'Albañilería', 'Corte y medición', 'Ajuste'],
-        [InventoryType.ELECTRICAL_TOOL]: ['Perforación', 'Corte y pulido', 'Compactación', 'Medición'],
-        [InventoryType.PPE]:             ['Protección para ojos', 'Protección para manos', 'Protección para cabeza', 'Ropa de trabajo'],
-        [InventoryType.SINGLE_USE]:      ['Fijación', 'Acabados', 'Pinturas y solventes', 'Eléctricos'],
-    };
-
-    /** Los grupos que ya usó para ese tipo, para ofrecerlos como botones en vez
-     *  de que tenga que acordarse de cómo los escribió la vez pasada. */
-    const gruposDe = (tipo: InventoryType | null): string[] => {
-        if (!tipo) return [];
-        const usados = items.filter(i => i.inventoryType === tipo).map(i => i.subCategory?.trim()).filter(Boolean) as string[];
-        const propios = [...new Set(usados)].filter(g => g !== 'General').sort((a, b) => a.localeCompare(b, 'es'));
-        // Los suyos primero; las sugerencias solo rellenan lo que falte.
-        const sugeridos = (GRUPOS_SUGERIDOS[tipo] ?? []).filter(g => !propios.includes(g));
-        return [...propios, ...sugeridos];
-    };
-
     /** Ítems cuyo nombre se parece al que está escribiendo. 600 es el umbral de
      *  "una palabra completa coincide" del buscador: por debajo empiezan las
      *  coincidencias por casualidad. */
@@ -277,6 +263,13 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     const grupoSugerido = (nombre: string, tipo: InventoryType | null): string =>
         parecidosA(nombre, tipo)[0]?.subCategory?.trim() || 'General';
 
+    /** Lo mismo para la familia: los atajos rápidos no la guardaban, así que un
+     *  ítem creado por ahí nacía suelto y no se agrupaba con nadie. */
+    const familiaSugerida = (nombre: string, tipo: InventoryType | null): string => {
+        const parecido = parecidosA(nombre, tipo)[0];
+        return familiaCanonica(parecido?.familia?.trim() || familiaDe(nombre), items);
+    };
+
     const resetWizardCreate = () => {
         setWizardCreateType(null);
         setWizardCreateName('');
@@ -284,7 +277,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         setWizardCreateBrand('');
         setWizardCreateColor('');
         setWizardCreateUnit('unidades');
-        setWizardCreateGroup('');
+        setWizardCreateFamilia('');
         setParecidoPendiente(null);
         setWizardSpecies([{ brand: '', color: '' }]);
     };
@@ -335,10 +328,17 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
      *  se hereda el grupo de X, para que las dos queden juntas en el histórico. */
     const crearItemDelAsistente = (grupo: string, familia?: string) => {
         if (!wizardCreateType || !wizardCreateName.trim()) return;
-        const subCategory = grupo.trim() || 'General';
+        // La familia se guarda como YA está escrita en la bodega: sin esto,
+        // "clavos" y "Clavos" quedan como dos familias distintas — y ya pasó.
+        const famCruda = familia?.trim() || familiaDe(wizardCreateName);
+        const famCanon = familiaCanonica(famCruda, items);
+        // El grupo dejó de preguntarse. Si la familia ya vive en algún lado del
+        // inventario, el ítem nuevo cae donde están sus hermanos.
+        const hermano = items.find(i => (i.familia?.trim() || familiaDe(i.name)).toLowerCase() === famCanon.toLowerCase());
+        const subCategory = grupo.trim() || hermano?.subCategory || 'General';
         // La familia queda GRABADA, no supuesta: es lo que el bodeguero acaba
         // de decidir en el aviso de parecidos.
-        const fam = familia?.trim() || familiaDe(wizardCreateName);
+        const fam = famCanon;
         if (wizardCreateType === InventoryType.ELECTRICAL_TOOL || wizardCreateType === InventoryType.HAND_TOOL) {
             // Color y marca solo son obligatorios en las ELÉCTRICAS: ahí es lo
             // único que distingue a un taladro de otro taladro. Un martillo o una
@@ -396,12 +396,17 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         if (!wizardCreateType || !wizardCreateName.trim()) return;
         // Si ya hay algo parecido, se para acá y se pregunta. Decidir solo por
         // parecido juntaría "Gafas" con "Gafas de soldar", que no son lo mismo.
+        //
+        // Pero si YA eligió familia arriba, esa es la respuesta: volver a
+        // preguntarlo acá es preguntar dos veces lo mismo, y el bodeguero está
+        // parado en la bodega con la herramienta en la mano.
+        const yaDecidio = wizardCreateFamilia.trim().length > 0;
         const parecidos = parecidosA(wizardCreateName, wizardCreateType);
-        if (parecidos.length > 0 && !parecidoPendiente) {
+        if (parecidos.length > 0 && !parecidoPendiente && !yaDecidio) {
             setParecidoPendiente(parecidos);
             return;
         }
-        crearItemDelAsistente(wizardCreateGroup);
+        crearItemDelAsistente('', wizardCreateFamilia);
     };
 
     /** "Es una variante de X": el nuevo hereda la familia de X. Y si X todavía
@@ -410,14 +415,14 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     const crearComoVarianteDe = (base: Item) => {
         const fam = base.familia?.trim() || familiaDe(base.name);
         if (!base.familia?.trim()) onEditItem?.({ ...base, familia: fam });
-        crearItemDelAsistente(base.subCategory || wizardCreateGroup, fam);
+        crearItemDelAsistente(base.subCategory, fam);
     };
 
     /** "Es algo distinto": se le fija familia propia, para que la app NO se lo
      *  vuelva a proponer junto con aquel. La app aprende del "no". */
     const crearComoDistinto = () => {
         const propia = `${familiaDe(wizardCreateName)} · ${wizardCreateName.trim()}`;
-        crearItemDelAsistente(wizardCreateGroup, propia);
+        crearItemDelAsistente('', propia);
     };
 
     /** "Es la misma": no se crea nada, se usa la que ya existe. */
@@ -654,7 +659,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                     quantity: loanCreateQty,
                     unit: 'unidades',
                     category: CATEGORY_BY_TYPE[loanInvType],
-                    subCategory: grupoSugerido(loanCreateName, loanInvType),
+                    subCategory: grupoSugerido(loanCreateName, loanInvType), familia: familiaSugerida(loanCreateName, loanInvType),
                     minStock: 0, price: 0,
                     brand: sp.brand.trim(), color: sp.color.trim(),
                 });
@@ -667,7 +672,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                 quantity: loanCreateQty,
                 unit: loanCreateUnit.trim() || 'unidades',
                 category: CATEGORY_BY_TYPE[loanInvType],
-                subCategory: grupoSugerido(loanCreateName, loanInvType),
+                subCategory: grupoSugerido(loanCreateName, loanInvType), familia: familiaSugerida(loanCreateName, loanInvType),
                 minStock: 0, price: 0,
             });
             setLoanSelected(prev => { const next = new Map(prev); next.set(newItem.id, loanCreateQty); return next; });
@@ -688,7 +693,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                     name: `${createName.trim()} (${sp.color.trim()} · ${sp.brand.trim()})`,
                     inventoryType: createInvType,
                     quantity: createQty, unit: createUnit.trim() || 'unidades',
-                    category: CATEGORY_BY_TYPE[createInvType], subCategory: grupoSugerido(createName, createInvType),
+                    category: CATEGORY_BY_TYPE[createInvType], subCategory: grupoSugerido(createName, createInvType), familia: familiaSugerida(createName, createInvType),
                     minStock: 0, price: 0, brand: sp.brand.trim(), color: sp.color.trim(),
                 });
                 names.push(it.name);
@@ -698,7 +703,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             const it = onCreateItem({
                 name: createName.trim(), inventoryType: createInvType,
                 quantity: createQty, unit: createUnit.trim() || 'unidades',
-                category: CATEGORY_BY_TYPE[createInvType], subCategory: grupoSugerido(createName, createInvType), minStock: 0, price: 0,
+                category: CATEGORY_BY_TYPE[createInvType], subCategory: grupoSugerido(createName, createInvType), familia: familiaSugerida(createName, createInvType), minStock: 0, price: 0,
             });
             addBot(`✅ ${it.name} agregado al inventario (${createQty} ${createUnit}).`);
         }
@@ -1054,23 +1059,67 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                                     </div>
                                                 </>
                                             )}
-                                            {/* El grupo: antes se escribía 'General' a mano y todo caía al mismo montón. */}
-                                            <div className="space-y-1">
-                                                <p className="text-[9px] font-black text-blue-500 uppercase tracking-wider">Grupo</p>
-                                                <div className="flex flex-wrap gap-1">
-                                                    {gruposDe(type).map(g => (
-                                                        <button key={g} onClick={() => setWizardCreateGroup(g)}
-                                                            className={`px-2 py-1 rounded-full text-[10px] font-black transition-all ${
-                                                                wizardCreateGroup === g ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:border-blue-400'}`}>
-                                                            {g}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                                <input type="text" value={wizardCreateGroup}
-                                                    onChange={e => setWizardCreateGroup(e.target.value)}
-                                                    placeholder="…o escribe uno nuevo"
-                                                    className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
-                                            </div>
+                                            {/* La FAMILIA, que es lo que se usa en la bodega. Acá había
+                                                unos "grupos" (Golpe, Albañilería, Acabados) que la app se
+                                                inventó y que nadie usaba. */}
+                                            {(() => {
+                                                const sugerida = familiaDe(wizardCreateName);
+                                                const candidatas = familiasParecidas(wizardCreateName, items);
+                                                const elegida = wizardCreateFamilia.trim();
+                                                const colores = elegida ? coloresDeFamilia(elegida, items) : [];
+                                                if (!wizardCreateName.trim()) return null;
+                                                return (
+                                                    <div className="space-y-1.5">
+                                                        <p className="text-[9px] font-black text-blue-500 uppercase tracking-wider">
+                                                            {candidatas.length > 0
+                                                                ? `¿Pertenece a la familia ${candidatas[0]}?`
+                                                                : '¿Con qué se agrupa?'}
+                                                        </p>
+                                                        <div className="flex flex-wrap gap-1">
+                                                            {[...new Set([...candidatas, sugerida])].filter(Boolean).map(f => (
+                                                                <button key={f} onClick={() => setWizardCreateFamilia(f)}
+                                                                    className={`px-2 py-1 rounded-full text-[10px] font-black transition-all ${
+                                                                        elegida.toLowerCase() === f.toLowerCase()
+                                                                            ? 'bg-blue-600 text-white'
+                                                                            : 'bg-white text-gray-600 border border-gray-200 hover:border-blue-400'}`}>
+                                                                    {f}
+                                                                </button>
+                                                            ))}
+                                                            <button onClick={() => setWizardCreateFamilia(`${sugerida} · ${wizardCreateName.trim()}`)}
+                                                                className={`px-2 py-1 rounded-full text-[10px] font-black transition-all ${
+                                                                    elegida.includes(' · ')
+                                                                        ? 'bg-orange-500 text-white'
+                                                                        : 'bg-white text-orange-600 border border-orange-200 hover:border-orange-400'}`}>
+                                                                Es diferente a esas
+                                                            </button>
+                                                        </div>
+
+                                                        {/* Los colores que esa familia YA tiene. Es la segunda
+                                                            pregunta: ¿es de un color existente o de otro? */}
+                                                        {colores.length > 0 && (
+                                                            <div className="space-y-1 pt-0.5">
+                                                                <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider">
+                                                                    ¿Es de un color que ya existe?
+                                                                </p>
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {colores.map(c => (
+                                                                        <button key={c} onClick={() => setWizardCreateColor(c)}
+                                                                            className={`px-2 py-1 rounded-full text-[10px] font-bold transition-all ${
+                                                                                wizardCreateColor.trim().toLowerCase() === c.toLowerCase()
+                                                                                    ? 'bg-gray-800 text-white'
+                                                                                    : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-400'}`}>
+                                                                            {c}
+                                                                        </button>
+                                                                    ))}
+                                                                    <span className="text-[10px] text-gray-400 self-center px-1">
+                                                                        …o escribí otro arriba
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })()}
                                             {parecidoPendiente && parecidoPendiente.length > 0 && (
                                                 <div className="border border-amber-300 bg-amber-50 rounded-xl p-2.5 space-y-2">
                                                     <p className="text-[11px] font-black text-amber-800">
