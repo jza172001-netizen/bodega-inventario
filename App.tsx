@@ -205,9 +205,9 @@ const App: React.FC = () => {
           const local = loadFromLocalStorage();
           const localItems     = local?.items      ?? [];
           const localMovements = local?.movements  ?? [];
-          const localProjects  = local?.projects   ?? [];
-          const localPersonnel = (local?.personnel ?? []).filter(p => p.name?.trim().length >= 4);
-          const localPOs       = local?.purchaseOrders ?? [];
+          let localProjects  = local?.projects   ?? [];
+          let localPersonnel = (local?.personnel ?? []).filter(p => p.name?.trim().length >= 4);
+          let localPOs       = local?.purchaseOrders ?? [];
           const localAuditLogs = local?.auditLogs  ?? [];
           const localBehaviorLogs = local?.behaviorLogs ?? [];
 
@@ -231,7 +231,36 @@ const App: React.FC = () => {
               db.fetchPurchaseOrders().catch((): PurchaseOrder[] => []),
               db.fetchAuditLogs().catch((): AuditLog[] => []),
               db.fetchBehaviorLogs().catch((): BehaviorLog[] => []),
-          ]).then(([supaItems, supaMovements, supaProjectsRaw, supaPersonnelRaw, supaPOs, supaAuditLogs, supaBehaviorLogs]) => {
+              db.fetchBorrados().catch(() => ({ personnel: [] as string[], projects: [] as string[], purchaseOrders: [] as string[] })),
+          ]).then(([supaItems, supaMovements, supaProjectsRaw, supaPersonnelRaw, supaPOs, supaAuditLogs, supaBehaviorLogs, borrados]) => {
+              // Lo que tiene lápida se saca de lo local ANTES de mezclar. Sin esto,
+              // el teléfono que todavía guarda la fila la vuelve a subir y el
+              // borrado se deshace solo — que es como volvieron 19 ítems el 18 de
+              // agosto y 4 trabajadores el 9 de junio, todos en el mismo minuto.
+              const conLapida = {
+                  personnel: new Set(borrados.personnel),
+                  projects: new Set(borrados.projects),
+                  purchaseOrders: new Set(borrados.purchaseOrders),
+              };
+              const resucitados: string[] = [];
+              localPersonnel = localPersonnel.filter(p => {
+                  if (!conLapida.personnel.has(p.id)) return true;
+                  resucitados.push(`trabajador "${p.name}"`);
+                  return false;
+              });
+              localProjects = localProjects.filter(p => {
+                  if (!conLapida.projects.has(p.id)) return true;
+                  resucitados.push(`proyecto "${p.name}"`);
+                  return false;
+              });
+              localPOs = localPOs.filter(o => !conLapida.purchaseOrders.has(o.id));
+
+              // Y queda constancia: lo del 18 de agosto no figura en ninguna parte,
+              // que es por qué tardó dos meses en verse.
+              if (resucitados.length > 0) {
+                  addAuditLog('SYNC_LIMPIEZA',
+                      `Se quitó de este dispositivo lo que ya estaba borrado: ${resucitados.join(', ')}`);
+              }
               // Deduplicar personal y proyectos de Supabase por nombre (defensa contra duplicados en DB)
               const seenPNames = new Set<string>();
               const supaPersonnel = supaPersonnelRaw.filter(p => {

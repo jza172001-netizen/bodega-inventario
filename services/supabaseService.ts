@@ -315,7 +315,7 @@ export async function updateMovementPersonnel(id: string, personnelId: string): 
 // ─── PERSONNEL ───────────────────────────────────────────────────────────────
 
 export async function fetchPersonnel(): Promise<Personnel[]> {
-    const { data, error } = await supabase.from('personnel').select('*').order('name');
+    const { data, error } = await supabase.from('personnel').select('*').is('deleted_at', null).order('name');
     if (error) throw error;
     return (data ?? []).map(r => ({
         id: r.id as string,
@@ -353,15 +353,25 @@ export async function updatePersonnel(p: Personnel): Promise<void> {
     if (error) throw error;
 }
 
+/**
+ * Borrar es marcar la lápida, no quitar la fila.
+ *
+ * Quitarla no funciona con dos teléfonos: el arranque une las dos listas y gana
+ * el que TIENE la fila, así que un teléfono con datos viejos vuelve a subir lo
+ * borrado. Pasó de verdad — 4 trabajadores borrados el 8 de junio volvieron el
+ * 9, y 19 ítems borrados el mismo día volvieron todos juntos el 18 de agosto.
+ * Contra un teléfono que tiene la fila, la ausencia de fila no puede competir.
+ */
 export async function deletePersonnel(id: string): Promise<void> {
-    const { error } = await supabase.from('personnel').delete().eq('id', id);
+    const { error } = await supabase.from('personnel')
+        .update({ deleted_at: new Date().toISOString() }).eq('id', id);
     if (error) throw error;
 }
 
 // ─── PROJECTS ────────────────────────────────────────────────────────────────
 
 export async function fetchProjects(): Promise<Project[]> {
-    const { data, error } = await supabase.from('projects').select('*').order('created_at');
+    const { data, error } = await supabase.from('projects').select('*').is('deleted_at', null).order('created_at');
     if (error) throw error;
     return (data ?? []).map(r => ({
         id: r.id as string,
@@ -392,7 +402,8 @@ export async function addProject(p: Omit<Project, 'id'>, id?: string): Promise<P
 }
 
 export async function deleteProject(id: string): Promise<void> {
-    const { error } = await supabase.from('projects').delete().eq('id', id);
+    const { error } = await supabase.from('projects')
+        .update({ deleted_at: new Date().toISOString() }).eq('id', id);
     if (error) throw error;
 }
 
@@ -402,6 +413,7 @@ export async function fetchPurchaseOrders(): Promise<PurchaseOrder[]> {
     const { data: orders, error: oErr } = await supabase
         .from('purchase_orders')
         .select('*')
+        .is('deleted_at', null)
         .order('order_date', { ascending: false });
     if (oErr) throw oErr;
 
@@ -480,7 +492,8 @@ export async function updatePurchaseOrderStatus(
 }
 
 export async function deletePurchaseOrder(id: string): Promise<void> {
-    const { error } = await supabase.from('purchase_orders').delete().eq('id', id);
+    const { error } = await supabase.from('purchase_orders')
+        .update({ deleted_at: new Date().toISOString() }).eq('id', id);
     if (error) throw error;
 }
 
@@ -768,4 +781,25 @@ export async function updateOrderNote(n: OrderNote): Promise<void> {
 export async function deleteOrderNote(id: string): Promise<void> {
     const { error } = await supabase.from('order_list').delete().eq('id', id);
     if (error) throw error;
+}
+
+
+/**
+ * Los ids que están marcados como borrados.
+ *
+ * Hace falta explícitamente: si la fila simplemente no viene, el arranque no
+ * puede distinguir "esto lo borraron" de "esto todavía no se ha subido", y ante
+ * la duda conserva lo local — que es exactamente cómo volvieron los borrados.
+ */
+export async function fetchBorrados(): Promise<{ personnel: string[]; projects: string[]; purchaseOrders: string[] }> {
+    const [per, proj, po] = await Promise.all([
+        supabase.from('personnel').select('id').not('deleted_at', 'is', null),
+        supabase.from('projects').select('id').not('deleted_at', 'is', null),
+        supabase.from('purchase_orders').select('id').not('deleted_at', 'is', null),
+    ]);
+    return {
+        personnel:      (per.data  ?? []).map(r => r.id as string),
+        projects:       (proj.data ?? []).map(r => r.id as string),
+        purchaseOrders: (po.data   ?? []).map(r => r.id as string),
+    };
 }

@@ -1,6 +1,7 @@
 
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { Movement, Item, Personnel, Project, ReturnCondition, InventoryType, AuditLog, BehaviorLog, AppUser, UserRole } from '../types';
+import { CotejoPanel } from './CotejoPanel';
 
 interface Props {
     movements: Movement[];
@@ -376,6 +377,11 @@ export const TraceabilityView: React.FC<Props> = ({
             {/* ── ACTIVIDAD ── */}
             {mainTab === 'actividad' && (
                 <div>
+                    {/* El cotejo primero: si algo no cuadra, hay que verlo antes de
+                        ponerse a leer la lista de lo que pasó. */}
+                    <div className="px-4 pt-3">
+                        <CotejoPanel items={items} movements={movements} personnel={personnel} auditLogs={auditLogs} />
+                    </div>
                     <div className="px-4 py-3 border-b border-gray-50 space-y-2">
                         {/* Actor filter */}
                         <div className="flex gap-2 overflow-x-auto scrollbar-hide">
