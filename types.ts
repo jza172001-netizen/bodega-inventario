@@ -143,3 +143,27 @@ export interface BehaviorLog {
     action: string;
     detail: string;
 }
+
+/**
+ * Una línea que la bodega no dejó salir, con TODO lo que hace falta para
+ * resolverla ahí mismo. Antes esto era un simple `false`: el chat solo podía
+ * decir "falta de stock" y mandar al bodeguero a arreglarlo por otro lado,
+ * que es justo lo contrario de para lo que existe el chat.
+ */
+export interface RechazoStock {
+    itemId: string;
+    nombre: string;
+    unidad: string;
+    /** Lo que había cuando se intentó, ya descontado lo que salió antes en el mismo lote. */
+    hay: number;
+    pedido: number;
+    /** La línea tal cual, para poder reintentarla sin rearmar nada. */
+    movimiento: Omit<Movement, 'id'>;
+}
+
+export interface LoteResultado {
+    ok: number;
+    /** Total de líneas REALMENTE intentadas, ya expandidos los accesorios. */
+    total: number;
+    rechazos: RechazoStock[];
+}

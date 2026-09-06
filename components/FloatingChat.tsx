@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Item, Movement, Personnel, PurchaseOrder, Project, MovementType, InventoryType } from '../types';
+import { Item, Movement, Personnel, PurchaseOrder, Project, MovementType, InventoryType, RechazoStock, LoteResultado } from '../types';
 import { momentoDeFecha } from '../utils/date';
 import { askCopilot } from '../services/copilotService';
 import { suggestQuestions } from '../services/warehouseQA';
@@ -15,7 +15,7 @@ interface FloatingChatProps {
     projects: Project[];
     /** Devuelve cuántos movimientos quedaron realmente registrados: la app puede
      *  rechazar una salida por stock insuficiente y el bot no debe cantar éxito. */
-    onLogMovements: (ms: Array<Omit<Movement, 'id'>>) => number;
+    onLogMovements: (ms: Array<Omit<Movement, 'id'>>) => LoteResultado;
     onCreateItem: (item: Omit<Item, 'id'>) => Item;
     /** Para fijarle la familia a un ítem que ya existía cuando se confirma
      *  que el nuevo es una variante suyo. */
@@ -125,6 +125,14 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     const [wizardCreateGroup, setWizardCreateGroup] = useState('');
     // Cuando el nombre se parece a algo que ya existe, se para antes de crear y
     // se pregunta. Unir por parecido sin preguntar juntaría cosas distintas.
+    /**
+     * Lo que la bodega no dejó salir, esperando decisión. No es un aviso: es el
+     * lugar donde se resuelve. El chat existe para no tener que salirse a
+     * arreglar nada, y decir «no hay stock» y cerrar era mandarlo a arreglarlo
+     * por otro lado.
+     */
+    const [reposicion, setReposicion] = useState<RechazoStock[] | null>(null);
+    const [reponerQty, setReponerQty] = useState<Map<string, number>>(new Map());
     const [parecidoPendiente, setParecidoPendiente] = useState<Item[] | null>(null);
     const [createSpecies, setCreateSpecies] = useState<Array<{brand: string; color: string}>>([{ brand: '', color: '' }]);
 
@@ -450,20 +458,97 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             }
         }
         if (toLog.length > 0) {
-            const ok = onLogMovements(toLog);
+            const r = onLogMovements(toLog);
             const dateLabel = wizardDate !== todayISO() ? ` (fecha: ${new Date(wizardDate + 'T12:00:00').toLocaleDateString('es-CO')})` : '';
-            if (ok === 0) {
-                addBot(`❌ No se registró ninguna salida: la bodega rechazó las ${toLog.length} por falta de stock.`);
-            } else if (ok < toLog.length) {
-                addBot(`⚠️ Solo ${ok} de ${toLog.length} salida(s) quedaron registradas${worker ? ` para ${worker.name}` : ''}${dateLabel}. Las demás se rechazaron por falta de stock.`);
-            } else {
-                addBot(`✅ ${ok} salida(s) registradas${worker ? ` para ${worker.name}` : ''}${project ? ` · ${project.name}` : ''}${dateLabel}.`);
+            if (r.ok > 0) {
+                addBot(`✅ ${r.ok} salida(s) registradas${worker ? ` para ${worker.name}` : ''}${project ? ` · ${project.name}` : ''}${dateLabel}.`);
+            }
+            if (r.rechazos.length > 0) {
+                // Nada de "falta de stock" a secas: se abre la reposición con el
+                // faltante ya calculado, para resolverlo sin devolverse.
+                setReponerQty(new Map(r.rechazos.map(x => [x.itemId, Math.max(1, x.pedido - x.hay)])));
+                setReposicion(r.rechazos);
+                cancelWizard();
+                return;
             }
         } else {
             addBot('No se registraron salidas (sin artículos válidos).');
         }
         cancelWizard();
     };
+
+    /**
+     * Repone y despacha en un solo toque. La entrada de stock y la salida van en
+     * el MISMO lote: la entrada sube el restante y la salida ya encuentra con qué
+     * salir, que es lo que antes obligaba a devolverse hasta el primer paso.
+     */
+    const reponerYDespachar = (r: RechazoStock) => {
+        const cuanto = reponerQty.get(r.itemId) ?? Math.max(1, r.pedido - r.hay);
+        const entrada: Omit<Movement, 'id'> = {
+            itemId: r.itemId, type: MovementType.CHECK_IN, quantity: cuanto,
+            timestamp: r.movimiento.timestamp, notes: 'Reposición desde el despacho',
+            isLoan: false, isReturned: false,
+        };
+        const res = onLogMovements([entrada, r.movimiento]);
+        if (res.rechazos.length === 0) {
+            addBot(`✅ Entraron ${cuanto} ${r.unidad} de **${r.nombre}** y salieron ${r.pedido}.`);
+        } else {
+            addBot(`⚠️ Entraron ${cuanto} ${r.unidad} de **${r.nombre}**, pero la salida no alcanzó. Revisá la cantidad.`);
+        }
+        onBehaviorLog?.('ACTION', `Repuso ${cuanto} de "${r.nombre}" sin salir del despacho`);
+        const quedan = (reposicion ?? []).filter(x => x.itemId !== r.itemId);
+        setReposicion(quedan.length > 0 ? quedan : null);
+    };
+
+    const descartarRechazo = (r: RechazoStock) => {
+        addBot(`Se dejó **${r.nombre}** fuera del pedido.`);
+        const quedan = (reposicion ?? []).filter(x => x.itemId !== r.itemId);
+        setReposicion(quedan.length > 0 ? quedan : null);
+    };
+
+    const renderReposicion = () => (
+        <div className="flex-1 overflow-y-auto px-3 py-4 space-y-3">
+            <div>
+                <p className="text-sm font-black text-gray-900">Falta stock para terminar</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">
+                    Ingresá cuánto entra y sale de una. No hay que devolverse.
+                </p>
+            </div>
+            {(reposicion ?? []).map(r => (
+                <div key={r.itemId} className="border border-orange-200 bg-orange-50 rounded-2xl p-3 space-y-2">
+                    <p className="text-sm font-bold text-gray-900">{r.nombre}</p>
+                    <p className="text-[11px] text-orange-800">
+                        Hay <strong>{r.hay} {r.unidad}</strong> y pediste <strong>{r.pedido}</strong>.
+                    </p>
+                    <div className="flex items-center gap-2">
+                        <label className="text-[11px] font-semibold text-gray-600 flex-shrink-0">¿Cuántos entran?</label>
+                        <input
+                            type="number" min={1}
+                            value={reponerQty.get(r.itemId) ?? Math.max(1, r.pedido - r.hay)}
+                            onFocus={e => e.target.select()}
+                            onChange={e => setReponerQty(prev => {
+                                const n = new Map(prev);
+                                n.set(r.itemId, Math.max(1, parseInt(e.target.value) || 1));
+                                return n;
+                            })}
+                            className="w-16 text-sm text-center border border-orange-300 rounded-lg px-1 py-1 bg-white focus:outline-none"
+                        />
+                        <span className="text-[11px] text-gray-500">{r.unidad}</span>
+                    </div>
+                    <div className="flex gap-2">
+                        <button onClick={() => descartarRechazo(r)}
+                            className="px-3 py-2 text-xs font-bold text-gray-500 border border-gray-200 bg-white rounded-xl">
+                            Sacar del pedido
+                        </button>
+                        <button onClick={() => reponerYDespachar(r)}
+                            className="flex-1 py-2 text-xs font-black bg-green-600 hover:bg-green-700 text-white rounded-xl">
+                            Ingresar y despachar
+                        </button>
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
 
     // ── Panels ──────────────────────────────────────────────────────────────
 
@@ -531,7 +616,8 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             timestamp: ts, personnelId: effectivePersonnelId,
             projectId, notes: '', isLoan, isReturned: false,
         }));
-        const ok = onLogMovements(movs);
+        const r = onLogMovements(movs);
+        const ok = r.ok;
         const workerName = personnel.find(p => p.id === effectivePersonnelId)?.name ?? personnel.find(p => p.id === loanPersonnelId)?.name ?? 'trabajador';
         const itemNames = [...loanSelected.keys()].map(id => items.find(i => i.id === id)?.name ?? id);
         const dateLabel = loanDate !== todayISO() ? ` (fecha: ${new Date(loanDate + 'T12:00:00').toLocaleDateString('es-CO')})` : '';
@@ -846,9 +932,14 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                         {!wizardIsAddMode && <p className="text-[11px] text-gray-400 mb-3">Para <strong>{workerName}</strong> · {projectName}</p>}
 
                         {wizardData.selectedTypes.map(type => {
+                            // Antes esto escondía todo lo que estuviera en cero, y el
+                            // vacío decía «Sin stock, usa + Crear nuevo»: empujaba a
+                            // crear un duplicado de algo que YA existía en la bodega.
+                            // Ahora se ven, marcados, y pedir de más abre la reposición.
                             const available = items
-                                .filter(i => i.inventoryType === type && i.quantity > 0)
-                                .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+                                .filter(i => i.inventoryType === type)
+                                .sort((a, b) => (a.quantity > 0 ? 0 : 1) - (b.quantity > 0 ? 0 : 1)
+                                              || a.name.localeCompare(b.name, 'es'));
                             const selectedCount = [...wizardSel.entries()]
                                 .filter(([id]) => items.find(i => i.id === id)?.inventoryType === type).length;
                             const isCreating = wizardCreateType === type;
@@ -870,9 +961,11 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                                         className={`flex items-center gap-2 px-2 py-1.5 rounded-lg border cursor-pointer transition-all ${isSelected ? 'bg-blue-50 border-blue-300' : 'bg-white border-transparent hover:border-blue-200 hover:bg-blue-50'}`}>
                                                         <input type="checkbox" checked={isSelected} readOnly className="w-4 h-4 accent-blue-600 flex-shrink-0" />
                                                         <FilaItem item={item} />
-                                                        <span className="text-[10px] text-gray-400 flex-shrink-0">{item.quantity} disp.</span>
+                                                        <span className={`text-[10px] flex-shrink-0 ${item.quantity > 0 ? 'text-gray-400' : 'font-black text-orange-600'}`}>
+                                                            {item.quantity > 0 ? `${item.quantity} disp.` : 'agotado'}
+                                                        </span>
                                                         {isSelected && (
-                                                            <input type="number" onFocus={e => e.target.select()} value={qty} min={1} max={item.quantity}
+                                                            <input type="number" onFocus={e => e.target.select()} value={qty} min={1}
                                                                 onChange={e => setWizardSelQty(item.id, parseInt(e.target.value) || 1)}
                                                                 onClick={e => e.stopPropagation()}
                                                                 className="w-11 text-xs text-center border border-blue-300 rounded-lg px-1 py-0.5 bg-white focus:outline-none" />
@@ -883,7 +976,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                         </div>
                                     )}
                                     {available.length === 0 && !isCreating && !wizardIsAddMode && (
-                                        <p className="text-xs text-gray-400 py-1 text-center mb-1">Sin stock. Usa "+ Crear nuevo".</p>
+                                        <p className="text-xs text-gray-400 py-1 text-center mb-1">Todavía no hay nada de este tipo. Usa "+ Crear nuevo".</p>
                                     )}
 
                                     {isCreating ? (
@@ -1413,7 +1506,8 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                     )}
 
                     {/* Contenido principal */}
-                    {wizardStep ? <div key={wizardStep} style={{ display: 'contents' }}>{renderWizard()}</div>
+                    {reposicion ? renderReposicion()
+                        : wizardStep ? <div key={wizardStep} style={{ display: 'contents' }}>{renderWizard()}</div>
                         : activePanel === 'loan' ? renderLoanPanel()
                         : activePanel === 'create' ? renderCreatePanel()
                         : (

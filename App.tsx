@@ -26,7 +26,7 @@ import { requestNotificationPermission, checkAndNotifyPickup } from './services/
 
 import { mockItems, mockMovements, mockPersonnel, mockPurchaseOrders, mockProjects, mockUsers } from './mockData';
 import { realUsers as seedUsers } from './realData';
-import { Item, Movement, MovementType, Personnel, PurchaseOrder, UserRole, InventoryType, Project, AppUser, PurchaseOrderStatus, AuditLog, BehaviorLog } from './types';
+import { Item, Movement, MovementType, Personnel, PurchaseOrder, UserRole, InventoryType, Project, AppUser, PurchaseOrderStatus, AuditLog, BehaviorLog, RechazoStock, LoteResultado } from './types';
 import { LoginView } from './components/LoginView';
 import { LandingPage } from './components/LandingPage';
 import { InvoiceReaderModal } from './components/InvoiceReaderModal';
@@ -718,23 +718,57 @@ const App: React.FC = () => {
     /** Devuelve true si el movimiento quedó registrado. Quien lo llama debe
      *  reportar lo que de verdad pasó: el chatbot decía "✅ registrado" incluso
      *  cuando esta validación había rechazado la salida. */
-    const handleLogMovement = (m: Omit<Movement, 'id'>): boolean => {
+    /**
+     * Un lote de movimientos, validado contra el stock que va QUEDANDO.
+     *
+     * `handleLogMovement` mira `items` del render, que no cambia hasta el
+     * siguiente: dos salidas del mismo ítem en un mismo lote se comparaban las
+     * dos contra el stock original y se podía sacar de más. Acá el stock se
+     * lleva en un mapa que sí baja movimiento a movimiento.
+     *
+     * Y lo que se rechaza vuelve DICHO: qué ítem, cuánto hay y cuánto se pidió.
+     * Sin eso el chat solo podía repetir "falta de stock", que es exactamente
+     * el callejón sin salida que hacía devolverse hasta el primer paso.
+     */
+    const handleLogMovements = (batch: Omit<Movement, 'id'>[]): LoteResultado => {
+        const expandido = expandirAccesorios(batch);
+        const restante = new Map(items.map(i => [i.id, i.quantity]));
+        const rechazos: RechazoStock[] = [];
+        let ok = 0;
+        for (const m of expandido) {
+            const it = items.find(i => i.id === m.itemId);
+            const esSalida = m.type === MovementType.CHECK_OUT || m.type === MovementType.WASTE;
+            const hay = restante.get(m.itemId) ?? 0;
+            if (it && esSalida && m.quantity > hay) {
+                rechazos.push({ itemId: it.id, nombre: it.name, unidad: it.unit, hay, pedido: m.quantity, movimiento: m });
+                continue;
+            }
+            if (handleLogMovement(m, hay)) {
+                ok++;
+                if (it) restante.set(m.itemId, esSalida ? hay - m.quantity : hay + m.quantity);
+            }
+        }
+        return { ok, total: expandido.length, rechazos };
+    };
+
+    const handleLogMovement = (m: Omit<Movement, 'id'>, stockDisponible?: number): boolean => {
         const ts = m.timestamp instanceof Date ? m.timestamp : new Date(m.timestamp ?? Date.now());
         const currentItem = items.find(i => i.id === m.itemId);
         const isWithdrawal = m.type === MovementType.CHECK_OUT || m.type === MovementType.WASTE;
+        // El stock contra el que se valida es el que va quedando en el lote, no el
+        // del render — que es el mismo para todas las líneas.
+        const hay = stockDisponible ?? currentItem?.quantity ?? 0;
         // Validación central de stock: el kardex debe cuadrar siempre con el inventario.
         // Sin esto, una salida mayor al stock registraría más de lo que descuenta.
-        if (currentItem && isWithdrawal && m.quantity > currentItem.quantity) {
-            alert(`Stock insuficiente de "${currentItem.name}": hay ${currentItem.quantity} ${currentItem.unit} y se intentó sacar ${m.quantity}. El movimiento NO se registró.`);
+        if (currentItem && isWithdrawal && m.quantity > hay) {
+            alert(`Stock insuficiente de "${currentItem.name}": hay ${hay} ${currentItem.unit} y se intentó sacar ${m.quantity}. El movimiento NO se registró.`);
             return false;
         }
         const id = crypto.randomUUID();
         const newMov = { ...m, id, timestamp: ts };
         setMovements(prev => [newMov, ...prev]);
         if (currentItem) {
-            const newQty = Math.max(0, isWithdrawal
-                ? currentItem.quantity - m.quantity
-                : currentItem.quantity + m.quantity);
+            const newQty = Math.max(0, isWithdrawal ? hay - m.quantity : hay + m.quantity);
             setItems(prev => prev.map(item =>
                 item.id === m.itemId ? { ...item, quantity: newQty } : item
             ));
@@ -1179,7 +1213,7 @@ const App: React.FC = () => {
                                 personnel={personnel}
                                 purchaseOrders={purchaseOrders}
                                 projects={projects}
-                                onLogMovements={batch => expandirAccesorios(batch).reduce((ok, m) => handleLogMovement(m) ? ok + 1 : ok, 0)}
+                                onLogMovements={handleLogMovements}
                                 onCreateItem={handleAddItemSync}
                                 onCreateProject={handleAddProjectSync}
                                 onCreatePersonnel={handleAddPersonnelSync}
@@ -1288,7 +1322,7 @@ const App: React.FC = () => {
                     personnel={personnel}
                     purchaseOrders={purchaseOrders}
                     projects={projects}
-                    onLogMovements={batch => expandirAccesorios(batch).reduce((ok, m) => handleLogMovement(m) ? ok + 1 : ok, 0)}
+                    onLogMovements={handleLogMovements}
                     onCreateItem={handleAddItemSync}
                     onCreateProject={handleAddProjectSync}
                     onCreatePersonnel={handleAddPersonnelSync}
