@@ -204,8 +204,8 @@ const App: React.FC = () => {
             sincronizando.current = true;
           const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
           const local = loadFromLocalStorage();
-          const localItems     = local?.items      ?? [];
-          const localMovements = local?.movements  ?? [];
+          let localItems       = local?.items      ?? [];
+          let localMovements   = local?.movements  ?? [];
           let localProjects  = local?.projects   ?? [];
           let localPersonnel = (local?.personnel ?? []).filter(p => p.name?.trim().length >= 4);
           let localPOs       = local?.purchaseOrders ?? [];
@@ -232,7 +232,7 @@ const App: React.FC = () => {
               db.fetchPurchaseOrders().catch((): PurchaseOrder[] => []),
               db.fetchAuditLogs().catch((): AuditLog[] => []),
               db.fetchBehaviorLogs().catch((): BehaviorLog[] => []),
-              db.fetchBorrados().catch(() => ({ personnel: [] as string[], projects: [] as string[], purchaseOrders: [] as string[] })),
+              db.fetchBorrados().catch(() => ({ personnel: [] as string[], projects: [] as string[], purchaseOrders: [] as string[], movements: [] as string[], items: [] as string[] })),
           ]).then(([supaItems, supaMovements, supaProjectsRaw, supaPersonnelRaw, supaPOs, supaAuditLogs, supaBehaviorLogs, borrados]) => {
               // Lo que tiene lápida se saca de lo local ANTES de mezclar. Sin esto,
               // el teléfono que todavía guarda la fila la vuelve a subir y el
@@ -242,6 +242,8 @@ const App: React.FC = () => {
                   personnel: new Set(borrados.personnel),
                   projects: new Set(borrados.projects),
                   purchaseOrders: new Set(borrados.purchaseOrders),
+                  movements: new Set(borrados.movements),
+                  items: new Set(borrados.items),
               };
               const resucitados: string[] = [];
               localPersonnel = localPersonnel.filter(p => {
@@ -255,6 +257,20 @@ const App: React.FC = () => {
                   return false;
               });
               localPOs = localPOs.filter(o => !conLapida.purchaseOrders.has(o.id));
+              // Movimientos e ítems no tenían lápida, y por eso borrarlos no servía
+              // de nada: los 15 movimientos de prueba del 17 y 24 de agosto y del 4
+              // de septiembre se borraron el 5 y volvieron completos desde el otro
+              // celular, que todavía los tenía guardados.
+              localMovements = localMovements.filter(m => {
+                  if (!conLapida.movements.has(m.id)) return true;
+                  resucitados.push(`movimiento del ${new Date(m.timestamp).toLocaleDateString('es-CO')}`);
+                  return false;
+              });
+              localItems = localItems.filter(i => {
+                  if (!conLapida.items.has(i.id)) return true;
+                  resucitados.push(`ítem "${i.name}"`);
+                  return false;
+              });
 
               // Y queda constancia: lo del 18 de agosto no figura en ninguna parte,
               // que es por qué tardó dos meses en verse.
@@ -532,6 +548,22 @@ const App: React.FC = () => {
         setOrderNotes(prev => prev.map(x => x.id === n.id ? upd : x));
         withSync(db.updateOrderNote(upd));
         addAuditLog(upd.comprado ? 'ORDER_NOTE_BOUGHT' : 'ORDER_NOTE_REOPENED', `"${n.texto}" — ${upd.comprado ? 'comprado' : 'vuelve a pendiente'}`);
+    };
+
+    /**
+     * Cambiarle el texto, la cantidad o la unidad a algo ya anotado.
+     *
+     * No existía: la lista solo dejaba marcar como comprado o borrar. Si se
+     * anotaban 3 bultos y hacían falta 5, tocaba borrar el renglón y volver a
+     * escribirlo entero — en una libreta uno tacha el 3 y pone 5.
+     */
+    const handleUpdateOrderNote = (n: OrderNote, cambios: Partial<OrderNote>) => {
+        const upd = { ...n, ...cambios, updatedAt: new Date() };
+        setOrderNotes(prev => prev.map(x => x.id === n.id ? upd : x));
+        withSync(db.updateOrderNote(upd));
+        const antes = `${n.texto}${n.cantidad != null ? ` (${n.cantidad} ${n.unidad ?? ''})`.trimEnd() + ')' : ''}`;
+        const ahora = `${upd.texto}${upd.cantidad != null ? ` (${upd.cantidad} ${upd.unidad ?? ''})`.trimEnd() + ')' : ''}`;
+        addAuditLog('ORDER_NOTE_EDITED', `Cambió en la lista de pedidos: ${antes} → ${ahora}`);
     };
 
     const handleDeleteOrderNote = (n: OrderNote) => {
@@ -1344,6 +1376,7 @@ const App: React.FC = () => {
                                 personnel={personnel}
                                 onAddNote={handleAddOrderNote}
                                 onToggleNote={handleToggleOrderNote}
+                                onUpdateNote={handleUpdateOrderNote}
                                 onDeleteNote={handleDeleteOrderNote}
                                 onBehaviorLog={addBehaviorLog}
                             />

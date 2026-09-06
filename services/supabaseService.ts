@@ -142,7 +142,7 @@ function dbToUser(row: Record<string, unknown>): AppUser {
 // ─── ITEMS ───────────────────────────────────────────────────────────────────
 
 export async function fetchItems(): Promise<Item[]> {
-    const { data, error } = await supabase.from('items').select('*').order('created_at');
+    const { data, error } = await supabase.from('items').select('*').is('deleted_at', null).order('created_at');
     if (error) throw error;
     return (data ?? []).map(r => dbToItem(r as Record<string, unknown>));
 }
@@ -166,8 +166,17 @@ export async function updateItem(item: Item): Promise<void> {
     if (error) throw error;
 }
 
+/**
+ * Borrar es poner una lápida, no quitar la fila.
+ *
+ * Quitándola, el celular que todavía la tiene en su memoria la vuelve a subir
+ * en la siguiente sincronización y el borrado se deshace solo: la mezcla une
+ * por id y gana el lado que TIENE la fila. Con la lápida, el otro lado se
+ * entera de que eso se borró.
+ */
 export async function deleteItem(id: string): Promise<void> {
-    const { error } = await supabase.from('items').delete().eq('id', id);
+    const { error } = await supabase.from('items')
+        .update({ deleted_at: new Date().toISOString() }).eq('id', id);
     if (error) throw error;
 }
 
@@ -185,6 +194,7 @@ export async function fetchMovements(): Promise<Movement[]> {
     const { data, error } = await supabase
         .from('movements')
         .select('*')
+        .is('deleted_at', null)
         .order('timestamp', { ascending: false });
     if (error) throw error;
     return (data ?? []).map(r => dbToMovement(r as Record<string, unknown>));
@@ -201,8 +211,10 @@ export async function addMovement(m: Omit<Movement, 'id'>, id?: string): Promise
     return dbToMovement(data as Record<string, unknown>);
 }
 
+/** Igual que con los ítems: lápida, no borrón. Ver `deleteItem`. */
 export async function deleteMovement(id: string): Promise<void> {
-    const { error } = await supabase.from('movements').delete().eq('id', id);
+    const { error } = await supabase.from('movements')
+        .update({ deleted_at: new Date().toISOString() }).eq('id', id);
     if (error) throw error;
 }
 
@@ -242,6 +254,16 @@ export async function logMovementWithStock(
 /**
  * Borra un movimiento revirtiendo su efecto en el stock (RPC transaccional).
  * Fallback no atómico si la migración aún no se aplicó.
+ */
+/**
+ * El borrado y el reverso de stock en una sola transacción.
+ *
+ * El RPC ahora pone LÁPIDA en vez de borrar la fila: una fila que desaparece se
+ * resucita sola desde el otro celular, que todavía la tiene guardada. Así
+ * volvieron los 15 movimientos de prueba de agosto después de borrarlos.
+ *
+ * El camino de respaldo (cuando la migración no está aplicada) hace lo mismo en
+ * dos pasos, que no es atómico pero sí deja la lápida.
  */
 export async function deleteMovementWithRevert(id: string, fallbackItemId?: string, fallbackQty?: number): Promise<void> {
     const { error } = await supabase.rpc('delete_movement_and_revert_stock', { p_movement_id: id });
@@ -749,6 +771,7 @@ function dbToOrderNote(row: Record<string, unknown>): OrderNote {
         cantidad: row.cantidad != null ? Number(row.cantidad) : undefined,
         unidad: (row.unidad as string | null) ?? undefined,
         familia: (row.familia as string | null) ?? undefined,
+        color: (row.color as string | null) ?? undefined,
         comprado: !!row.comprado,
         createdAt: new Date(row.created_at as string),
         updatedAt: row.updated_at ? new Date(row.updated_at as string) : undefined,
@@ -764,7 +787,7 @@ export async function fetchOrderList(): Promise<OrderNote[]> {
 export async function addOrderNote(n: Omit<OrderNote, 'id'>, id: string): Promise<void> {
     const { error } = await supabase.from('order_list').insert({
         id, texto: n.texto, cantidad: n.cantidad ?? null, unidad: n.unidad ?? null,
-        familia: n.familia ?? null, comprado: n.comprado,
+        familia: n.familia ?? null, color: n.color ?? null, comprado: n.comprado,
         created_at: sello(n.createdAt), updated_at: sello(n.updatedAt),
     });
     if (error) throw error;
@@ -773,7 +796,7 @@ export async function addOrderNote(n: Omit<OrderNote, 'id'>, id: string): Promis
 export async function updateOrderNote(n: OrderNote): Promise<void> {
     const { error } = await supabase.from('order_list').update({
         texto: n.texto, cantidad: n.cantidad ?? null, unidad: n.unidad ?? null,
-        familia: n.familia ?? null, comprado: n.comprado, updated_at: sello(new Date()),
+        familia: n.familia ?? null, color: n.color ?? null, comprado: n.comprado, updated_at: sello(new Date()),
     }).eq('id', n.id);
     if (error) throw error;
 }
@@ -791,15 +814,19 @@ export async function deleteOrderNote(id: string): Promise<void> {
  * puede distinguir "esto lo borraron" de "esto todavía no se ha subido", y ante
  * la duda conserva lo local — que es exactamente cómo volvieron los borrados.
  */
-export async function fetchBorrados(): Promise<{ personnel: string[]; projects: string[]; purchaseOrders: string[] }> {
-    const [per, proj, po] = await Promise.all([
+export async function fetchBorrados(): Promise<{ personnel: string[]; projects: string[]; purchaseOrders: string[]; movements: string[]; items: string[] }> {
+    const [per, proj, po, mov, it] = await Promise.all([
         supabase.from('personnel').select('id').not('deleted_at', 'is', null),
         supabase.from('projects').select('id').not('deleted_at', 'is', null),
         supabase.from('purchase_orders').select('id').not('deleted_at', 'is', null),
+        supabase.from('movements').select('id').not('deleted_at', 'is', null),
+        supabase.from('items').select('id').not('deleted_at', 'is', null),
     ]);
     return {
         personnel:      (per.data  ?? []).map(r => r.id as string),
         projects:       (proj.data ?? []).map(r => r.id as string),
         purchaseOrders: (po.data   ?? []).map(r => r.id as string),
+        movements:      (mov.data  ?? []).map(r => r.id as string),
+        items:          (it.data   ?? []).map(r => r.id as string),
     };
 }

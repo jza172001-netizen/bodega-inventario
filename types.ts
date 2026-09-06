@@ -183,6 +183,10 @@ export interface OrderNote {
     unidad?: string;
     /** De qué familia salió, cuando vino de una sugerencia de consumo. */
     familia?: string;
+    /** El color, cuando importa para comprar: la lechada es gris o es beige, y
+     *  "3 bultos de lechada" no alcanza para ir a la ferretería. Va aparte del
+     *  texto para poder pintarlo del color que es, como en el resto de la app. */
+    color?: string;
     comprado: boolean;
     createdAt: Date;
     updatedAt?: Date;
