@@ -53,14 +53,14 @@ const timeAgo = (date: Date): string => {
 };
 
 const TYPE_CONFIG: Record<string, { label: string; color: string; dot: string }> = {
-    'COMPRA':  { label: 'Compra',  color: 'bg-green-100 text-green-700',  dot: 'bg-green-500' },
-    'ENTRADA': { label: 'Entrada', color: 'bg-blue-100 text-blue-700',    dot: 'bg-blue-500' },
-    'SALIDA':  { label: 'Salida',  color: 'bg-yellow-100 text-yellow-700', dot: 'bg-yellow-500' },
-    'MERMA':   { label: 'Merma',   color: 'bg-red-100 text-red-700',      dot: 'bg-red-500' },
+    'COMPRA':  { label: 'Compra',  color: 'bg-bien-suave text-bien',  dot: 'bg-bien' },
+    'ENTRADA': { label: 'Entrada', color: 'bg-marca-suave text-marca-oscuro',    dot: 'bg-marca' },
+    'SALIDA':  { label: 'Salida',  color: 'bg-atencion-suave text-atencion', dot: 'bg-atencion' },
+    'MERMA':   { label: 'Merma',   color: 'bg-alerta-suave text-alerta',      dot: 'bg-alerta' },
 };
 
 const getTypeConfig = (type: string) =>
-    TYPE_CONFIG[type] ?? { label: type, color: 'bg-gray-100 text-gray-700', dot: 'bg-gray-400' };
+    TYPE_CONFIG[type] ?? { label: type, color: 'bg-papel-hondo text-tinta-suave', dot: 'bg-papel-borde' };
 
 type DocxPeriod = 'week' | 'month' | 'quarter';
 
@@ -260,7 +260,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                 sub: `${personnelMap.get(m.personnelId ?? '')?.name ?? 'Sin asignar'} · ${new Date(m.timestamp).toLocaleDateString('es-CO')}`,
                 value: `${m.quantity} ${itemMap.get(m.itemId)?.unit ?? ''}`,
                 badge: m.isLoan ? 'Préstamo' : undefined,
-                badgeColor: 'bg-yellow-100 text-yellow-700',
+                badgeColor: 'bg-atencion-suave text-atencion',
             })
         );
         setActiveDetail({ title: 'Salidas últimos 30 días', rows, navigateTo: { view: 'kardex', tab: 'movements' } });
@@ -279,7 +279,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                     label: i.name,
                     value: `${i.quantity} ${i.unit}`,
                     badge: onLoan > 0 ? `${onLoan} prestado` : undefined,
-                    badgeColor: 'bg-yellow-100 text-yellow-700',
+                    badgeColor: 'bg-atencion-suave text-atencion',
                 };
             }
         );
@@ -297,7 +297,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                     sub: `×${m.quantity} · ${timeAgo(m.timestamp)}`,
                     value: `${dias}d`,
                     badge: dias > DIAS_VENCIDO ? 'VENCIDO' : dias > 7 ? '+7d' : 'Reciente',
-                    badgeColor: dias > DIAS_VENCIDO ? 'bg-red-100 text-red-600' : dias > 7 ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700',
+                    badgeColor: dias > DIAS_VENCIDO ? 'bg-alerta-suave text-alerta' : dias > 7 ? 'bg-atencion-suave text-atencion' : 'bg-bien-suave text-bien',
                 };
             });
         setActiveDetail({ title: `Herramientas con ${nombre}`, rows, navigateTo: { view: 'kardex', tab: 'loans' } });
@@ -314,7 +314,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                     sub: personnelMap.get(m.personnelId ?? '')?.name ?? 'Sin asignar',
                     value: `${days}d`,
                     badge: days > 14 ? '+14d' : days > 7 ? '+7d' : 'Reciente',
-                    badgeColor: days > 14 ? 'bg-red-100 text-red-600' : days > 7 ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700',
+                    badgeColor: days > 14 ? 'bg-alerta-suave text-alerta' : days > 7 ? 'bg-atencion-suave text-atencion' : 'bg-bien-suave text-bien',
                 };
             }
         );
@@ -330,7 +330,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                 sub: INV_TYPE_LABEL[i.inventoryType],
                 value: `${i.quantity} / ${i.minStock} ${i.unit}`,
                 badge: i.quantity === 0 ? 'Agotado' : 'Bajo',
-                badgeColor: i.quantity === 0 ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600',
+                badgeColor: i.quantity === 0 ? 'bg-alerta-suave text-alerta' : 'bg-atencion-suave text-atencion',
             }));
         setActiveDetail({ title: 'Stock bajo / agotado', rows, navigateTo: { view: 'kardex', tab: 'inventory' } });
     };
@@ -383,7 +383,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                     label: `📤 Con ${personnelMap.get(m.personnelId ?? '')?.name ?? 'desconocido'}`,
                     sub: `Préstamo desde hace ${days} día${days !== 1 ? 's' : ''}`,
                     badge: days > 7 ? 'Vencido' : 'Activo',
-                    badgeColor: days > 7 ? 'bg-red-100 text-red-600' : 'bg-yellow-100 text-yellow-700',
+                    badgeColor: days > 7 ? 'bg-alerta-suave text-alerta' : 'bg-atencion-suave text-atencion',
                 });
             });
         }
@@ -405,41 +405,41 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                 <div className="fixed inset-0 z-40 flex items-end md:items-center justify-center" onClick={() => setActiveDetail(null)}>
                     <div className="absolute inset-0 bg-black/40" />
                     <div
-                        className="relative w-full max-w-lg bg-white rounded-t-2xl md:rounded-2xl shadow-2xl max-h-[70vh] flex flex-col"
+                        className="relative w-full max-w-lg bg-papel rounded-t-2xl md:rounded-2xl shadow-2xl max-h-[70vh] flex flex-col"
                         onClick={e => e.stopPropagation()}
                     >
-                        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
-                            <h3 className="font-black text-gray-900 text-sm uppercase tracking-tight">{activeDetail.title}</h3>
-                            <button onClick={() => setActiveDetail(null)} className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400">
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-papel-borde flex-shrink-0">
+                            <h3 className="font-black text-tinta text-sm uppercase tracking-tight">{activeDetail.title}</h3>
+                            <button onClick={() => setActiveDetail(null)} className="p-1.5 rounded-full hover:bg-papel-hondo text-tinta-tenue">
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
                             </button>
                         </div>
                         <div className="overflow-y-auto flex-1">
                             {activeDetail.rows.length === 0 ? (
-                                <p className="text-center py-10 text-gray-400 text-sm">Sin datos para mostrar.</p>
+                                <p className="text-center py-10 text-tinta-tenue text-sm">Sin datos para mostrar.</p>
                             ) : activeDetail.rows.map((row, i) =>
                                 row.isHeader ? (
-                                    <div key={i} className="px-5 py-1.5 bg-gray-50 border-b border-gray-100">
-                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{row.label}</p>
+                                    <div key={i} className="px-5 py-1.5 bg-papel-hondo border-b border-papel-borde">
+                                        <p className="text-[10px] font-black text-tinta-tenue uppercase tracking-widest">{row.label}</p>
                                     </div>
                                 ) : (
-                                <div key={i} className="flex items-center justify-between px-5 py-3 border-b border-gray-50">
+                                <div key={i} className="flex items-center justify-between px-5 py-3 border-b border-papel-borde">
                                     <div className="min-w-0 flex-1">
-                                        <p className="text-sm font-semibold text-gray-800 truncate">{row.label}</p>
-                                        {row.sub && <p className="text-xs text-gray-400 mt-0.5">{row.sub}</p>}
+                                        <p className="text-sm font-semibold text-tinta truncate">{row.label}</p>
+                                        {row.sub && <p className="text-xs text-tinta-tenue mt-0.5">{row.sub}</p>}
                                     </div>
                                     <div className="flex items-center gap-2 flex-shrink-0 ml-3">
-                                        {row.value && <span className="text-sm font-black text-gray-700">{row.value}</span>}
-                                        {row.badge && <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase ${row.badgeColor ?? 'bg-gray-100 text-gray-600'}`}>{row.badge}</span>}
+                                        {row.value && <span className="text-sm font-black text-tinta-suave">{row.value}</span>}
+                                        {row.badge && <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase ${row.badgeColor ?? 'bg-papel-hondo text-tinta-suave'}`}>{row.badge}</span>}
                                     </div>
                                 </div>
                             ))}
                         </div>
                         {activeDetail.navigateTo && onNavigate && (
-                            <div className="flex-shrink-0 px-5 py-3 border-t border-gray-100">
+                            <div className="flex-shrink-0 px-5 py-3 border-t border-papel-borde">
                                 <button
                                     onClick={() => { onNavigate(activeDetail.navigateTo!.view, activeDetail.navigateTo!.tab); setActiveDetail(null); }}
-                                    className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-black rounded-xl transition-colors"
+                                    className="w-full py-2.5 bg-marca hover:bg-marca-fuerte text-tinta text-sm font-black rounded-xl transition-colors"
                                 >
                                     Ir al Kardex →
                                 </button>
@@ -452,12 +452,12 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
             {/* Modal selector de período DOCX */}
             {showDocxModal && (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+                    <div className="bg-papel rounded-2xl shadow-2xl w-full max-w-sm p-6">
                         <div className="flex items-center gap-2 mb-1">
                             <span className="text-2xl">📄</span>
-                            <h3 className="text-lg font-bold text-gray-900">Exportar informe DOCX</h3>
+                            <h3 className="text-lg font-bold text-tinta">Exportar informe DOCX</h3>
                         </div>
-                        <p className="text-sm text-gray-500 mb-5">Formato profesional Grupo Montecielo — se descarga como archivo Word</p>
+                        <p className="text-sm text-tinta-tenue mb-5">Formato profesional Grupo Montecielo — se descarga como archivo Word</p>
                         <div className="space-y-2">
                             {([
                                 { key: 'week', label: 'Esta semana', sub: 'Últimos 7 días' },
@@ -465,64 +465,39 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                                 { key: 'quarter', label: 'Este trimestre', sub: 'Últimos 90 días' },
                             ] as const).map(opt => (
                                 <button key={opt.key} onClick={() => handleExportDocx(opt.key)}
-                                    className="w-full text-left px-4 py-3 rounded-xl border border-gray-200 hover:border-amber-400 hover:bg-amber-50 transition-all">
-                                    <p className="font-semibold text-gray-800 text-sm">{opt.label}</p>
-                                    <p className="text-xs text-gray-400">{opt.sub}</p>
+                                    className="w-full text-left px-4 py-3 rounded-xl border border-papel-borde hover:border-atencion hover:bg-atencion-suave transition-all">
+                                    <p className="font-semibold text-tinta text-sm">{opt.label}</p>
+                                    <p className="text-xs text-tinta-tenue">{opt.sub}</p>
                                 </button>
                             ))}
                         </div>
-                        <button onClick={() => setShowDocxModal(false)} className="mt-4 w-full text-sm text-gray-400 hover:text-gray-600 py-2">Cancelar</button>
+                        <button onClick={() => setShowDocxModal(false)} className="mt-4 w-full text-sm text-tinta-tenue hover:text-tinta-suave py-2">Cancelar</button>
                     </div>
                 </div>
             )}
 
-            {/* Botón exportar DOCX */}
-            <div className="flex justify-end">
-                <button onClick={() => setShowDocxModal(true)} disabled={docxExporting}
-                    className="flex items-center gap-2 px-4 py-2 bg-amber-50 border border-amber-200 hover:border-amber-400 hover:bg-amber-100 text-amber-800 font-semibold rounded-xl text-sm transition-all shadow-sm disabled:opacity-60">
-                    <span className="text-base">📄</span>
-                    {docxExporting ? 'Generando DOCX...' : 'Exportar DOCX'}
-                </button>
-            </div>
+            {/* ── LOS TRES NÚMEROS, EN UNA TIRA ──
+                Antes eran tres tarjetas de p-5, cada una con su propio idioma de
+                color: etiqueta azul, etiqueta verde, tarjeta amarilla. Ocupaban
+                casi toda la primera pantalla para decir tres cifras.
 
-            {/* ── KPI CARDS ── */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                Ahora son tres columnas iguales: el número grande, la palabra
+                debajo. El color solo aparece cuando hay algo que mirar. */}
+            <div className="grid grid-cols-3 rounded-xl border border-papel-borde bg-papel overflow-hidden divide-x divide-papel-borde">
                 <button onClick={showSalidasDetail}
-                    className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-1 text-left hover:border-blue-300 hover:shadow-md transition-all active:scale-95">
-                    <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Salidas (30 días)</span>
-                    <span className="text-2xl font-black text-gray-800">{kpis.totalSalidas}</span>
-                    <span className="text-xs text-gray-400">unidades despachadas</span>
-                    {typeBreakdown.length > 0 && (
-                        <div className="mt-2 space-y-0.5 w-full">
-                            {typeBreakdown.map(c => (
-                                <div key={c.type} className="flex items-center justify-between text-[10px]">
-                                    <span className="text-gray-500">{c.label}</span>
-                                    <span className="font-black text-gray-700">{c.qty}</span>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                    <div className="mt-2 flex items-center gap-1 text-[10px] text-blue-400 font-semibold">
-                        <span>Ver lista →</span>
-                    </div>
+                    className="px-2 py-2.5 text-center hover:bg-papel-hondo active:bg-marca-suave transition-colors">
+                    <span className="block text-xl font-black text-tinta leading-none">{kpis.totalSalidas}</span>
+                    <span className="block mt-1 text-[10px] font-bold text-tinta-tenue uppercase tracking-wide leading-tight">Salidas 30d</span>
                 </button>
                 <button onClick={showInventarioListDetail}
-                    className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-1 text-left hover:shadow-md hover:border-green-300 transition-all active:scale-95">
-                    <span className="text-[10px] font-black text-green-400 uppercase tracking-widest">Ítems en inventario</span>
-                    <span className="text-2xl font-black text-gray-800">{kpis.totalItems}</span>
-                    <span className="text-xs text-gray-400">productos registrados</span>
-                    <div className="mt-2 flex items-center gap-1 text-[10px] text-green-500 font-semibold">
-                        <span>Ver lista →</span>
-                    </div>
+                    className="px-2 py-2.5 text-center hover:bg-papel-hondo active:bg-marca-suave transition-colors">
+                    <span className="block text-xl font-black text-tinta leading-none">{kpis.totalItems}</span>
+                    <span className="block mt-1 text-[10px] font-bold text-tinta-tenue uppercase tracking-wide leading-tight">Ítems</span>
                 </button>
                 <button onClick={showPrestamosDetail}
-                    className={`p-5 rounded-2xl shadow-sm border flex flex-col gap-1 text-left hover:shadow-md transition-all active:scale-95 ${kpis.activeLoanCount > 0 ? 'bg-yellow-50 border-yellow-200 hover:border-yellow-400' : 'bg-white border-gray-100 hover:border-blue-300'}`}>
-                    <span className="text-[10px] font-black text-yellow-500 uppercase tracking-widest">Préstamos activos</span>
-                    <span className={`text-2xl font-black ${kpis.activeLoanCount > 0 ? 'text-yellow-600' : 'text-gray-800'}`}>{kpis.activeLoanCount}</span>
-                    <span className="text-xs text-gray-400">{kpis.activeLoanCount === 0 ? '✅ Todo devuelto' : 'herramientas fuera'}</span>
-                    <div className="mt-2 flex items-center gap-1 text-[10px] text-yellow-500 font-semibold">
-                        <span>Ver quién los tiene →</span>
-                    </div>
+                    className={`px-2 py-2.5 text-center transition-colors ${kpis.activeLoanCount > 0 ? 'bg-atencion-suave hover:bg-atencion-suave' : 'hover:bg-papel-hondo'} active:bg-marca-suave`}>
+                    <span className={`block text-xl font-black leading-none ${kpis.activeLoanCount > 0 ? 'text-atencion' : 'text-tinta'}`}>{kpis.activeLoanCount}</span>
+                    <span className="block mt-1 text-[10px] font-bold text-tinta-tenue uppercase tracking-wide leading-tight">Prestadas</span>
                 </button>
             </div>
 
@@ -531,22 +506,22 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
             {/* ── TORTA + TOP CONSUMIDOS ── */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Torta */}
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-                    <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4">Consumo por tipo — últimos 30 días</h2>
+                <div className="bg-papel rounded-2xl shadow-sm border border-papel-borde p-5">
+                    <h2 className="text-xs font-black text-tinta-tenue uppercase tracking-widest mb-4">Consumo por tipo — últimos 30 días</h2>
                     {typeBreakdown.length === 0 ? (
-                        <p className="text-sm text-gray-400 py-6 text-center">Sin consumos registrados.</p>
+                        <p className="text-sm text-tinta-tenue py-6 text-center">Sin consumos registrados.</p>
                     ) : (
                         <div className="flex items-center gap-6">
                             <div className="flex-shrink-0 w-32 h-32 rounded-full" style={{ background: `conic-gradient(${typeBreakdown.map(c => `${c.color} ${c.from}% ${c.from + c.pct}%`).join(', ')})` }} />
                             <div className="space-y-2 flex-1">
                                 {typeBreakdown.map(c => (
                                     <button key={c.type} onClick={() => showTipoDetail(c.type, c.label)}
-                                        className="w-full flex items-center justify-between gap-2 hover:bg-gray-50 rounded-lg px-1 py-0.5 transition-colors">
+                                        className="w-full flex items-center justify-between gap-2 hover:bg-papel-hondo rounded-lg px-1 py-0.5 transition-colors">
                                         <div className="flex items-center gap-2">
                                             <span className="w-3 h-3 rounded-sm flex-shrink-0" style={{ background: c.color }} />
-                                            <span className="text-xs font-semibold text-gray-700">{c.label}</span>
+                                            <span className="text-xs font-semibold text-tinta-suave">{c.label}</span>
                                         </div>
-                                        <span className="text-xs font-black text-gray-500">{c.qty} <span className="font-normal text-gray-400">({Math.round(c.pct)}%) →</span></span>
+                                        <span className="text-xs font-black text-tinta-tenue">{c.qty} <span className="font-normal text-tinta-tenue">({Math.round(c.pct)}%) →</span></span>
                                     </button>
                                 ))}
                             </div>
@@ -555,23 +530,23 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                 </div>
 
                 {/* Top consumidos */}
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-                    <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4">Top 8 consumidos — últimos 30 días</h2>
+                <div className="bg-papel rounded-2xl shadow-sm border border-papel-borde p-5">
+                    <h2 className="text-xs font-black text-tinta-tenue uppercase tracking-widest mb-4">Top 8 consumidos — últimos 30 días</h2>
                     {topConsumed.length === 0 ? (
-                        <p className="text-sm text-gray-400 py-6 text-center">Sin salidas registradas.</p>
+                        <p className="text-sm text-tinta-tenue py-6 text-center">Sin salidas registradas.</p>
                     ) : (
                         <div className="space-y-2.5">
                             {topConsumed.map(({ item, qty }, i) => (
-                                <button key={item!.id} onClick={() => showItemConsumoDetail(item!.id, item!.name)} className="w-full text-left hover:bg-gray-50 rounded-lg px-1 transition-colors">
+                                <button key={item!.id} onClick={() => showItemConsumoDetail(item!.id, item!.name)} className="w-full text-left hover:bg-papel-hondo rounded-lg px-1 transition-colors">
                                     <div className="flex justify-between items-center mb-1">
-                                        <span className="text-sm font-semibold text-gray-800 truncate max-w-[70%]">
-                                            <span className="text-xs font-black text-blue-400 mr-2">#{i + 1}</span>
+                                        <span className="text-sm font-semibold text-tinta truncate max-w-[70%]">
+                                            <span className="text-xs font-black text-tinta-tenue mr-2">#{i + 1}</span>
                                             {item!.name}
                                         </span>
-                                        <span className="text-xs font-black text-gray-600">{qty} {item!.unit} →</span>
+                                        <span className="text-xs font-black text-tinta-suave">{qty} {item!.unit} →</span>
                                     </div>
-                                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                                        <div className="h-1.5 rounded-full bg-gradient-to-r from-blue-400 to-blue-600 transition-all duration-500" style={{ width: `${Math.round((qty / maxConsumed) * 100)}%` }} />
+                                    <div className="h-1.5 bg-papel-hondo rounded-full overflow-hidden">
+                                        <div className="h-1.5 rounded-full bg-gradient-to-r from-marca to-marca-fuerte transition-all duration-500" style={{ width: `${Math.round((qty / maxConsumed) * 100)}%` }} />
                                     </div>
                                 </button>
                             ))}
@@ -581,26 +556,26 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
             </div>
 
             {/* ── ACTIVIDAD RECIENTE ── */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-                <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4">Actividad reciente</h2>
+            <div className="bg-papel rounded-2xl shadow-sm border border-papel-borde p-5">
+                <h2 className="text-xs font-black text-tinta-tenue uppercase tracking-widest mb-4">Actividad reciente</h2>
                 {recentActivity.length === 0 ? (
-                    <p className="text-sm text-gray-400 py-6 text-center">Sin movimientos.</p>
+                    <p className="text-sm text-tinta-tenue py-6 text-center">Sin movimientos.</p>
                 ) : (
                     <div className="space-y-1">
                         {recentActivity.map(m => {
                             const cfg = getTypeConfig(m.type);
                             return (
                                 <button key={m.id} onClick={() => showActividadDetail(m.id, m.itemId, m.itemName)}
-                                    className="w-full flex items-center gap-3 hover:bg-gray-50 rounded-xl px-2 py-2 transition-colors text-left">
+                                    className="w-full flex items-center gap-3 hover:bg-papel-hondo rounded-xl px-2 py-2 transition-colors text-left">
                                     <span className={`w-2 h-2 rounded-full flex-shrink-0 ${cfg.dot}`} />
                                     <div className="flex-1 min-w-0">
-                                        <p className="text-sm text-gray-800 truncate">
+                                        <p className="text-sm text-tinta truncate">
                                             <span className={`text-[10px] font-black px-1.5 py-0.5 rounded mr-1.5 ${cfg.color}`}>{m.type}</span>
                                             {m.itemName}
-                                            <span className="text-gray-400 ml-1">×{m.quantity} {m.unit}</span>
+                                            <span className="text-tinta-tenue ml-1">×{m.quantity} {m.unit}</span>
                                         </p>
                                     </div>
-                                    <span className="text-[10px] text-gray-400 flex-shrink-0">{timeAgo(new Date(m.timestamp))} →</span>
+                                    <span className="text-[10px] text-tinta-tenue flex-shrink-0">{timeAgo(new Date(m.timestamp))} →</span>
                                 </button>
                             );
                         })}
@@ -612,22 +587,22 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
             {kpis.activeLoanCount > 0 && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {/* Quién tiene herramientas */}
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-                        <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4">
+                    <div className="bg-papel rounded-2xl shadow-sm border border-papel-borde p-5">
+                        <h2 className="text-xs font-black text-tinta-tenue uppercase tracking-widest mb-4">
                             Quién tiene herramientas
                         </h2>
                         <div className="space-y-2">
                             {loansByPerson.map((p, i) => (
                                 <button key={i} onClick={() => showPersonaLoansDetail(p.nombre, p.movs)}
-                                    className="w-full flex items-center justify-between gap-3 p-2.5 rounded-xl hover:bg-yellow-50 transition-colors text-left">
+                                    className="w-full flex items-center justify-between gap-3 p-2.5 rounded-xl hover:bg-atencion-suave transition-colors text-left">
                                     <div className="flex items-center gap-3 min-w-0">
-                                        <span className="w-7 h-7 rounded-full bg-yellow-100 text-yellow-700 text-xs font-black flex items-center justify-center flex-shrink-0">
+                                        <span className="w-7 h-7 rounded-full bg-atencion-suave text-atencion text-xs font-black flex items-center justify-center flex-shrink-0">
                                             {p.nombre.charAt(0).toUpperCase()}
                                         </span>
-                                        <span className="text-sm font-bold text-gray-800 truncate">{p.nombre}</span>
+                                        <span className="text-sm font-bold text-tinta truncate">{p.nombre}</span>
                                     </div>
-                                    <span className="text-xs font-black text-gray-500 flex-shrink-0">
-                                        {p.unidades} <span className="font-normal text-gray-400">{p.unidades === 1 ? 'herramienta' : 'herramientas'} →</span>
+                                    <span className="text-xs font-black text-tinta-tenue flex-shrink-0">
+                                        {p.unidades} <span className="font-normal text-tinta-tenue">{p.unidades === 1 ? 'herramienta' : 'herramientas'} →</span>
                                     </span>
                                 </button>
                             ))}
@@ -635,20 +610,20 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                     </div>
 
                     {/* Las más demoradas */}
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-                        <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4">
+                    <div className="bg-papel rounded-2xl shadow-sm border border-papel-borde p-5">
+                        <h2 className="text-xs font-black text-tinta-tenue uppercase tracking-widest mb-4">
                             Las más demoradas
                         </h2>
                         <div className="space-y-2">
                             {loansOldest.map((l, i) => {
                                 const vencido = l.dias > DIAS_VENCIDO;
                                 return (
-                                    <div key={i} className={`flex items-center justify-between gap-3 p-2.5 rounded-xl ${vencido ? 'bg-red-50 border border-red-100' : 'bg-gray-50'}`}>
+                                    <div key={i} className={`flex items-center justify-between gap-3 p-2.5 rounded-xl ${vencido ? 'bg-alerta-suave border border-alerta' : 'bg-papel-hondo'}`}>
                                         <div className="min-w-0">
-                                            <p className="text-sm font-bold text-gray-800 truncate">{l.item!.name}</p>
-                                            <p className="text-xs text-gray-500 truncate">{l.persona}</p>
+                                            <p className="text-sm font-bold text-tinta truncate">{l.item!.name}</p>
+                                            <p className="text-xs text-tinta-tenue truncate">{l.persona}</p>
                                         </div>
-                                        <span className={`text-[10px] font-black px-2 py-1 rounded-full flex-shrink-0 ${vencido ? 'bg-red-100 text-red-600' : l.dias > 7 ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}>
+                                        <span className={`text-[10px] font-black px-2 py-1 rounded-full flex-shrink-0 ${vencido ? 'bg-alerta-suave text-alerta' : l.dias > 7 ? 'bg-atencion-suave text-atencion' : 'bg-bien-suave text-bien'}`}>
                                             {l.dias === 0 ? 'HOY' : `${l.dias}d`}{vencido ? ' · VENCIDO' : ''}
                                         </span>
                                     </div>
@@ -661,19 +636,19 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
 
             {/* ── ALERTAS DE CONSUMO (reemplaza "salud del stock") ── */}
             {(consumptionInsights.insights.length > 0 || consumptionInsights.itemSpikes.length > 0) && (
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-                    <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4">Alertas de consumo esta semana</h2>
+                <div className="bg-papel rounded-2xl shadow-sm border border-papel-borde p-5">
+                    <h2 className="text-xs font-black text-tinta-tenue uppercase tracking-widest mb-4">Alertas de consumo esta semana</h2>
                     <div className="space-y-3">
                         {consumptionInsights.insights.map((ins, i) => (
-                            <div key={i} className={`flex items-start gap-3 p-3 rounded-xl ${ins.isNew ? 'bg-gray-50 border border-gray-200' : ins.pct >= 0 ? 'bg-orange-50 border border-orange-100' : 'bg-blue-50 border border-blue-100'}`}>
+                            <div key={i} className={`flex items-start gap-3 p-3 rounded-xl ${ins.isNew ? 'bg-papel-hondo border border-papel-borde' : ins.pct >= 0 ? 'bg-atencion-suave border border-atencion' : 'bg-marca-suave border border-marca-borde'}`}>
                                 <span className="text-lg flex-shrink-0">{ins.isNew ? '🆕' : ins.pct >= 0 ? '📈' : '📉'}</span>
                                 <div>
-                                    <p className="text-sm font-bold text-gray-800">
+                                    <p className="text-sm font-bold text-tinta">
                                         {ins.isNew
                                             ? `Primer consumo de ${ins.label.toLowerCase()} en 2 semanas`
                                             : `${ins.pct >= 0 ? `↑ ${ins.pct}% más` : `↓ ${Math.abs(ins.pct)}% menos`} en ${ins.label}`}
                                     </p>
-                                    <p className="text-xs text-gray-500 mt-0.5">
+                                    <p className="text-xs text-tinta-tenue mt-0.5">
                                         {ins.isNew
                                             ? `${ins.thisQty} und esta semana — sin consumo la semana pasada, no hay con qué comparar`
                                             : `${ins.thisQty} und esta semana vs ${ins.lastQty} und la semana pasada`}
@@ -683,11 +658,11 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                             </div>
                         ))}
                         {consumptionInsights.itemSpikes.map((s, i) => (
-                            <div key={`spike-${i}`} className="flex items-start gap-3 p-3 rounded-xl bg-red-50 border border-red-100">
+                            <div key={`spike-${i}`} className="flex items-start gap-3 p-3 rounded-xl bg-alerta-suave border border-alerta">
                                 <span className="text-lg flex-shrink-0">🚨</span>
                                 <div>
-                                    <p className="text-sm font-bold text-gray-800">Incremento en {s.name}: +{s.pct}%</p>
-                                    <p className="text-xs text-gray-500 mt-0.5">{s.thisQty} {s.unit} esta semana — considerar compra</p>
+                                    <p className="text-sm font-bold text-tinta">Incremento en {s.name}: +{s.pct}%</p>
+                                    <p className="text-xs text-tinta-tenue mt-0.5">{s.thisQty} {s.unit} esta semana — considerar compra</p>
                                 </div>
                             </div>
                         ))}
@@ -707,10 +682,10 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                 kpis.activeLoans.forEach(m => { if (!activeLoansByItem.has(m.itemId)) activeLoansByItem.set(m.itemId, []); activeLoansByItem.get(m.itemId)!.push(m); });
 
                 return (
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                    <div className="bg-papel rounded-2xl shadow-sm border border-papel-borde p-5">
                         <div className="mb-4">
-                            <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest">Inventario completo</h2>
-                            <p className="text-[10px] text-gray-400 mt-0.5">{items.length} ítems · toca cualquier fila para ver detalle</p>
+                            <h2 className="text-xs font-black text-tinta-tenue uppercase tracking-widest">Inventario completo</h2>
+                            <p className="text-[10px] text-tinta-tenue mt-0.5">{items.length} ítems · toca cualquier fila para ver detalle</p>
                         </div>
                         <div className="space-y-6">
                             {TYPE_ORDER.map(({ type, label, dot }) => {
@@ -720,20 +695,20 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                                     <div key={type}>
                                         <div className="flex items-center gap-2 mb-2">
                                             <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: dot }} />
-                                            <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{label}</span>
-                                            <span className="text-[10px] text-gray-400">({group.length})</span>
+                                            <span className="text-[10px] font-black text-tinta-tenue uppercase tracking-widest">{label}</span>
+                                            <span className="text-[10px] text-tinta-tenue">({group.length})</span>
                                         </div>
                                         <div className="overflow-x-auto">
-                                            <table className="min-w-full divide-y divide-gray-50">
+                                            <table className="min-w-full divide-y divide-papel-borde">
                                                 <thead>
                                                     <tr>
-                                                        <th className="pb-1.5 text-left text-[9px] font-black text-gray-300 uppercase tracking-wider">Ítem</th>
-                                                        <th className="pb-1.5 text-center text-[9px] font-black text-gray-300 uppercase tracking-wider w-16">Stock</th>
-                                                        <th className="pb-1.5 text-left text-[9px] font-black text-gray-300 uppercase tracking-wider">Con quién</th>
-                                                        <th className="pb-1.5 text-right text-[9px] font-black text-gray-300 uppercase tracking-wider w-20">Estado</th>
+                                                        <th className="pb-1.5 text-left text-[9px] font-black text-tinta-tenue uppercase tracking-wider">Ítem</th>
+                                                        <th className="pb-1.5 text-center text-[9px] font-black text-tinta-tenue uppercase tracking-wider w-16">Stock</th>
+                                                        <th className="pb-1.5 text-left text-[9px] font-black text-tinta-tenue uppercase tracking-wider">Con quién</th>
+                                                        <th className="pb-1.5 text-right text-[9px] font-black text-tinta-tenue uppercase tracking-wider w-20">Estado</th>
                                                     </tr>
                                                 </thead>
-                                                <tbody className="divide-y divide-gray-50">
+                                                <tbody className="divide-y divide-papel-borde">
                                                     {group.map(item => {
                                                         const loans = activeLoansByItem.get(item.id) ?? [];
                                                         const holder = loans.length > 0 ? personnelMap.get(loans[0].personnelId ?? '')?.name ?? 'Desconocido' : null;
@@ -745,15 +720,15 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                                                         // AGOTADO (rojo, "hay que comprar") se reserva para cuando no existe ninguno.
                                                         const todoPrestado = empty && loans.length > 0;
                                                         const badge = todoPrestado ? 'TODO PRESTADO' : empty ? 'AGOTADO' : low ? 'BAJO' : loans.length > 0 ? 'PRESTADO' : 'OK';
-                                                        const badgeClass = todoPrestado ? 'bg-yellow-100 text-yellow-700' : empty ? 'bg-red-100 text-red-600' : low ? 'bg-orange-100 text-orange-600' : loans.length > 0 ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700';
+                                                        const badgeClass = todoPrestado ? 'bg-atencion-suave text-atencion' : empty ? 'bg-alerta-suave text-alerta' : low ? 'bg-atencion-suave text-atencion' : loans.length > 0 ? 'bg-atencion-suave text-atencion' : 'bg-bien-suave text-bien';
                                                         return (
-                                                            <tr key={item.id} onClick={() => showInventarioDetail(item)} className="hover:bg-blue-50 cursor-pointer transition-colors">
-                                                                <td className="py-2 text-sm font-medium text-gray-800">{item.name}</td>
-                                                                <td className="py-2 text-center text-sm font-black text-gray-700">
-                                                                    {item.quantity}<span className="text-[10px] font-normal text-gray-400 ml-0.5">{item.unit}</span>
+                                                            <tr key={item.id} onClick={() => showInventarioDetail(item)} className="hover:bg-marca-suave cursor-pointer transition-colors">
+                                                                <td className="py-2 text-sm font-medium text-tinta">{item.name}</td>
+                                                                <td className="py-2 text-center text-sm font-black text-tinta-suave">
+                                                                    {item.quantity}<span className="text-[10px] font-normal text-tinta-tenue ml-0.5">{item.unit}</span>
                                                                 </td>
-                                                                <td className="py-2 text-xs text-gray-500">
-                                                                    {holder ? <span className="font-semibold text-yellow-700">{holder}{multiHolder ? ` ${multiHolder}` : ''}</span> : <span className="text-gray-300">—</span>}
+                                                                <td className="py-2 text-xs text-tinta-tenue">
+                                                                    {holder ? <span className="font-semibold text-atencion">{holder}{multiHolder ? ` ${multiHolder}` : ''}</span> : <span className="text-tinta-tenue">—</span>}
                                                                 </td>
                                                                 <td className="py-2 text-right">
                                                                     <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${badgeClass}`}>{badge}</span>
@@ -771,6 +746,17 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                     </div>
                 );
             })()}
+
+            {/* El reporte es cosa de fin de mes, no de todos los días: estaba
+                suelto y alineado a la derecha en mitad del camino, entre los
+                pendientes y los números. Va al final, después de los datos. */}
+            <div className="pt-1">
+                <button onClick={() => setShowDocxModal(true)} disabled={docxExporting}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-papel border border-papel-borde hover:border-marca text-tinta-suave font-bold rounded-xl text-sm transition-all disabled:opacity-60">
+                    <span className="text-base">📄</span>
+                    {docxExporting ? 'Generando DOCX…' : 'Exportar reporte DOCX'}
+                </button>
+            </div>
         </div>
     );
 };

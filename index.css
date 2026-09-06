@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Estaban sueltos en un <style> dentro de index.html, donde nadie los
+   encontraba y no podían usar los colores de la marca. */
+@layer components {
+    .input-style {
+        @apply px-3 py-2 border border-papel-borde rounded-md shadow-sm bg-papel text-tinta;
+    }
+    .input-style:focus {
+        @apply outline-none border-marca ring-2 ring-marca;
+    }
+}
+
+@layer base {
+    body { @apply bg-papel-hondo text-tinta; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { @apply bg-papel-hondo; }
+    ::-webkit-scrollbar-thumb { @apply bg-papel-borde rounded; }
+    ::-webkit-scrollbar-thumb:hover { @apply bg-tinta-tenue; }
+}

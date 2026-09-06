@@ -27,7 +27,7 @@ interface Props {
 }
 
 const Flecha = ({ abierto }: { abierto: boolean }) => (
-    <span className={`text-gray-400 text-[9px] transition-transform flex-shrink-0 ${abierto ? 'rotate-90' : ''}`}>▶</span>
+    <span className={`text-tinta-tenue text-[9px] transition-transform flex-shrink-0 ${abierto ? 'rotate-90' : ''}`}>▶</span>
 );
 
 /** El puntico del color, cuando la rama ES un color. */
@@ -69,17 +69,17 @@ export const ArbolFamilias: React.FC<Props> = ({ items, fila, escogidos, abrirTo
                 return (
                     <div key={a.familia}>
                         <button onClick={() => alternar(llaveFam)}
-                            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 text-left transition-colors">
+                            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-papel-hondo text-left transition-colors">
                             <Flecha abierto={abierta} />
-                            <span className="text-sm font-bold text-gray-800 flex-1 min-w-0 truncate">{a.familia}</span>
+                            <span className="text-sm font-bold text-tinta flex-1 min-w-0 truncate">{a.familia}</span>
                             {escogidosAca > 0 && (
-                                <span className="text-[9px] font-black text-white bg-blue-600 rounded-full px-1.5 py-0.5 flex-shrink-0">{escogidosAca}</span>
+                                <span className="text-[9px] font-black text-tinta bg-marca rounded-full px-1.5 py-0.5 flex-shrink-0">{escogidosAca}</span>
                             )}
-                            <span className="text-[10px] text-gray-400 flex-shrink-0">{a.cuantos} · {a.total} disp.</span>
+                            <span className="text-[10px] text-tinta-tenue flex-shrink-0">{a.cuantos} · {a.total} disp.</span>
                         </button>
 
                         {abierta && (
-                            <div className="ml-3 pl-2 border-l border-gray-200 space-y-0.5">
+                            <div className="ml-3 pl-2 border-l border-papel-borde space-y-0.5">
                                 {unaSolaRama
                                     ? a.ramas[0].items.map(i => <div key={i.id}>{fila(i, detalleDe(i, a.familia, todosLosDeLaFamilia))}</div>)
                                     : a.ramas.map(r => {
@@ -89,22 +89,22 @@ export const ArbolFamilias: React.FC<Props> = ({ items, fila, escogidos, abrirTo
                                         return (
                                             <div key={llaveRama}>
                                                 <button onClick={() => alternar(llaveRama)}
-                                                    className="w-full flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-gray-50 text-left transition-colors">
+                                                    className="w-full flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-papel-hondo text-left transition-colors">
                                                     <Flecha abierto={abiertaR} />
                                                     <Punto variante={r.variante} />
-                                                    <span className="text-xs font-semibold text-gray-600 flex-1 min-w-0 truncate">
+                                                    <span className="text-xs font-semibold text-tinta-suave flex-1 min-w-0 truncate">
                                                         {/* Una "Concretadora" al lado de una "Concretadora Electrica":
                                                             la rama de la sencilla se llama como la familia, que es como
                                                             la pide el bodeguero. */}
                                                         {r.variante === '—' ? a.familia : r.variante}
                                                     </span>
                                                     {escogidosRama > 0 && (
-                                                        <span className="text-[9px] font-black text-white bg-blue-600 rounded-full px-1.5 py-0.5 flex-shrink-0">{escogidosRama}</span>
+                                                        <span className="text-[9px] font-black text-tinta bg-marca rounded-full px-1.5 py-0.5 flex-shrink-0">{escogidosRama}</span>
                                                     )}
-                                                    <span className="text-[10px] text-gray-400 flex-shrink-0">{r.items.length} · {r.total}</span>
+                                                    <span className="text-[10px] text-tinta-tenue flex-shrink-0">{r.items.length} · {r.total}</span>
                                                 </button>
                                                 {abiertaR && (
-                                                    <div className="ml-3 pl-2 border-l border-gray-100 space-y-0.5">
+                                                    <div className="ml-3 pl-2 border-l border-papel-borde space-y-0.5">
                                                         {r.items.map(i => <div key={i.id}>{fila(i, detalleDe(i, a.familia, todosLosDeLaFamilia))}</div>)}
                                                     </div>
                                                 )}

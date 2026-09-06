@@ -26,10 +26,10 @@ const MOV_LABEL: Record<string, string> = {
 };
 
 const MOV_COLOR: Record<string, string> = {
-    PURCHASE: 'bg-green-100 text-green-700',
-    CHECK_IN:  'bg-blue-100 text-blue-700',
-    CHECK_OUT: 'bg-yellow-100 text-yellow-700',
-    WASTE:     'bg-red-100 text-red-700',
+    PURCHASE: 'bg-bien-suave text-bien',
+    CHECK_IN:  'bg-marca-suave text-marca-oscuro',
+    CHECK_OUT: 'bg-atencion-suave text-atencion',
+    WASTE:     'bg-alerta-suave text-alerta',
 };
 
 const LOAN_TYPES = new Set([InventoryType.HAND_TOOL, InventoryType.ELECTRICAL_TOOL]);
@@ -109,31 +109,31 @@ const ProjectDetail: React.FC<{
     return (
         <div className="space-y-4">
             {/* Header */}
-            <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
+            <div className="bg-papel border border-papel-borde rounded-2xl p-5 shadow-sm">
                 <div className="flex items-center gap-3 mb-3">
-                    <button onClick={onBack} className="p-2 rounded-full hover:bg-gray-100 transition-colors flex-shrink-0">
-                        <ArrowLeftIcon className="w-5 h-5 text-gray-600" />
+                    <button onClick={onBack} className="p-2 rounded-full hover:bg-papel-hondo transition-colors flex-shrink-0">
+                        <ArrowLeftIcon className="w-5 h-5 text-tinta-suave" />
                     </button>
                     <div className="min-w-0">
-                        <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight truncate">{project.name}</h2>
-                        {project.description && <p className="text-xs text-gray-400 mt-0.5">{project.description}</p>}
+                        <h2 className="text-xl font-black text-tinta uppercase tracking-tight truncate">{project.name}</h2>
+                        {project.description && <p className="text-xs text-tinta-tenue mt-0.5">{project.description}</p>}
                     </div>
-                    <span className={`flex-shrink-0 ml-auto text-[10px] font-black uppercase px-2.5 py-1 rounded-full ${project.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                    <span className={`flex-shrink-0 ml-auto text-[10px] font-black uppercase px-2.5 py-1 rounded-full ${project.status === 'active' ? 'bg-bien-suave text-bien' : 'bg-papel-hondo text-tinta-tenue'}`}>
                         {project.status === 'active' ? 'Activo' : 'Terminado'}
                     </span>
                 </div>
                 {/* Summary chips */}
                 <div className="flex flex-wrap gap-2">
-                    <span className="flex items-center gap-1.5 text-xs font-bold bg-blue-50 text-blue-700 px-3 py-1.5 rounded-full">
+                    <span className="flex items-center gap-1.5 text-xs font-bold bg-marca-suave text-marca-oscuro px-3 py-1.5 rounded-full">
                         <span>👷</span>{workerSummary.length} persona{workerSummary.length !== 1 ? 's' : ''}
                     </span>
-                    <span className="flex items-center gap-1.5 text-xs font-bold bg-yellow-50 text-yellow-700 px-3 py-1.5 rounded-full">
+                    <span className="flex items-center gap-1.5 text-xs font-bold bg-atencion-suave text-atencion px-3 py-1.5 rounded-full">
                         <span>🔑</span>{activeLoans.length} préstamo{activeLoans.length !== 1 ? 's' : ''} activo{activeLoans.length !== 1 ? 's' : ''}
                     </span>
-                    <span className="flex items-center gap-1.5 text-xs font-bold bg-orange-50 text-orange-700 px-3 py-1.5 rounded-full">
+                    <span className="flex items-center gap-1.5 text-xs font-bold bg-atencion-suave text-atencion px-3 py-1.5 rounded-full">
                         <span>🔨</span>{toolsOut.length} uso{toolsOut.length !== 1 ? 's' : ''} de herramienta{toolsOut.length !== 1 ? 's' : ''}
                     </span>
-                    <span className="flex items-center gap-1.5 text-xs font-bold bg-purple-50 text-purple-700 px-3 py-1.5 rounded-full">
+                    <span className="flex items-center gap-1.5 text-xs font-bold bg-marca-suave text-marca-oscuro px-3 py-1.5 rounded-full">
                         <span>📦</span>{consumablesUsed.reduce((s, c) => s + c.qty, 0)} consumibles
                     </span>
                 </div>
@@ -141,22 +141,22 @@ const ProjectDetail: React.FC<{
 
             {/* Personal involucrado */}
             {workerSummary.length > 0 && (
-                <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-5 pt-4 pb-2">👷 Personal involucrado</p>
-                    <div className="divide-y divide-gray-50">
+                <div className="bg-papel border border-papel-borde rounded-2xl shadow-sm overflow-hidden">
+                    <p className="text-[10px] font-black text-tinta-tenue uppercase tracking-widest px-5 pt-4 pb-2">👷 Personal involucrado</p>
+                    <div className="divide-y divide-papel-borde">
                         {workerSummary.map(({ id, person, activeLoans: al, returnedLoans, consumables }) => (
                             <div key={id} className="px-5 py-3">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-2">
-                                        <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 font-black text-sm flex items-center justify-center flex-shrink-0">
+                                        <div className="w-8 h-8 rounded-xl bg-marca-suave text-marca-oscuro font-black text-sm flex items-center justify-center flex-shrink-0">
                                             {person?.name?.[0]?.toUpperCase() ?? '?'}
                                         </div>
-                                        <span className="font-bold text-sm text-gray-900">{person?.name ?? 'Desconocido'}</span>
+                                        <span className="font-bold text-sm text-tinta">{person?.name ?? 'Desconocido'}</span>
                                     </div>
                                     <div className="flex gap-2 text-[10px] font-bold">
-                                        {al.length > 0 && <span className="bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">{al.length} activo{al.length !== 1 ? 's' : ''}</span>}
-                                        {returnedLoans.length > 0 && <span className="bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">{returnedLoans.length} devuelto{returnedLoans.length !== 1 ? 's' : ''}</span>}
-                                        {consumables.length > 0 && <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">{consumables.reduce((s, m) => s + m.quantity, 0)} cons.</span>}
+                                        {al.length > 0 && <span className="bg-atencion-suave text-atencion px-2 py-0.5 rounded-full">{al.length} activo{al.length !== 1 ? 's' : ''}</span>}
+                                        {returnedLoans.length > 0 && <span className="bg-papel-hondo text-tinta-tenue px-2 py-0.5 rounded-full">{returnedLoans.length} devuelto{returnedLoans.length !== 1 ? 's' : ''}</span>}
+                                        {consumables.length > 0 && <span className="bg-marca-suave text-marca-oscuro px-2 py-0.5 rounded-full">{consumables.reduce((s, m) => s + m.quantity, 0)} cons.</span>}
                                     </div>
                                 </div>
                                 {al.length > 0 && (
@@ -164,8 +164,8 @@ const ProjectDetail: React.FC<{
                                         {al.map(m => {
                                             const it = itemMap.get(m.itemId);
                                             return (
-                                                <p key={m.id} className="text-xs text-yellow-700 font-semibold flex items-center gap-1">
-                                                    <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0" />
+                                                <p key={m.id} className="text-xs text-atencion font-semibold flex items-center gap-1">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-atencion flex-shrink-0" />
                                                     {it?.name ?? m.itemId} — desde {fmt(m.timestamp)}
                                                 </p>
                                             );
@@ -180,9 +180,9 @@ const ProjectDetail: React.FC<{
 
             {/* Préstamos activos */}
             {activeLoans.length > 0 && (
-                <div className="bg-white border border-yellow-200 rounded-2xl shadow-sm overflow-hidden">
-                    <p className="text-[10px] font-black text-yellow-600 uppercase tracking-widest px-5 pt-4 pb-2">🔑 Préstamos activos</p>
-                    <div className="divide-y divide-yellow-50">
+                <div className="bg-papel border border-atencion rounded-2xl shadow-sm overflow-hidden">
+                    <p className="text-[10px] font-black text-atencion uppercase tracking-widest px-5 pt-4 pb-2">🔑 Préstamos activos</p>
+                    <div className="divide-y divide-atencion">
                         {activeLoans.map(m => {
                             const it = itemMap.get(m.itemId);
                             const worker = personnelMap.get(m.personnelId ?? '');
@@ -190,10 +190,10 @@ const ProjectDetail: React.FC<{
                             return (
                                 <div key={m.id} className="px-5 py-3 flex items-center justify-between">
                                     <div>
-                                        <p className="font-bold text-sm text-gray-900">{it?.name ?? '—'}</p>
-                                        {worker && <p className="text-xs text-gray-500 mt-0.5">Con {worker.name}</p>}
+                                        <p className="font-bold text-sm text-tinta">{it?.name ?? '—'}</p>
+                                        {worker && <p className="text-xs text-tinta-tenue mt-0.5">Con {worker.name}</p>}
                                     </div>
-                                    <span className={`text-[10px] font-black px-2 py-1 rounded-full ${days > 7 ? 'bg-red-100 text-red-600' : 'bg-yellow-100 text-yellow-700'}`}>
+                                    <span className={`text-[10px] font-black px-2 py-1 rounded-full ${days > 7 ? 'bg-alerta-suave text-alerta' : 'bg-atencion-suave text-atencion'}`}>
                                         {days === 0 ? 'hoy' : `hace ${days}d`}
                                     </span>
                                 </div>
@@ -205,24 +205,24 @@ const ProjectDetail: React.FC<{
 
             {/* Materiales consumidos */}
             {consumablesUsed.length > 0 && (
-                <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-5 pt-4 pb-2">📦 Materiales consumidos</p>
-                    <div className="divide-y divide-gray-50">
+                <div className="bg-papel border border-papel-borde rounded-2xl shadow-sm overflow-hidden">
+                    <p className="text-[10px] font-black text-tinta-tenue uppercase tracking-widest px-5 pt-4 pb-2">📦 Materiales consumidos</p>
+                    <div className="divide-y divide-papel-borde">
                         {consumablesUsed.map((c, i) => (
                             <div key={i} className="px-5 py-3 flex items-center justify-between">
-                                <span className="text-sm text-gray-800 font-semibold">{c.name}</span>
+                                <span className="text-sm text-tinta font-semibold">{c.name}</span>
                                 <div className="text-right">
-                                    <span className="font-black text-gray-900 text-sm">{c.qty} <span className="font-normal text-xs text-gray-400">{c.unit}</span></span>
+                                    <span className="font-black text-tinta text-sm">{c.qty} <span className="font-normal text-xs text-tinta-tenue">{c.unit}</span></span>
                                     {showEconomicValues && c.price > 0 && (
-                                        <p className="text-[10px] text-gray-400">${(c.qty * c.price).toLocaleString('es-CO')}</p>
+                                        <p className="text-[10px] text-tinta-tenue">${(c.qty * c.price).toLocaleString('es-CO')}</p>
                                     )}
                                 </div>
                             </div>
                         ))}
                         {showEconomicValues && totalCost > 0 && (
-                            <div className="px-5 py-3 flex items-center justify-between bg-gray-50">
-                                <span className="text-xs font-black text-gray-700 uppercase tracking-wider">Total estimado</span>
-                                <span className="font-black text-gray-900">${totalCost.toLocaleString('es-CO')}</span>
+                            <div className="px-5 py-3 flex items-center justify-between bg-papel-hondo">
+                                <span className="text-xs font-black text-tinta-suave uppercase tracking-wider">Total estimado</span>
+                                <span className="font-black text-tinta">${totalCost.toLocaleString('es-CO')}</span>
                             </div>
                         )}
                     </div>
@@ -231,30 +231,30 @@ const ProjectDetail: React.FC<{
 
             {/* Historial completo (colapsable) */}
             {pMovements.length > 0 && (
-                <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+                <div className="bg-papel border border-papel-borde rounded-2xl shadow-sm overflow-hidden">
                     <button
                         onClick={() => setHistoryOpen(o => !o)}
-                        className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
+                        className="w-full flex items-center justify-between px-5 py-4 hover:bg-papel-hondo transition-colors"
                     >
-                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">📋 Historial completo ({pMovements.length})</p>
-                        <svg className={`w-4 h-4 text-gray-400 transition-transform ${historyOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <p className="text-[10px] font-black text-tinta-tenue uppercase tracking-widest">📋 Historial completo ({pMovements.length})</p>
+                        <svg className={`w-4 h-4 text-tinta-tenue transition-transform ${historyOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/>
                         </svg>
                     </button>
                     {historyOpen && (
-                        <div className="divide-y divide-gray-50 border-t border-gray-100">
+                        <div className="divide-y divide-papel-borde border-t border-papel-borde">
                             {pMovements.map(m => {
                                 const it   = itemMap.get(m.itemId);
                                 const worker = personnelMap.get(m.personnelId ?? '');
                                 const label = m.isLoan ? (m.isReturned ? 'Devuelto' : 'Préstamo') : (MOV_LABEL[m.type] ?? m.type);
-                                const color = m.isLoan && !m.isReturned ? 'bg-yellow-100 text-yellow-700' : (MOV_COLOR[m.type] ?? 'bg-gray-100 text-gray-600');
+                                const color = m.isLoan && !m.isReturned ? 'bg-atencion-suave text-atencion' : (MOV_COLOR[m.type] ?? 'bg-papel-hondo text-tinta-suave');
                                 return (
                                     <div key={m.id} className="px-5 py-2.5 flex items-center gap-3">
-                                        <span className="text-[10px] font-bold text-gray-400 w-14 flex-shrink-0">{fmt(m.timestamp)}</span>
+                                        <span className="text-[10px] font-bold text-tinta-tenue w-14 flex-shrink-0">{fmt(m.timestamp)}</span>
                                         <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full flex-shrink-0 ${color}`}>{label}</span>
-                                        <span className="text-sm text-gray-800 font-semibold truncate flex-1">{it?.name ?? '—'}</span>
-                                        <span className="text-xs text-gray-500 flex-shrink-0">{m.quantity} {it?.unit ?? ''}</span>
-                                        {worker && <span className="text-xs text-gray-400 truncate hidden sm:block">{worker.name}</span>}
+                                        <span className="text-sm text-tinta font-semibold truncate flex-1">{it?.name ?? '—'}</span>
+                                        <span className="text-xs text-tinta-tenue flex-shrink-0">{m.quantity} {it?.unit ?? ''}</span>
+                                        {worker && <span className="text-xs text-tinta-tenue truncate hidden sm:block">{worker.name}</span>}
                                     </div>
                                 );
                             })}
@@ -264,7 +264,7 @@ const ProjectDetail: React.FC<{
             )}
 
             {pMovements.length === 0 && (
-                <div className="bg-white border border-gray-100 rounded-2xl p-10 text-center text-gray-400 text-sm shadow-sm">
+                <div className="bg-papel border border-papel-borde rounded-2xl p-10 text-center text-tinta-tenue text-sm shadow-sm">
                     Sin movimientos registrados para este proyecto aún.
                 </div>
             )}
@@ -325,89 +325,89 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
 
     return (
         <div className="space-y-4">
-            <div className="bg-white border border-gray-100 rounded-2xl px-5 py-4 shadow-sm flex items-center justify-between">
+            <div className="bg-papel border border-papel-borde rounded-2xl px-5 py-4 shadow-sm flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                    <button onClick={onGoBack} className="p-2 rounded-full hover:bg-gray-100 transition-colors">
-                        <ArrowLeftIcon className="w-5 h-5 text-gray-600" />
+                    <button onClick={onGoBack} className="p-2 rounded-full hover:bg-papel-hondo transition-colors">
+                        <ArrowLeftIcon className="w-5 h-5 text-tinta-suave" />
                     </button>
-                    <h2 className="text-lg font-black text-gray-800 uppercase tracking-tight">Obras / Proyectos</h2>
+                    <h2 className="text-lg font-black text-tinta uppercase tracking-tight">Obras / Proyectos</h2>
                 </div>
                 {userRole !== UserRole.VISITOR && (
-                    <button onClick={() => setIsAdding(true)} className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-black py-2 px-4 rounded-xl text-xs uppercase tracking-wider transition-colors">
+                    <button onClick={() => setIsAdding(true)} className="flex items-center gap-1.5 bg-marca hover:bg-marca-fuerte text-tinta font-black py-2 px-4 rounded-xl text-xs uppercase tracking-wider transition-colors">
                         <PlusIcon className="w-4 h-4" /> Nueva
                     </button>
                 )}
             </div>
 
             {isAdding && (
-                <div className="bg-white border-2 border-blue-500 rounded-2xl p-5 shadow-sm">
-                    <h3 className="font-black text-gray-900 mb-4 text-base uppercase tracking-tight">Nueva obra / proyecto</h3>
+                <div className="bg-papel border-2 border-marca rounded-2xl p-5 shadow-sm">
+                    <h3 className="font-black text-tinta mb-4 text-base uppercase tracking-tight">Nueva obra / proyecto</h3>
                     <form onSubmit={handleSubmit} className="space-y-3">
                         <input type="text" placeholder="Nombre de la obra" value={newProjectName} onChange={e => setNewProjectName(e.target.value)}
-                            className="w-full p-3 border-2 border-gray-100 rounded-xl outline-none focus:border-blue-400 text-sm" required />
+                            className="w-full p-3 border-2 border-papel-borde rounded-xl outline-none focus:border-marca text-sm" required />
                         <input type="text" placeholder="Ubicación / descripción (opcional)" value={newProjectDesc} onChange={e => setNewProjectDesc(e.target.value)}
-                            className="w-full p-3 border-2 border-gray-100 rounded-xl outline-none focus:border-blue-400 text-sm" />
+                            className="w-full p-3 border-2 border-papel-borde rounded-xl outline-none focus:border-marca text-sm" />
                         <div className="flex justify-end gap-2">
-                            <button type="button" onClick={() => setIsAdding(false)} className="px-5 py-2 text-gray-400 font-bold text-sm hover:text-gray-600">Cancelar</button>
-                            <button type="submit" className="px-6 py-2 bg-blue-600 text-white font-black rounded-xl text-xs uppercase">Guardar</button>
+                            <button type="button" onClick={() => setIsAdding(false)} className="px-5 py-2 text-tinta-tenue font-bold text-sm hover:text-tinta-suave">Cancelar</button>
+                            <button type="submit" className="px-6 py-2 bg-marca text-tinta font-black rounded-xl text-xs uppercase">Guardar</button>
                         </div>
                     </form>
                 </div>
             )}
 
             {projects.length === 0 ? (
-                <div className="bg-white border border-gray-100 rounded-2xl p-10 text-center shadow-sm">
+                <div className="bg-papel border border-papel-borde rounded-2xl p-10 text-center shadow-sm">
                     <p className="text-4xl mb-3">🏗</p>
-                    <p className="text-gray-500 text-sm font-semibold">Sin proyectos registrados</p>
-                    <p className="text-gray-400 text-xs mt-1">Crea una obra para asociar movimientos y personal</p>
+                    <p className="text-tinta-tenue text-sm font-semibold">Sin proyectos registrados</p>
+                    <p className="text-tinta-tenue text-xs mt-1">Crea una obra para asociar movimientos y personal</p>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {projectStats.map(project => (
-                        <div key={project.id} className="bg-white border border-gray-100 rounded-2xl p-5 hover:shadow-md transition-all cursor-pointer relative group">
+                        <div key={project.id} className="bg-papel border border-papel-borde rounded-2xl p-5 hover:shadow-md transition-all cursor-pointer relative group">
                             {onDeleteProject && userRole !== UserRole.VISITOR && (
                                 <button
                                     onClick={e => { e.stopPropagation(); onBehaviorLog?.('ACTION', `Eliminó proyecto: ${project.name}`); onDeleteProject(project.id); }}
-                                    className="absolute top-3 right-3 p-1.5 text-gray-400 hover:text-red-500 transition-all"
+                                    className="absolute top-3 right-3 p-1.5 text-tinta-tenue hover:text-alerta transition-all"
                                 >
                                     <TrashIcon className="w-4 h-4" />
                                 </button>
                             )}
                             <div onClick={() => { onBehaviorLog?.('NAV', `Abrió proyecto: ${project.name}`); setSelectedProjectId(project.id); }}>
                                 <div className="flex items-start justify-between mb-3">
-                                    <h3 className="font-black text-base text-gray-900 uppercase leading-tight pr-6">{project.name}</h3>
-                                    <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full flex-shrink-0 ${project.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
+                                    <h3 className="font-black text-base text-tinta uppercase leading-tight pr-6">{project.name}</h3>
+                                    <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full flex-shrink-0 ${project.status === 'active' ? 'bg-bien-suave text-bien' : 'bg-papel-hondo text-tinta-tenue'}`}>
                                         {project.status === 'active' ? 'Activo' : 'Terminado'}
                                     </span>
                                 </div>
-                                {project.description && <p className="text-xs text-gray-400 mb-3 truncate">{project.description}</p>}
-                                <div className="grid grid-cols-2 gap-2 border-t border-gray-50 pt-3">
+                                {project.description && <p className="text-xs text-tinta-tenue mb-3 truncate">{project.description}</p>}
+                                <div className="grid grid-cols-2 gap-2 border-t border-papel-borde pt-3">
                                     <div className="flex items-center gap-1.5">
                                         <span className="text-sm">👷</span>
                                         <div>
-                                            <span className="text-xs font-black text-gray-800">{project.workerCount}</span>
-                                            <span className="text-[10px] text-gray-400 ml-1">personas</span>
+                                            <span className="text-xs font-black text-tinta">{project.workerCount}</span>
+                                            <span className="text-[10px] text-tinta-tenue ml-1">personas</span>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-1.5">
                                         <span className="text-sm">🔑</span>
                                         <div>
-                                            <span className={`text-xs font-black ${project.activeLoans > 0 ? 'text-yellow-600' : 'text-gray-800'}`}>{project.activeLoans}</span>
-                                            <span className="text-[10px] text-gray-400 ml-1">activos</span>
+                                            <span className={`text-xs font-black ${project.activeLoans > 0 ? 'text-atencion' : 'text-tinta'}`}>{project.activeLoans}</span>
+                                            <span className="text-[10px] text-tinta-tenue ml-1">activos</span>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-1.5">
                                         <span className="text-sm">🔨</span>
                                         <div>
-                                            <span className="text-xs font-black text-gray-800">{project.toolsCount}</span>
-                                            <span className="text-[10px] text-gray-400 ml-1">herramientas</span>
+                                            <span className="text-xs font-black text-tinta">{project.toolsCount}</span>
+                                            <span className="text-[10px] text-tinta-tenue ml-1">herramientas</span>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-1.5">
                                         <span className="text-sm">📦</span>
                                         <div>
-                                            <span className="text-xs font-black text-blue-600">{project.consumableCount}</span>
-                                            <span className="text-[10px] text-gray-400 ml-1">uds.</span>
+                                            <span className="text-xs font-black text-marca-oscuro">{project.consumableCount}</span>
+                                            <span className="text-[10px] text-tinta-tenue ml-1">uds.</span>
                                         </div>
                                     </div>
                                 </div>

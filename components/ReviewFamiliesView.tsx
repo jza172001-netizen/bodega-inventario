@@ -120,29 +120,29 @@ export const ReviewFamiliesView: React.FC<Props> = ({ items, onEditItem, onGoBac
     return (
         <div className="space-y-4 max-w-2xl mx-auto">
             <div className="flex items-center gap-2">
-                <button onClick={onGoBack} className="text-gray-400 hover:text-gray-600 text-xl leading-none">←</button>
+                <button onClick={onGoBack} className="text-tinta-tenue hover:text-tinta-suave text-xl leading-none">←</button>
                 <div>
-                    <h1 className="text-xl font-black text-gray-900">Revisar agrupaciones</h1>
-                    <p className="text-xs text-gray-400 mt-0.5">
+                    <h1 className="text-xl font-black text-tinta">Revisar agrupaciones</h1>
+                    <p className="text-xs text-tinta-tenue mt-0.5">
                         La app propone; vos decidís. Lo que confirmes queda guardado.
                     </p>
                 </div>
             </div>
 
             {pendientes.length === 0 ? (
-                <div className="text-center py-20 text-gray-400">
+                <div className="text-center py-20 text-tinta-tenue">
                     <p className="text-4xl mb-3">✅</p>
-                    <p className="font-semibold text-gray-600">No queda nada por revisar</p>
+                    <p className="font-semibold text-tinta-suave">No queda nada por revisar</p>
                     <p className="text-sm mt-1">Todas las familias están decididas.</p>
                 </div>
             ) : (
                 pendientes.map(([familia, grupo]) => {
                     const enSeparacion = separando === familia;
                     return (
-                        <div key={familia} className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-                            <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
-                                <p className="text-sm font-black text-gray-900">{familia}</p>
-                                <p className="text-[11px] text-gray-500">{grupo.length} ítems propuestos</p>
+                        <div key={familia} className="bg-papel rounded-2xl border border-papel-borde overflow-hidden">
+                            <div className="px-4 py-3 bg-papel-hondo border-b border-papel-borde">
+                                <p className="text-sm font-black text-tinta">{familia}</p>
+                                <p className="text-[11px] text-tinta-tenue">{grupo.length} ítems propuestos</p>
                             </div>
 
                             <div className="px-4 py-3 space-y-1">
@@ -154,10 +154,10 @@ export const ReviewFamiliesView: React.FC<Props> = ({ items, onEditItem, onGoBac
                                         onClick={() => alternar(i.id)}
                                         className={`w-full text-left text-sm px-2.5 py-1.5 rounded-lg border transition-all ${
                                             !enSeparacion
-                                                ? 'border-transparent text-gray-700'
+                                                ? 'border-transparent text-tinta-suave'
                                                 : fuera.has(i.id)
-                                                    ? 'border-orange-400 bg-orange-50 text-orange-800 font-bold'
-                                                    : 'border-green-300 bg-green-50 text-green-800'
+                                                    ? 'border-atencion bg-atencion-suave text-atencion font-bold'
+                                                    : 'border-bien bg-bien-suave text-bien'
                                         }`}>
                                         {enSeparacion && <span className="mr-1.5">{fuera.has(i.id) ? '✕' : '✓'}</span>}
                                         {i.name}
@@ -167,8 +167,8 @@ export const ReviewFamiliesView: React.FC<Props> = ({ items, onEditItem, onGoBac
                             </div>
 
                             {!enSeparacion && porCorregir(familia, grupo).length > 0 && (
-                                <div className="mx-4 mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 space-y-1.5">
-                                    <p className="text-[10px] font-black text-amber-700 uppercase tracking-wider">
+                                <div className="mx-4 mb-3 rounded-xl border border-atencion bg-atencion-suave px-3 py-2 space-y-1.5">
+                                    <p className="text-[10px] font-black text-atencion uppercase tracking-wider">
                                         Se escribieron distinto
                                     </p>
                                     {porCorregir(familia, grupo).map(c => {
@@ -178,8 +178,8 @@ export const ReviewFamiliesView: React.FC<Props> = ({ items, onEditItem, onGoBac
                                                 onClick={() => alternarCorreccion(c.item.id)}
                                                 className="w-full flex items-center gap-2 text-left text-xs">
                                                 <span className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 text-[10px] font-black ${
-                                                    se ? 'border-gray-300 bg-white text-transparent' : 'border-amber-500 bg-amber-500 text-white'}`}>✓</span>
-                                                <span className={`flex-1 min-w-0 truncate ${se ? 'text-gray-400' : 'text-amber-900'}`}>
+                                                    se ? 'border-papel-borde bg-papel text-transparent' : 'border-atencion bg-atencion text-papel'}`}>✓</span>
+                                                <span className={`flex-1 min-w-0 truncate ${se ? 'text-tinta-tenue' : 'text-atencion'}`}>
                                                     <span className="line-through opacity-60">{c.item.name}</span>
                                                     {' → '}
                                                     <strong>{c.nuevo}</strong>
@@ -187,7 +187,7 @@ export const ReviewFamiliesView: React.FC<Props> = ({ items, onEditItem, onGoBac
                                             </button>
                                         );
                                     })}
-                                    <p className="text-[10px] text-amber-600 pt-0.5">
+                                    <p className="text-[10px] text-atencion pt-0.5">
                                         Toca uno para dejarlo como está.
                                     </p>
                                 </div>
@@ -197,23 +197,23 @@ export const ReviewFamiliesView: React.FC<Props> = ({ items, onEditItem, onGoBac
                                 {enSeparacion ? (
                                     <>
                                         <button onClick={() => { setSeparando(null); setFuera(new Set()); }}
-                                            className="px-3 py-2 text-xs font-bold text-gray-500 border border-gray-200 rounded-xl">
+                                            className="px-3 py-2 text-xs font-bold text-tinta-tenue border border-papel-borde rounded-xl">
                                             Cancelar
                                         </button>
                                         <button onClick={() => aplicarSeparacion(familia, grupo)}
                                             disabled={fuera.size === 0}
-                                            className="flex-1 py-2 text-xs font-black bg-orange-500 hover:bg-orange-600 disabled:bg-gray-200 disabled:text-gray-400 text-white rounded-xl">
+                                            className="flex-1 py-2 text-xs font-black bg-atencion hover:bg-atencion disabled:bg-papel-borde disabled:text-tinta-tenue text-papel rounded-xl">
                                             Sacar {fuera.size || ''} de "{familia}"
                                         </button>
                                     </>
                                 ) : (
                                     <>
                                         <button onClick={() => { setSeparando(familia); setFuera(new Set()); }}
-                                            className="px-3 py-2 text-xs font-bold text-gray-600 border border-gray-200 rounded-xl hover:border-gray-400">
+                                            className="px-3 py-2 text-xs font-bold text-tinta-suave border border-papel-borde rounded-xl hover:border-tinta-tenue">
                                             Separar…
                                         </button>
                                         <button onClick={() => confirmar(familia, grupo)}
-                                            className="flex-1 py-2 text-xs font-black bg-green-600 hover:bg-green-700 text-white rounded-xl">
+                                            className="flex-1 py-2 text-xs font-black bg-bien hover:bg-bien text-papel rounded-xl">
                                             {porCorregir(familia, grupo).some(c => !sinCorregir.has(c.item.id))
                                                 ? 'Sí, y corregir los nombres'
                                                 : 'Sí, son la misma familia'}

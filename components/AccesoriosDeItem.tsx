@@ -51,8 +51,8 @@ export const AccesoriosDeItem: React.FC<ChipsProps> = ({ item, className, onEdit
                     title={a.itemId ? 'Se gasta: descuenta stock' : 'Vuelve con la herramienta'}
                     className={`inline-flex items-center gap-1 text-[9px] font-bold rounded-full ${
                         sePuedeTocar ? 'pl-1.5 pr-0.5 py-0.5' : 'px-1.5 py-0.5'} ${
-                        a.itemId ? 'bg-orange-50 text-orange-700 border border-orange-200'
-                                 : 'bg-gray-100 text-gray-600 border border-gray-200'}`}>
+                        a.itemId ? 'bg-atencion-suave text-atencion border border-atencion'
+                                 : 'bg-papel-hondo text-tinta-suave border border-papel-borde'}`}>
                     {a.itemId ? '📦' : '🔁'} {a.nombre}
                     {/* La cantidad solo tiene sentido en lo que se gasta: una maleta
                         que vuelve con la herramienta es una, y ya. */}
@@ -61,7 +61,7 @@ export const AccesoriosDeItem: React.FC<ChipsProps> = ({ item, className, onEdit
                             onClick={e => e.stopPropagation()}
                             onChange={e => cambiar(i, { cantidad: Number(e.target.value) })}
                             title="Cuántos salen con la herramienta"
-                            className="bg-transparent text-[9px] font-bold text-orange-800 border-0 focus:outline-none cursor-pointer -mr-0.5">
+                            className="bg-transparent text-[9px] font-bold text-atencion border-0 focus:outline-none cursor-pointer -mr-0.5">
                             {Array.from({ length: 20 }, (_, n) => n + 1).map(n =>
                                 <option key={n} value={n}>×{n}</option>)}
                         </select>
@@ -71,8 +71,8 @@ export const AccesoriosDeItem: React.FC<ChipsProps> = ({ item, className, onEdit
                             onClick={e => { e.stopPropagation(); cambiar(i, null); }}
                             title={`Quitar ${a.nombre}`}
                             className={`w-4 h-4 flex items-center justify-center rounded-full text-[10px] leading-none transition-colors ${
-                                a.itemId ? 'text-orange-400 hover:bg-orange-200 hover:text-orange-900'
-                                         : 'text-gray-400 hover:bg-gray-300 hover:text-gray-800'}`}>
+                                a.itemId ? 'text-tinta-tenue hover:bg-atencion-suave hover:text-atencion'
+                                         : 'text-tinta-tenue hover:bg-papel-borde hover:text-tinta'}`}>
                             ✕
                         </button>
                     )}
@@ -139,25 +139,25 @@ export const AgregarAccesorio: React.FC<AgregarProps> = ({ item, items, onEditIt
 
     if (creando) {
         return (
-            <div className="w-full border border-orange-200 bg-orange-50 rounded-lg p-2 space-y-1.5"
+            <div className="w-full border border-atencion bg-atencion-suave rounded-lg p-2 space-y-1.5"
                 onClick={e => e.stopPropagation()}>
-                <p className="text-[10px] font-black text-orange-800">Nuevo accesorio para {item.name}</p>
+                <p className="text-[10px] font-black text-atencion">Nuevo accesorio para {item.name}</p>
                 <input type="text" value={nombre || palabraDeAccesorio(familia)} autoFocus
                     onChange={e => setNombre(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); crearYEnganchar(); } }}
                     placeholder="Ej: Disco, Broca"
-                    className="w-full text-xs border border-orange-200 rounded-lg px-2 py-1.5 bg-white" />
+                    className="w-full text-xs border border-atencion rounded-lg px-2 py-1.5 bg-papel" />
                 <div className="flex gap-1.5">
                     <select value={unidad} onChange={e => setUnidad(e.target.value)}
-                        className="flex-1 min-w-0 text-xs border border-orange-200 rounded-lg px-2 py-1.5 bg-white">
+                        className="flex-1 min-w-0 text-xs border border-atencion rounded-lg px-2 py-1.5 bg-papel">
                         {unidadesCon(unidad).map(u => <option key={u} value={u}>{u}</option>)}
                     </select>
                     <button type="button" onClick={() => { setCreando(false); setNombre(''); }}
-                        className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-500">
+                        className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg border border-papel-borde bg-papel text-tinta-tenue">
                         Cancelar
                     </button>
                     <button type="button" onClick={crearYEnganchar} disabled={!nombre.trim()}
-                        className="text-[11px] font-black px-2.5 py-1.5 rounded-lg bg-orange-500 disabled:bg-gray-200 disabled:text-gray-400 text-white">
+                        className="text-[11px] font-black px-2.5 py-1.5 rounded-lg bg-atencion disabled:bg-papel-borde disabled:text-tinta-tenue text-papel">
                         Crear
                     </button>
                 </div>
@@ -175,7 +175,7 @@ export const AgregarAccesorio: React.FC<AgregarProps> = ({ item, items, onEditIt
                 if (c) enganchar(c);
             }}
             title="Engancharle un consumible a esta herramienta"
-            className="text-[11px] font-bold px-2 py-1.5 rounded-lg border border-gray-200 text-gray-600 bg-white max-w-[130px]"
+            className="flex-shrink-0 min-w-0 text-[11px] font-bold px-1.5 py-1.5 rounded-lg border border-papel-borde text-tinta-suave bg-papel max-w-[112px]"
         >
             <option value="">+ Accesorio</option>
             {suyos.length > 0 && (

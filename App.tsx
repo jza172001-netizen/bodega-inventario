@@ -1178,7 +1178,7 @@ const App: React.FC = () => {
     if (!loggedIn) return <LoginView users={users} onLoginSuccess={handleLoginSuccess} onFirstSetup={handleFirstSetup} onCredentialVerified={handleCredentialVerified} />;
 
     return (
-        <div translate="no" className="flex h-screen bg-gray-50 overflow-hidden font-sans">
+        <div translate="no" className="flex h-screen bg-papel-hondo overflow-hidden font-sans">
             {/* Backdrop mobile: cierra el sidebar al tocar fuera */}
             {isSidebarOpen && (
                 <div
@@ -1187,8 +1187,8 @@ const App: React.FC = () => {
                 />
             )}
 
-            <aside className={`bg-white border-r border-gray-200 shadow-xl transition-all duration-300 ease-in-out fixed md:relative inset-y-0 left-0 z-30 transform md:transform-none ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:${isSidebarOpen ? 'w-64' : 'w-0 overflow-hidden'} flex flex-col`}>
-                <div className="h-16 flex-shrink-0 flex items-center px-5 border-b bg-blue-700">
+            <aside className={`bg-papel border-r border-papel-borde shadow-xl transition-all duration-300 ease-in-out fixed md:relative inset-y-0 left-0 z-30 transform md:transform-none ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:${isSidebarOpen ? 'w-64' : 'w-0 overflow-hidden'} flex flex-col`}>
+                <div className="h-16 flex-shrink-0 flex items-center px-5 border-b bg-marca-fuerte">
                     <img
                         src="/montecielo-logo.png"
                         alt="Grupo Montecielo"
@@ -1237,11 +1237,11 @@ const App: React.FC = () => {
                 </div>
 
                 {/* Help & tutorial footer */}
-                <div className="flex-shrink-0 px-2 py-3 border-t border-gray-100 space-y-1">
+                <div className="flex-shrink-0 px-2 py-3 border-t border-papel-borde space-y-1">
                     <NavItem icon={QuestionMarkIcon} label="Ayuda ❓" onClick={() => selectView('help')} isActive={currentView === 'help'} />
                     <button
                         onClick={() => { addBehaviorLog('BUTTON', 'Abrió: Configuración'); setSettingsOpen(true); }}
-                        className="w-full flex items-center text-left px-4 py-2.5 text-xs font-semibold rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-all"
+                        className="w-full flex items-center text-left px-4 py-2.5 text-xs font-semibold rounded-xl text-tinta-tenue hover:bg-papel-hondo hover:text-tinta-suave transition-all"
                     >
                         <svg className="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
@@ -1251,7 +1251,7 @@ const App: React.FC = () => {
                     </button>
                     <button
                         onClick={handleLogout}
-                        className="w-full flex items-center text-left px-4 py-2.5 text-xs font-semibold rounded-xl text-gray-400 hover:bg-red-50 hover:text-red-600 transition-all"
+                        className="w-full flex items-center text-left px-4 py-2.5 text-xs font-semibold rounded-xl text-tinta-tenue hover:bg-alerta-suave hover:text-alerta transition-all"
                     >
                         <svg className="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
@@ -1272,7 +1272,9 @@ const App: React.FC = () => {
                     syncStatus={syncStatus}
                     onOpenSearch={() => { setSearchOpen(true); addBehaviorLog('BUTTON', 'Abrió búsqueda global'); }}
                 />
-                <main className="flex-1 p-4 md:p-6 overflow-y-auto bg-gray-50">
+                {/* En el celular, 16px de margen por lado son 32px que no se ven
+                    y un renglón menos de contenido. */}
+                <main className="flex-1 p-2 md:p-6 overflow-y-auto bg-papel-hondo">
                     <div className="max-w-7xl mx-auto">
                         {effectiveView === 'dashboard' && (
                             <Dashboard
@@ -1491,11 +1493,11 @@ const PickupNavIcon: React.FC<{ className?: string }> = ({ className }) => (
 );
 
 const NavItem: React.FC<{ icon: React.ElementType, label: string, onClick: () => void, isActive: boolean, badge?: number }> = ({ icon: Icon, label, onClick, isActive, badge }) => (
-    <button onClick={onClick} className={`w-full flex items-center text-left px-4 py-3 text-sm font-semibold rounded-xl transition-all duration-200 ${isActive ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'}`}>
-        <Icon className={`w-5 h-5 mr-3 ${isActive ? 'text-white' : 'text-gray-400'}`} />
+    <button onClick={onClick} className={`w-full flex items-center text-left px-4 py-3 text-sm font-semibold rounded-xl transition-all duration-200 ${isActive ? 'bg-marca text-tinta shadow-lg' : 'text-tinta-tenue hover:bg-papel-hondo hover:text-tinta'}`}>
+        <Icon className={`w-5 h-5 mr-3 ${isActive ? 'text-tinta' : 'text-tinta-tenue'}`} />
         <span className="flex-1">{label}</span>
         {badge != null && badge > 0 && (
-            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${isActive ? 'bg-white text-blue-600' : 'bg-orange-500 text-white'}`}>
+            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${isActive ? 'bg-papel text-marca-oscuro' : 'bg-atencion text-papel'}`}>
                 {badge}
             </span>
         )}
@@ -1503,7 +1505,7 @@ const NavItem: React.FC<{ icon: React.ElementType, label: string, onClick: () =>
 );
 
 const NavHeader: React.FC<{ label: string }> = ({ label }) => (
-    <h3 className="px-5 pt-6 pb-2 text-[10px] font-black text-gray-400 uppercase tracking-widest">{label}</h3>
+    <h3 className="px-5 pt-6 pb-2 text-[10px] font-black text-tinta-tenue uppercase tracking-widest">{label}</h3>
 );
 
 export default App;
