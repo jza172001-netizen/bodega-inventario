@@ -51,7 +51,7 @@ export const HelpView: React.FC = () => (
 
             <div className="mt-3 space-y-4">
                 {/* Despacho */}
-                <div className="bg-tinta rounded-xl p-3 text-tinta">
+                <div className="bg-tinta rounded-xl p-3 text-papel">
                     <p className="font-black text-sm">🚀 Despacho — salidas grandes</p>
                     <p className="text-xs text-tinta-tenue mt-1">Para cuando vas a sacar varios ítems de distintos tipos a la vez. Sigue 4 pasos guiados:</p>
                     <div className="mt-2 space-y-1 text-xs text-tinta-tenue">
@@ -78,7 +78,7 @@ export const HelpView: React.FC = () => (
                 </div>
 
                 {/* Agregar */}
-                <div className="bg-bien rounded-xl p-3 text-tinta">
+                <div className="bg-bien rounded-xl p-3 text-papel">
                     <p className="font-black text-sm">➕ Agregar — añadir al inventario</p>
                     <p className="text-xs text-tinta mt-1">Para cuando llega mercancía o necesitas registrar ítems nuevos. No registra salidas — solo crea stock.</p>
                     <div className="mt-2 space-y-1 text-xs text-tinta">

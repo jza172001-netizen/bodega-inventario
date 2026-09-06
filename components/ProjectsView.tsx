@@ -3,6 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { Project, Movement, Item, UserRole, MovementType, Personnel, InventoryType } from '../types';
 import { PlusIcon } from './icons/PlusIcon';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
+import { PersonnelDetailModal } from './PersonnelDetailModal';
 import { TrashIcon } from './icons/TrashIcon';
 
 interface ProjectsViewProps {
@@ -15,6 +16,13 @@ interface ProjectsViewProps {
     onGoBack: () => void;
     userRole: UserRole;
     showEconomicValues?: boolean;
+    /** Los mismos de Personal: acá adentro la ficha y el histórico son los de siempre. */
+    onItemHistory?: (item: Item) => void;
+    onReturnLoan?: (movementId: string, condition?: string, notes?: string) => void;
+    onMarkPendingPickup?: (movementId: string, pending: boolean) => void;
+    onAssignProject?: (movementId: string, projectId: string) => void;
+    onCreateProject?: (name: string) => Project;
+    onTransferLoan?: (movementId: string, newPersonnelId: string) => void;
     onBehaviorLog?: (action: string, detail: string) => void;
 }
 
@@ -41,10 +49,36 @@ const ProjectDetail: React.FC<{
     movements: Movement[];
     items: Item[];
     personnel: Personnel[];
+    projects: Project[];
     onBack: () => void;
     showEconomicValues: boolean;
-}> = ({ project, movements, items, personnel, onBack, showEconomicValues }) => {
+    onItemHistory?: (item: Item) => void;
+    onReturnLoan?: (movementId: string, condition?: string, notes?: string) => void;
+    onMarkPendingPickup?: (movementId: string, pending: boolean) => void;
+    onAssignProject?: (movementId: string, projectId: string) => void;
+    onCreateProject?: (name: string) => Project;
+    onTransferLoan?: (movementId: string, newPersonnelId: string) => void;
+    onBehaviorLog?: (action: string, detail: string) => void;
+}> = ({ project, movements, items, personnel, projects, onBack, showEconomicValues,
+       onItemHistory, onReturnLoan, onMarkPendingPickup, onAssignProject, onCreateProject,
+       onTransferLoan, onBehaviorLog }) => {
     const [historyOpen, setHistoryOpen] = useState(false);
+    // Acá adentro no se podía tocar nada: los nombres eran texto muerto. Son los
+    // mismos datos que en Préstamos y en Personal, así que abren lo mismo.
+    const [fichaDe, setFichaDe] = useState<Personnel | null>(null);
+
+    /** El nombre del ítem, tocable: abre su histórico. */
+    const NombreDeItem: React.FC<{ item?: Item; texto?: string; className?: string }> = ({ item, texto, className = '' }) => {
+        const etiqueta = texto ?? item?.name ?? '—';
+        if (!item || !onItemHistory) return <span className={className}>{etiqueta}</span>;
+        return (
+            <button type="button"
+                onClick={() => { onBehaviorLog?.('BUTTON', `Ver historial desde Proyecto: ${item.name}`); onItemHistory(item); }}
+                className={`text-left hover:underline ${className}`}>
+                {etiqueta}
+            </button>
+        );
+    };
 
     const pMovements = useMemo(
         () => movements.filter(m => m.projectId === project.id).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
@@ -78,7 +112,7 @@ const ProjectDetail: React.FC<{
 
     // Consumables aggregated
     const consumablesUsed = useMemo(() => {
-        const map = new Map<string, { name: string; qty: number; unit: string; price: number }>();
+        const map = new Map<string, { itemId: string; name: string; qty: number; unit: string; price: number }>();
         pMovements
             .filter(m => m.type === MovementType.CHECK_OUT || m.type === MovementType.WASTE)
             .forEach(m => {
@@ -86,7 +120,7 @@ const ProjectDetail: React.FC<{
                 if (!it || !CONSUMABLE_TYPES.has(it.inventoryType)) return;
                 const existing = map.get(m.itemId);
                 if (existing) existing.qty += m.quantity;
-                else map.set(m.itemId, { name: it.name, qty: m.quantity, unit: it.unit, price: it.price ?? 0 });
+                else map.set(m.itemId, { itemId: m.itemId, name: it.name, qty: m.quantity, unit: it.unit, price: it.price ?? 0 });
             });
         return [...map.values()].sort((a, b) => b.qty - a.qty);
     }, [pMovements, itemMap]);
@@ -147,12 +181,15 @@ const ProjectDetail: React.FC<{
                         {workerSummary.map(({ id, person, activeLoans: al, returnedLoans, consumables }) => (
                             <div key={id} className="px-5 py-3">
                                 <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
+                                    <button type="button" disabled={!person}
+                                        onClick={() => { if (!person) return; onBehaviorLog?.('BUTTON', `Abrió ficha desde Proyecto: ${person.name}`); setFichaDe(person); }}
+                                        className="flex items-center gap-2 min-w-0 text-left disabled:cursor-default">
                                         <div className="w-8 h-8 rounded-xl bg-marca-suave text-marca-oscuro font-black text-sm flex items-center justify-center flex-shrink-0">
                                             {person?.name?.[0]?.toUpperCase() ?? '?'}
                                         </div>
-                                        <span className="font-bold text-sm text-tinta">{person?.name ?? 'Desconocido'}</span>
-                                    </div>
+                                        <span className="font-bold text-sm text-tinta truncate">{person?.name ?? 'Desconocido'}</span>
+                                        {person && <span className="text-tinta-tenue text-xs flex-shrink-0">›</span>}
+                                    </button>
                                     <div className="flex gap-2 text-[10px] font-bold">
                                         {al.length > 0 && <span className="bg-atencion-suave text-atencion px-2 py-0.5 rounded-full">{al.length} activo{al.length !== 1 ? 's' : ''}</span>}
                                         {returnedLoans.length > 0 && <span className="bg-papel-hondo text-tinta-tenue px-2 py-0.5 rounded-full">{returnedLoans.length} devuelto{returnedLoans.length !== 1 ? 's' : ''}</span>}
@@ -166,7 +203,7 @@ const ProjectDetail: React.FC<{
                                             return (
                                                 <p key={m.id} className="text-xs text-atencion font-semibold flex items-center gap-1">
                                                     <span className="w-1.5 h-1.5 rounded-full bg-atencion flex-shrink-0" />
-                                                    {it?.name ?? m.itemId} — desde {fmt(m.timestamp)}
+                                                    <NombreDeItem item={it} texto={`${it?.name ?? m.itemId} — desde ${fmt(m.timestamp)}`} />
                                                 </p>
                                             );
                                         })}
@@ -189,9 +226,15 @@ const ProjectDetail: React.FC<{
                             const days = Math.floor((Date.now() - new Date(m.timestamp).getTime()) / 86400000);
                             return (
                                 <div key={m.id} className="px-5 py-3 flex items-center justify-between">
-                                    <div>
-                                        <p className="font-bold text-sm text-tinta">{it?.name ?? '—'}</p>
-                                        {worker && <p className="text-xs text-tinta-tenue mt-0.5">Con {worker.name}</p>}
+                                    <div className="min-w-0">
+                                        <NombreDeItem item={it} className="font-bold text-sm text-tinta block truncate" />
+                                        {worker && (
+                                            <button type="button"
+                                                onClick={() => { onBehaviorLog?.('BUTTON', `Abrió ficha desde Proyecto: ${worker.name}`); setFichaDe(worker); }}
+                                                className="text-xs text-tinta-tenue mt-0.5 hover:text-marca-oscuro hover:underline">
+                                                Con {worker.name} ›
+                                            </button>
+                                        )}
                                     </div>
                                     <span className={`text-[10px] font-black px-2 py-1 rounded-full ${days > 7 ? 'bg-alerta-suave text-alerta' : 'bg-atencion-suave text-atencion'}`}>
                                         {days === 0 ? 'hoy' : `hace ${days}d`}
@@ -210,7 +253,7 @@ const ProjectDetail: React.FC<{
                     <div className="divide-y divide-papel-borde">
                         {consumablesUsed.map((c, i) => (
                             <div key={i} className="px-5 py-3 flex items-center justify-between">
-                                <span className="text-sm text-tinta font-semibold">{c.name}</span>
+                                <NombreDeItem item={itemMap.get(c.itemId)} texto={c.name} className="text-sm text-tinta font-semibold min-w-0 truncate" />
                                 <div className="text-right">
                                     <span className="font-black text-tinta text-sm">{c.qty} <span className="font-normal text-xs text-tinta-tenue">{c.unit}</span></span>
                                     {showEconomicValues && c.price > 0 && (
@@ -252,9 +295,14 @@ const ProjectDetail: React.FC<{
                                     <div key={m.id} className="px-5 py-2.5 flex items-center gap-3">
                                         <span className="text-[10px] font-bold text-tinta-tenue w-14 flex-shrink-0">{fmt(m.timestamp)}</span>
                                         <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full flex-shrink-0 ${color}`}>{label}</span>
-                                        <span className="text-sm text-tinta font-semibold truncate flex-1">{it?.name ?? '—'}</span>
+                                        <NombreDeItem item={it} className="text-sm text-tinta font-semibold truncate flex-1" />
                                         <span className="text-xs text-tinta-tenue flex-shrink-0">{m.quantity} {it?.unit ?? ''}</span>
-                                        {worker && <span className="text-xs text-tinta-tenue truncate hidden sm:block">{worker.name}</span>}
+                                        {worker && (
+                                            <button type="button" onClick={() => setFichaDe(worker)}
+                                                className="text-xs text-tinta-tenue truncate hidden sm:block hover:text-marca-oscuro hover:underline">
+                                                {worker.name}
+                                            </button>
+                                        )}
                                     </div>
                                 );
                             })}
@@ -268,13 +316,32 @@ const ProjectDetail: React.FC<{
                     Sin movimientos registrados para este proyecto aún.
                 </div>
             )}
+
+            {/* La misma ficha de Personal: devolver, marcar a recoger, pasar la
+                herramienta a otro. No hay una segunda versión de nada. */}
+            {fichaDe && (
+                <PersonnelDetailModal
+                    person={fichaDe}
+                    movements={movements}
+                    items={items}
+                    projects={projects}
+                    allPersonnel={personnel}
+                    onReturnLoan={onReturnLoan}
+                    onMarkPendingPickup={onMarkPendingPickup}
+                    onAssignProject={onAssignProject}
+                    onCreateProject={onCreateProject}
+                    onTransferLoan={onTransferLoan}
+                    onClose={() => setFichaDe(null)}
+                />
+            )}
         </div>
     );
 };
 
 // ── Projects list ─────────────────────────────────────────────────────────────
 export const ProjectsView: React.FC<ProjectsViewProps> = ({
-    projects, movements, items, personnel, onAddProject, onDeleteProject, onGoBack, userRole, showEconomicValues = false, onBehaviorLog,
+    projects, movements, items, personnel, onAddProject, onDeleteProject, onGoBack, userRole, showEconomicValues = false,
+    onItemHistory, onReturnLoan, onMarkPendingPickup, onAssignProject, onCreateProject, onTransferLoan, onBehaviorLog,
 }) => {
     const [isAdding, setIsAdding] = useState(false);
     const [newProjectName, setNewProjectName] = useState('');
@@ -317,8 +384,16 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                 movements={movements}
                 items={items}
                 personnel={personnel}
+                projects={projects}
                 onBack={() => setSelectedProjectId(null)}
                 showEconomicValues={showEconomicValues}
+                onItemHistory={onItemHistory}
+                onReturnLoan={onReturnLoan}
+                onMarkPendingPickup={onMarkPendingPickup}
+                onAssignProject={onAssignProject}
+                onCreateProject={onCreateProject}
+                onTransferLoan={onTransferLoan}
+                onBehaviorLog={onBehaviorLog}
             />
         );
     }
@@ -364,21 +439,24 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
             ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {projectStats.map(project => (
-                        <div key={project.id} className="bg-papel border border-papel-borde rounded-2xl p-5 hover:shadow-md transition-all cursor-pointer relative group">
-                            {onDeleteProject && userRole !== UserRole.VISITOR && (
-                                <button
-                                    onClick={e => { e.stopPropagation(); onBehaviorLog?.('ACTION', `Eliminó proyecto: ${project.name}`); onDeleteProject(project.id); }}
-                                    className="absolute top-3 right-3 p-1.5 text-tinta-tenue hover:text-alerta transition-all"
-                                >
-                                    <TrashIcon className="w-4 h-4" />
-                                </button>
-                            )}
+                        <div key={project.id} className="bg-papel border border-papel-borde rounded-2xl p-5 hover:shadow-md transition-all cursor-pointer group">
                             <div onClick={() => { onBehaviorLog?.('NAV', `Abrió proyecto: ${project.name}`); setSelectedProjectId(project.id); }}>
-                                <div className="flex items-start justify-between mb-3">
-                                    <h3 className="font-black text-base text-tinta uppercase leading-tight pr-6">{project.name}</h3>
+                                {/* La papelera va EN la fila, no flotando encima: estaba en
+                                    `absolute right-3`, que es exactamente donde cae la insignia
+                                    de «Activo», y las dos se montaban una sobre la otra. */}
+                                <div className="flex items-start gap-2 mb-3">
+                                    <h3 className="flex-1 min-w-0 font-black text-base text-tinta uppercase leading-tight">{project.name}</h3>
                                     <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full flex-shrink-0 ${project.status === 'active' ? 'bg-bien-suave text-bien' : 'bg-papel-hondo text-tinta-tenue'}`}>
                                         {project.status === 'active' ? 'Activo' : 'Terminado'}
                                     </span>
+                                    {onDeleteProject && userRole !== UserRole.VISITOR && (
+                                        <button
+                                            onClick={e => { e.stopPropagation(); onBehaviorLog?.('ACTION', `Eliminó proyecto: ${project.name}`); onDeleteProject(project.id); }}
+                                            className="flex-shrink-0 p-1 -mt-0.5 text-tinta-tenue hover:text-alerta transition-all"
+                                        >
+                                            <TrashIcon className="w-4 h-4" />
+                                        </button>
+                                    )}
                                 </div>
                                 {project.description && <p className="text-xs text-tinta-tenue mb-3 truncate">{project.description}</p>}
                                 <div className="grid grid-cols-2 gap-2 border-t border-papel-borde pt-3">

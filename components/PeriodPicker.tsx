@@ -80,7 +80,7 @@ export const PeriodPicker: React.FC<Props> = ({ value, onChange, onBehaviorLog }
                 <button type="button"
                     onClick={() => setPersonalizado(v => !v)}
                     className={`px-2.5 py-1 rounded-full text-[11px] font-black transition-all ${
-                        personalizado ? 'bg-tinta text-papel' : 'bg-papel text-tinta-suave border border-papel-borde hover:border-tinta-tenue'
+                        personalizado ? 'bg-tinta text-papel' : 'bg-papel text-papel border border-papel-borde hover:border-tinta-tenue'
                     }`}>
                     Fechas…
                 </button>

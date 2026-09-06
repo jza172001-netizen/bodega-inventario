@@ -31,14 +31,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onVisito
             </div>
             <button
                 onClick={onGetStarted}
-                className="px-5 py-2.5 bg-papel/20 hover:bg-papel/30 text-papel font-bold rounded-xl border border-papel/30 transition-all text-sm"
+                className="px-5 py-2.5 bg-papel/20 hover:bg-papel/30 text-tinta-tenue font-bold rounded-xl border border-papel/30 transition-all text-sm"
             >
                 Iniciar sesión
             </button>
         </header>
 
         <main className="flex-1 flex flex-col items-center justify-center px-6 py-12 text-center">
-            <div className="inline-flex items-center gap-2 bg-papel/10 text-papel text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-full border border-papel/20 mb-8">
+            <div className="inline-flex items-center gap-2 bg-papel/10 text-tinta-tenue text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-full border border-papel/20 mb-8">
                 <span className="w-2 h-2 bg-bien rounded-full animate-pulse" />
                 Sistema activo
             </div>
@@ -61,7 +61,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onVisito
                 </button>
                 <button
                     onClick={onVisitorLogin}
-                    className="px-8 py-4 bg-papel/15 hover:bg-papel/25 text-papel font-bold text-lg rounded-2xl border border-papel/30 transition-all duration-200 hover:scale-105 active:scale-95 min-w-[220px]"
+                    className="px-8 py-4 bg-papel/15 hover:bg-papel/25 text-tinta-tenue font-bold text-lg rounded-2xl border border-papel/30 transition-all duration-200 hover:scale-105 active:scale-95 min-w-[220px]"
                 >
                     👁 Ver como Visitante
                 </button>

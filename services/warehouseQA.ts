@@ -17,6 +17,7 @@
  */
 
 import { Item, InventoryType, Movement, MovementType, Personnel, Project, PurchaseOrder, PurchaseOrderStatus } from '../types';
+import { comoSeHace } from './comoSeHace';
 import { normStr } from '../utils/genus';
 import { rankMatches, scoreMatch } from '../utils/search';
 import { isAsset, isConsumable, getActiveLoans, daysSince } from '../utils/inventory';
@@ -410,6 +411,8 @@ const listaAyuda = (ctx: QAContext): string => {
     L.push('- Del día: qué falta, qué hay que recoger, qué préstamos están vencidos');
     L.push('- Del período: cuánto se consumió, últimos movimientos, mermas, órdenes de compra');
     L.push('');
+    L.push('Y también **cómo se hace cada cosa**: "¿cómo devuelvo una herramienta?", "¿cómo marco algo para recoger?", "¿cómo agrego un ítem?". El botón **?** de arriba tiene la lista completa.');
+    L.push('');
     L.push('No hace falta escribir bien: entiendo tildes, mayúsculas y errores de dedo.');
     return L.join('\n');
 };
@@ -692,6 +695,13 @@ export const answerQuestion = (message: string, ctx: QAContext): QAAnswer => {
         persona  ? { tipo: 'persona' as const,  score: persona.score }  : null,
         proyecto ? { tipo: 'proyecto' as const, score: proyecto.score } : null,
     ].filter(Boolean).sort((a, b) => b!.score - a!.score)[0];
+
+    // «¿Cómo devuelvo una herramienta?» es una pregunta de USO, no de datos.
+    // Va antes de resolver entidades porque si no, esa misma frase termina en la
+    // ficha de la herramienta que más se le parezca. La puerta la pone
+    // `comoSeHace`: solo entra lo que suena a cómo/dónde/para qué.
+    const guia = comoSeHace(message);
+    if (guia) return { text: guia.respuesta, suggestions: [] };
 
     // La ayuda va antes que la entidad: preguntar "¿qué puedes hacer?" no debe
     // terminar en la ficha de un ítem que se le parezca a alguna palabra.
