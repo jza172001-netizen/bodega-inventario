@@ -177,10 +177,38 @@ export const buildConsolidatedPickupText = (
         return `• ${l.itemName} x${l.qty} — con ${l.workerName}${proj}`;
     });
     return `📍 *Herramientas a recoger — Bodega Grupo Montecielo*\n\n` +
-        `Hola ${recipientName} 👋, estas herramientas están pendientes de recogida:\n\n` +
+        // Antes decía «estas herramientas están pendientes de recogida», y como la
+        // lista trae el nombre de QUIEN LAS TIENE, el mensaje se leía como un
+        // reclamo a quien lo recibía: «Hola Abel… Taladro x1 — con Ferney».
+        // El encargo tiene que decir que es un encargo.
+        `Hola ${recipientName} 👋, te encargamos recoger estas herramientas:\n\n` +
         `${lines.join('\n')}\n\n` +
         `Por favor pásalas a buscar cuando puedas. Gracias 🙏`;
 };
+
+/**
+ * El aviso a QUIEN TIENE la herramienta. Es el que faltaba: la vista de recogida
+ * solo sabía mandarle la lista completa de la bodega a un mensajero, así que
+ * marcar la herramienta de Ferney y avisarle a Abel se veía como un error de la
+ * app cuando en realidad no había forma de avisarle a Ferney.
+ */
+export const buildOwnPickupText = (
+    holderName: string,
+    loans: { itemName: string; qty: number; projectName?: string }[],
+): string => {
+    const lines = loans.map(l => `• ${l.itemName} x${l.qty}${l.projectName ? ` (${l.projectName})` : ''}`);
+    return `📍 *Devolución a bodega — Grupo Montecielo*\n\n` +
+        `Hola ${holderName} 👋, necesitamos de vuelta en bodega:\n\n` +
+        `${lines.join('\n')}\n\n` +
+        `Cuando puedas la traes o avisas dónde pasarla a buscar. Gracias 🙏`;
+};
+
+export const buildOwnPickupUrl = (
+    holderPhone: string,
+    holderName: string,
+    loans: { itemName: string; qty: number; projectName?: string }[],
+): string =>
+    `https://wa.me/${formatPhone(holderPhone)}?text=${encodeURIComponent(buildOwnPickupText(holderName, loans))}`;
 
 export const buildConsolidatedPickupUrl = (
     loans: { itemName: string; qty: number; workerName: string; projectName?: string }[],

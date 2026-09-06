@@ -6,7 +6,7 @@ import { EditIcon } from './icons/EditIcon';
 import { TrashIcon } from './icons/TrashIcon';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
 import { HistoryIcon } from './icons/HistoryIcon';
-import { getGenus, normStr, clusterGenera } from '../utils/genus';
+import { getGenus, normStr, clusterGenera, looseMatch } from '../utils/genus';
 
 interface InventoryViewProps {
     items: Item[];
@@ -48,16 +48,17 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, movements =
     const displayItems = useMemo(() => {
         const sorted = [...items].sort((a, b) => a.name.localeCompare(b.name, 'es'));
         if (!search.trim()) return sorted;
-        const q = normStr(search);
+        // `normStr(...).includes()` respeta las tildes pero no los errores de dedo:
+        // "amrtillo" no encontraba nada. Mismo criterio que el buscador general.
         return sorted.filter(i => {
-            if (normStr(i.name).includes(q)) return true;
-            if (normStr(getGenus(i.name)).includes(q)) return true;
-            if (normStr(i.subCategory).includes(q)) return true;
-            if (normStr(i.category).includes(q)) return true;
+            if (looseMatch(i.name, search)) return true;
+            if (looseMatch(getGenus(i.name), search)) return true;
+            if (looseMatch(i.subCategory, search)) return true;
+            if (looseMatch(i.category, search)) return true;
             const loan = activeLoans.find(m => m.itemId === i.id);
             if (loan?.personnelId) {
                 const name = personnel.find(p => p.id === loan.personnelId)?.name ?? '';
-                if (normStr(name).includes(q)) return true;
+                if (looseMatch(name, search)) return true;
             }
             return false;
         });

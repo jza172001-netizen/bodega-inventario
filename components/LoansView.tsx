@@ -4,7 +4,7 @@ import { Movement, Item, Personnel, UserRole, InventoryType, ReturnCondition } f
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
 import { ClockIcon } from './icons/ClockIcon';
 import { ReturnToolModal } from './ReturnToolModal';
-import { getGenus } from '../utils/genus';
+import { getGenus, looseMatch } from '../utils/genus';
 import { getActiveToolLoans, getConsumedMovements } from '../utils/inventory';
 
 /**
@@ -99,10 +99,13 @@ export const LoansView: React.FC<LoansViewProps> = ({
         let list = activeLoans;
         if (typeFilter) list = list.filter(m => itemMap.get(m.itemId)?.inventoryType === typeFilter);
         if (search.trim()) {
-            const q = search.toLowerCase();
+            // `.includes()` a secas no perdona nada: "hector" no encontraba a
+            // "Héctor" ni "amrtillo" al "Martillo". `looseMatch` es lo mismo que
+            // usa el buscador general —sin tildes y aguantando errores de dedo— y
+            // conserva el orden, así que el índice A-Z de la derecha sigue sirviendo.
             list = list.filter(m =>
-                getItemName(m.itemId).toLowerCase().includes(q) ||
-                getPersonName(m.personnelId).toLowerCase().includes(q)
+                looseMatch(getItemName(m.itemId), search) ||
+                looseMatch(getPersonName(m.personnelId), search)
             );
         }
         return list;
