@@ -3,7 +3,6 @@ import React, { useState, useEffect } from 'react';
 import { AddItemModal } from './components/AddItemModal';
 import { OrderListView } from './components/OrderListView';
 import { ReviewFamiliesView } from './components/ReviewFamiliesView';
-import { familiaDe as familiaDeNombre } from './utils/genus';
 import { EditItemModal } from './components/EditItemModal';
 import { Dashboard } from './components/Dashboard';
 import { Header } from './components/Header';
@@ -597,17 +596,9 @@ const App: React.FC = () => {
         : (userRole === UserRole.EMPLOYEE && !EMPLOYEE_VIEWS.includes(currentView))
             ? 'dashboard'
             : currentView;
-    // Cuántas agrupaciones faltan por confirmar: si no se ve, nadie entra a la
-    // pantalla y la bodega se queda con las suposiciones.
-    const familiasPorRevisar = (() => {
-        const cuenta = new Map<string, number>();
-        for (const i of items) {
-            if (i.familia?.trim()) continue;
-            const f = familiaDeNombre(i.name);
-            cuenta.set(f, (cuenta.get(f) ?? 0) + 1);
-        }
-        return [...cuenta.values()].filter(n => n >= 2).length;
-    })();
+    // Acá se contaban las agrupaciones por confirmar, para el número de "Agrupar
+    // ítems". Ese botón salió de la barra, así que el conteo —que recorría todos
+    // los ítems en cada render— ya no alimenta nada.
 
     const pendingPickupCount = movements.filter(m => m.isLoan && !m.isReturned && m.pendingPickup).length;
     const [isSidebarOpen, setSidebarOpen] = useState(true);
@@ -1214,20 +1205,22 @@ const App: React.FC = () => {
                             <>
                                 <NavItem icon={PersonnelIcon} label="Personal" onClick={() => selectView('personnel')} isActive={effectiveView === 'personnel'} />
                                 <NavItem icon={PickupNavIcon} label="A Recoger" onClick={() => selectView('pickup')} isActive={effectiveView === 'pickup'} badge={pendingPickupCount} />
+                                {/* Sin número: cuatro cosas anotadas para comprar no son
+                                    una alarma, son una libreta. El aviso naranja es el
+                                    mismo de "A Recoger", donde sí hay algo esperando. */}
                                 <NavItem
                                     icon={({ className }: { className?: string }) => <span className={className}>🧾</span>}
                                     label="Lista de pedidos"
                                     onClick={() => selectView('pedidos')}
                                     isActive={effectiveView === 'pedidos'}
-                                    badge={orderNotes.filter(n => !n.comprado).length}
                                 />
-                                <NavItem
-                                    icon={({ className }: { className?: string }) => <span className={className}>🗂️</span>}
-                                    label="Agrupar ítems"
-                                    onClick={() => selectView('familias')}
-                                    isActive={effectiveView === 'familias'}
-                                    badge={familiasPorRevisar}
-                                />
+                                {/* "Agrupar ítems" sale de la barra: de 77 ítems, 25 nunca
+                                    tuvieron familia confirmada y la separación no se usó ni
+                                    una vez — el árbol la deduce del nombre igual de bien, y
+                                    para un ítem suelto está el campo Familia al editarlo.
+                                    La pantalla NO se borra: la vista 'familias' y
+                                    ReviewFamiliesView siguen enteros, con su autocorrección.
+                                    Volver a enlazarla es poner acá el NavItem otra vez. */}
                             </>
                         )}
                         <NavItem

@@ -3,7 +3,7 @@ import React, { useMemo, useState } from 'react';
 import { Item, Movement, OrderNote, Personnel } from '../types';
 import { familiaDe, normStr } from '../utils/genus';
 import { construirArbol } from '../utils/arbol';
-import { tonoDe } from '../utils/colores';
+import { PALETA, raizDeColor, tonoDe } from '../utils/colores';
 import { unidadesCon } from '../utils/unidades';
 import { getConsumption } from '../utils/inventory';
 import { materialDe, medidaDe } from '../utils/medida';
@@ -39,9 +39,22 @@ export const OrderListView: React.FC<Props> = ({
     const [editando, setEditando] = useState<string | null>(null);
     const [borrador, setBorrador] = useState<{ texto: string; cantidad: string; unidad: string; color: string }>(
         { texto: '', cantidad: '', unidad: '', color: '' });
+    // El «+» abierto, con lo que se lleva escrito.
+    const [anadiendoColor, setAnadiendoColor] = useState(false);
+    const [colorNuevo, setColorNuevo] = useState('');
+
+    const ponerColor = (c: string) => {
+        const v = c.trim();
+        if (!v) return;
+        setBorrador(b => ({ ...b, color: v }));
+        setAnadiendoColor(false);
+        setColorNuevo('');
+    };
 
     const abrirEdicion = (n: OrderNote) => {
         setEditando(n.id);
+        setAnadiendoColor(false);
+        setColorNuevo('');
         setBorrador({
             texto: n.texto,
             cantidad: n.cantidad != null ? String(n.cantidad) : '',
@@ -173,10 +186,31 @@ export const OrderListView: React.FC<Props> = ({
                             // clavos, acero y hierro. Cuando la variante es un color de
                             // verdad, el chip va pintado de ese color.
                             const familia = (n.familia?.trim() || familiaDe(n.texto));
-                            const colores = construirArbol(
+                            const delArbol = construirArbol(
                                     items.filter(i => normStr(i.familia?.trim() || familiaDe(i.name)) === normStr(familia)))
-                                .flatMap(a => a.ramas.map(r => r.variante))
-                                .filter(v => v !== '—');
+                                .flatMap(a => a.ramas.map(r => r.variante));
+                            const deLaFamilia = (f?: string, texto = '') =>
+                                normStr(f?.trim() || familiaDe(texto)) === normStr(familia);
+                            // Lo que ya se pidió antes de esta misma familia cuenta como
+                            // opción, aunque en la bodega no exista todavía. Una lista de
+                            // pedidos es justamente para lo que NO hay: escribir "blanco"
+                            // una vez lo deja de chip para la próxima. Sale gratis — las
+                            // notas ya guardan color y familia, no hay nada que guardar.
+                            const yaPedidos = notes
+                                .filter(o => o.id !== n.id && o.color?.trim() && deLaFamilia(o.familia, o.texto))
+                                .map(o => o.color!.trim());
+                            const colores: string[] = [];
+                            const vistos = new Set<string>();
+                            for (const v of [...delArbol, ...yaPedidos, borrador.color.trim()]) {
+                                if (!v || v === '—') continue;
+                                const raiz = raizDeColor(v);
+                                if (vistos.has(raiz)) continue;   // "Blanca" y "Blanco" son uno solo
+                                vistos.add(raiz);
+                                colores.push(v);
+                            }
+                            // Los de la paleta que esta familia todavía no tiene: para
+                            // escoger "Blanco" sin escribirlo, y ya pintado.
+                            const restoDeLaPaleta = PALETA.filter(c => !vistos.has(raizDeColor(c)));
                             return (
                                 <div key={n.id} className="px-3 py-2.5 border-b border-gray-50 last:border-0 bg-blue-50/40 space-y-2">
                                     <input type="text" value={borrador.texto} autoFocus
@@ -194,22 +228,63 @@ export const OrderListView: React.FC<Props> = ({
                                             {unidadesCon(borrador.unidad).map(u => <option key={u} value={u}>{u}</option>)}
                                         </select>
                                     </div>
-                                    {colores.length > 0 && (
-                                        <div className="flex flex-wrap gap-1 items-center">
-                                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider mr-0.5">¿Cuál?</span>
-                                            {colores.map(c => {
-                                                const puesto = borrador.color.toLowerCase() === c.toLowerCase();
-                                                return (
-                                                    <button key={c} type="button"
-                                                        onClick={() => setBorrador(b => ({ ...b, color: puesto ? '' : c }))}
-                                                        className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold border transition-all ${
-                                                            puesto ? 'border-blue-500 bg-white text-blue-700' : 'border-gray-200 bg-white text-gray-600 hover:border-blue-300'}`}>
-                                                        {tonoDe(c) && <span className="w-2.5 h-2.5 rounded-full border border-black/10"
-                                                            style={{ backgroundColor: tonoDe(c)! }} />}
-                                                        {c}
-                                                    </button>
-                                                );
-                                            })}
+                                    {/* La fila va SIEMPRE, aunque la familia no tenga ni una
+                                        variante: si no, para la Estopa no había dónde poner
+                                        nada. Y el «+» va de primero, a la izquierda. */}
+                                    <div className="flex flex-wrap gap-1 items-center">
+                                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider mr-0.5">¿Cuál?</span>
+                                        <button type="button"
+                                            onClick={() => { setAnadiendoColor(a => !a); setColorNuevo(''); }}
+                                            title="Añadir un color que no está"
+                                            className={`w-6 h-6 flex items-center justify-center rounded-full border text-sm font-black leading-none transition-all ${
+                                                anadiendoColor ? 'border-blue-500 bg-blue-600 text-white' : 'border-gray-300 bg-white text-gray-500 hover:border-blue-400 hover:text-blue-600'}`}>
+                                            +
+                                        </button>
+                                        {colores.map(c => {
+                                            const puesto = raizDeColor(borrador.color) === raizDeColor(c);
+                                            return (
+                                                <button key={c} type="button"
+                                                    onClick={() => setBorrador(b => ({ ...b, color: puesto ? '' : c }))}
+                                                    className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold border transition-all ${
+                                                        puesto ? 'border-blue-500 bg-white text-blue-700' : 'border-gray-200 bg-white text-gray-600 hover:border-blue-300'}`}>
+                                                    {tonoDe(c) && <span className="w-2.5 h-2.5 rounded-full border border-black/10"
+                                                        style={{ backgroundColor: tonoDe(c)! }} />}
+                                                    {c}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+
+                                    {anadiendoColor && (
+                                        <div className="rounded-xl border border-dashed border-blue-300 bg-white p-2 space-y-2">
+                                            <div className="flex gap-1.5">
+                                                <input type="text" value={colorNuevo} autoFocus
+                                                    placeholder="Escribe el color (ej: blanco)"
+                                                    onChange={e => setColorNuevo(e.target.value)}
+                                                    onKeyDown={e => {
+                                                        if (e.key === 'Enter') { e.preventDefault(); ponerColor(colorNuevo); }
+                                                        if (e.key === 'Escape') { setAnadiendoColor(false); setColorNuevo(''); }
+                                                    }}
+                                                    className="flex-1 min-w-0 text-sm border border-gray-200 rounded-xl px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                                                <button type="button" onClick={() => ponerColor(colorNuevo)}
+                                                    disabled={!colorNuevo.trim()}
+                                                    className="px-3 py-1.5 text-xs font-black bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white rounded-xl flex-shrink-0">
+                                                    Poner
+                                                </button>
+                                            </div>
+                                            {/* O tocar uno de los que la app ya sabe pintar, sin escribirlo. */}
+                                            {restoDeLaPaleta.length > 0 && (
+                                                <div className="flex flex-wrap gap-1">
+                                                    {restoDeLaPaleta.map(c => (
+                                                        <button key={c} type="button" onClick={() => ponerColor(c)}
+                                                            className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold border border-gray-200 bg-white text-gray-600 hover:border-blue-400">
+                                                            <span className="w-2.5 h-2.5 rounded-full border border-black/10"
+                                                                style={{ backgroundColor: tonoDe(c)! }} />
+                                                            {c}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                     <div className="flex gap-2">
