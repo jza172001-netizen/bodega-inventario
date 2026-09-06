@@ -105,11 +105,15 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
                         const letter = p.name.charAt(0).toUpperCase();
                         const isFirst = !seenLetters.has(letter);
                         if (isFirst) seenLetters.add(letter);
-                        const activeLoans = movements.filter(m => m.personnelId === p.id && m.isLoan && !m.isReturned);
+                        const subWorkers = p.isTeamLeader ? personnel.filter(w => w.teamLeaderId === p.id) : [];
+                        // Un oficial no saca herramienta: la saca su gente. Su tarjeta
+                        // decía siempre cero mientras su cuadrilla tenía media bodega
+                        // afuera — Alex, con Jhon jader y Rafael, mostraba 0.
+                        const enFoco = new Set([p.id, ...subWorkers.map(w => w.id)]);
+                        const activeLoans = movements.filter(m => m.personnelId && enFoco.has(m.personnelId) && m.isLoan && !m.isReturned);
                         const activeItems = activeLoans.map(m => items.find(i => i.id === m.itemId)).filter(Boolean) as Item[];
                         const visibleChips = activeItems.slice(0, 3);
                         const extra = activeItems.length - visibleChips.length;
-                        const subWorkers = p.isTeamLeader ? personnel.filter(w => w.teamLeaderId === p.id) : [];
 
                         return (
                             <div
@@ -161,8 +165,14 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
                                         <span className="text-[9px] font-bold bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-full">
                                             Oficial · {subWorkers.length} trabajador{subWorkers.length !== 1 ? 'es' : ''}
                                         </span>
+                                        {/* Clicables: desde el oficial se llega a la ficha
+                                            de cada uno de los suyos sin buscarlo en la lista. */}
                                         {subWorkers.slice(0, 2).map(w => (
-                                            <span key={w.id} className="text-[9px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full truncate max-w-[80px]">{w.name.split(' ')[0]}</span>
+                                            <button key={w.id} type="button"
+                                                onClick={e => { e.stopPropagation(); setDetailPerson(w); }}
+                                                className="text-[9px] bg-gray-100 hover:bg-indigo-100 text-gray-600 hover:text-indigo-700 px-1.5 py-0.5 rounded-full truncate max-w-[80px] transition-colors">
+                                                {w.name.split(' ')[0]}
+                                            </button>
                                         ))}
                                         {subWorkers.length > 2 && <span className="text-[9px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full">+{subWorkers.length - 2}</span>}
                                     </div>

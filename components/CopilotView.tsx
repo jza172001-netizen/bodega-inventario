@@ -184,7 +184,9 @@ const CopilotView: React.FC<CopilotViewProps> = ({
                 addBot(`✅ Proyecto **${p.name}** creado.`);
             } else if (creation.type === 'personnel') {
                 const leaders = personnel.filter(p => p.isTeamLeader);
-                const autoLeader = leaders.length === 1 ? leaders[0] : null;
+                // No se asigna cuadrilla sola. Con un solo oficial registrado, esto metía
+                // a TODO trabajador nuevo en su cuadrilla sin decírselo a nadie.
+                const autoLeader = null as Personnel | null;
                 const p = onCreatePersonnel({ name: creation.name, ...(autoLeader ? { teamLeaderId: autoLeader.id } : {}) });
                 addBot(`✅ Trabajador **${p.name}** registrado.`);
             } else if (creation.type === 'item') {
@@ -285,7 +287,9 @@ const CopilotView: React.FC<CopilotViewProps> = ({
 
     const handleInlinePersonnelCreate = (msgId: string, name: string) => {
         const leaders = personnel.filter(p => p.isTeamLeader);
-        const autoLeader = leaders.length === 1 ? leaders[0] : null;
+        // No se asigna cuadrilla sola. Con un solo oficial registrado, esto metía
+                // a TODO trabajador nuevo en su cuadrilla sin decírselo a nadie.
+                const autoLeader = null as Personnel | null;
         const p = onCreatePersonnel({ name, ...(autoLeader ? { teamLeaderId: autoLeader.id } : {}) });
         setMessages(prev => prev.map(m => m.id === msgId && m.parsedExit ? { ...m, parsedExit: { ...m.parsedExit!, matchedPersonnel: p } } : m));
     };

@@ -446,7 +446,12 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         }
 
         const leaders = personnel.filter(p => p.isTeamLeader);
-        const autoLeader = wizardData.teamLeaderWorker ?? (leaders.length === 1 ? leaders[0] : null);
+        // Antes, con UN solo oficial registrado, todo trabajador nuevo se le
+        // asignaba solo y en silencio: así Rafael quedó de cuadrilla de Alex sin
+        // que nadie lo decidiera, creado a las 08:11 en mitad de un despacho.
+        // Ahora la asignación automática solo ocurre si el despacho YA venía por
+        // el camino de la cuadrilla; si no, se pregunta (ver `preguntarCuadrilla`).
+        const autoLeader = wizardData.teamLeaderWorker ?? null;
         const worker = wizardData.worker
             ?? (wizardData.newWorkerName.trim()
                 ? onCreatePersonnel({ name: wizardData.newWorkerName.trim(), ...(autoLeader ? { teamLeaderId: autoLeader.id } : {}) })
