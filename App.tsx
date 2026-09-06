@@ -34,6 +34,7 @@ import { InvoiceReaderModal } from './components/InvoiceReaderModal';
 import { MultiUserConfirmModal } from './components/MultiUserConfirmModal';
 import { saveToLocalStorage, loadFromLocalStorage, loadInitialData, exportToFile, importFromFile } from './storage';
 import * as db from './services/supabaseService';
+import { supabase } from './lib/supabase';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { sha256Hex } from './utils/hash';
 
@@ -471,9 +472,33 @@ const App: React.FC = () => {
         const alVolver = () => { if (document.visibilityState === 'visible') sincronizar(); };
         document.addEventListener('visibilitychange', alVolver);
         window.addEventListener('online', sincronizar);
+
+        // Y en vivo: Supabase avisa cuando algo cambia y se dispara la MISMA
+        // sincronización. El tiempo real es solo el aviso — quién gana lo sigue
+        // decidiendo el merge de siempre. Meter una segunda vía de datos, que
+        // aplicara el cambio directo al estado, sería otra forma de que los dos
+        // teléfonos terminen distintos, que es justo lo que se acaba de arreglar.
+        //
+        // Con espera: al marcar una devolución caen varios eventos seguidos
+        // (movimiento + stock del ítem) y no vale la pena bajar todo por cada uno.
+        let esperando: ReturnType<typeof setTimeout> | null = null;
+        const avisoDeCambio = () => {
+            if (esperando) clearTimeout(esperando);
+            esperando = setTimeout(() => { esperando = null; sincronizar(); }, 500);
+        };
+        const canal = supabase
+            .channel('bodega-en-vivo')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'movements' }, avisoDeCambio)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'items' }, avisoDeCambio)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'personnel' }, avisoDeCambio)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, avisoDeCambio)
+            .subscribe();
+
         return () => {
             document.removeEventListener('visibilitychange', alVolver);
             window.removeEventListener('online', sincronizar);
+            if (esperando) clearTimeout(esperando);
+            supabase.removeChannel(canal);
         };
     }, []);
 
@@ -483,7 +508,16 @@ const App: React.FC = () => {
      * tiene copia local que pueda contradecirla.
      */
     const [orderNotes, setOrderNotes] = useState<OrderNote[]>([]);
-    useEffect(() => { db.fetchOrderList().then(setOrderNotes).catch(e => console.error('[Supabase] pedidos:', e)); }, []);
+    useEffect(() => {
+        const traer = () => db.fetchOrderList().then(setOrderNotes).catch(e => console.error('[Supabase] pedidos:', e));
+        traer();
+        // También en vivo: si el otro teléfono anota algo para comprar, aparece acá.
+        const canal = supabase
+            .channel('pedidos-en-vivo')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'order_list' }, () => { traer(); })
+            .subscribe();
+        return () => { supabase.removeChannel(canal); };
+    }, []);
 
     const handleAddOrderNote = (texto: string, cantidad?: number, unidad?: string, familia?: string) => {
         const nota: OrderNote = { id: crypto.randomUUID(), texto, cantidad, unidad, familia, comprado: false, createdAt: new Date(), updatedAt: new Date() };
