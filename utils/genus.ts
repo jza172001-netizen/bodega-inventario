@@ -62,11 +62,21 @@ export const editDistance = (a: string, b: string): number => {
     return dp[a.length][b.length];
 };
 
+/**
+ * ¿Estas dos familias son la misma? La agrupación del inventario se apoya acá.
+ *
+ * Usa la regla del buscador universal, igual que `esParecido`: una sola forma de
+ * decidir si dos palabras son la misma en toda la app. Antes tenía su propia
+ * copia con margen de una letra, y por eso el inventario mostraba "Extension" y
+ * "Extensiones" como dos familias, y no habría juntado nunca un "Peludora".
+ *
+ * `looseMatch` está definido más abajo; en tiempo de ejecución ya existe cuando
+ * esto se llama, porque solo corre al agrupar.
+ */
 export const sameGenus = (a: string, b: string): boolean => {
     const na = normStr(a), nb = normStr(b);
     if (na === nb) return true;
-    if (Math.abs(na.length - nb.length) > 2) return false;
-    return editDistance(na, nb) === 1;
+    return looseMatch(na, nb) || looseMatch(nb, na);
 };
 
 /**
@@ -135,16 +145,19 @@ export const esParecido = (nombre: string, otro: Item, familiaConfirmada?: strin
     const a = normStr(fa), b = normStr(fb);
     if (!a || !b) return false;
     if (a === b) return true;
-    // Un error de dedo en la primera palabra: "Palustre" vs "Palustra".
+    // Una sola regla de parecido en toda la app, y es la del buscador universal.
     //
-    // El margen crece con la palabra. Con uno fijo de 1, el error que él tuvo de
-    // verdad —"Peludora" por "Pulidora"— no se pillaba: son DOS letras cambiadas
-    // (e→u, u→i). Y en una palabra de ocho letras, dos cambios siguen siendo un
-    // dedazo; en una de cuatro, ya son otra palabra ("pala" y "pila").
-    // Probado contra las 40 familias de la bodega: el único par nuevo que junta
-    // es "extension" con "extensiones", que en efecto son lo mismo.
-    const margen = Math.max(a.length, b.length) >= 7 ? 2 : 1;
-    return Math.abs(a.length - b.length) <= 2 && editDistance(a, b) <= margen;
+    // Acá había una copia: distancia de edición ≤ 1. Con ese margen fijo, el
+    // error que Juli tuvo de verdad —"Peludora" por "Pulidora"— no se pillaba,
+    // porque son DOS letras cambiadas (e→u, u→i). `looseMatch` ya resolvía
+    // exactamente eso ("una palabra corta admite un error; una larga, dos"), así
+    // que lo que se buscaba escribiendo se junta también al agrupar. Si mañana
+    // se afina el buscador, la autocorrección se afina con él.
+    //
+    // Probado contra las 40 familias de la bodega: el único par que junta de más
+    // es "extension" con "extensiones", que en efecto son lo mismo. Y sigue
+    // separando lo que debe: "pala" de "palustre", "martillo" de "tornillo".
+    return looseMatch(a, b) || looseMatch(b, a);
 };
 
 /**
