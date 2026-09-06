@@ -8,7 +8,7 @@ import { supabase } from '../lib/supabase';
 import {
     Item, Movement, Personnel, Project, PurchaseOrder,
     PurchaseOrderItem, AppUser, AuditLog, BehaviorLog, InventoryType, MovementType,
-    PurchaseOrderStatus, UserRole, ReturnCondition,
+    PurchaseOrderStatus, UserRole, ReturnCondition, OrderNote,
 } from '../types';
 
 // ─── HELPERS DE MAPEO ────────────────────────────────────────────────────────
@@ -723,5 +723,49 @@ export async function bulkUpsertBehaviorLogs(logs: BehaviorLog[]): Promise<void>
         detail: log.detail,
     }));
     const { error } = await supabase.from('behavior_logs').upsert(payload, { onConflict: 'id' });
+    if (error) throw error;
+}
+
+
+// ─── LISTA DE PEDIDOS ────────────────────────────────────────────────────────
+
+function dbToOrderNote(row: Record<string, unknown>): OrderNote {
+    return {
+        id: row.id as string,
+        texto: row.texto as string,
+        cantidad: row.cantidad != null ? Number(row.cantidad) : undefined,
+        unidad: (row.unidad as string | null) ?? undefined,
+        familia: (row.familia as string | null) ?? undefined,
+        comprado: !!row.comprado,
+        createdAt: new Date(row.created_at as string),
+        updatedAt: row.updated_at ? new Date(row.updated_at as string) : undefined,
+    };
+}
+
+export async function fetchOrderList(): Promise<OrderNote[]> {
+    const { data, error } = await supabase.from('order_list').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map(dbToOrderNote);
+}
+
+export async function addOrderNote(n: Omit<OrderNote, 'id'>, id: string): Promise<void> {
+    const { error } = await supabase.from('order_list').insert({
+        id, texto: n.texto, cantidad: n.cantidad ?? null, unidad: n.unidad ?? null,
+        familia: n.familia ?? null, comprado: n.comprado,
+        created_at: sello(n.createdAt), updated_at: sello(n.updatedAt),
+    });
+    if (error) throw error;
+}
+
+export async function updateOrderNote(n: OrderNote): Promise<void> {
+    const { error } = await supabase.from('order_list').update({
+        texto: n.texto, cantidad: n.cantidad ?? null, unidad: n.unidad ?? null,
+        familia: n.familia ?? null, comprado: n.comprado, updated_at: sello(new Date()),
+    }).eq('id', n.id);
+    if (error) throw error;
+}
+
+export async function deleteOrderNote(id: string): Promise<void> {
+    const { error } = await supabase.from('order_list').delete().eq('id', id);
     if (error) throw error;
 }

@@ -167,3 +167,23 @@ export interface LoteResultado {
     total: number;
     rechazos: RechazoStock[];
 }
+
+/**
+ * Un renglón de la lista de pedidos: lo que hay que comprar.
+ *
+ * A propósito NO está atado al inventario. El bodeguero anota "3 bultos de
+ * lechada" mientras camina por la bodega, sin que eso mueva cantidades de nada
+ * ni exija que el ítem exista. Es una libreta, y una libreta no debe pedir
+ * permiso.
+ */
+export interface OrderNote {
+    id: string;
+    texto: string;
+    cantidad?: number;
+    unidad?: string;
+    /** De qué familia salió, cuando vino de una sugerencia de consumo. */
+    familia?: string;
+    comprado: boolean;
+    createdAt: Date;
+    updatedAt?: Date;
+}
