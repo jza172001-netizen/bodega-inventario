@@ -147,3 +147,75 @@ solos mientras hace los otros.
 
 Cuando estén corridos, **la app está lista para entregar** — y entregarla no es
 lo mismo que que no quede nada por hacer.
+
+---
+
+## 8. La lista de comprobación, tal como está la app hoy
+
+El plan viejo de 12 pasos se escribió antes de casi todo lo que se construyó
+después (el árbol de familias, el «+» de colores, los accesorios que se quitan,
+el aspecto Montecielo, el reporte nuevo, el cotejo, la ayuda en el chat, las
+lápidas). Se queda corto. Esta es la lista al día.
+
+### Bloque A — Que las cuentas no mientan
+
+Si algo de acá falla, **no se entrega**. Es plata.
+
+1. **Sacar por el formulario directo.** Despachá una herramienta y un
+   consumible. → La herramienta tiene que quedar como **préstamo** (aparece en
+   Préstamos) y el consumible como **gasto** (no aparece). El stock de los dos
+   baja.
+2. **Devolver en buen estado.** → El stock sube **+1** y sale de Préstamos.
+3. **Devolver dañada.** → Guarda el estado, y en **Trazabilidad** tiene que
+   decir **quién la tuvo**.
+4. **Borrar un movimiento** (una salida simple, no devuelta, que no sea carga
+   inicial). → El stock **vuelve**, y queda rastro del borrado en Trazabilidad.
+5. **Pedir más de lo que hay.** → Tiene que frenar, y el chat **no** puede
+   decir que registró nada.
+
+### Bloque B — Que no se pierda nada
+
+6. **Cerrar la app y volver a abrirla.** → Está todo.
+7. **Abrir en otro aparato** (u otra pestaña). → Lo que hacés en uno aparece en
+   el otro **en vivo**. Y lo importante: **algo borrado NO puede volver.** Ese
+   era el bug de las lápidas.
+
+### Bloque C — Lo que se construyó en este chat y nunca viste funcionando
+
+8. **El árbol.** Abrí *Clavos* → dos familias → adentro las pulgadas. Abrí
+   *Pulidora* → grande y pequeña → adentro color y marca.
+9. **Escribir mal a propósito** en el buscador: `pulidra`, `hektor`,
+   `amrtilo`. → Tiene que encontrarlos igual.
+10. **Lista de pedidos.** El **«+»** a la izquierda de los colores: agregá uno
+    que la bodega no tenga y comprobá que **queda para la próxima vez**.
+11. **Accesorios.** Enganchale uno a una herramienta y después **quitalo con
+    la ✕**. Antes se podía poner y nunca sacar.
+12. **A Recoger.** Marcá con «📍 Recoger» desde Préstamos **y desde el
+    Historial**, entrá a la pantalla, elegí el trabajador y comprobá que arma
+    el WhatsApp con la lista.
+13. **WhatsApp.** → Solo pueden salir **herramientas**, ninguna unidad
+    consumida. Y que no le mande dos veces al mismo.
+14. **Proyectos.** Entrá a un proyecto: tocá una **persona** (abre su ficha
+    completa) y un **ítem** (abre su histórico). Y en la lista, que la papelera
+    **no tape** el «Activo».
+15. **La ayuda.** El **«?»** a la izquierda de las sugerencias del chat →
+    salen las preguntas → tocá una → te responde ahí mismo.
+16. **El reporte DOCX** (al final del Resumen). → Corto, con **Inventario**
+    (manual y eléctrica) y **Consumos** (consumibles y EPP), en orden
+    alfabético.
+17. **El cotejo**, al final del Resumen. Mirá los hallazgos y tocá
+    **«✓ Ya lo revisé»** — que quede tu nombre en la bitácora, no el mío.
+
+### Bloque D — La prueba de verdad
+
+18. **Una mañana entera de trabajo real**, con el papel al lado como siempre.
+    Al final, cotejar papel contra pantalla. Es la única prueba que dice si la
+    app sirve en la bodega; las 17 de arriba solo dicen que no está rota.
+
+### Y aparte, dos cosas que no son pasos
+
+- Ponerle el teléfono a **Jhon jader** y a **Rafael** (son los dos únicos que
+  faltan, de 33).
+- Decidir qué hacer con que **Rafael y Jhon jader siguen en la cuadrilla de
+  Alex**: el modal deja marcar a alguien como oficial pero **no deja quitarle
+  el oficial a un trabajador**. O sirve así, o hay que agregar ese campo.
