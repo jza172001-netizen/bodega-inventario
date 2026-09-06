@@ -13,6 +13,20 @@ import {
 
 // ─── HELPERS DE MAPEO ────────────────────────────────────────────────────────
 
+/**
+ * La marca de "cuándo se tocó esto por última vez". Es lo único que permite
+ * decidir quién gana cuando el teléfono y la nube traen la misma fila distinta:
+ * sin ella había que elegir a ciegas un bando, y la app elegía uno distinto
+ * para ítems (ganaba la nube, borrando correcciones) que para movimientos
+ * (ganaba el teléfono, perdiendo lo marcado en el otro).
+ *
+ * Se manda explícita en vez de dejársela al trigger de Postgres porque una
+ * escritura hecha sin conexión se sincroniza después, y debe conservar la hora
+ * en que el bodeguero la hizo — no la hora en que por fin subió.
+ */
+const sello = (d?: Date): string =>
+    (d instanceof Date ? d : new Date()).toISOString();
+
 function dbToItem(row: Record<string, unknown>): Item {
     return {
         id: row.id as string,
@@ -29,6 +43,7 @@ function dbToItem(row: Record<string, unknown>): Item {
         requiresReturnNote: row.requires_return_note as boolean | undefined,
         accessories: Array.isArray(row.accessories) ? (row.accessories as import('../types').Accessory[]) : [],
         familia: (row.familia as string | null) ?? undefined,
+        updatedAt: row.updated_at ? new Date(row.updated_at as string) : undefined,
     };
 }
 
@@ -47,6 +62,7 @@ function itemToDb(item: Omit<Item, 'id'>): Record<string, unknown> {
         requires_return_note: item.requiresReturnNote ?? false,
         accessories: item.accessories ?? [],
         familia: item.familia ?? null,
+        updated_at: sello(item.updatedAt),
     };
 }
 
@@ -66,6 +82,7 @@ function dbToMovement(row: Record<string, unknown>): Movement {
         returnCondition: row.return_condition as ReturnCondition | undefined,
         returnNotes: row.return_notes as string | undefined,
         returnedAt: row.returned_at ? new Date(row.returned_at as string) : undefined,
+        updatedAt: row.updated_at ? new Date(row.updated_at as string) : undefined,
     };
 }
 
@@ -84,6 +101,7 @@ function movementToDb(m: Omit<Movement, 'id'>): Record<string, unknown> {
         return_condition: m.returnCondition ?? null,
         return_notes: m.returnNotes ?? null,
         returned_at: m.returnedAt instanceof Date ? m.returnedAt.toISOString() : (m.returnedAt ?? null),
+        updated_at: sello(m.updatedAt),
     };
 }
 
@@ -305,6 +323,7 @@ export async function fetchPersonnel(): Promise<Personnel[]> {
         phone: r.phone as string | undefined,
         isTeamLeader: (r.is_team_leader as boolean) || undefined,
         teamLeaderId: r.team_leader_id as string | undefined,
+        updatedAt: r.updated_at ? new Date(r.updated_at as string) : undefined,
     }));
 }
 
@@ -313,6 +332,7 @@ export async function addPersonnel(p: Omit<Personnel, 'id'>, id?: string): Promi
         name: p.name, phone: p.phone ?? null,
         is_team_leader: p.isTeamLeader ?? false,
         team_leader_id: p.teamLeaderId ?? null,
+        updated_at: sello(p.updatedAt),
     };
     if (id) payload.id = id;
     const { data, error } = await supabase
@@ -544,6 +564,7 @@ export async function bulkUpsertPersonnel(personnel: Personnel[]): Promise<void>
         phone: p.phone ?? null,
         is_team_leader: p.isTeamLeader ?? false,
         team_leader_id: p.teamLeaderId ?? null,
+        updated_at: sello(p.updatedAt),
     }));
     const { error } = await supabase.from('personnel').upsert(payload, { onConflict: 'id' });
     if (error) throw error;

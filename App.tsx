@@ -193,206 +193,258 @@ const App: React.FC = () => {
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Sync desde Supabase al montar — migra localStorage → Supabase y hace merge
+    /** Dos sincronizaciones corriendo a la vez se pisan entre ellas. */
+    const sincronizando = React.useRef(false);
+
     useEffect(() => {
-        const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        const local = loadFromLocalStorage();
-        const localItems     = local?.items      ?? [];
-        const localMovements = local?.movements  ?? [];
-        const localProjects  = local?.projects   ?? [];
-        const localPersonnel = (local?.personnel ?? []).filter(p => p.name?.trim().length >= 4);
-        const localPOs       = local?.purchaseOrders ?? [];
-        const localAuditLogs = local?.auditLogs  ?? [];
-        const localBehaviorLogs = local?.behaviorLogs ?? [];
+        const sincronizar = () => {
+            if (sincronizando.current) return;
+            sincronizando.current = true;
+          const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          const local = loadFromLocalStorage();
+          const localItems     = local?.items      ?? [];
+          const localMovements = local?.movements  ?? [];
+          const localProjects  = local?.projects   ?? [];
+          const localPersonnel = (local?.personnel ?? []).filter(p => p.name?.trim().length >= 4);
+          const localPOs       = local?.purchaseOrders ?? [];
+          const localAuditLogs = local?.auditLogs  ?? [];
+          const localBehaviorLogs = local?.behaviorLogs ?? [];
 
-        // Los usuarios de Supabase siempre reemplazan la lista local (fuente de verdad
-        // del login), preservando el passwordHash guardado en este dispositivo para que
-        // el respaldo offline siga funcionando.
-        db.fetchUsers().then(data => {
-            if (data.length === 0) return;
-            setUsers(prev => migrateUsers(data).map(u => {
-                const known = prev.find(p => p.id === u.id)
-                    ?? prev.find(p => p.username && p.username === u.username);
-                return known?.passwordHash ? { ...u, passwordHash: known.passwordHash } : u;
-            }));
-        }).catch(e => console.error('[Supabase] users:', e));
+          // Los usuarios de Supabase siempre reemplazan la lista local (fuente de verdad
+          // del login), preservando el passwordHash guardado en este dispositivo para que
+          // el respaldo offline siga funcionando.
+          db.fetchUsers().then(data => {
+              if (data.length === 0) return;
+              setUsers(prev => migrateUsers(data).map(u => {
+                  const known = prev.find(p => p.id === u.id)
+                      ?? prev.find(p => p.username && p.username === u.username);
+                  return known?.passwordHash ? { ...u, passwordHash: known.passwordHash } : u;
+              }));
+          }).catch(e => console.error('[Supabase] users:', e));
 
-        Promise.all([
-            db.fetchItems().catch((): Item[] => []),
-            db.fetchMovements().catch((): Movement[] => []),
-            db.fetchProjects().catch((): Project[] => []),
-            db.fetchPersonnel().catch((): Personnel[] => []),
-            db.fetchPurchaseOrders().catch((): PurchaseOrder[] => []),
-            db.fetchAuditLogs().catch((): AuditLog[] => []),
-            db.fetchBehaviorLogs().catch((): BehaviorLog[] => []),
-        ]).then(([supaItems, supaMovements, supaProjectsRaw, supaPersonnelRaw, supaPOs, supaAuditLogs, supaBehaviorLogs]) => {
-            // Deduplicar personal y proyectos de Supabase por nombre (defensa contra duplicados en DB)
-            const seenPNames = new Set<string>();
-            const supaPersonnel = supaPersonnelRaw.filter(p => {
-                const key = p.name.trim().toLowerCase();
-                if (seenPNames.has(key)) return false;
-                seenPNames.add(key);
-                return true;
-            });
-            const seenProjNames = new Set<string>();
-            const supaProjects = supaProjectsRaw.filter(p => {
-                const key = p.name.trim().toLowerCase();
-                if (seenProjNames.has(key)) return false;
-                seenProjNames.add(key);
-                return true;
-            });
+          Promise.all([
+              db.fetchItems().catch((): Item[] => []),
+              db.fetchMovements().catch((): Movement[] => []),
+              db.fetchProjects().catch((): Project[] => []),
+              db.fetchPersonnel().catch((): Personnel[] => []),
+              db.fetchPurchaseOrders().catch((): PurchaseOrder[] => []),
+              db.fetchAuditLogs().catch((): AuditLog[] => []),
+              db.fetchBehaviorLogs().catch((): BehaviorLog[] => []),
+          ]).then(([supaItems, supaMovements, supaProjectsRaw, supaPersonnelRaw, supaPOs, supaAuditLogs, supaBehaviorLogs]) => {
+              // Deduplicar personal y proyectos de Supabase por nombre (defensa contra duplicados en DB)
+              const seenPNames = new Set<string>();
+              const supaPersonnel = supaPersonnelRaw.filter(p => {
+                  const key = p.name.trim().toLowerCase();
+                  if (seenPNames.has(key)) return false;
+                  seenPNames.add(key);
+                  return true;
+              });
+              const seenProjNames = new Set<string>();
+              const supaProjects = supaProjectsRaw.filter(p => {
+                  const key = p.name.trim().toLowerCase();
+                  if (seenProjNames.has(key)) return false;
+                  seenProjNames.add(key);
+                  return true;
+              });
 
-            const supaItemIds = new Set(supaItems.map(i => i.id));
-            const supaMovIds  = new Set(supaMovements.map(m => m.id));
-            const supaProjIds = new Set(supaProjects.map(p => p.id));
-            const supaPerIds  = new Set(supaPersonnel.map(p => p.id));
-            const supaPOIds   = new Set(supaPOs.map(o => o.id));
+              const supaItemIds = new Set(supaItems.map(i => i.id));
+              const supaMovIds  = new Set(supaMovements.map(m => m.id));
+              const supaProjIds = new Set(supaProjects.map(p => p.id));
+              const supaPerIds  = new Set(supaPersonnel.map(p => p.id));
+              const supaPOIds   = new Set(supaPOs.map(o => o.id));
 
-            // Reasignar UUIDs a entidades con IDs temporales (per-XXX, i-XXX, mov-XXX, p-XXX, po-XXX)
-            const itemRemap = new Map<string, string>();
-            const projRemap = new Map<string, string>();
-            const perRemap  = new Map<string, string>();
-            const movRemap  = new Map<string, string>();
+              // Reasignar UUIDs a entidades con IDs temporales (per-XXX, i-XXX, mov-XXX, p-XXX, po-XXX)
+              const itemRemap = new Map<string, string>();
+              const projRemap = new Map<string, string>();
+              const perRemap  = new Map<string, string>();
+              const movRemap  = new Map<string, string>();
 
-            const normItems = localItems.map(item => {
-                // Si ya tiene UUID válido (en Supabase o propio) → conservar tal cual
-                if (supaItemIds.has(item.id) || UUID_RE.test(item.id)) return item;
-                // ID temporal heredado (et-xxx, ht-xxx) → asignar UUID nuevo
-                const id = crypto.randomUUID();
-                itemRemap.set(item.id, id);
-                return { ...item, id };
-            });
+              const normItems = localItems.map(item => {
+                  // Si ya tiene UUID válido (en Supabase o propio) → conservar tal cual
+                  if (supaItemIds.has(item.id) || UUID_RE.test(item.id)) return item;
+                  // ID temporal heredado (et-xxx, ht-xxx) → asignar UUID nuevo
+                  const id = crypto.randomUUID();
+                  itemRemap.set(item.id, id);
+                  return { ...item, id };
+              });
 
-            const normProjects = localProjects.map(p => {
-                // Nombre primero: si Supabase ya tiene este proyecto por nombre, usar su ID
-                const supaMatch = supaProjects.find(sp => sp.name.trim().toLowerCase() === p.name.trim().toLowerCase());
-                if (supaMatch) {
-                    if (p.id !== supaMatch.id) projRemap.set(p.id, supaMatch.id);
-                    return supaMatch;
-                }
-                if (supaProjIds.has(p.id) || UUID_RE.test(p.id)) return p;
-                const id = crypto.randomUUID();
-                projRemap.set(p.id, id);
-                return { ...p, id };
-            });
+              const normProjects = localProjects.map(p => {
+                  // Nombre primero: si Supabase ya tiene este proyecto por nombre, usar su ID
+                  const supaMatch = supaProjects.find(sp => sp.name.trim().toLowerCase() === p.name.trim().toLowerCase());
+                  if (supaMatch) {
+                      if (p.id !== supaMatch.id) projRemap.set(p.id, supaMatch.id);
+                      return supaMatch;
+                  }
+                  if (supaProjIds.has(p.id) || UUID_RE.test(p.id)) return p;
+                  const id = crypto.randomUUID();
+                  projRemap.set(p.id, id);
+                  return { ...p, id };
+              });
 
-            const normPersonnel = localPersonnel.map(p => {
-                // Nombre primero: si Supabase ya tiene esta persona por nombre, usar su ID
-                const supaMatch = supaPersonnel.find(sp => sp.name.trim().toLowerCase() === p.name.trim().toLowerCase());
-                if (supaMatch) {
-                    if (p.id !== supaMatch.id) perRemap.set(p.id, supaMatch.id);
-                    return supaMatch;
-                }
-                if (supaPerIds.has(p.id) || UUID_RE.test(p.id)) return p;
-                const id = crypto.randomUUID();
-                perRemap.set(p.id, id);
-                return { ...p, id };
-            });
+              const normPersonnel = localPersonnel.map(p => {
+                  // Nombre primero: si Supabase ya tiene esta persona por nombre, usar su ID
+                  const supaMatch = supaPersonnel.find(sp => sp.name.trim().toLowerCase() === p.name.trim().toLowerCase());
+                  if (supaMatch) {
+                      if (p.id !== supaMatch.id) perRemap.set(p.id, supaMatch.id);
+                      return supaMatch;
+                  }
+                  if (supaPerIds.has(p.id) || UUID_RE.test(p.id)) return p;
+                  const id = crypto.randomUUID();
+                  perRemap.set(p.id, id);
+                  return { ...p, id };
+              });
 
-            const normPOs = localPOs.map(o => {
-                if (supaPOIds.has(o.id) || UUID_RE.test(o.id)) return o;
-                return { ...o, id: crypto.randomUUID() };
-            });
+              const normPOs = localPOs.map(o => {
+                  if (supaPOIds.has(o.id) || UUID_RE.test(o.id)) return o;
+                  return { ...o, id: crypto.randomUUID() };
+              });
 
-            // Aplicar remaps de items/projects/personnel a los movimientos, luego normalizar sus IDs
-            const normMovements = localMovements.map(m => {
-                const itemId      = m.itemId      ? (itemRemap.get(m.itemId)      ?? m.itemId)      : m.itemId;
-                const projectId   = m.projectId   ? (projRemap.get(m.projectId)   ?? m.projectId)   : m.projectId;
-                const personnelId = m.personnelId ? (perRemap.get(m.personnelId)  ?? m.personnelId) : m.personnelId;
-                const base = { ...m, itemId, projectId, personnelId };
-                if (supaMovIds.has(base.id) || UUID_RE.test(base.id)) return base;
-                const id = crypto.randomUUID();
-                movRemap.set(m.id, id);
-                return { ...base, id };
-            });
+              // Aplicar remaps de items/projects/personnel a los movimientos, luego normalizar sus IDs
+              const normMovements = localMovements.map(m => {
+                  const itemId      = m.itemId      ? (itemRemap.get(m.itemId)      ?? m.itemId)      : m.itemId;
+                  const projectId   = m.projectId   ? (projRemap.get(m.projectId)   ?? m.projectId)   : m.projectId;
+                  const personnelId = m.personnelId ? (perRemap.get(m.personnelId)  ?? m.personnelId) : m.personnelId;
+                  const base = { ...m, itemId, projectId, personnelId };
+                  if (supaMovIds.has(base.id) || UUID_RE.test(base.id)) return base;
+                  const id = crypto.randomUUID();
+                  movRemap.set(m.id, id);
+                  return { ...base, id };
+              });
 
-            // localStorage es fuente de verdad para existencia.
-            // Si está completamente vacío (primera instalación / localStorage borrado) → Supabase gana.
-            // Si tiene datos → localStorage gana: lo que no está en local fue eliminado por el usuario.
-            const localIsEmpty =
-                localItems.length === 0 &&
-                localPersonnel.length === 0 &&
-                localProjects.length === 0;
+              // localStorage es fuente de verdad para existencia.
+              // Si está completamente vacío (primera instalación / localStorage borrado) → Supabase gana.
+              // Si tiene datos → localStorage gana: lo que no está en local fue eliminado por el usuario.
+              const localIsEmpty =
+                  localItems.length === 0 &&
+                  localPersonnel.length === 0 &&
+                  localProjects.length === 0;
 
-            // Ítems: cuando Supabase está disponible es fuente de verdad para existencia.
-            // Esto evita que ítems eliminados en Supabase "resuciten" desde localStorage.
-            // Solo se agregan ítems locales con ID temporal (creados offline, nunca sincronizados).
-            // Si Supabase no responde (supaItems vacío por error), se conserva todo lo local.
-            const normItemIds = new Set(normItems.map(i => i.id));
-            const localNameTypeKeys = new Set(
-                normItems.map(i => `${i.name.trim().toLowerCase()}::${i.inventoryType}`)
-            );
-            const mergedItems: Item[] = localIsEmpty
-                ? supaItems
-                : supaItems.length > 0
-                    ? [
-                        ...supaItems,
-                        ...normItems.filter(i => !UUID_RE.test(i.id) && !supaItemIds.has(i.id)),
-                    ]
-                    : [
-                        ...normItems,
-                        ...supaItems.filter(i =>
-                            !normItemIds.has(i.id) &&
-                            !localNameTypeKeys.has(`${i.name.trim().toLowerCase()}::${i.inventoryType}`)
-                        ),
-                    ];
+              // Existencia y contenido son dos preguntas distintas, y confundirlas era
+              // la falla: la app resolvía "¿quién gana?" eligiendo un bando fijo, y
+              // elegía bandos OPUESTOS para ítems y para movimientos. Con los ítems
+              // ganaba siempre la nube, así que una corrección hecha en el teléfono se
+              // borraba sola al siguiente arranque. Con los movimientos ganaba siempre
+              // el teléfono, así que un "a recoger" marcado en el otro nunca llegaba.
+              //
+              // Existencia se sigue resolviendo como antes (cada entidad tiene su
+              // criterio, y hay que respetar los borrados). El contenido de una fila que
+              // está en los dos lados ahora lo decide la fecha: gana la más reciente.
+              const masReciente = <T extends { id: string; updatedAt?: Date }>(a: T, b?: T): T => {
+                  if (!b) return a;
+                  const ta = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+                  const tb = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+                  return tb > ta ? b : a;
+              };
 
-            // Movimientos: merge aditivo (registros inmutables — nunca se borran en startup)
-            const normMovIds = new Set(normMovements.map(m => m.id));
-            const mergedMovements: Movement[] = localIsEmpty
-                ? supaMovements
-                : [...normMovements, ...supaMovements.filter(m => !normMovIds.has(m.id))];
+              // Ítems: cuando Supabase está disponible es fuente de verdad para existencia.
+              // Esto evita que ítems eliminados en Supabase "resuciten" desde localStorage.
+              // Solo se agregan ítems locales con ID temporal (creados offline, nunca sincronizados).
+              // Si Supabase no responde (supaItems vacío por error), se conserva todo lo local.
+              const normItemIds = new Set(normItems.map(i => i.id));
+              const localItemById = new Map(normItems.map(i => [i.id, i]));
+              const supaItemById  = new Map(supaItems.map(i => [i.id, i]));
+              const localNameTypeKeys = new Set(
+                  normItems.map(i => `${i.name.trim().toLowerCase()}::${i.inventoryType}`)
+              );
+              const mergedItems: Item[] = localIsEmpty
+                  ? supaItems
+                  : supaItems.length > 0
+                      ? [
+                          // La nube manda sobre QUÉ ítems existen; la fecha manda sobre
+                          // CÓMO está cada uno. Así un ítem borrado sigue borrado y una
+                          // corrección recién hecha acá deja de perderse.
+                          ...supaItems.map(i => masReciente(i, localItemById.get(i.id))),
+                          ...normItems.filter(i => !UUID_RE.test(i.id) && !supaItemIds.has(i.id)),
+                      ]
+                      : [
+                          ...normItems,
+                          ...supaItems.filter(i =>
+                              !normItemIds.has(i.id) &&
+                              !localNameTypeKeys.has(`${i.name.trim().toLowerCase()}::${i.inventoryType}`)
+                          ),
+                      ];
 
-            // Proyectos, personal y OC: merge aditivo. Supabase es la fuente compartida
-            // entre dispositivos — un localStorage desactualizado NO debe borrar nada.
-            // Las eliminaciones solo ocurren por acción explícita del usuario (handlers).
-            const mergeById = <T extends { id: string }>(local: T[], remote: T[]): T[] => {
-                const localIds = new Set(local.map(x => x.id));
-                return [...local, ...remote.filter(x => !localIds.has(x.id))];
-            };
-            const mergedProjects:  Project[]       = localIsEmpty ? supaProjects  : mergeById(normProjects, supaProjects);
-            const mergedPersonnel: Personnel[]     = localIsEmpty ? supaPersonnel : mergeById(normPersonnel, supaPersonnel);
-            const mergedPOs:       PurchaseOrder[] = localIsEmpty ? supaPOs       : mergeById(normPOs, supaPOs);
+              // Movimientos: merge aditivo (ninguno de los dos lados borra al otro en el
+              // arranque), pero el contenido de los compartidos lo decide la fecha. Un
+              // movimiento no es inmutable: se marca a recoger, se devuelve, se traspasa.
+              const normMovIds = new Set(normMovements.map(m => m.id));
+              const supaMovById = new Map(supaMovements.map(m => [m.id, m]));
+              const mergedMovements: Movement[] = localIsEmpty
+                  ? supaMovements
+                  : [
+                      ...normMovements.map(m => masReciente(m, supaMovById.get(m.id))),
+                      ...supaMovements.filter(m => !normMovIds.has(m.id)),
+                  ];
 
-            // Audit logs: unir local + Supabase (acumulativo — nunca se borra)
-            const supaAuditIds = new Set(supaAuditLogs.map(a => a.id));
-            const mergedAuditLogs: AuditLog[] = [
-                ...localAuditLogs,
-                ...supaAuditLogs.filter(a => !localAuditLogs.some(l => l.id === a.id)),
-            ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+              // Proyectos, personal y OC: merge aditivo. Supabase es la fuente compartida
+              // entre dispositivos — un localStorage desactualizado NO debe borrar nada.
+              // Las eliminaciones solo ocurren por acción explícita del usuario (handlers).
+              const mergeById = <T extends { id: string }>(local: T[], remote: T[]): T[] => {
+                  const localIds = new Set(local.map(x => x.id));
+                  return [...local, ...remote.filter(x => !localIds.has(x.id))];
+              };
+              const supaPerById = new Map(supaPersonnel.map(p => [p.id, p]));
+              const mergedProjects:  Project[]       = localIsEmpty ? supaProjects  : mergeById(normProjects, supaProjects);
+              const mergedPersonnel: Personnel[]     = localIsEmpty
+                  ? supaPersonnel
+                  : mergeById(normPersonnel.map(p => masReciente(p, supaPerById.get(p.id))), supaPersonnel);
+              const mergedPOs:       PurchaseOrder[] = localIsEmpty ? supaPOs       : mergeById(normPOs, supaPOs);
 
-            // Behavior logs: mismo criterio acumulativo que la bitácora
-            const supaBehaviorIds = new Set(supaBehaviorLogs.map(b => b.id));
-            const mergedBehaviorLogs: BehaviorLog[] = [
-                ...localBehaviorLogs,
-                ...supaBehaviorLogs.filter(b => !localBehaviorLogs.some(l => l.id === b.id)),
-            ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+              // Audit logs: unir local + Supabase (acumulativo — nunca se borra)
+              const supaAuditIds = new Set(supaAuditLogs.map(a => a.id));
+              const mergedAuditLogs: AuditLog[] = [
+                  ...localAuditLogs,
+                  ...supaAuditLogs.filter(a => !localAuditLogs.some(l => l.id === a.id)),
+              ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
-            // Actualizar estado: siempre que haya datos o remapeos
-            if (mergedItems.length > 0     || itemRemap.size > 0)  setItems(mergedItems);
-            if (mergedMovements.length > 0 || movRemap.size > 0)   setMovements(mergedMovements);
-            if (mergedProjects.length > 0  || projRemap.size > 0)  setProjects(mergedProjects);
-            if (mergedPersonnel.length > 0 || perRemap.size > 0)   setPersonnel(mergedPersonnel);
-            if (mergedPOs.length > 0)                              setPurchaseOrders(mergedPOs);
-            if (mergedAuditLogs.length > 0)                        setAuditLogs(mergedAuditLogs);
-            if (mergedBehaviorLogs.length > 0)                     setBehaviorLogs(mergedBehaviorLogs);
+              // Behavior logs: mismo criterio acumulativo que la bitácora
+              const supaBehaviorIds = new Set(supaBehaviorLogs.map(b => b.id));
+              const mergedBehaviorLogs: BehaviorLog[] = [
+                  ...localBehaviorLogs,
+                  ...supaBehaviorLogs.filter(b => !localBehaviorLogs.some(l => l.id === b.id)),
+              ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
-            // Subir diferencias a Supabase en segundo plano (bulk upsert — idempotente)
-            const itemsToSync  = mergedItems.filter(i     => !supaItemIds.has(i.id));
-            const movsToSync   = mergedMovements.filter(m => !supaMovIds.has(m.id));
-            const projsToSync  = mergedProjects.filter(p  => !supaProjIds.has(p.id));
-            const perToSync    = mergedPersonnel.filter(p => !supaPerIds.has(p.id));
-            const posToSync    = mergedPOs.filter(o       => !supaPOIds.has(o.id));
-            const auditToSync  = localAuditLogs.filter(a  => !supaAuditIds.has(a.id));
-            const behaviorToSync = localBehaviorLogs.filter(b => !supaBehaviorIds.has(b.id));
+              // Actualizar estado: siempre que haya datos o remapeos
+              if (mergedItems.length > 0     || itemRemap.size > 0)  setItems(mergedItems);
+              if (mergedMovements.length > 0 || movRemap.size > 0)   setMovements(mergedMovements);
+              if (mergedProjects.length > 0  || projRemap.size > 0)  setProjects(mergedProjects);
+              if (mergedPersonnel.length > 0 || perRemap.size > 0)   setPersonnel(mergedPersonnel);
+              if (mergedPOs.length > 0)                              setPurchaseOrders(mergedPOs);
+              if (mergedAuditLogs.length > 0)                        setAuditLogs(mergedAuditLogs);
+              if (mergedBehaviorLogs.length > 0)                     setBehaviorLogs(mergedBehaviorLogs);
 
-            if (itemsToSync.length  > 0) db.bulkUpsertItems(itemsToSync).catch(e => console.error('[Supabase] items:', e));
-            if (movsToSync.length   > 0) db.bulkUpsertMovements(movsToSync).catch(e => console.error('[Supabase] movements:', e));
-            if (projsToSync.length  > 0) db.bulkUpsertProjects(projsToSync).catch(e => console.error('[Supabase] projects:', e));
-            if (perToSync.length    > 0) db.bulkUpsertPersonnel(perToSync).catch(e => console.error('[Supabase] personnel:', e));
-            if (posToSync.length    > 0) db.bulkUpsertPurchaseOrders(posToSync).catch(e => console.error('[Supabase] POs:', e));
-            if (auditToSync.length  > 0) db.bulkUpsertAuditLogs(auditToSync).catch(e => console.error('[Supabase] auditLogs:', e));
-            if (behaviorToSync.length > 0) db.bulkUpsertBehaviorLogs(behaviorToSync).catch(e => console.error('[Supabase] behaviorLogs:', e));
-        });
+              // Subir diferencias a Supabase en segundo plano (bulk upsert — idempotente)
+              const itemsToSync  = mergedItems.filter(i     => !supaItemIds.has(i.id));
+              const movsToSync   = mergedMovements.filter(m => !supaMovIds.has(m.id));
+              const projsToSync  = mergedProjects.filter(p  => !supaProjIds.has(p.id));
+              const perToSync    = mergedPersonnel.filter(p => !supaPerIds.has(p.id));
+              const posToSync    = mergedPOs.filter(o       => !supaPOIds.has(o.id));
+              const auditToSync  = localAuditLogs.filter(a  => !supaAuditIds.has(a.id));
+              const behaviorToSync = localBehaviorLogs.filter(b => !supaBehaviorIds.has(b.id));
+
+              if (itemsToSync.length  > 0) db.bulkUpsertItems(itemsToSync).catch(e => console.error('[Supabase] items:', e));
+              if (movsToSync.length   > 0) db.bulkUpsertMovements(movsToSync).catch(e => console.error('[Supabase] movements:', e));
+              if (projsToSync.length  > 0) db.bulkUpsertProjects(projsToSync).catch(e => console.error('[Supabase] projects:', e));
+              if (perToSync.length    > 0) db.bulkUpsertPersonnel(perToSync).catch(e => console.error('[Supabase] personnel:', e));
+              if (posToSync.length    > 0) db.bulkUpsertPurchaseOrders(posToSync).catch(e => console.error('[Supabase] POs:', e));
+              if (auditToSync.length  > 0) db.bulkUpsertAuditLogs(auditToSync).catch(e => console.error('[Supabase] auditLogs:', e));
+              if (behaviorToSync.length > 0) db.bulkUpsertBehaviorLogs(behaviorToSync).catch(e => console.error('[Supabase] behaviorLogs:', e));
+          }).finally(() => { sincronizando.current = false; });
+        };
+
+        sincronizar();
+
+        // Antes esto corría UNA sola vez, al abrir la app. Con dos teléfonos en la
+        // bodega eso quiere decir que lo que uno marca el otro no lo ve hasta cerrar
+        // y volver a abrir — y nadie cierra la app en mitad de un despacho. Ahora se
+        // vuelve a mirar al volver a la pestaña y al recuperar la señal.
+        const alVolver = () => { if (document.visibilityState === 'visible') sincronizar(); };
+        document.addEventListener('visibilitychange', alVolver);
+        window.addEventListener('online', sincronizar);
+        return () => {
+            document.removeEventListener('visibilitychange', alVolver);
+            window.removeEventListener('online', sincronizar);
+        };
     }, []);
 
     const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle');
@@ -634,8 +686,11 @@ const App: React.FC = () => {
         return newItem;
     };
 
-    const handleEditItem = (updated: Item) => {
-        const prev = items.find(i => i.id === updated.id);
+    const handleEditItem = (entrante: Item) => {
+        const prev = items.find(i => i.id === entrante.id);
+        // El sello es lo que hace que esta corrección le gane al dato viejo de la
+        // nube cuando la app vuelva a sincronizar. Sin él, se borraba sola.
+        const updated: Item = { ...entrante, updatedAt: new Date() };
         setItems(p => p.map(i => i.id === updated.id ? updated : i));
         withSync(db.updateItem(updated));
         if (prev?.name !== updated.name) {
@@ -740,7 +795,7 @@ const App: React.FC = () => {
         const personName = mov?.personnelId ? personnel.find(p => p.id === mov.personnelId)?.name : undefined;
 
         setMovements(prev => prev.map(m => m.id === id
-            ? { ...m, isReturned: true, pendingPickup: false, returnCondition: condition as import('./types').ReturnCondition | undefined, returnNotes: notes, returnedAt: new Date() }
+            ? { ...m, isReturned: true, pendingPickup: false, returnCondition: condition as import('./types').ReturnCondition | undefined, returnNotes: notes, returnedAt: new Date(), updatedAt: new Date() }
             : m));
 
         // La herramienta vuelve a la bodega: hay que reponer la unidad al inventario.
@@ -765,7 +820,7 @@ const App: React.FC = () => {
         const mov = movements.find(m => m.id === id);
         const itemName = mov ? items.find(i => i.id === mov.itemId)?.name ?? 'herramienta' : 'herramienta';
         const personName = mov?.personnelId ? personnel.find(p => p.id === mov.personnelId)?.name : undefined;
-        setMovements(prev => prev.map(m => m.id === id ? { ...m, pendingPickup: pending } : m));
+        setMovements(prev => prev.map(m => m.id === id ? { ...m, pendingPickup: pending, updatedAt: new Date() } : m));
         withSync(db.markMovementPendingPickup(id, pending));
         if (pending) {
             addAuditLog('PICKUP_MARKED', `Marcado a recoger: "${itemName}"${personName ? ` de ${personName}` : ''}`);
@@ -778,7 +833,7 @@ const App: React.FC = () => {
         const mov = movements.find(m => m.id === movementId);
         const itemName = mov ? items.find(i => i.id === mov.itemId)?.name ?? 'ítem' : 'ítem';
         const projName = projects.find(p => p.id === projectId)?.name ?? projectId;
-        setMovements(prev => prev.map(m => m.id === movementId ? { ...m, projectId } : m));
+        setMovements(prev => prev.map(m => m.id === movementId ? { ...m, projectId, updatedAt: new Date() } : m));
         withSync(db.updateMovementProject(movementId, projectId));
         addAuditLog('LOAN_PROJECT_ASSIGNED', `Asignó "${itemName}" al proyecto "${projName}"`);
     };
@@ -793,7 +848,7 @@ const App: React.FC = () => {
 
         requireConfirm(`¿Traspasar "${itemName}" de ${fromName} a ${toName}?`, () => {
             // Cierra el préstamo original sin tocar el stock (la herramienta no regresó a bodega)
-            setMovements(prev => prev.map(m => m.id === movementId ? { ...m, isReturned: true, pendingPickup: false } : m));
+            setMovements(prev => prev.map(m => m.id === movementId ? { ...m, isReturned: true, pendingPickup: false, updatedAt: new Date() } : m));
             withSync(db.markMovementReturned(movementId));
 
             // Crea nuevo préstamo al trabajador destino, sin ajustar cantidad de inventario
@@ -830,8 +885,9 @@ const App: React.FC = () => {
         return newP;
     };
 
-    const handleEditPersonnel = (p: Personnel) => {
-        const prev = personnel.find(pers => pers.id === p.id);
+    const handleEditPersonnel = (entrante: Personnel) => {
+        const prev = personnel.find(pers => pers.id === entrante.id);
+        const p: Personnel = { ...entrante, updatedAt: new Date() };
         setPersonnel(ps => ps.map(pers => pers.id === p.id ? p : pers));
         withSync(db.updatePersonnel(p));
         if (prev?.name !== p.name) {
