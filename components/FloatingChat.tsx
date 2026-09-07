@@ -585,8 +585,16 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     const nombreDelNuevo = (): string => {
         const esConsumible = wizardCreateType === InventoryType.PPE
                           || wizardCreateType === InventoryType.SINGLE_USE;
+        // Lo escrito en el «+» vale aunque no se haya tocado "Poner".
+        //
+        // Juli escribió 3" en la denominación y guardó sin confirmar: quedó
+        // "Clavos hierro", sin la pulgada. Escribir algo y que se pierda porque
+        // faltó un toque más es la app perdiendo trabajo del bodeguero, no el
+        // bodeguero equivocándose. Si hay texto pendiente, ese es el valor.
+        const genero = wizardGenero.trim() || (nuevoGenero ?? '').trim();
+        const denom  = wizardDenom.trim()  || (nuevaDenom  ?? '').trim();
         return esConsumible
-            ? nombreCompuesto(wizardCreateName, wizardGenero, wizardDenom)
+            ? nombreCompuesto(wizardCreateName, genero, denom)
             : wizardCreateName.trim();
     };
 
@@ -1251,7 +1259,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                             <p className="text-[10px] font-black text-marca-oscuro uppercase tracking-widest">Nuevo ítem</p>
                                             <input type="text" value={wizardCreateName}
                                                 onChange={e => setWizardCreateName(e.target.value)}
-                                                placeholder={(type === InventoryType.ELECTRICAL_TOOL || type === InventoryType.HAND_TOOL) ? 'Género (ej: Pulidora, Martillo) *' : '1. Familia (ej: Clavos) *'} autoFocus
+                                                placeholder={(type === InventoryType.ELECTRICAL_TOOL || type === InventoryType.HAND_TOOL) ? '1. Familia (ej: Pulidora, Martillo) *' : '1. Familia (ej: Clavos) *'} autoFocus
                                                 className="w-full border border-papel-borde rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-marca bg-papel" />
 
                                             {/* Género y denominación: las dos piezas que hasta hoy había
@@ -1329,20 +1337,21 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
 
                                                     {/* Cómo va a quedar. Se ve antes de guardar, no después. */}
                                                     <p className="text-[10px] text-marca-oscuro font-bold">
-                                                        Va a quedar: «{nombreCompuesto(wizardCreateName, wizardGenero, wizardDenom)}»
+                                                        Va a quedar: «{nombreCompuesto(wizardCreateName, wizardGenero || (nuevoGenero ?? ''), wizardDenom || (nuevaDenom ?? ''))}»
                                                     </p>
                                                 </div>
                                                 );
                                             })()}
-                                            {(type === InventoryType.ELECTRICAL_TOOL || type === InventoryType.HAND_TOOL) ? null : (
-                                                <input type="number" onFocus={e => e.target.select()} value={wizardCreateQty} min={1}
-                                                    onChange={e => setWizardCreateQty(parseInt(e.target.value) || 1)}
-                                                    placeholder="4. Cantidad *"
-                                                    className="w-full border border-papel-borde rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-marca bg-papel" />
-                                            )}
+                                            {/* La cantidad se pide en TODOS los tipos: son los mismos
+                                                cuatro pasos en toda la app. En una herramienta sigue
+                                                valiendo 1 si no se toca, que es como venía. */}
+                                            <input type="number" onFocus={e => e.target.select()} value={wizardCreateQty} min={1}
+                                                onChange={e => setWizardCreateQty(parseInt(e.target.value) || 1)}
+                                                placeholder="4. Cantidad *"
+                                                className="w-full border border-papel-borde rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-marca bg-papel" />
                                             {(type === InventoryType.ELECTRICAL_TOOL || type === InventoryType.HAND_TOOL) && (
                                                 <div className="space-y-1.5">
-                                                    <p className="text-[9px] font-black text-marca-oscuro uppercase tracking-wider">{type === InventoryType.ELECTRICAL_TOOL ? 'Especies (color + marca)' : 'Color y marca (opcional)'}</p>
+                                                    <p className="text-[9px] font-black text-marca-oscuro uppercase tracking-wider">{type === InventoryType.ELECTRICAL_TOOL ? 'Más especies — para crear varias de una vez' : 'Más especies (opcional)'}</p>
                                                     {wizardSpecies.map((sp, idx) => (
                                                         <div key={idx} className="relative pr-6">
                                                             <div className="flex flex-col gap-1">
@@ -1522,7 +1531,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                                             que en la Lista de pedidos. */}
                                                         <div className="space-y-1 pt-0.5">
                                                             <p className="text-[9px] font-black text-tinta-tenue uppercase tracking-wider">
-                                                                ¿De qué color?
+                                                                2. Color
                                                             </p>
                                                             <div className="flex flex-wrap gap-1 items-center">
                                                                 <button type="button"
@@ -1624,7 +1633,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                                         {marcas.length > 0 && (
                                                             <div className="space-y-1 pt-0.5">
                                                                 <p className="text-[9px] font-black text-tinta-tenue uppercase tracking-wider">
-                                                                    ¿De qué marca?
+                                                                    3. Marca
                                                                 </p>
                                                                 <div className="flex flex-wrap gap-1">
                                                                     {marcas.map(m => (
