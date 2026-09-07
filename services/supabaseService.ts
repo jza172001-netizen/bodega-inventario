@@ -215,9 +215,9 @@ export async function updateItem(item: Item): Promise<void> {
  * por id y gana el lado que TIENE la fila. Con la lápida, el otro lado se
  * entera de que eso se borró.
  */
-export async function deleteItem(id: string): Promise<void> {
+export async function deleteItem(id: string, quien?: string): Promise<void> {
     const { error } = await supabase.from('items')
-        .update({ deleted_at: new Date().toISOString() }).eq('id', id);
+        .update({ deleted_at: new Date().toISOString(), deleted_by: quien ?? null }).eq('id', id);
     if (error) throw error;
 }
 
@@ -253,9 +253,9 @@ export async function addMovement(m: Omit<Movement, 'id'>, id?: string): Promise
 }
 
 /** Igual que con los ítems: lápida, no borrón. Ver `deleteItem`. */
-export async function deleteMovement(id: string): Promise<void> {
+export async function deleteMovement(id: string, quien?: string): Promise<void> {
     const { error } = await supabase.from('movements')
-        .update({ deleted_at: new Date().toISOString() }).eq('id', id);
+        .update({ deleted_at: new Date().toISOString(), deleted_by: quien ?? null }).eq('id', id);
     if (error) throw error;
 }
 
@@ -306,11 +306,17 @@ export async function logMovementWithStock(
  * El camino de respaldo (cuando la migración no está aplicada) hace lo mismo en
  * dos pasos, que no es atómico pero sí deja la lápida.
  */
-export async function deleteMovementWithRevert(id: string, fallbackItemId?: string, fallbackQty?: number): Promise<void> {
+export async function deleteMovementWithRevert(id: string, fallbackItemId?: string, fallbackQty?: number, quien?: string): Promise<void> {
     const { error } = await supabase.rpc('delete_movement_and_revert_stock', { p_movement_id: id });
-    if (!error) return;
+    if (!error) {
+        // El RPC pone la lápida pero no sabe de `deleted_by`: se anota aparte.
+        // Si esta segunda escritura falla, el movimiento igual quedó borrado y
+        // recuperable — solo se pierde el nombre de quién fue.
+        if (quien) await supabase.from('movements').update({ deleted_by: quien }).eq('id', id);
+        return;
+    }
     if (!isMissingRpc(error)) throw error;
-    await deleteMovement(id);
+    await deleteMovement(id, quien);
     if (fallbackItemId !== undefined && fallbackQty !== undefined) {
         await updateItemQuantity(fallbackItemId, fallbackQty);
     }
@@ -425,9 +431,9 @@ export async function updatePersonnel(p: Personnel): Promise<void> {
  * 9, y 19 ítems borrados el mismo día volvieron todos juntos el 18 de agosto.
  * Contra un teléfono que tiene la fila, la ausencia de fila no puede competir.
  */
-export async function deletePersonnel(id: string): Promise<void> {
+export async function deletePersonnel(id: string, quien?: string): Promise<void> {
     const { error } = await supabase.from('personnel')
-        .update({ deleted_at: new Date().toISOString() }).eq('id', id);
+        .update({ deleted_at: new Date().toISOString(), deleted_by: quien ?? null }).eq('id', id);
     if (error) throw error;
 }
 
@@ -464,9 +470,9 @@ export async function addProject(p: Omit<Project, 'id'>, id?: string): Promise<P
     };
 }
 
-export async function deleteProject(id: string): Promise<void> {
+export async function deleteProject(id: string, quien?: string): Promise<void> {
     const { error } = await supabase.from('projects')
-        .update({ deleted_at: new Date().toISOString() }).eq('id', id);
+        .update({ deleted_at: new Date().toISOString(), deleted_by: quien ?? null }).eq('id', id);
     if (error) throw error;
 }
 
@@ -554,9 +560,9 @@ export async function updatePurchaseOrderStatus(
     if (error) throw error;
 }
 
-export async function deletePurchaseOrder(id: string): Promise<void> {
+export async function deletePurchaseOrder(id: string, quien?: string): Promise<void> {
     const { error } = await supabase.from('purchase_orders')
-        .update({ deleted_at: new Date().toISOString() }).eq('id', id);
+        .update({ deleted_at: new Date().toISOString(), deleted_by: quien ?? null }).eq('id', id);
     if (error) throw error;
 }
 
@@ -572,6 +578,8 @@ export async function fetchUsers(): Promise<AppUser[]> {
         password: '', // contraseña nunca viaja al cliente
         role: r.user_role as UserRole,
         name: r.user_name as string,
+        // Viene de la columna, no de deducirlo del nombre de usuario.
+        setupComplete: (r.user_setup_complete as boolean) ?? !!r.user_username,
     }));
 }
 
@@ -611,8 +619,16 @@ export async function updateUser(u: AppUser): Promise<void> {
     if (error) throw error;
 }
 
-export async function deleteUser(id: string): Promise<void> {
-    const { error } = await supabase.from('app_users').delete().eq('id', id);
+/**
+ * Un acceso borrado también es lápida, no borrado.
+ *
+ * Era la única tabla junto con `order_list` donde se quitaba la fila de verdad:
+ * si alguien borraba un acceso por equivocación, no había cómo devolverlo. Y
+ * `fetchUsers` ya filtra por lápida, así que desaparece igual de la pantalla.
+ */
+export async function deleteUser(id: string, quien?: string): Promise<void> {
+    const { error } = await supabase.from('app_users')
+        .update({ deleted_at: new Date().toISOString(), deleted_by: quien ?? null }).eq('id', id);
     if (error) throw error;
 }
 
@@ -690,30 +706,17 @@ export async function bulkUpsertProjects(projects: Project[]): Promise<void> {
 
 // ─── BULK DELETE (factory reset) ─────────────────────────────────────────────
 
-export async function deleteAllMovements(): Promise<void> {
-    const { error } = await supabase.from('movements').delete().not('id', 'is', null);
-    if (error) throw error;
-}
-
-export async function deleteAllItems(): Promise<void> {
-    const { error } = await supabase.from('items').delete().not('id', 'is', null);
-    if (error) throw error;
-}
-
-export async function deleteAllPersonnel(): Promise<void> {
-    const { error } = await supabase.from('personnel').delete().not('id', 'is', null);
-    if (error) throw error;
-}
-
-export async function deleteAllProjects(): Promise<void> {
-    const { error } = await supabase.from('projects').delete().not('id', 'is', null);
-    if (error) throw error;
-}
-
-export async function deleteAllPurchaseOrders(): Promise<void> {
-    const { error } = await supabase.from('purchase_orders').delete().not('id', 'is', null);
-    if (error) throw error;
-}
+/**
+ * Acá vivían `deleteAllMovements`, `deleteAllItems`, `deleteAllPersonnel`,
+ * `deleteAllProjects` y `deleteAllPurchaseOrders`.
+ *
+ * Eran las únicas funciones del archivo que hacían un DELETE de verdad sobre
+ * las tablas de la bodega: no ponían lápida, quitaban la fila. Las llamaban los
+ * dos botones de la «Zona de peligro», que ya no existen.
+ *
+ * No se reponen. Todo borrado en esta app pone `deleted_at`, y para eso está la
+ * papelera: lo borrado se ve y se devuelve.
+ */
 
 // ─── AUDIT LOGS ──────────────────────────────────────────────────────────────
 
@@ -730,6 +733,7 @@ export async function fetchAuditLogs(): Promise<AuditLog[]> {
         actor: r.actor as string,
         action: r.action as string,
         description: r.description as string,
+        origen: (r.origen as string | null) ?? undefined,
     }));
 }
 
@@ -740,6 +744,7 @@ export async function addAuditLog(log: AuditLog): Promise<void> {
         actor: log.actor,
         action: log.action,
         description: log.description,
+        origen: log.origen ?? null,
     });
     if (error) throw error;
 }
@@ -752,6 +757,7 @@ export async function bulkUpsertAuditLogs(logs: AuditLog[]): Promise<void> {
         actor: log.actor,
         action: log.action,
         description: log.description,
+        origen: log.origen ?? null,
     }));
     const { error } = await supabase.from('audit_logs').upsert(payload, { onConflict: 'id' });
     if (error) throw error;
@@ -824,7 +830,8 @@ function dbToOrderNote(row: Record<string, unknown>): OrderNote {
 }
 
 export async function fetchOrderList(): Promise<OrderNote[]> {
-    const { data, error } = await supabase.from('order_list').select('*').order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('order_list').select('*')
+        .is('deleted_at', null).order('created_at', { ascending: false });
     if (error) throw error;
     return (data ?? []).map(dbToOrderNote);
 }
@@ -850,11 +857,117 @@ export async function updateOrderNote(n: OrderNote): Promise<void> {
     if (error) throw error;
 }
 
-export async function deleteOrderNote(id: string): Promise<void> {
-    const { error } = await supabase.from('order_list').delete().eq('id', id);
+export async function deleteOrderNote(id: string, quien?: string): Promise<void> {
+    const { error } = await supabase.from('order_list')
+        .update({ deleted_at: new Date().toISOString(), deleted_by: quien ?? null }).eq('id', id);
     if (error) throw error;
 }
 
+
+
+// ─── PAPELERA ────────────────────────────────────────────────────────────────
+
+/**
+ * Lo que está borrado, de todas las tablas, en una sola lista.
+ *
+ * Borrar en esta app siempre fue poner una lápida (`deleted_at`) y no quitar la
+ * fila — el dato nunca se iba—, pero no había ninguna pantalla que lo mostrara:
+ * para devolver algo tocaba entrar a la base a mano. Esto es lo que le faltaba
+ * a esa mitad.
+ */
+export type TablaPapelera =
+    | 'items' | 'movements' | 'personnel' | 'projects'
+    | 'purchase_orders' | 'app_users' | 'order_list';
+
+export interface EnLaPapelera {
+    tabla: TablaPapelera;
+    id: string;
+    /** Qué era, en una línea. */
+    titulo: string;
+    /** Lo que traía puesto: cantidad, unidad, con quién estaba. */
+    detalle?: string;
+    borradoEl: Date;
+    /** Nulo en lo borrado antes de que se guardara el dato. */
+    borradoPor?: string;
+    /** Solo para movimientos: cuánto y de qué ítem, para poder devolver el stock. */
+    movItemId?: string;
+    movCantidad?: number;
+    movEsSalida?: boolean;
+    /** Préstamo ya devuelto: salió y volvió, su efecto neto sobre el stock es cero. */
+    movNetoCero?: boolean;
+}
+
+const fechaDe = (r: Record<string, unknown>): Date =>
+    new Date((r.deleted_at as string) ?? Date.now());
+const quienDe = (r: Record<string, unknown>): string | undefined =>
+    (r.deleted_by as string | null) ?? undefined;
+
+export async function fetchPapelera(): Promise<EnLaPapelera[]> {
+    const traer = (tabla: TablaPapelera) =>
+        supabase.from(tabla).select('*').not('deleted_at', 'is', null)
+            .order('deleted_at', { ascending: false }).limit(200);
+
+    const [it, mov, per, proj, po, us, ord] = await Promise.all([
+        traer('items'), traer('movements'), traer('personnel'), traer('projects'),
+        traer('purchase_orders'), traer('app_users'), traer('order_list'),
+    ]);
+
+    const salida: EnLaPapelera[] = [];
+    const fila = (r: Record<string, unknown>, tabla: TablaPapelera, titulo: string, detalle?: string) =>
+        ({ tabla, id: r.id as string, titulo, detalle, borradoEl: fechaDe(r), borradoPor: quienDe(r) });
+
+    for (const r of (it.data ?? []) as Record<string, unknown>[])
+        salida.push(fila(r, 'items', r.name as string,
+            `${Number(r.quantity)} ${r.unit ?? ''} · ${r.inventory_type ?? ''}`.trim()));
+
+    for (const r of (mov.data ?? []) as Record<string, unknown>[])
+        salida.push({
+            ...fila(r, 'movements',
+                `${r.type} de ${Number(r.quantity)}`,
+                (r.notes as string | null) ?? undefined),
+            movItemId: r.item_id as string,
+            movCantidad: Number(r.quantity),
+            movEsSalida: (r.type as string) === MovementType.CHECK_OUT || (r.type as string) === MovementType.WASTE,
+            movNetoCero: !!r.is_loan && !!r.is_returned,
+        });
+
+    for (const r of (per.data ?? []) as Record<string, unknown>[])
+        salida.push(fila(r, 'personnel', r.name as string, (r.phone as string | null) ?? undefined));
+
+    for (const r of (proj.data ?? []) as Record<string, unknown>[])
+        salida.push(fila(r, 'projects', r.name as string, (r.description as string | null) ?? undefined));
+
+    for (const r of (po.data ?? []) as Record<string, unknown>[])
+        salida.push(fila(r, 'purchase_orders', `Orden a ${r.supplier}`, r.status as string));
+
+    for (const r of (us.data ?? []) as Record<string, unknown>[])
+        salida.push(fila(r, 'app_users', r.name as string, `acceso · ${r.role}`));
+
+    for (const r of (ord.data ?? []) as Record<string, unknown>[])
+        salida.push(fila(r, 'order_list', r.texto as string,
+            r.cantidad != null ? `${Number(r.cantidad)} ${r.unidad ?? ''}`.trim() : undefined));
+
+    return salida.sort((a, b) => b.borradoEl.getTime() - a.borradoEl.getTime());
+}
+
+/**
+ * Devuelve una fila de la papelera.
+ *
+ * Además de quitar la lápida sella `updated_at`. El sello es lo que hace que la
+ * restauración le gane al dato viejo que el otro teléfono todavía tiene en
+ * memoria: sin él, la siguiente sincronización vuelve a borrarla. Es la misma
+ * regla de `updateItem`.
+ *
+ * `order_list` y `app_users` no tienen `updated_at` con ese papel, así que solo
+ * se les levanta la lápida.
+ */
+export async function restaurar(tabla: TablaPapelera, id: string): Promise<void> {
+    const conSello: TablaPapelera[] = ['items', 'movements', 'personnel', 'projects', 'purchase_orders'];
+    const cambios: Record<string, unknown> = { deleted_at: null, deleted_by: null };
+    if (conSello.includes(tabla)) cambios.updated_at = sello();
+    const { error } = await supabase.from(tabla).update(cambios).eq('id', id);
+    if (error) throw error;
+}
 
 /**
  * Los ids que están marcados como borrados.

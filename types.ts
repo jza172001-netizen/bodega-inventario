@@ -177,6 +177,13 @@ export interface AuditLog {
     action: string;
     actor: string;
     description: string;
+    /**
+     * Desde dónde se hizo: `'chat'` si salió del asistente, sin poner nada si
+     * salió de las pantallas normales. Es lo que le permite al chat mostrar SU
+     * historial —lo que se hizo desde ahí— en cualquier celular, sin una tabla
+     * aparte: la bitácora ya se sincroniza sola entre teléfonos.
+     */
+    origen?: string;
 }
 
 export interface BehaviorLog {

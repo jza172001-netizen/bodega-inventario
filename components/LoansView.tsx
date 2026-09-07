@@ -68,15 +68,19 @@ export const LoansView: React.FC<LoansViewProps> = ({
     const [returningLoan, setReturningLoan] = useState<Movement | null>(null);
     const bottomSentinelRef = useRef<HTMLDivElement>(null);
 
-    useEffect(() => {
-        const el = bottomSentinelRef.current;
-        if (!el) return;
-        const obs = new IntersectionObserver(([entry]) => {
-            if (entry.isIntersecting) onBehaviorLog?.('SCROLL', 'Llegó al fondo: Préstamos');
-        }, { threshold: 0.5 });
-        obs.observe(el);
-        return () => obs.disconnect();
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    /**
+     * Acá había un observador que anotaba «Llegó al fondo: Préstamos» cada vez
+     * que la lista se recorría hasta abajo.
+     *
+     * Medido en producción: entre eso y los avisos de cambiar de pestaña, el
+     * 53% del registro de comportamiento —950 renglones de 1.786— era eso.
+     * No responde ninguna pregunta que alguien se haya hecho, y cada renglón
+     * costaba una escritura completa al almacenamiento del teléfono, que es lo
+     * que ponía lenta la app en el navegador de Huawei.
+     *
+     * Lo que ya está guardado no se toca. Esto solo deja de producir más.
+     */
+
 
     const itemMap   = useMemo(() => new Map(items.map(i => [i.id, i])), [items]);
     const personMap = useMemo(() => new Map(personnel.map(p => [p.id, p])), [personnel]);

@@ -106,8 +106,9 @@ export const KardexHub: React.FC<KardexHubProps> = ({
     const handleTabClick = (tab: KardexTab) => {
         setActiveTab(tab);
         onTabChange?.(tab);
-        const tabLabel = TABS.find(t => t.id === tab)?.label ?? tab;
-        onBehaviorLog?.('NAV', `Kardex → ${tabLabel}`);
+        // Cambiar de pestaña ya no deja renglón: era la mitad del ruido del
+        // registro y no responde ninguna pregunta. Los filtros SÍ se siguen
+        // anotando — esos dicen qué estaba buscando la persona.
     };
 
     const filteredItems = invType && invType !== 'dañadas'
