@@ -601,14 +601,34 @@ export async function authenticateUser(
     };
 }
 
+/**
+ * Crear un acceso. Sin pedir la fila de vuelta, y ahí está todo el asunto.
+ *
+ * Esto NUNCA funcionó contra la base. Juli creó Santiago, Camilo, CAMILO y KATE
+ * —cinco veces, algunas dos veces seguidas porque "no quedaban"— y en
+ * `app_users` no llegó ni uno: los cinco quedaron solo en la memoria de su
+ * teléfono. La bitácora los registraba, la nube no.
+ *
+ * La causa no era el INSERT: era el `.select()` que venía detrás. `app_users`
+ * tiene seguridad de fila con permiso de insertar, editar y borrar, pero
+ * NINGUNO de leer —por eso los usuarios se leen con `get_users_safe`, que se
+ * salta esa restricción—. Al pedir la fila recién creada de vuelta, PostgREST
+ * choca contra esa falta de permiso y **revierte el insert entero**.
+ *
+ * Comprobado contra producción con la llave real de la app:
+ *   con `Prefer: return=representation` → 401, no queda nada
+ *   sin él                              → 201, la fila queda
+ *
+ * Así que no se pide de vuelta. El objeto que se devuelve es el mismo que
+ * entró, que es exactamente lo que la fila contiene: acá no hay valores que
+ * ponga la base por su cuenta.
+ */
 export async function addUser(u: AppUser): Promise<AppUser> {
-    const { data, error } = await supabase
+    const { error } = await supabase
         .from('app_users')
-        .insert({ id: u.id, ...userToDb(u) })
-        .select()
-        .single();
+        .insert({ id: u.id, ...userToDb(u) });
     if (error) throw error;
-    return dbToUser(data as Record<string, unknown>);
+    return u;
 }
 
 export async function updateUser(u: AppUser): Promise<void> {
