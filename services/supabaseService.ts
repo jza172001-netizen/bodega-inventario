@@ -734,6 +734,7 @@ export async function fetchAuditLogs(): Promise<AuditLog[]> {
         action: r.action as string,
         description: r.description as string,
         origen: (r.origen as string | null) ?? undefined,
+        operacionId: (r.operacion_id as string | null) ?? undefined,
     }));
 }
 
@@ -745,6 +746,7 @@ export async function addAuditLog(log: AuditLog): Promise<void> {
         action: log.action,
         description: log.description,
         origen: log.origen ?? null,
+        operacion_id: log.operacionId ?? null,
     });
     if (error) throw error;
 }
@@ -758,6 +760,7 @@ export async function bulkUpsertAuditLogs(logs: AuditLog[]): Promise<void> {
         action: log.action,
         description: log.description,
         origen: log.origen ?? null,
+        operacion_id: log.operacionId ?? null,
     }));
     const { error } = await supabase.from('audit_logs').upsert(payload, { onConflict: 'id' });
     if (error) throw error;

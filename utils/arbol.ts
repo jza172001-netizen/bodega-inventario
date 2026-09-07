@@ -1,6 +1,6 @@
 
 import { Item } from '../types';
-import { familiaDe, normStr } from './genus';
+import { familiaDe, normStr, raizDeFamilia } from './genus';
 import { raizDeColor } from './colores';
 import { materialDe, medidaDe } from './medida';
 
@@ -56,7 +56,12 @@ const restoDelNombre = (nombre: string, familia: string): string => {
     const palabras = sinParentesis(nombre).split(/\s+/).filter(Boolean);
     const dela = normStr(familia).split(/\s+/).filter(Boolean);
     let i = 0;
-    while (i < palabras.length && i < dela.length && normStr(palabras[i]) === dela[i]) i++;
+    // Por raíz y no por texto exacto: la familia unida se llama "Extensiones" y
+    // el ítem se llama "Extension", así que comparando letra por letra la
+    // palabra de la familia NO se descontaba y quedaba como si fuera la
+    // descripción. Resultado: dos ramas llamadas "Extension" y "Extensiones",
+    // cada una con un solo ítem, en vez de ramificar por color como debe.
+    while (i < palabras.length && i < dela.length && raizDeFamilia(palabras[i]) === raizDeFamilia(dela[i])) i++;
     return palabras.slice(i).join(' ');
 };
 
@@ -181,14 +186,22 @@ export const construirArbol = (items: Item[]): Arbol[] => {
     const porFamilia = new Map<string, Item[]>();
     for (const i of items) {
         const f = (i.familia?.trim() || familiaDe(i.name)).trim();
-        const clave = normStr(f);
+        // Singular y plural son la misma cesta: la bodega tenía "Extension" y
+        // "Extensiones" como dos familias, así que la segunda no salía junto a
+        // la primera y se volvía a crear. Es la misma idea de `raizDeColor` unas
+        // líneas más abajo, donde Amarillo y Amarilla ya eran un solo color.
+        const clave = raizDeFamilia(f);
         if (!porFamilia.has(clave)) porFamilia.set(clave, []);
         porFamilia.get(clave)!.push(i);
     }
 
     return [...porFamilia.values()]
         .map(losDeLaFamilia => {
-            const familia = losDeLaFamilia[0].familia?.trim() || familiaDe(losDeLaFamilia[0].name);
+            // La forma que más se repite manda, igual que con los colores. Con
+            // el primero de la lista el nombre de la familia dependía del orden
+            // alfabético: dos "Extensiones" y una "Extension" se llamaban
+            // "Extension" solo porque va antes en el abecedario.
+            const familia = masUsada(losDeLaFamilia.map(i => i.familia?.trim() || familiaDe(i.name)));
             const suEje = ejeDeLaFamilia(losDeLaFamilia, familia);
             const porVariante = new Map<string, Item[]>();
             for (const i of losDeLaFamilia) {

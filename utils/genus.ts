@@ -35,6 +35,41 @@ export const normStr = (s: string): string =>
     s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 
 /**
+ * La raíz de una familia: la misma palabra en singular o en plural cae en la
+ * misma cesta.
+ *
+ * En la bodega hay "Extension (Blanca)" y "Extensiones (Negro)" —el mismo cable,
+ * escrito de dos maneras distintas dos días distintos— y el árbol las mostraba
+ * como dos familias, así que la segunda no aparecía junto a la primera y se
+ * volvía a crear. Lo mismo con "Guante" y "Guantes".
+ *
+ * Es a propósito una regla ANGOSTA y no el parecido tolerante del buscador. Si
+ * agrupara por parecido, "Broca" y "Brocha" caerían juntas —una letra de
+ * diferencia— y esconder una broca dentro de las brochas es peor que tener dos
+ * familias: el bodeguero no la vuelve a encontrar. Acá solo se perdona el plural
+ * y las tildes; cualquier otra diferencia son cosas distintas.
+ *
+ * Se quita la "s" final y después la "e" que queda, que es lo que hace coincidir
+ * las dos formas:
+ *
+ *   extensiones → extensione → extension  ·  extension → extension   ✅ juntas
+ *   guantes     → guante     → guant      ·  guante    → guant       ✅ juntas
+ *   clavos      → clavo                   ·  clavo     → clavo       ✅ juntas
+ *   broca       → broca                   ·  brocha    → brocha      ✅ aparte
+ *
+ * Nunca acorta por debajo de tres letras, para que un nombre corto no se coma a
+ * otro. Los plurales irregulares del español no los cubre —"lápiz" y "lápices"
+ * siguen separados—: para eso está el campo `familia`, que el bodeguero elige a
+ * mano y siempre le gana a esta deducción.
+ */
+export const raizDeFamilia = (familia: string): string => {
+    let r = normStr(familia);
+    if (r.length > 3 && r.endsWith('s')) r = r.slice(0, -1);
+    if (r.length > 3 && r.endsWith('e')) r = r.slice(0, -1);
+    return r;
+};
+
+/**
  * Distancia de edición Damerau-Levenshtein: cuántos errores separan dos palabras.
  *
  * A diferencia del Levenshtein clásico, cuenta el CAMBIO DE PUESTO de dos letras

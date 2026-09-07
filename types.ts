@@ -184,6 +184,13 @@ export interface AuditLog {
      * aparte: la bitácora ya se sincroniza sola entre teléfonos.
      */
     origen?: string;
+    /**
+     * Amarra los renglones que salieron del MISMO toque: los tres despachos de
+     * una sola salida comparten este número. Es lo que le permite al chat
+     * mostrar «✅ 3 salidas registradas para Jhon jader» y abrirlo para ver el
+     * detalle, en vez de tres renglones sueltos.
+     */
+    operacionId?: string;
 }
 
 export interface BehaviorLog {

@@ -9,7 +9,7 @@ import { AccesoriosDeItem } from './AccesoriosDeItem';
 import { ArbolFamilias } from './ArbolFamilias';
 import { COMO_SE_HACE } from '../services/comoSeHace';
 import { unidadesCon } from '../utils/unidades';
-import { getGenus, familiaDe, esParecido, familiaCanonica, familiasParecidas, coloresDeFamilia, marcasDeFamilia, nombreCorregido } from '../utils/genus';
+import { getGenus, familiaDe, esParecido, familiaCanonica, familiasParecidas, coloresDeFamilia, marcasDeFamilia, nombreCorregido, normStr } from '../utils/genus';
 import { tonoDe, raizDeColor, coloresUnificados, PALETA } from '../utils/colores';
 import { medidaDe } from '../utils/medida';
 
@@ -37,6 +37,9 @@ interface FloatingChatProps {
      * Solo borra los que no alcanzaron a tener movimientos.
      */
     onDescartarItems?: (ids: string[]) => void;
+    /** Guarda en la bitácora la misma frase que se acaba de mostrar en el chat,
+     *  para que el historial diga lo que el bodeguero vio y no una reconstrucción. */
+    onResumenChat?: (texto: string) => void;
     /**
      * La bitácora, para poder mirarla sin salir del chat.
      *
@@ -120,11 +123,13 @@ const INIT_WIZARD: WizardData = {
 export const FloatingChat: React.FC<FloatingChatProps> = ({
     items, movements, personnel, purchaseOrders, projects,
     onLogMovements, onCreateItem, onEditItem, onCreateProject, onCreatePersonnel,
-    onBehaviorLog, auditLogs = [], onDescartarItems,
+    onBehaviorLog, auditLogs = [], onDescartarItems, onResumenChat,
 }) => {
     const [open, setOpen] = useState(false);
     /** El historial del asistente: lo que se hizo DESDE acá, no toda la app. */
     const [verHistorial, setVerHistorial] = useState(false);
+    /** Cuál operación del historial está abierta mostrando su detalle. */
+    const [operacionAbierta, setOperacionAbierta] = useState<string | null>(null);
     const [messages, setMessages] = useState<ChatMsg[]>([
         { id: uid(), role: 'bot', text: '¡Hola! Usa los botones de arriba para registrar salidas, asignar herramientas o agregar ítems al inventario.' },
     ]);
@@ -216,10 +221,27 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
 
     const bottomRef = useRef<HTMLDivElement>(null);
 
+    /**
+     * Lo que se puede despachar por la salida rápida.
+     *
+     * Antes filtraba `quantity > 0` y escondía todo lo agotado. En la bodega de
+     * verdad eso dejaba la lista de consumibles con dos renglones —Clavos y
+     * Polvo enchape— mientras había otros nueve ítems que sencillamente estaban
+     * en cero. Juli lo reportó como "solo me salen clavos y polvo de enchape
+     * pero hay más consumibles".
+     *
+     * Y no es solo incómodo: sin verlos, uno cree que no existen y crea un
+     * duplicado de algo que ya está en la bodega. Ese razonamiento ya está
+     * escrito en el despacho grande, donde el filtro se quitó hace tiempo; lo
+     * que pasó es que el arreglo se hizo allá y nunca se trajo acá.
+     *
+     * Ahora se ven todos, los agotados marcados como tales y de últimos.
+     */
     const availableForLoan = useMemo(() => {
         if (!loanInvType) return [];
-        return items.filter(i => i.inventoryType === loanInvType && i.quantity > 0)
-            .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+        return items.filter(i => i.inventoryType === loanInvType)
+            .sort((a, b) => (a.quantity > 0 ? 0 : 1) - (b.quantity > 0 ? 0 : 1)
+                          || a.name.localeCompare(b.name, 'es'));
     }, [items, loanInvType]);
 
     const sortedPersonnel = useMemo(() =>
@@ -238,6 +260,24 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     const addBot = (text: string) => {
         setMessages(prev => [...prev, { id: uid(), role: 'bot', text }]);
         if (!open) setHasNew(true);
+    };
+
+    /**
+     * Lo mismo que `addBot`, pero además queda guardado.
+     *
+     * La conversación vive solo en este teléfono: a Juli se le apagó el celular
+     * y se le borró entera. Lo que hizo NO se perdió —eso está en la bitácora—,
+     * pero el resumen legible, el del chulito, sí. Con esto la frase que él ve
+     * es la misma que queda escrita, y sobrevive al apagón y se ve desde
+     * cualquier celular.
+     *
+     * Se usa solo cuando de verdad PASÓ algo en la bodega. Los saludos y las
+     * respuestas a preguntas no se guardan: eso sería llenar la bitácora de
+     * conversación.
+     */
+    const addBotYGuarda = (text: string) => {
+        addBot(text);
+        onResumenChat?.(text);
     };
 
     // El predictor: con el campo vacío muestra lo urgente del día; mientras se
@@ -503,6 +543,28 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         setParecidoPendiente(null);
     };
 
+    /**
+     * El que ya existe y es EXACTAMENTE este: mismo tipo, mismo nombre, mismo
+     * color, misma marca. No parecido — el mismo.
+     *
+     * El 7 de septiembre quedaron en la bodega dos ítems llamados igual,
+     * "Bisturi" y "Bisturi", mismo tipo y misma familia, creados el mismo día.
+     * La causa está justo abajo.
+     */
+    const elIdenticoDe = (): Item | undefined => {
+        if (!wizardCreateType || !wizardCreateName.trim()) return undefined;
+        const esHerramienta = wizardCreateType === InventoryType.ELECTRICAL_TOOL
+                           || wizardCreateType === InventoryType.HAND_TOOL;
+        const g     = normStr(getGenus(wizardCreateName));
+        const color = normStr((esHerramienta ? wizardSpecies[0]?.color : wizardCreateColor) ?? '');
+        const marca = normStr((esHerramienta ? wizardSpecies[0]?.brand : wizardCreateBrand) ?? '');
+        return items.find(i =>
+            i.inventoryType === wizardCreateType &&
+            normStr(getGenus(i.name)) === g &&
+            normStr(i.color ?? '') === color &&
+            normStr(i.brand ?? '') === marca);
+    };
+
     const handleWizardCreateItem = () => {
         if (!wizardCreateType || !wizardCreateName.trim()) return;
         // Si ya hay algo parecido, se para acá y se pregunta. Decidir solo por
@@ -512,7 +574,23 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         // preguntarlo acá es preguntar dos veces lo mismo, y el bodeguero está
         // parado en la bodega con la herramienta en la mano.
         const yaDecidio = wizardCreateFamilia.trim().length > 0;
+
+        /**
+         * Salvo que sea el MISMO, y ahí siempre se para.
+         *
+         * Elegir familia responde "¿con quién se agrupa esto?", no "¿es el mismo
+         * ítem que ya tengo?". Son dos preguntas distintas, y el atajo de arriba
+         * las trataba como una: tocado el chip de la familia, el aviso de
+         * repetidos se apagaba entero y se podía crear un gemelo exacto sin que
+         * nadie dijera nada. Así nacieron los dos "Bisturi".
+         */
+        const identico = elIdenticoDe();
         const parecidos = parecidosA(wizardCreateName, wizardCreateType);
+        if (identico && !parecidoPendiente) {
+            // El idéntico va de primero: es la respuesta más probable.
+            setParecidoPendiente([identico, ...parecidos.filter(p => p.id !== identico.id)]);
+            return;
+        }
         if (parecidos.length > 0 && !parecidoPendiente && !yaDecidio) {
             setParecidoPendiente(parecidos);
             return;
@@ -593,7 +671,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             const r = onLogMovements(toLog);
             const dateLabel = wizardDate !== todayISO() ? ` (fecha: ${new Date(wizardDate + 'T12:00:00').toLocaleDateString('es-CO')})` : '';
             if (r.ok > 0) {
-                addBot(`✅ ${r.ok} salida(s) registradas${worker ? ` para ${worker.name}` : ''}${project ? ` · ${project.name}` : ''}${dateLabel}.`);
+                addBotYGuarda(`✅ ${r.ok} salida(s) registradas${worker ? ` para ${worker.name}` : ''}${project ? ` · ${project.name}` : ''}${dateLabel}.`);
             }
             if (r.rechazos.length > 0) {
                 // Nada de "falta de stock" a secas: se abre la reposición con el
@@ -623,9 +701,9 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         };
         const res = onLogMovements([entrada, r.movimiento]);
         if (res.rechazos.length === 0) {
-            addBot(`✅ Entraron ${cuanto} ${r.unidad} de **${r.nombre}** y salieron ${r.pedido}.`);
+            addBotYGuarda(`✅ Entraron ${cuanto} ${r.unidad} de **${r.nombre}** y salieron ${r.pedido}.`);
         } else {
-            addBot(`⚠️ Entraron ${cuanto} ${r.unidad} de **${r.nombre}**, pero la salida no alcanzó. Revisá la cantidad.`);
+            addBotYGuarda(`⚠️ Entraron ${cuanto} ${r.unidad} de **${r.nombre}**, pero la salida no alcanzó. Revisá la cantidad.`);
         }
         onBehaviorLog?.('ACTION', `Repuso ${cuanto} de "${r.nombre}" sin salir del despacho`);
         const quedan = (reposicion ?? []).filter(x => x.itemId !== r.itemId);
@@ -755,11 +833,11 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         const dateLabel = loanDate !== todayISO() ? ` (fecha: ${new Date(loanDate + 'T12:00:00').toLocaleDateString('es-CO')})` : '';
         const verb = isLoan ? 'Préstamo registrado' : 'Salida registrada';
         if (ok === 0) {
-            addBot(`❌ No se registró nada: la bodega rechazó ${movs.length === 1 ? 'el movimiento' : `los ${movs.length} movimientos`} por falta de stock.`);
+            addBotYGuarda(`❌ No se registró nada: la bodega rechazó ${movs.length === 1 ? 'el movimiento' : `los ${movs.length} movimientos`} por falta de stock.`);
         } else if (ok < movs.length) {
-            addBot(`⚠️ Solo ${ok} de ${movs.length} quedaron registrados para ${workerName}${dateLabel}. El resto se rechazó por falta de stock.`);
+            addBotYGuarda(`⚠️ Solo ${ok} de ${movs.length} quedaron registrados para ${workerName}${dateLabel}. El resto se rechazó por falta de stock.`);
         } else {
-            addBot(`✅ ${verb} para ${workerName}: ${itemNames.join(', ')}${dateLabel}.`);
+            addBotYGuarda(`✅ ${verb} para ${workerName}: ${itemNames.join(', ')}${dateLabel}.`);
         }
         closePanel();
     };
@@ -815,14 +893,14 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                 });
                 names.push(it.name);
             }
-            addBot(`✅ ${names.length} ítem(s) agregados: ${names.join(', ')}.`);
+            addBotYGuarda(`✅ ${names.length} ítem(s) agregados: ${names.join(', ')}.`);
         } else {
             const it = onCreateItem({
                 name: createName.trim(), inventoryType: createInvType,
                 quantity: createQty, unit: createUnit.trim() || 'unidades',
                 category: CATEGORY_BY_TYPE[createInvType], subCategory: grupoSugerido(createName, createInvType), familia: familiaSugerida(createName, createInvType), minStock: 0, price: 0,
             });
-            addBot(`✅ ${it.name} agregado al inventario (${createQty} ${createUnit}).`);
+            addBotYGuarda(`✅ ${it.name} agregado al inventario (${createQty} ${createUnit}).`);
         }
         // Mantener el tipo para crear otro ítem sin re-seleccionar
         setCreateName(''); setCreateQty(1); setCreateUnit('unidades'); setCreateSpecies([{ brand: '', color: '' }]);
@@ -1403,12 +1481,23 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                             })()}
                                             {parecidoPendiente && parecidoPendiente.length > 0 && (
                                                 <div className="border border-atencion bg-atencion-suave rounded-xl p-2.5 space-y-2">
+                                                    {/* El primero puede ser el gemelo exacto, no un parecido:
+                                                        entonces el aviso lo dice con esas palabras. Antes decía
+                                                        "algo parecido" para los dos casos y se leía igual de
+                                                        blando, así que se tocaba "créalo aparte" sin pensarlo. */}
                                                     <p className="text-[11px] font-black text-atencion">
-                                                        Ya tenés algo parecido. ¿Qué hacemos?
+                                                        {elIdenticoDe()
+                                                            ? 'Esto ya está en la bodega, igualito. ¿Es el mismo?'
+                                                            : 'Ya tenés algo parecido. ¿Qué hacemos?'}
                                                     </p>
                                                     {parecidoPendiente.map(it => (
                                                         <div key={it.id} className="space-y-1">
-                                                            <p className="text-[11px] font-bold text-tinta-suave">{it.name}</p>
+                                                            <p className="text-[11px] font-bold text-tinta-suave">
+                                                                {it.name}
+                                                                <span className="font-normal text-tinta-tenue">
+                                                                    {' · '}{it.quantity > 0 ? `${it.quantity} ${it.unit}` : 'agotado'}
+                                                                </span>
+                                                            </p>
                                                             <div className="flex gap-1">
                                                                 <button onClick={() => usarItemExistente(it)}
                                                                     className="flex-1 py-1 text-[10px] font-black bg-bien hover:bg-bien text-papel rounded-lg">
@@ -1579,7 +1668,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                         Ítems disponibles *{loanSelected.size > 0 && <span className="normal-case font-normal text-marca-oscuro ml-1">({loanSelected.size} selec.)</span>}
                     </label>
                     {availableForLoan.length === 0 && !loanIsCreating && (
-                        <p className="text-xs text-tinta-tenue text-center py-2">Sin stock. Usa "+ Crear nuevo".</p>
+                        <p className="text-xs text-tinta-tenue text-center py-2">Todavía no hay nada de este tipo. Usa "+ Crear nuevo".</p>
                     )}
                     {availableForLoan.length > 0 && (
                         <div className="max-h-48 overflow-y-auto mb-1">
@@ -1596,7 +1685,9 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                             className={`flex items-center gap-2 px-3 py-2 rounded-xl border cursor-pointer transition-all ${isSelected ? 'bg-marca-suave border-marca-borde' : 'bg-papel border-papel-borde hover:border-marca-borde'}`}>
                                             <input type="checkbox" checked={isSelected} readOnly className="w-4 h-4 accent-marca flex-shrink-0" />
                                             <FilaItem item={item} detalle={detalle} />
-                                            <span className="text-[10px] text-tinta-tenue flex-shrink-0">{item.quantity} disp.</span>
+                                            <span className={`text-[10px] flex-shrink-0 ${item.quantity > 0 ? 'text-tinta-tenue' : 'font-black text-atencion'}`}>
+                                                {item.quantity > 0 ? `${item.quantity} disp.` : 'agotado'}
+                                            </span>
                                             {isSelected && (
                                                 <input type="number" onFocus={e => e.target.select()} value={qty} min={1} max={item.quantity}
                                                     onChange={e => setLoanItemQty(item.id, parseInt(e.target.value) || 1)}
@@ -1902,26 +1993,87 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                      * La conversación en sí sigue siendo de este teléfono.
                                      */
                                     const mios = auditLogs.filter(l => l.origen === 'chat');
+
+                                    /**
+                                     * Un renglón por COSA HECHA, no por apunte suelto.
+                                     *
+                                     * Una salida de tres vainas deja cinco o seis apuntes
+                                     * en la bitácora, y para el bodeguero eso fue una sola
+                                     * cosa. Se agrupan por el número de operación y manda
+                                     * el resumen —la frase con chulito que él ya vio en el
+                                     * chat—; los apuntes quedan adentro, para el que
+                                     * quiera abrir y mirar el detalle.
+                                     *
+                                     * Lo de antes de que existiera el número de operación
+                                     * queda como estaba, cada uno por su lado: no hay de
+                                     * dónde sacar a qué toque perteneció.
+                                     */
+                                    type Bloque = { clave: string; titulo: string; cuando: Date; quien: string; detalles: typeof mios };
+                                    const bloques: Bloque[] = [];
+                                    const porOperacion = new Map<string, Bloque>();
+                                    for (const l of mios) {
+                                        if (!l.operacionId) {
+                                            bloques.push({ clave: l.id, titulo: l.description, cuando: new Date(l.timestamp), quien: l.actor, detalles: [] });
+                                            continue;
+                                        }
+                                        let b = porOperacion.get(l.operacionId);
+                                        if (!b) {
+                                            b = { clave: l.operacionId, titulo: '', cuando: new Date(l.timestamp), quien: l.actor, detalles: [] };
+                                            porOperacion.set(l.operacionId, b);
+                                            bloques.push(b);
+                                        }
+                                        // El resumen es el título; lo demás, el detalle.
+                                        if (l.action === 'CHAT_RESUMEN') b.titulo = l.description;
+                                        else b.detalles.push(l);
+                                    }
+                                    // Una operación sin resumen guardado (las de antes de
+                                    // este cambio) se anuncia con lo que tenga adentro.
+                                    for (const b of bloques) {
+                                        if (b.titulo) continue;
+                                        b.titulo = b.detalles.length === 1
+                                            ? b.detalles[0].description
+                                            : `${b.detalles.length} apuntes`;
+                                    }
+
                                     return (
                                     <div className="border-t border-papel-borde bg-papel-hondo max-h-56 overflow-y-auto flex-shrink-0">
-                                        {mios.length === 0 ? (
+                                        {bloques.length === 0 ? (
                                             <div className="px-3 py-3 space-y-1">
                                                 <p className="text-xs text-tinta-tenue">Todavía no has hecho nada desde acá.</p>
                                                 <p className="text-[10px] text-tinta-tenue">
                                                     Lo que hagas con el asistente queda en esta lista y se
-                                                    ve desde cualquier celular. Lo de antes de hoy no quedó
-                                                    marcado: esa información no se guardaba.
+                                                    ve desde cualquier celular, aunque se apague este.
                                                 </p>
                                             </div>
-                                        ) : mios.slice(0, 60).map(l => (
-                                            <div key={l.id} className="px-3 py-2 border-b border-papel-borde last:border-0">
-                                                <p className="text-xs text-tinta">{l.description}</p>
-                                                <p className="text-[10px] text-tinta-tenue">
-                                                    {new Date(l.timestamp).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}
-                                                    {l.actor ? ` · ${l.actor}` : ''}
-                                                </p>
+                                        ) : bloques.slice(0, 40).map(b => {
+                                            const abierto = operacionAbierta === b.clave;
+                                            return (
+                                            <div key={b.clave} className="border-b border-papel-borde last:border-0">
+                                                <button type="button"
+                                                    onClick={() => setOperacionAbierta(abierto ? null : b.clave)}
+                                                    className="w-full text-left px-3 py-2 flex items-start gap-2 hover:bg-papel">
+                                                    <span className="flex-1 min-w-0">
+                                                        <span className="block text-xs text-tinta">{b.titulo}</span>
+                                                        <span className="block text-[10px] text-tinta-tenue">
+                                                            {b.cuando.toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}
+                                                            {b.quien ? ` · ${b.quien}` : ''}
+                                                            {b.detalles.length > 0 && ` · ${b.detalles.length} detalle${b.detalles.length === 1 ? '' : 's'}`}
+                                                        </span>
+                                                    </span>
+                                                    {b.detalles.length > 0 && (
+                                                        <span className="text-[10px] text-tinta-tenue flex-shrink-0 mt-0.5">{abierto ? '▲' : '▼'}</span>
+                                                    )}
+                                                </button>
+                                                {abierto && b.detalles.length > 0 && (
+                                                    <ul className="px-3 pb-2 space-y-0.5">
+                                                        {b.detalles.map(d => (
+                                                            <li key={d.id} className="text-[11px] text-tinta-suave">• {d.description}</li>
+                                                        ))}
+                                                    </ul>
+                                                )}
                                             </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                     );
                                 })()}
