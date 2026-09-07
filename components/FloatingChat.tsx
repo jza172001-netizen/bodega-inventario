@@ -123,7 +123,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     onBehaviorLog, auditLogs = [], onDescartarItems,
 }) => {
     const [open, setOpen] = useState(false);
-    /** El historial de todos, desplegado dentro del chat. */
+    /** El historial del asistente: lo que se hizo DESDE acá, no toda la app. */
     const [verHistorial, setVerHistorial] = useState(false);
     const [messages, setMessages] = useState<ChatMsg[]>([
         { id: uid(), role: 'bot', text: '¡Hola! Usa los botones de arriba para registrar salidas, asignar herramientas o agregar ítems al inventario.' },
@@ -391,6 +391,19 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
      * ítems creados se quedan: para eso los creó.
      */
     const cancelWizard = (descartar = false) => {
+        /**
+         * En qué paso se salió.
+         *
+         * En producción el registro se abrió 88 veces y en seis de los nueve días
+         * con actividad se abrió 47 veces sin guardar un solo movimiento. Sé que
+         * pasa; no sé por qué, y adivinarlo sería peor que medirlo. Esto anota el
+         * paso exacto donde se abandona, que es el dato que falta para poder
+         * decidir qué arreglar.
+         */
+        if (descartar && wizardStep) {
+            onBehaviorLog?.('WIZARD_ABANDONADO',
+                `Salió del ${wizardIsAddMode ? 'agregar al inventario' : 'registro de salida'} en el paso "${wizardStep}"`);
+        }
         if (descartar && creadosPorAsistente.length > 0) onDescartarItems?.(creadosPorAsistente);
         setCreadosPorAsistente([]);
         setWizardIsAddMode(false); setWizardStep(null); setInput(''); setWizardSel(new Map()); setWizardSubWorkerName(''); resetWizardCreate();
@@ -1873,11 +1886,34 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                     semitransparente y debajo de los botones: es una
                                     consulta, no una acción — no compite con Despacho,
                                     Rápido ni Agregar. */}
-                                {verHistorial && (
+                                {verHistorial && (() => {
+                                    /**
+                                     * Lo que se hizo DESDE ACÁ, no toda la app.
+                                     *
+                                     * Antes este panel mostraba la bitácora entera —lo
+                                     * mismo que la vista de Trazabilidad—, que no es lo
+                                     * que se pidió. Lo que hacía falta era el historial
+                                     * del asistente: lo que uno despachó, creó o asignó
+                                     * hablándole a él.
+                                     *
+                                     * Sale de la misma bitácora, filtrando por su origen,
+                                     * y por eso se ve igual en todos los celulares sin
+                                     * hacer nada más: la bitácora ya se sincroniza sola.
+                                     * La conversación en sí sigue siendo de este teléfono.
+                                     */
+                                    const mios = auditLogs.filter(l => l.origen === 'chat');
+                                    return (
                                     <div className="border-t border-papel-borde bg-papel-hondo max-h-56 overflow-y-auto flex-shrink-0">
-                                        {auditLogs.length === 0 ? (
-                                            <p className="px-3 py-3 text-xs text-tinta-tenue">Todavía no hay nada registrado.</p>
-                                        ) : auditLogs.slice(0, 60).map(l => (
+                                        {mios.length === 0 ? (
+                                            <div className="px-3 py-3 space-y-1">
+                                                <p className="text-xs text-tinta-tenue">Todavía no has hecho nada desde acá.</p>
+                                                <p className="text-[10px] text-tinta-tenue">
+                                                    Lo que hagas con el asistente queda en esta lista y se
+                                                    ve desde cualquier celular. Lo de antes de hoy no quedó
+                                                    marcado: esa información no se guardaba.
+                                                </p>
+                                            </div>
+                                        ) : mios.slice(0, 60).map(l => (
                                             <div key={l.id} className="px-3 py-2 border-b border-papel-borde last:border-0">
                                                 <p className="text-xs text-tinta">{l.description}</p>
                                                 <p className="text-[10px] text-tinta-tenue">
@@ -1887,13 +1923,14 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                             </div>
                                         ))}
                                     </div>
-                                )}
+                                    );
+                                })()}
                                 <div className="border-t border-papel-borde px-3 py-1.5 flex-shrink-0">
                                     <button
-                                        onClick={() => { setVerHistorial(v => !v); onBehaviorLog?.('BUTTON', verHistorial ? 'Cerró historial en el chat' : 'Abrió historial en el chat'); }}
+                                        onClick={() => { setVerHistorial(v => !v); onBehaviorLog?.('BUTTON', verHistorial ? 'Cerró el historial del chat' : 'Abrió el historial del chat'); }}
                                         className="w-full text-[11px] font-bold text-tinta-tenue/70 hover:text-tinta-suave py-1 rounded-lg hover:bg-papel-hondo transition-colors"
                                     >
-                                        {verHistorial ? '✕ Cerrar el historial' : '¿Deseas acceder al historial? →'}
+                                        {verHistorial ? '✕ Cerrar' : 'Lo que se ha hecho desde acá →'}
                                     </button>
                                 </div>
                                 {/* Las sugerencias de siempre, con un «?» chiquito pegado

@@ -16,6 +16,8 @@ import CopilotView from './components/CopilotView';
 import { FloatingChat } from './components/FloatingChat';
 import { OnboardingModal } from './components/OnboardingModal';
 import { HelpView } from './components/HelpView';
+import { describirCambios, describirEstado } from './utils/cambios';
+import { PapeleraView } from './components/PapeleraView';
 import { TraceabilityView } from './components/TraceabilityView';
 import { WhatsAppView } from './components/WhatsAppView';
 import { PickupView } from './components/PickupView';
@@ -43,7 +45,7 @@ import { MovementsIcon } from './components/icons/MovementsIcon';
 import { PersonnelIcon } from './components/icons/PersonnelIcon';
 import { WhatsAppIcon } from './components/icons/WhatsAppIcon';
 
-type View = 'dashboard' | 'kardex' | 'personnel' | 'copilot' | 'help' | 'whatsapp' | 'pickup' | 'traceability' | 'familias' | 'pedidos';
+type View = 'dashboard' | 'kardex' | 'personnel' | 'copilot' | 'help' | 'whatsapp' | 'pickup' | 'traceability' | 'familias' | 'pedidos' | 'papelera';
 type KardexTab = 'movements' | 'loans' | 'inventory' | 'projects';
 
 /**
@@ -60,6 +62,36 @@ const ONBOARDING_KEY = 'bodega_onboarding_v1';
 // El seed solo aplica cuando no hay ningún usuario (instalación nueva sin conexión).
 // Antes esta función colapsaba cualquier lista sobre los 3 seedUsers: los usuarios
 // creados en la BD nunca aparecían y sus credenciales quedaban bajo otra tarjeta (B-2).
+/**
+ * Los campos que la bitácora vigila de un ítem y de una persona, con el nombre
+ * que tienen en la pantalla.
+ *
+ * Lo que no está acá no se compara: el sello de `updatedAt` cambia en cada
+ * guardado y reportarlo llenaría la bitácora de ruido, que es justo lo que se
+ * está tratando de quitar.
+ */
+const ETIQUETAS_ITEM: import('./utils/cambios').Etiquetas<Item> = {
+    name: 'nombre',
+    quantity: 'cantidad',
+    unit: 'unidad',
+    minStock: 'mínimo',
+    price: 'precio',
+    inventoryType: 'tipo',
+    category: 'categoría',
+    familia: 'familia',
+    color: 'color',
+    brand: 'marca',
+};
+
+const ETIQUETAS_PERSONA: import('./utils/cambios').Etiquetas<Personnel> = {
+    name: 'nombre',
+    phone: 'teléfono',
+    isTeamLeader: 'es oficial',
+    // `teamLeaderId` NO va: es un id, y en la bitácora saldría como un
+    // amasijo de letras. Los cambios de cuadrilla ya se anotan con nombres
+    // propios en `soltarCuadrillaDe`.
+};
+
 const migrateUsers = (stored: AppUser[]): AppUser[] => {
     if (stored.length === 0) return seedUsers;
     return stored.map(u => ({ ...u, setupComplete: u.setupComplete || !!u.username }));
@@ -140,6 +172,41 @@ const App: React.FC = () => {
         return logs.map(l => fix[l.actor] ? { ...l, actor: fix[l.actor] } : l);
     });
 
+    /** Quién manda algo a la papelera. Misma regla que el actor de la bitácora:
+     *  nunca en blanco, porque un borrado sin dueño no se puede auditar. */
+    const quienBorra = (): string => userName?.trim() || 'sin identificar';
+
+    /**
+     * De dónde salió lo que se está registrando.
+     *
+     * El chat necesita mostrar SU historial —lo que se hizo desde ahí— y que se
+     * vea en cualquier celular. La bitácora ya se sincroniza entre teléfonos, así
+     * que no hace falta una tabla nueva: falta saber cuáles renglones vinieron
+     * del chat.
+     *
+     * Es un interruptor y no un parámetro a propósito. Una sola acción del chat
+     * dispara varias anotaciones en cascada —crear un ítem registra además su
+     * carga inicial, despachar toca stock y préstamo—, y pasarle el origen a
+     * quince funciones significaría cambiarles la firma a todas y acordarse de
+     * cada una para siempre. Con el interruptor, TODO lo que se anote mientras
+     * el chat está actuando queda marcado, cascada incluida.
+     *
+     * Va en un `ref` y no en estado porque tiene que valer YA, en la misma
+     * vuelta: un `useState` no cambia hasta el render siguiente, que es
+     * exactamente el error que costó plata con el stock en la tanda del 6.
+     */
+    const origenAccion = React.useRef<string | null>(null);
+    const desdeElChat = <A extends unknown[], R>(fn: (...a: A) => R) => (...a: A): R => {
+        origenAccion.current = 'chat';
+        try {
+            return fn(...a);
+        } finally {
+            // En un `finally` para que un error a mitad no deje el interruptor
+            // encendido marcando como «del chat» todo lo que venga después.
+            origenAccion.current = null;
+        }
+    };
+
     const addAuditLog = (action: string, description: string, actorOverride?: string) => {
         const entry: AuditLog = {
             id: `audit-${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -159,6 +226,7 @@ const App: React.FC = () => {
              */
             actor: (actorOverride ?? userName)?.trim() || 'sin identificar',
             description,
+            ...(origenAccion.current ? { origen: origenAccion.current } : {}),
         };
         setAuditLogs(prev => [entry, ...prev]);
         db.addAuditLog(entry).catch(e => console.error('[Supabase] auditLog:', e));
@@ -701,7 +769,7 @@ const App: React.FC = () => {
 
     const handleDeleteOrderNote = (n: OrderNote) => {
         setOrderNotes(prev => prev.filter(x => x.id !== n.id));
-        withSync(db.deleteOrderNote(n.id));
+        withSync(db.deleteOrderNote(n.id, quienBorra()));
         addAuditLog('ORDER_NOTE_DELETED', `Quitó de la lista de pedidos: "${n.texto}"`);
     };
 
@@ -723,8 +791,8 @@ const App: React.FC = () => {
 
     const [currentView, setCurrentView] = useState<View>('dashboard');
     const [kardexTab, setKardexTab] = useState<KardexTab>('movements');
-    const EMPLOYEE_VIEWS: View[] = ['dashboard', 'kardex', 'personnel', 'help', 'whatsapp', 'pickup', 'traceability', 'copilot', 'familias', 'pedidos'];
-    const VISITOR_VIEWS: View[] = ['dashboard', 'kardex', 'whatsapp', 'traceability'];
+    const EMPLOYEE_VIEWS: View[] = ['dashboard', 'kardex', 'personnel', 'help', 'whatsapp', 'pickup', 'traceability', 'copilot', 'familias', 'pedidos', 'papelera'];
+    const VISITOR_VIEWS: View[] = ['dashboard', 'kardex', 'whatsapp', 'traceability', 'papelera'];
     const effectiveView: View = (userRole === UserRole.VISITOR && !VISITOR_VIEWS.includes(currentView))
         ? 'dashboard'
         : (userRole === UserRole.EMPLOYEE && !EMPLOYEE_VIEWS.includes(currentView))
@@ -790,55 +858,22 @@ const App: React.FC = () => {
         setShowOnboarding(false);
     };
 
-    // El dueño ejecuta los reset directamente: la escalera de 3 toques del modal de
-    // Configuración ya es la confirmación. Los empleados sí requieren que todos los
-    // usuarios con cuenta confirmen con su contraseña.
-    const requireResetAuth = (fn: () => void, title: string, message: string) => {
-        if (userRole === UserRole.OWNER) fn();
-        else requireMultiUser(fn, title, message);
-    };
-
-    const handleResetAllData = () => {
-        requireResetAuth(
-            () => {
-                setItems([]);
-                setMovements([]);
-                setPersonnel([]);
-                setPurchaseOrders([]);
-                setProjects([]);
-                addAuditLog('ITEM_DELETED', 'Se borró toda la bodega (reset completo)');
-                Promise.all([
-                    db.deleteAllMovements(),
-                    db.deleteAllItems(),
-                    db.deleteAllPersonnel(),
-                    db.deleteAllProjects(),
-                    db.deleteAllPurchaseOrders(),
-                ]).catch(e => console.error('Error limpiando Supabase:', e));
-                alert('Bodega limpia. Ahora puedes empezar a registrar tus propios materiales.');
-            },
-            'Borrar toda la bodega',
-            'Se eliminarán TODOS los productos, trabajadores y movimientos. Irreversible.',
-        );
-    };
-
-    const handleResetMaterials = () => {
-        requireResetAuth(
-            () => {
-                setItems([]);
-                setMovements([]);
-                setPurchaseOrders([]);
-                addAuditLog('ITEM_DELETED', 'Restableció materiales (ítems, movimientos, OC). Personal conservado.');
-                Promise.all([
-                    db.deleteAllMovements(),
-                    db.deleteAllItems(),
-                    db.deleteAllPurchaseOrders(),
-                ]).catch(e => console.error('Error limpiando materiales:', e));
-                alert('Materiales limpiados. El personal se conserva.');
-            },
-            'Restablecer solo materiales',
-            'Se eliminarán ítems, movimientos y órdenes de compra. El personal permanece.',
-        );
-    };
+    /**
+     * Acá vivían `handleResetAllData` y `handleResetMaterials`: los dos botones
+     * de la «Zona de peligro» que borraban la bodega entera.
+     *
+     * No dejaban lápida —eran un DELETE de verdad contra Supabase, sin vuelta
+     * atrás— y `requireResetAuth` dejaba pasar al dueño sin clave ninguna: los
+     * tres toques de confirmación caían todos en el MISMO botón, así que tres
+     * toques seguidos en el mismo punto de la pantalla y no quedaba nada. El
+     * bodeguero también los veía.
+     *
+     * Verificado contra producción: nunca se dispararon, así que no hubo daño.
+     * Esto es cerrar la puerta antes de entregarle la app a alguien más.
+     *
+     * Empezar de cero, si algún día hace falta de verdad, se hace por fuera y
+     * deja su renglón en la trazabilidad como toda operación sobre los datos.
+     */
 
     const NAV_LABELS: Record<View, string> = {
         dashboard: 'Resumen',
@@ -850,6 +885,7 @@ const App: React.FC = () => {
         pickup: 'A Recoger',
         familias: 'Agrupar ítems',
         traceability: 'Trazabilidad',
+        papelera: 'Papelera',
         pedidos: 'Lista de pedidos',
     };
 
@@ -857,7 +893,18 @@ const App: React.FC = () => {
         setCurrentView(view);
         if (tab) setKardexTab(tab);
         if (window.innerWidth < 768) setSidebarOpen(false);
-        addBehaviorLog('NAV', `Abrió ${NAV_LABELS[view] ?? view}${tab ? ` → ${tab}` : ''}`);
+        /**
+         * Moverse por la app ya no deja renglón.
+         *
+         * Esta línea, más los avisos de «llegó al fondo» de las listas, eran el
+         * 53% del registro de comportamiento en producción: 950 renglones de
+         * 1.786 que solo dicen que alguien cambió de pantalla. Cada uno costaba
+         * una escritura completa al almacenamiento del teléfono.
+         *
+         * Lo que se sigue anotando es lo que responde algo: qué filtró, qué
+         * ficha abrió, qué botón tocó, y por supuesto todo lo que TOCA los datos
+         * —eso va a la bitácora, que es otra cosa y no se recorta.
+         */
     };
 
     // ── Handlers síncronos + sync Supabase en background ──
@@ -994,9 +1041,49 @@ const App: React.FC = () => {
             setMovements(prev => prev.filter(m => !idsMov.has(m.id)));
             for (const m of aperturas) withSync(db.deleteMovement(m.id));
         }
-        for (const id of aBorrar) withSync(db.deleteItem(id));
+        for (const id of aBorrar) withSync(db.deleteItem(id, quienBorra()));
         addAuditLog('ITEM_DELETED',
             `Se descartó lo que el asistente había creado y no se confirmó: ${nombres.join(', ')}`);
+    };
+
+    /**
+     * Devolver algo de la papelera.
+     *
+     * Levantar la lápida en la base no alcanza: hay que rehacer también el
+     * efecto que ese dato tenía. Con un movimiento eso es el stock — borrarlo
+     * lo revirtió (`handleDeleteMovement`), así que devolverlo tiene que
+     * volver a aplicarlo, o el Kardex queda contando una salida que ya no
+     * existe. Un préstamo ya devuelto no se toca: salió y volvió, su efecto
+     * neto siempre fue cero.
+     *
+     * Lo demás se recarga de la nube en vez de reconstruirlo a mano: la fila
+     * que vuelve trae todos sus campos, y armarla acá sería una segunda
+     * versión de la verdad.
+     */
+    const handleRestaurado = (f: import('./services/supabaseService').EnLaPapelera) => {
+        if (f.tabla === 'movements' && f.movItemId && f.movCantidad != null && !f.movNetoCero) {
+            const item = itemActual(f.movItemId);
+            if (item) {
+                const qty = Math.max(0, f.movEsSalida
+                    ? item.quantity - f.movCantidad
+                    : item.quantity + f.movCantidad);
+                setItems(prev => prev.map(i => i.id === item.id ? { ...i, quantity: qty } : i));
+                ajustarEspejo(item.id, qty);
+                withSync(db.updateItemQuantity(item.id, qty));
+            }
+        }
+        const recargas: Record<string, () => void> = {
+            items:           () => { db.fetchItems().then(setItems).catch(() => {}); },
+            movements:       () => { db.fetchMovements().then(setMovements).catch(() => {}); },
+            personnel:       () => { db.fetchPersonnel().then(setPersonnel).catch(() => {}); },
+            projects:        () => { db.fetchProjects().then(setProjects).catch(() => {}); },
+            purchase_orders: () => { db.fetchPurchaseOrders().then(setPurchaseOrders).catch(() => {}); },
+            app_users:       () => { db.fetchUsers().then(u => setUsers(migrateUsers(u))).catch(() => {}); },
+            order_list:      () => { db.fetchOrderList().then(setOrderNotes).catch(() => {}); },
+        };
+        recargas[f.tabla]?.();
+        // Un movimiento que vuelve cambia el stock del ítem: hay que refrescar los dos.
+        if (f.tabla === 'movements') recargas.items();
     };
 
     const handleEditItem = (entrante: Item) => {
@@ -1006,14 +1093,20 @@ const App: React.FC = () => {
         const updated: Item = { ...entrante, updatedAt: new Date() };
         setItems(p => p.map(i => i.id === updated.id ? updated : i));
         withSync(db.updateItem(updated));
+        // Qué cambió, no solo que cambió. Antes acá decía `Se editó "X"` y punto:
+        // si alguien bajaba una cantidad de 3 a 1, la bitácora no lo sabía.
+        const queCambio = describirCambios(prev, updated, ETIQUETAS_ITEM);
         if (prev?.name !== updated.name) {
             // Acción propia, no un ITEM_EDITED cualquiera: el cotejo compara por
             // NOMBRE porque la bitácora no guarda ids, así que al renombrar algo se
             // rompía el hilo con su creación y el ítem salía "sin registro de
             // creación" para siempre. Con esto el hilo se puede seguir.
-            addAuditLog('ITEM_RENAMED', `Se renombró "${prev?.name ?? ''}" → "${updated.name}"`);
+            const resto = describirCambios(prev, updated, { ...ETIQUETAS_ITEM, name: undefined });
+            addAuditLog('ITEM_RENAMED',
+                `Se renombró "${prev?.name ?? ''}" → "${updated.name}"${resto ? ` · ${resto}` : ''}`);
         } else {
-            addAuditLog('ITEM_EDITED', `Se editó "${updated.name}"`);
+            addAuditLog('ITEM_EDITED',
+                queCambio ? `Se editó "${updated.name}": ${queCambio}` : `Se abrió y guardó "${updated.name}" sin cambiarle nada`);
         }
     };
 
@@ -1024,8 +1117,13 @@ const App: React.FC = () => {
         requirePin(
             () => {
                 setItems(prev => prev.filter(i => i.id !== id));
-                withSync(db.deleteItem(id));
-                addAuditLog('ITEM_DELETED', `Se eliminó "${item?.name ?? id}" del inventario`);
+                withSync(db.deleteItem(id, quienBorra()));
+                // Qué TENÍA lo que se borró. `Se eliminó "Pala"` no dice si tenía
+                // 1 o tenía 40, y eso es justo lo que hace falta para decidir si
+                // devolverlo de la papelera.
+                const traiaPuesto = item ? describirEstado(item, ETIQUETAS_ITEM) : '';
+                addAuditLog('ITEM_DELETED',
+                    `Se mandó a la papelera "${item?.name ?? id}"${traiaPuesto ? ` — ${traiaPuesto}` : ''}`);
             },
             `Eliminar "${item?.name ?? 'ítem'}"`,
             detail,
@@ -1137,7 +1235,7 @@ const App: React.FC = () => {
                     ajustarEspejo(item.id, qty);
                 }
                 setMovements(prev => prev.filter(m => m.id !== id));
-                withSync(db.deleteMovementWithRevert(id, item?.id, newQty));
+                withSync(db.deleteMovementWithRevert(id, item?.id, newQty, quienBorra()));
                 addAuditLog('MOVEMENT_DELETED', `Se eliminó registro de movimiento: "${itemName}" (stock revertido)`);
             },
             `Eliminar registro de "${itemName}"`,
@@ -1310,10 +1408,14 @@ const App: React.FC = () => {
         const p: Personnel = { ...entrante, updatedAt: new Date() };
         setPersonnel(ps => ps.map(pers => pers.id === p.id ? p : pers));
         withSync(db.updatePersonnel(p));
+        const queCambio = describirCambios(prev, p, ETIQUETAS_PERSONA);
         if (prev?.name !== p.name) {
-            addAuditLog('PERSONNEL_EDITED', `Se cambió nombre de trabajador: "${prev?.name}" → "${p.name}"`);
+            const resto = describirCambios(prev, p, { ...ETIQUETAS_PERSONA, name: undefined });
+            addAuditLog('PERSONNEL_EDITED',
+                `Se cambió nombre de trabajador: "${prev?.name}" → "${p.name}"${resto ? ` · ${resto}` : ''}`);
         } else {
-            addAuditLog('PERSONNEL_EDITED', `Se editó trabajador: "${p.name}"`);
+            addAuditLog('PERSONNEL_EDITED',
+                queCambio ? `Se editó a "${p.name}": ${queCambio}` : `Se abrió y guardó a "${p.name}" sin cambiarle nada`);
         }
         // Dejó de ser oficial: su gente no puede quedar en la cuadrilla de nadie.
         if (prev?.isTeamLeader && !p.isTeamLeader) soltarCuadrillaDe(p, 'dejó de ser oficial');
@@ -1329,7 +1431,7 @@ const App: React.FC = () => {
                 // queda apuntando a alguien que ya no está en ninguna lista.
                 if (person) soltarCuadrillaDe(person, 'fue eliminado');
                 setPersonnel(prev => prev.filter(p => p.id !== id));
-                withSync(db.deletePersonnel(id));
+                withSync(db.deletePersonnel(id, quienBorra()));
                 addAuditLog('PERSONNEL_DELETED', `Se eliminó trabajador: "${person?.name ?? id}"`);
             },
             `Eliminar trabajador "${person?.name ?? 'trabajador'}"`,
@@ -1361,7 +1463,7 @@ const App: React.FC = () => {
         requirePin(
             () => {
                 setProjects(prev => prev.filter(p => p.id !== id));
-                withSync(db.deleteProject(id));
+                withSync(db.deleteProject(id, quienBorra()));
                 addAuditLog('PROJECT_DELETED', `Se eliminó proyecto: "${project?.name ?? id}"`);
             },
             `Eliminar proyecto "${project?.name ?? 'proyecto'}"`,
@@ -1389,7 +1491,7 @@ const App: React.FC = () => {
     const handleDeletePO = (id: string) => {
         const orden = purchaseOrders.find(o => o.id === id);
         setPurchaseOrders(prev => prev.filter(o => o.id !== id));
-        withSync(db.deletePurchaseOrder(id));
+        withSync(db.deletePurchaseOrder(id, quienBorra()));
         addAuditLog('PO_DELETED', `Eliminó orden de compra de "${orden?.supplier ?? id}"`);
     };
 
@@ -1402,11 +1504,17 @@ const App: React.FC = () => {
     };
 
     const handleEditUser = (u: AppUser) => {
+        // Se toma el anterior ANTES de reemplazarlo: después de `setUsers` ya no
+        // hay contra qué comparar.
+        const previo = users.find(x => x.id === u.id);
         const seed = seedUsers.find(s => s.id === u.id);
         const normalized = seed ? { ...u, name: seed.name } : u;
         setUsers(prev => prev.map(user => user.id === u.id ? normalized : user));
         withSync(db.updateUser(normalized));
-        addAuditLog('PERSONNEL_EDITED', `Se editó usuario: "${u.username}"`);
+        // Se compara contra lo que de verdad se guardó, no contra lo que entró.
+        const queCambio = describirCambios(previo, normalized, { name: 'nombre', role: 'rol', username: 'usuario' });
+        addAuditLog('PERSONNEL_EDITED',
+            queCambio ? `Se editó el acceso de "${normalized.name}": ${queCambio}` : `Se guardó el acceso de "${normalized.name}" sin cambios`);
     };
 
     const handleDeleteUser = (id: string) => {
@@ -1414,32 +1522,22 @@ const App: React.FC = () => {
         requirePin(
             () => {
                 setUsers(prev => prev.filter(u => u.id !== id));
-                db.deleteUser(id).catch(() => setSyncStatus('error'));
+                db.deleteUser(id, quienBorra()).catch(() => setSyncStatus('error'));
                 addAuditLog('USER_DELETED', `Se eliminó usuario: "${user?.username ?? id}"`);
             },
             `Eliminar usuario "${user?.username ?? 'usuario'}"`,
         );
     };
 
-    const handleClearAuditLogs = () => {
-        requirePin(
-            () => {
-                // Se deja una entrada que sobrevive al borrado: si no, quien limpia
-                // la bitácora borra también la prueba de que la limpió, y el
-                // registro deja de servir como registro.
-                const cuantos = auditLogs.length;
-                setAuditLogs([{
-                    id: `aud-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-                    timestamp: new Date(),
-                    action: 'AUDIT_CLEARED',
-                    actor: userName,
-                    description: `Limpió la bitácora de auditoría (${cuantos} registro(s) eliminados)`,
-                }]);
-            },
-            'Limpiar bitácora',
-            'Se borrarán todos los registros de auditoría. Quedará constancia de esta limpieza.',
-        );
-    };
+    /**
+     * Acá vivía `handleClearAuditLogs`, que vaciaba la bitácora.
+     *
+     * No lo llamaba nadie —quedó de una pantalla que ya no existe— y solo tocaba
+     * la memoria del teléfono, nunca Supabase, así que ni siquiera borraba de
+     * verdad. Se va igual: una función que borra la trazabilidad y está ahí
+     * suelta es una bomba esperando a que alguien le conecte un botón. La
+     * bitácora es lo único que responde «quién hizo esto», y eso no se limpia.
+     */
 
     // ── PIN de autorización para acciones destructivas ──
     const [pinAction, setPinAction] = useState<null | { fn: () => void; title?: string; message?: string }>(null);
@@ -1537,6 +1635,20 @@ const App: React.FC = () => {
                             <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 14.25v2.25m3-4.5v4.5m3-6.75v6.75m3-9v9M6 20.25h12A2.25 2.25 0 0 0 20.25 18V6A2.25 2.25 0 0 0 18 3.75H6A2.25 2.25 0 0 0 3.75 6v12A2.25 2.25 0 0 0 6 20.25Z" />
                         </svg>
                         Trazabilidad
+                    </button>
+                    {/* La papelera va al pie, con Trazabilidad: las dos son para ir a
+                        mirar qué pasó, no para el trabajo del día. */}
+                    <button
+                        onClick={() => selectView('papelera')}
+                        className={`w-full flex items-center text-left px-4 py-2.5 text-xs font-semibold rounded-xl transition-all ${
+                            effectiveView === 'papelera'
+                                ? 'bg-marca text-tinta'
+                                : 'text-tinta-tenue hover:bg-papel-hondo hover:text-tinta-suave'}`}
+                    >
+                        <svg className="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.9} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                        </svg>
+                        Papelera
                     </button>
                     <button
                         onClick={() => { addBehaviorLog('BUTTON', 'Abrió: Configuración'); setSettingsOpen(true); }}
@@ -1695,6 +1807,14 @@ const App: React.FC = () => {
                                 onBehaviorLog={addBehaviorLog}
                             />
                         )}
+                        {effectiveView === 'papelera' && (
+                            <PapeleraView
+                                userRole={userRole}
+                                onRestaurado={handleRestaurado}
+                                onAuditLog={addAuditLog}
+                                onBehaviorLog={addBehaviorLog}
+                            />
+                        )}
                         {effectiveView === 'whatsapp' && (
                             <WhatsAppView movements={movements} items={items} personnel={personnel} readOnly={userRole === UserRole.VISITOR} onBehaviorLog={addBehaviorLog} onAuditLog={addAuditLog} />
                         )}
@@ -1727,8 +1847,6 @@ const App: React.FC = () => {
                     onChange={handleConfigChange}
                     onClose={() => setSettingsOpen(false)}
                     userRole={userRole}
-                    onResetAllData={handleResetAllData}
-                    onResetMaterials={handleResetMaterials}
                     onOpenUserManagement={() => { addBehaviorLog('BUTTON', 'Abrió: Accesos a la app'); setSettingsOpen(false); setUserManagementOpen(true); }}
                 />
             )}
@@ -1769,20 +1887,23 @@ const App: React.FC = () => {
                 />
             )}
             {(userRole === UserRole.OWNER || userRole === UserRole.EMPLOYEE) && (
+                /* Los handlers van envueltos para que todo lo que dispare el chat
+                   quede marcado como suyo en la bitácora, cascada incluida —es lo
+                   que le permite mostrar su propio historial. Ver `desdeElChat`. */
                 <FloatingChat
-                    onEditItem={handleEditItem}
+                    onEditItem={desdeElChat(handleEditItem)}
                     items={items}
                     movements={movements}
                     personnel={personnel}
                     purchaseOrders={purchaseOrders}
                     projects={projects}
-                    onLogMovements={handleLogMovements}
-                    onCreateItem={handleAddItemSync}
-                    onCreateProject={handleAddProjectSync}
-                    onCreatePersonnel={handleAddPersonnelSync}
+                    onLogMovements={desdeElChat(handleLogMovements)}
+                    onCreateItem={desdeElChat(handleAddItemSync)}
+                    onCreateProject={desdeElChat(handleAddProjectSync)}
+                    onCreatePersonnel={desdeElChat(handleAddPersonnelSync)}
                     onBehaviorLog={addBehaviorLog}
                     auditLogs={auditLogs}
-                    onDescartarItems={handleDescartarItems}
+                    onDescartarItems={desdeElChat(handleDescartarItems)}
                 />
             )}
         </div>

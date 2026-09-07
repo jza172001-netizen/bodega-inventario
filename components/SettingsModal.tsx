@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React from 'react';
 import { UserRole } from '../types';
 
 export interface AppConfig {
@@ -19,9 +19,22 @@ interface SettingsModalProps {
     userRole?: UserRole;
     /** Abre la gestión de accesos. Solo el administrador la ve. */
     onOpenUserManagement?: () => void;
-    onResetAllData?: () => void;
-    onResetMaterials?: () => void;
 }
+
+/**
+ * Acá vivía la «Zona de peligro»: dos botones que borraban la bodega entera.
+ *
+ * No eran una lápida como el resto de los borrados —eran un DELETE de verdad
+ * contra Supabase, sin vuelta atrás— y se disparaban con tres toques al MISMO
+ * botón. Al dueño ni siquiera le pedían la clave: tres toques seguidos en el
+ * mismo punto de la pantalla y no quedaba nada. El bodeguero también los veía.
+ *
+ * Nunca se dispararon (cero renglones de reset en la bitácora), así que no hubo
+ * daño; esto es cerrar la puerta antes de entregarle la app a alguien más.
+ *
+ * Si algún día de verdad hay que empezar de cero, se hace por fuera y queda su
+ * renglón en la trazabilidad, como toda operación sobre los datos de verdad.
+ */
 
 const Toggle: React.FC<{ label: string; description: string; value: boolean; onToggle: () => void }> = ({ label, description, value, onToggle }) => (
     <div className="flex items-center justify-between py-4 border-b border-papel-borde last:border-0">
@@ -38,25 +51,8 @@ const Toggle: React.FC<{ label: string; description: string; value: boolean; onT
     </div>
 );
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ config, onChange, onClose, userRole, onResetAllData, onResetMaterials, onOpenUserManagement }) => {
-    const [resetStep, setResetStep] = useState(0);
-    const [matResetStep, setMatResetStep] = useState(0);
+export const SettingsModal: React.FC<SettingsModalProps> = ({ config, onChange, onClose, userRole, onOpenUserManagement }) => {
     const isOwner = userRole !== UserRole.VISITOR;
-
-    const handleResetClick = () => {
-        if (resetStep === 0) { setResetStep(1); return; }
-        if (resetStep === 1) { setResetStep(2); return; }
-        if (resetStep === 2) {
-            setResetStep(0);
-            onResetAllData?.();
-        }
-    };
-
-    const resetLabels = [
-        '🗑 Restablecer fábrica',
-        '⚠️ ¿Seguro? Esto borra TODO',
-        '🔴 Confirmar — acción irreversible',
-    ];
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -113,67 +109,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ config, onChange, 
                                 </span>
                                 <span className="flex-shrink-0 text-xs font-black text-marca-oscuro">Abrir →</span>
                             </button>
-                        </>
-                    )}
-
-                    {isOwner && (onResetAllData || onResetMaterials) && (
-                        <>
-                            <p className="text-[10px] font-black text-tinta-tenue uppercase tracking-widest pt-5 pb-1">Zona de peligro</p>
-
-                            {onResetMaterials && (
-                                <div className="py-3 border-t border-atencion">
-                                    <p className="text-xs text-tinta-tenue mb-3">
-                                        Borra ítems, movimientos y órdenes de compra — <strong>el personal se conserva</strong>.
-                                    </p>
-                                    <div className="flex gap-2">
-                                        {matResetStep > 0 && (
-                                            <button onClick={() => setMatResetStep(0)}
-                                                className="px-3 py-2 text-xs font-semibold bg-papel-hondo text-tinta-suave rounded-xl hover:bg-papel-borde transition-colors">
-                                                Cancelar
-                                            </button>
-                                        )}
-                                        <button onClick={() => {
-                                            if (matResetStep < 2) { setMatResetStep(s => s + 1); return; }
-                                            setMatResetStep(0);
-                                            onResetMaterials();
-                                        }} className={`flex-1 py-2 text-xs font-black rounded-xl transition-all ${
-                                            matResetStep === 0
-                                                ? 'bg-atencion-suave text-atencion hover:bg-atencion-suave'
-                                                : matResetStep === 1
-                                                    ? 'bg-atencion text-papel hover:bg-atencion'
-                                                    : 'bg-atencion text-papel hover:bg-atencion'
-                                        }`}>
-                                            {['🗂 Restablecer solo materiales', '⚠️ ¿Seguro? Borra ítems y movimientos', '🔴 Confirmar — acción irreversible'][matResetStep]}
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
-
-                            {onResetAllData && (
-                                <div className="py-3 border-t border-alerta">
-                                    <p className="text-xs text-tinta-tenue mb-3">
-                                        Borra <strong>todos</strong> los ítems, movimientos, trabajadores y proyectos — tanto en la app como en la base de datos. Esta acción es irreversible.
-                                    </p>
-                                    <div className="flex gap-2">
-                                        {resetStep > 0 && (
-                                            <button onClick={() => setResetStep(0)}
-                                                className="px-3 py-2 text-xs font-semibold bg-papel-hondo text-tinta-suave rounded-xl hover:bg-papel-borde transition-colors">
-                                                Cancelar
-                                            </button>
-                                        )}
-                                        <button onClick={handleResetClick}
-                                            className={`flex-1 py-2 text-xs font-black rounded-xl transition-all ${
-                                                resetStep === 0
-                                                    ? 'bg-alerta-suave text-alerta hover:bg-alerta-suave'
-                                                    : resetStep === 1
-                                                        ? 'bg-alerta text-papel hover:bg-alerta'
-                                                        : 'bg-alerta text-papel hover:bg-alerta'
-                                            }`}>
-                                            {resetLabels[resetStep]}
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
                         </>
                     )}
                 </div>

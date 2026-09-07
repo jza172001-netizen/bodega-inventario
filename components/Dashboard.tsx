@@ -58,6 +58,45 @@ export const Dashboard: React.FC<DashboardProps> = ({ items, movements, purchase
         if (aRecoger > 0) anota('recoger', '📍',
             `${aRecoger} herramienta${aRecoger > 1 ? 's' : ''} por recoger`, true,
             () => onNavigate?.('pickup'));
+
+        /**
+         * Marcadas para recoger, y a esa persona nadie le ha escrito.
+         *
+         * En la bitácora de producción: 16 veces se marcó algo «a recoger» y una
+         * sola vez se avisó. Dos WhatsApp en tres meses. La función servía hasta
+         * la mitad — marcar — y ahí se quedaba, porque nada volvía a acordarse.
+         *
+         * El cruce es por persona y por fecha: se busca el último WhatsApp que
+         * se le mandó a quien tiene la herramienta, y se compara contra cuándo
+         * se marcó (que es cuando el movimiento se tocó por última vez). Si el
+         * aviso es más viejo que la marca, o no hay aviso, todavía falta.
+         */
+        const avisadoEl = (nombre: string): number => {
+            let ultimo = 0;
+            for (const l of auditLogs) {
+                if (l.action !== 'WHATSAPP_SENT') continue;
+                if (!l.description?.includes(nombre)) continue;
+                const t = new Date(l.timestamp).getTime();
+                if (t > ultimo) ultimo = t;
+            }
+            return ultimo;
+        };
+        const sinAvisar = fuera.filter(m => {
+            if (!m.pendingPickup) return false;
+            const quien = personnel.find(p => p.id === m.personnelId);
+            if (!quien) return true;          // sin dueño conocido, nadie le avisó
+            const marcadoEl = new Date(m.updatedAt ?? m.timestamp).getTime();
+            return avisadoEl(quien.name) < marcadoEl;
+        });
+        if (sinAvisar.length > 0) {
+            const masViejo = Math.max(...sinAvisar.map(m => dias(m.updatedAt ?? m.timestamp)));
+            // Corto a propósito: en un celular de 390 px el renglón se corta con
+            // puntos suspensivos y se pierde justo el final, que es el dato.
+            anota('sin-avisar', '📵',
+                `${sinAvisar.length} sin avisar${masViejo > 0 ? ` · ${masViejo}d` : ''}`,
+                true,
+                () => onNavigate?.('whatsapp'));
+        }
         if (vencidos > 0) anota('vencidos', '⏰',
             `${vencidos} préstamo${vencidos > 1 ? 's' : ''} de más de una semana`, true,
             () => onNavigate?.('kardex', 'loans'));
