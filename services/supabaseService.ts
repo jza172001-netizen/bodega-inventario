@@ -907,9 +907,19 @@ export async function fetchPapelera(): Promise<EnLaPapelera[]> {
         supabase.from(tabla).select('*').not('deleted_at', 'is', null)
             .order('deleted_at', { ascending: false }).limit(200);
 
+    /**
+     * Los accesos van por RPC y no por SELECT.
+     *
+     * `app_users` tiene seguridad de fila con permisos de insertar, editar y
+     * borrar, pero ninguno de LEER —por eso los vivos se leen con
+     * `get_users_safe`—. Un SELECT directo acá devuelve vacío siempre, así que
+     * un acceso borrado desaparecía de la pantalla de entrada y tampoco salía
+     * en la papelera: se perdía sin forma de devolverlo. Comprobado contra
+     * producción con la llave real de la app.
+     */
     const [it, mov, per, proj, po, us, ord] = await Promise.all([
         traer('items'), traer('movements'), traer('personnel'), traer('projects'),
-        traer('purchase_orders'), traer('app_users'), traer('order_list'),
+        traer('purchase_orders'), supabase.rpc('get_deleted_users_safe'), traer('order_list'),
     ]);
 
     const salida: EnLaPapelera[] = [];
@@ -940,8 +950,16 @@ export async function fetchPapelera(): Promise<EnLaPapelera[]> {
     for (const r of (po.data ?? []) as Record<string, unknown>[])
         salida.push(fila(r, 'purchase_orders', `Orden a ${r.supplier}`, r.status as string));
 
+    // El RPC devuelve las columnas con otro nombre (`user_*`): se adaptan acá.
     for (const r of (us.data ?? []) as Record<string, unknown>[])
-        salida.push(fila(r, 'app_users', r.name as string, `acceso · ${r.role}`));
+        salida.push({
+            tabla: 'app_users',
+            id: r.user_id as string,
+            titulo: r.user_name as string,
+            detalle: `acceso · ${r.user_role}`,
+            borradoEl: new Date((r.user_deleted_at as string) ?? Date.now()),
+            borradoPor: (r.user_deleted_by as string | null) ?? undefined,
+        });
 
     for (const r of (ord.data ?? []) as Record<string, unknown>[])
         salida.push(fila(r, 'order_list', r.texto as string,
@@ -962,6 +980,12 @@ export async function fetchPapelera(): Promise<EnLaPapelera[]> {
  * se les levanta la lápida.
  */
 export async function restaurar(tabla: TablaPapelera, id: string): Promise<void> {
+    // Los accesos, por el mismo camino que se leen: por RPC.
+    if (tabla === 'app_users') {
+        const { error } = await supabase.rpc('restore_user', { p_id: id });
+        if (error) throw error;
+        return;
+    }
     const conSello: TablaPapelera[] = ['items', 'movements', 'personnel', 'projects', 'purchase_orders'];
     const cambios: Record<string, unknown> = { deleted_at: null, deleted_by: null };
     if (conSello.includes(tabla)) cambios.updated_at = sello();
