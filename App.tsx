@@ -196,8 +196,29 @@ const App: React.FC = () => {
      * exactamente el error que costó plata con el stock en la tanda del 6.
      */
     const origenAccion = React.useRef<string | null>(null);
+
+    /**
+     * El número que amarra todo lo que salió del MISMO toque.
+     *
+     * Una sola salida por el chat deja varios renglones —el movimiento, el
+     * stock, a veces la creación del ítem y su carga inicial—, y para el
+     * bodeguero eso fue UNA cosa: "le despaché tres vainas a Jhon jader". Sin
+     * este número, el historial del chat serían tres renglones sueltos en vez de
+     * un chulito que se abre.
+     *
+     * Vive hasta el final del toque y no más: se genera en la primera llamada y
+     * se suelta con un `setTimeout(0)`, que corre cuando el navegador terminó de
+     * atender ese clic. Todo lo que pase dentro del mismo clic es síncrono, así
+     * que comparte el número; el clic siguiente empieza uno nuevo.
+     */
+    const operacionActual = React.useRef<string | null>(null);
+
     const desdeElChat = <A extends unknown[], R>(fn: (...a: A) => R) => (...a: A): R => {
         origenAccion.current = 'chat';
+        if (!operacionActual.current) {
+            operacionActual.current = crypto.randomUUID();
+            setTimeout(() => { operacionActual.current = null; }, 0);
+        }
         try {
             return fn(...a);
         } finally {
@@ -206,6 +227,17 @@ const App: React.FC = () => {
             origenAccion.current = null;
         }
     };
+
+    /**
+     * La frase que el bodeguero YA vio en el chat, guardada tal cual.
+     *
+     * Se guarda la redacción de la pantalla y no una reconstruida después: si el
+     * chat dijo "✅ 3 salidas registradas para Jhon jader · LODGES", eso es lo
+     * que tiene que decir el historial. Deducirlo leyendo las descripciones con
+     * expresiones regulares sería inventar una segunda versión de algo que ya
+     * está escrito.
+     */
+    const handleResumenChat = (texto: string) => addAuditLog('CHAT_RESUMEN', texto);
 
     const addAuditLog = (action: string, description: string, actorOverride?: string) => {
         const entry: AuditLog = {
@@ -227,6 +259,7 @@ const App: React.FC = () => {
             actor: (actorOverride ?? userName)?.trim() || 'sin identificar',
             description,
             ...(origenAccion.current ? { origen: origenAccion.current } : {}),
+            ...(operacionActual.current ? { operacionId: operacionActual.current } : {}),
         };
         setAuditLogs(prev => [entry, ...prev]);
         db.addAuditLog(entry).catch(e => console.error('[Supabase] auditLog:', e));
@@ -1904,6 +1937,7 @@ const App: React.FC = () => {
                     onBehaviorLog={addBehaviorLog}
                     auditLogs={auditLogs}
                     onDescartarItems={desdeElChat(handleDescartarItems)}
+                    onResumenChat={desdeElChat(handleResumenChat)}
                 />
             )}
         </div>
