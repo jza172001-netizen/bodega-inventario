@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { AppUser, UserRole } from '../types';
 import * as db from '../services/supabaseService';
 import { sha256Hex } from '../utils/hash';
+import { normStr } from '../utils/genus';
 
 interface LoginViewProps {
     users: AppUser[];
@@ -96,13 +97,21 @@ export const LoginView: React.FC<LoginViewProps> = ({ users, onLoginSuccess, onF
     const handleSetupSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedUser) return;
-        if (!setupUsername.trim()) { triggerShake('Pon un nombre de usuario'); return; }
         if (setupPassword.length < 3) { triggerShake('La contraseña debe tener al menos 3 caracteres'); return; }
         if (setupPassword !== setupConfirm) { triggerShake('Las contraseñas no coinciden'); return; }
-        if (users.some(u => u.username === setupUsername.trim() && u.id !== selectedUser.id)) {
-            triggerShake('Ese nombre de usuario ya está en uso'); return;
+        /**
+         * El nombre de usuario se deriva del nombre de la persona, no se pide.
+         *
+         * Y se guarda normalizado —sin tildes, en minúscula— porque al entrar se
+         * compara con la misma regla del buscador maestro: escribirlo en
+         * mayúscula o con tilde tiene que servir igual. La CONTRASEÑA no lleva
+         * esa regla: esa va exacta como la escribió su dueño.
+         */
+        const usuario = normStr(selectedUser.name).replace(/\s+/g, '_');
+        if (users.some(u => u.username && normStr(u.username) === normStr(usuario) && u.id !== selectedUser.id)) {
+            triggerShake('Ya hay alguien registrado con ese nombre'); return;
         }
-        onFirstSetup(selectedUser.id, setupUsername.trim(), setupPassword);
+        onFirstSetup(selectedUser.id, usuario, setupPassword);
     };
 
     const goBack = () => {
@@ -251,25 +260,21 @@ export const LoginView: React.FC<LoginViewProps> = ({ users, onLoginSuccess, onF
                             <div className="text-center mb-5">
                                 <p className="text-2xl mb-1">✨</p>
                                 <p className="font-black text-tinta text-lg">Bienvenido/a, {selectedUser.name}</p>
-                                <p className="text-xs text-tinta-tenue mt-1">Crea tu nombre de usuario y contraseña</p>
+                                {/* El nombre de usuario ya no se pide: es el nombre de la
+                                    persona, que es con el que ella se reconoce y con el que
+                                    entra. Pedirle que se invente otro era un paso de más
+                                    para alguien que solo quiere ponerle clave a su tarjeta. */}
+                                <p className="text-xs text-tinta-tenue mt-1">Crea tu contraseña</p>
+                                <p className="text-[11px] text-tinta-tenue mt-1">
+                                    Solo la sabés vos. Nadie más la puede ver, ni el administrador.
+                                </p>
                             </div>
 
                             <form onSubmit={handleSetupSubmit} className="space-y-4">
                                 <div>
-                                    <label className="text-[10px] font-black text-tinta-tenue uppercase tracking-widest mb-1 block">Nombre de usuario</label>
-                                    <input
-                                        ref={setupUsernameRef}
-                                        type="text"
-                                        value={setupUsername}
-                                        onChange={e => { setSetupUsername(e.target.value); setError(''); }}
-                                        placeholder="ej: esteban_bodega"
-                                        className="w-full px-4 py-3 rounded-xl border-2 border-papel-borde focus:border-marca outline-none text-tinta font-bold"
-                                        autoComplete="username"
-                                    />
-                                </div>
-                                <div>
                                     <label className="text-[10px] font-black text-tinta-tenue uppercase tracking-widest mb-1 block">Contraseña</label>
                                     <input
+                                        ref={setupUsernameRef}
                                         type="password"
                                         value={setupPassword}
                                         onChange={e => { setSetupPassword(e.target.value); setError(''); }}

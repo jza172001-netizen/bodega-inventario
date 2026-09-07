@@ -15,6 +15,7 @@ import {
 } from '../services/whatsappService';
 import { isConsumable, CONSUMABLE_TYPES } from '../utils/inventory';
 import { ConfirmDialog } from './ConfirmDialog';
+import { ConfirmLoteWhatsApp, LinaPersona } from './ConfirmLoteWhatsApp';
 
 interface Props {
     movements: Movement[];
@@ -118,6 +119,11 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
      * característica, y era la única sin confirmar.
      */
     const [porConfirmar, setPorConfirmar] = useState<{ titulo: string; mensaje: string; hacer: () => void } | null>(null);
+    /** Lo mismo, pero para un envío a varios: además del sí/no, se puede
+     *  destildar gente y abrir cada nombre para ver qué tiene. */
+    const [lotePorConfirmar, setLotePorConfirmar] = useState<
+        { titulo: string; subtitulo: string; gente: LinaPersona[]; hacer: (ids: string[]) => void } | null
+    >(null);
     /**
      * A quién se le manda.
      *
@@ -234,16 +240,34 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
         });
     };
 
-    /** Confirma un lote: se listan los nombres, no los mensajes completos — con
-     *  ocho personas la pantalla se vuelve ilegible y la confirmación deja de
-     *  cumplir su función. */
+    /**
+     * Confirma un lote.
+     *
+     * Antes era una lista de nombres en texto plano: si ahí se veía que a uno
+     * no había que escribirle, tocaba cancelar todo y volver a armar el envío.
+     * Ahora la lista es tildable y cada nombre se abre para ver qué tiene esa
+     * persona — se decide en el mismo diálogo.
+     */
     const confirmarLote = (batch: PersonGroup[], label: string, kind: ReminderKind, windowDays: number) => {
         if (batch.length === 0) return;
         const queReporta = kind === 'consumo' ? 'Reporte de consumo' : kind === 'loan' ? 'Reporte de préstamos' : 'Reporte de préstamos y consumo';
-        setPorConfirmar({
+        const gente: LinaPersona[] = batch.map(g => ({
+            id: g.person.id,
+            nombre: g.person.name,
+            telefono: g.person.phone,
+            // Las mismas líneas que va a leer la persona en el WhatsApp: no hay
+            // dos versiones de la verdad.
+            tiene: buildPersonGroups(g.person, movements, items, windowDays, kind)
+                .flatMap(gr => gr.items.map(linea => `${gr.emoji} ${linea}`)),
+        }));
+        setLotePorConfirmar({
             titulo: `Enviar ${batch.length} mensaje(s)`,
-            mensaje: `Se van a enviar uno por uno, a:\n\n${batch.map(g => `• ${g.person.name}`).join('\n')}\n\n${queReporta} · ventana de ${windowDays} días`,
-            hacer: () => { startBatchQueue(batch, label, kind, windowDays); },
+            subtitulo: `${queReporta} · ventana de ${windowDays} días`,
+            gente,
+            hacer: (ids: string[]) => {
+                const elegidos = batch.filter(g => ids.includes(g.person.id));
+                if (elegidos.length > 0) startBatchQueue(elegidos, label, kind, windowDays);
+            },
         });
     };
 
@@ -621,6 +645,15 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
                 </div>
             )}
             </div>
+            {lotePorConfirmar && (
+                <ConfirmLoteWhatsApp
+                    titulo={lotePorConfirmar.titulo}
+                    subtitulo={lotePorConfirmar.subtitulo}
+                    gente={lotePorConfirmar.gente}
+                    onConfirm={lotePorConfirmar.hacer}
+                    onClose={() => setLotePorConfirmar(null)}
+                />
+            )}
             {porConfirmar && (
                 <ConfirmDialog
                     title={porConfirmar.titulo}

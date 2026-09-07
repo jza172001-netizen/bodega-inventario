@@ -4,6 +4,7 @@ import { Item, Movement, Personnel, Project, InventoryType, UserRole, AuditLog, 
 import { MovementsView } from './MovementsView';
 import { LoansView, LoansLens } from './LoansView';
 import { InventoryView } from './InventoryView';
+import { DañadasPanel } from './DañadasPanel';
 import { ProjectsView } from './ProjectsView';
 import { ReturnToolModal } from './ReturnToolModal';
 
@@ -40,6 +41,8 @@ interface KardexHubProps {
     onCreateItem?: (item: Omit<Item, 'id'>) => Item;
     onDeleteItem: (itemId: string) => void;
     onItemHistory: (item: Item) => void;
+    /** Los dos pasos del arreglo de una herramienta dañada. */
+    onRepararPaso?: (itemId: string, paso: 'enviada' | 'arreglada') => void;
     onOpenInvoiceReader?: () => void;
     // project handlers
     onAddProject: (p: Omit<Project, 'id'>) => void;
@@ -60,12 +63,27 @@ const TABS: Array<{ id: KardexTab; label: string; icon: string }> = [
     { id: 'projects',   label: 'Proyectos',  icon: '🏗' },
 ];
 
-const INV_TYPES: Array<{ type: InventoryType | null; label: string }> = [
+/**
+ * `'dañadas'` no es un tipo de inventario, es una lente: las herramientas que
+ * están rotas o en el taller, sin importar de qué tipo sean.
+ *
+ * Va acá y no en el Resumen —donde la había puesto yo— porque es una lista de
+ * inventario: se consulta cuando uno se pregunta «¿y dónde está la pulidora?»,
+ * que es la misma pregunta con la que uno abre esta pantalla. Juli lo pidió
+ * así: «al lado de consumibles, acá en inventario, en el Kardex».
+ */
+type FiltroInv = InventoryType | null | 'dañadas';
+
+const INV_TYPES: Array<{ type: FiltroInv; label: string }> = [
     { type: null,                        label: 'Todos' },
     { type: InventoryType.HAND_TOOL,     label: '🔨 H. Manual' },
     { type: InventoryType.ELECTRICAL_TOOL, label: '⚡ H. Eléctrica' },
     { type: InventoryType.PPE,           label: '🦺 Seguridad' },
     { type: InventoryType.SINGLE_USE,    label: '📦 Consumibles' },
+    // Pegada a Consumibles, como la pidió: es la pastilla que va a buscar cuando
+    // algo no prende, y no tiene por qué quedar al final de la fila.
+    { type: 'dañadas',                   label: '🔧 Dañadas' },
+    { type: InventoryType.ACCESSORY,     label: '🔩 Accesorios' },
 ];
 
 export const KardexHub: React.FC<KardexHubProps> = ({
@@ -73,12 +91,12 @@ export const KardexHub: React.FC<KardexHubProps> = ({
     initialTab = 'movements', initialInventoryType = null, initialLoansLens = 'loans',
     onGoBack, onTabChange, onBehaviorLog,
     openLogMovementModal, onDeleteMovement, onReturnLoan,
-    onReturnItem, onMarkPendingPickup,
+    onReturnItem, onMarkPendingPickup, onRepararPaso,
     openAddItemModal, onEditItem, onSaveItem, onCreateItem, onDeleteItem, onItemHistory, onOpenInvoiceReader,
     onAddProject, onDeleteProject, onAssignProject, onCreateProject, onTransferLoan, showEconomicValues = false,
 }) => {
     const [activeTab, setActiveTab] = useState<KardexTab>(initialTab);
-    const [invType, setInvType] = useState<InventoryType | null>(initialInventoryType);
+    const [invType, setInvType] = useState<FiltroInv>(initialInventoryType);
     // Devolver desde el Historial abría nada: llamaba a la devolución directo y
     // se saltaba el estado y la revisión de accesorios.
     const [devolviendo, setDevolviendo] = useState<Movement | null>(null);
@@ -92,7 +110,9 @@ export const KardexHub: React.FC<KardexHubProps> = ({
         onBehaviorLog?.('NAV', `Kardex → ${tabLabel}`);
     };
 
-    const filteredItems = invType ? items.filter(i => i.inventoryType === invType) : items;
+    const filteredItems = invType && invType !== 'dañadas'
+        ? items.filter(i => i.inventoryType === invType)
+        : items;
     const categoryLabel = INV_TYPES.find(t => t.type === invType)?.label ?? 'Todos';
 
     return (
@@ -188,7 +208,20 @@ export const KardexHub: React.FC<KardexHubProps> = ({
                 />
             )}
 
-            {activeTab === 'inventory' && (
+            {activeTab === 'inventory' && invType === 'dañadas' && (
+                <div className="pt-1">
+                    <DañadasPanel items={items} onPaso={onRepararPaso} />
+                    {items.every(i => !i.reparacion) && (
+                        <div className="bg-papel border border-papel-borde rounded-2xl p-10 text-center shadow-sm">
+                            <p className="text-4xl mb-3">🔧</p>
+                            <p className="text-tinta-tenue text-sm font-semibold">Ninguna herramienta dañada</p>
+                            <p className="text-tinta-tenue text-xs mt-1">Acá aparecen las que se devuelven rotas o incompletas</p>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {activeTab === 'inventory' && invType !== 'dañadas' && (
                 <InventoryView
                     items={filteredItems}
                     movements={movements}

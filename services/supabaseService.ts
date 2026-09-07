@@ -147,10 +147,36 @@ function dbToPurchaseOrder(
 function dbToUser(row: Record<string, unknown>): AppUser {
     return {
         id: row.id as string,
-        username: row.username as string,
-        password: row.password as string,
+        // La base guarda NULL cuando la persona todavía no ha elegido su
+        // nombre de usuario. Adentro de la app se maneja como cadena vacía.
+        username: (row.username as string | null) ?? '',
+        password: (row.password as string | null) ?? '',
         role: row.role as UserRole,
         name: row.name as string,
+        setupComplete: !!row.setup_complete,
+        passwordHash: (row.password_hash as string | null) ?? undefined,
+    };
+}
+
+/**
+ * La fila tal como va a la base.
+ *
+ * El nombre de usuario vacío se manda como NULL, no como ''. La tabla tiene
+ * UNIQUE (username): con cadena vacía, el segundo acceso sin configurar choca
+ * contra el primero y la inserción falla. Con NULL no, porque Postgres deja
+ * repetir nulos bajo una restricción única.
+ *
+ * Eso fue exactamente lo que hizo desaparecer los accesos de Santiago y de
+ * Camilo: el primero entró y el segundo se perdió sin decir nada.
+ */
+function userToDb(u: AppUser): Record<string, unknown> {
+    return {
+        username: u.username?.trim() || null,
+        password: u.password ?? '',
+        role: u.role,
+        name: u.name,
+        setup_complete: u.setupComplete ?? false,
+        password_hash: u.passwordHash ?? null,
     };
 }
 
@@ -570,7 +596,7 @@ export async function authenticateUser(
 export async function addUser(u: AppUser): Promise<AppUser> {
     const { data, error } = await supabase
         .from('app_users')
-        .insert({ id: u.id, username: u.username, password: u.password, role: u.role, name: u.name })
+        .insert({ id: u.id, ...userToDb(u) })
         .select()
         .single();
     if (error) throw error;
@@ -580,7 +606,7 @@ export async function addUser(u: AppUser): Promise<AppUser> {
 export async function updateUser(u: AppUser): Promise<void> {
     const { error } = await supabase
         .from('app_users')
-        .update({ username: u.username, password: u.password, role: u.role, name: u.name })
+        .update(userToDb(u))
         .eq('id', u.id);
     if (error) throw error;
 }

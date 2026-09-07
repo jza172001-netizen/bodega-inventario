@@ -78,9 +78,11 @@ const ProjectDetail: React.FC<{
     onCreateProject?: (name: string) => Project;
     onTransferLoan?: (movementId: string, newPersonnelId: string) => void;
     onBehaviorLog?: (action: string, detail: string) => void;
+    /** Para que la ficha de la persona sepa si quien mira puede actuar. */
+    userRole: UserRole;
 }> = ({ project, movements, items, personnel, projects, onBack, showEconomicValues,
        onItemHistory, onReturnLoan, onMarkPendingPickup, onAssignProject, onCreateProject,
-       onTransferLoan, onBehaviorLog }) => {
+       onTransferLoan, onBehaviorLog, userRole }) => {
     const [historyOpen, setHistoryOpen] = useState(false);
     // Acá adentro no se podía tocar nada: los nombres eran texto muerto. Son los
     // mismos datos que en Préstamos y en Personal, así que abren lo mismo.
@@ -348,6 +350,7 @@ const ProjectDetail: React.FC<{
                     onAssignProject={onAssignProject}
                     onCreateProject={onCreateProject}
                     onTransferLoan={onTransferLoan}
+                    userRole={userRole}
                     onClose={() => setFichaDe(null)}
                 />
             )}
@@ -419,6 +422,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                 onCreateProject={onCreateProject}
                 onTransferLoan={onTransferLoan}
                 onBehaviorLog={onBehaviorLog}
+                userRole={userRole}
             />
         );
     }

@@ -3,7 +3,7 @@ import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react'
 import { Movement, Item, Personnel, InventoryType, MovementType, UserRole } from '../types';
 import { getGenus, looseMatch } from '../utils/genus';
 import { PeriodPicker, TODO, Periodo } from './PeriodPicker';
-import { TruckIcon } from './icons/TruckIcon';
+import { RegistrarIcon } from './icons/RegistrarIcon';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
 import { TrashIcon } from './icons/TrashIcon';
 
@@ -54,9 +54,8 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
     const isOwner = userRole !== UserRole.VISITOR;
     const [page, setPage] = useState(0);
     const [filter, setFilter] = useState<FilterKey>('');
-    // Antes solo había dos casillas de fecha en blanco: para ver "los últimos 21
-    // días" tocaba calcular la fecha a mano. Ahora el rango tiene botones, y las
-    // casillas siguen ahí para el caso raro.
+    // Arranca en TODO: el historial se abre mostrando todo y se recorta con las
+    // dos casillas de fecha. Los chips de días salieron.
     const [periodo, setPeriodo] = useState<Periodo>(TODO);
     const [groupByTool, setGroupByTool] = useState(false);
     const [busqueda, setBusqueda] = useState('');
@@ -271,7 +270,7 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
                 {openLogMovementModal && isOwner && (
                     <button onClick={openLogMovementModal}
                         className="flex items-center bg-marca hover:bg-marca-fuerte text-tinta font-bold py-2 px-3 rounded-xl text-xs gap-1.5">
-                        <TruckIcon className="w-4 h-4" />
+                        <RegistrarIcon className="w-4 h-4" />
                         Registrar
                     </button>
                 )}
