@@ -42,3 +42,52 @@ export const medidaDe = (nombre: string): string | null => {
     if (/^(kg|kilos?|g|gr|gramos?|ml|mililitros?|l|lt|litros?|m|cm|mm|km|lb|lbs|libras?)\b/.test(despues)) return null;
     return `${num}"`;
 };
+
+/**
+ * Los GÉNEROS que una familia ya tiene en la bodega, sin repetir.
+ *
+ * Juli lo dijo con su ejemplo: «clavos familia, hierro género, 2" denominación,
+ * 20 cantidad». El género es de qué está hecha la cosa —acero, hierro— y la
+ * denominación es la medida. Hasta hoy los dos vivían escondidos dentro del
+ * nombre y solo se leían para dibujar el árbol; nadie los ofrecía al crear.
+ *
+ * `items` se filtra por familia antes de entrar, para que el que llama decida
+ * cómo se compara la familia y no haya dos reglas de eso en la app.
+ */
+export const generosDe = (deLaFamilia: { name: string }[]): string[] => {
+    const vistos = new Map<string, string>();
+    for (const i of deLaFamilia) {
+        const g = materialDe(i.name);
+        if (g && !vistos.has(g.toLowerCase())) vistos.set(g.toLowerCase(), g);
+    }
+    return [...vistos.values()].sort((a, b) => a.localeCompare(b, 'es'));
+};
+
+/** Las DENOMINACIONES (medidas) que ya existen, opcionalmente solo las de un género. */
+export const denominacionesDe = (
+    deLaFamilia: { name: string }[],
+    genero?: string,
+): string[] => {
+    const g = genero?.trim().toLowerCase();
+    const vistas = new Set<string>();
+    for (const i of deLaFamilia) {
+        if (g && materialDe(i.name)?.toLowerCase() !== g) continue;
+        const m = medidaDe(i.name);
+        if (m) vistas.add(m);
+    }
+    // Por número, no alfabético: 1" antes que 10", y 2" antes que 10".
+    return [...vistas].sort((a, b) => parseFloat(a) - parseFloat(b));
+};
+
+/**
+ * Arma el nombre con las cuatro piezas, en el orden en que la bodega las dice:
+ * familia, género, denominación. La cantidad no va en el nombre — es del ítem.
+ *
+ *   ("Clavos", "hierro", "2\"") → «Clavos hierro 2"»
+ *   ("Polvo enchape", "", "")   → «Polvo enchape»
+ *
+ * Es la forma que `familiaDe`, `materialDe` y `medidaDe` ya saben descomponer,
+ * así que el árbol lo agrupa solo sin tocar nada más.
+ */
+export const nombreCompuesto = (familia: string, genero?: string, denominacion?: string): string =>
+    [familia, genero, denominacion].map(p => (p ?? '').trim()).filter(Boolean).join(' ');

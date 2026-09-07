@@ -9,8 +9,9 @@ import { AccesoriosDeItem } from './AccesoriosDeItem';
 import { ArbolFamilias } from './ArbolFamilias';
 import { COMO_SE_HACE } from '../services/comoSeHace';
 import { unidadesCon } from '../utils/unidades';
-import { getGenus, familiaDe, esParecido, familiaCanonica, familiasParecidas, coloresDeFamilia, marcasDeFamilia, nombreCorregido, normStr } from '../utils/genus';
+import { getGenus, familiaDe, esParecido, familiaCanonica, familiasParecidas, coloresDeFamilia, marcasDeFamilia, nombreCorregido, normStr, raizDeFamilia } from '../utils/genus';
 import { tonoDe, raizDeColor, coloresUnificados, PALETA } from '../utils/colores';
+import { generosDe, denominacionesDe, nombreCompuesto } from '../utils/medida';
 import { medidaDe } from '../utils/medida';
 
 /** Las preguntas de uso, tal cual las responde el asistente. */
@@ -164,6 +165,24 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
      * porque no hay nada que pintar. Los dos escriben en la misma casilla.
      */
     const [anadiendoColor, setAnadiendoColor] = useState<null | 'elegir' | 'color' | 'denominacion'>(null);
+    /**
+     * Las cuatro piezas con que la bodega nombra un consumible, en el orden en
+     * que Juli las dijo: «clavos 1, hierro 2, 2" 3, 20 unidades 4».
+     *
+     * Familia, género, denominación y cantidad. Hasta hoy el formulario pedía un
+     * nombre libre y después color y marca —que para un clavo no significan
+     * nada—, así que para meter clavos de acero de otra pulgada había que
+     * adivinar que la medida iba escrita dentro del nombre. La estructura ya
+     * existía en el árbol; lo que faltaba era preguntarla.
+     *
+     * El nombre se ARMA con las piezas (`nombreCompuesto`), que es exactamente
+     * la forma que `familiaDe`, `materialDe` y `medidaDe` saben descomponer: el
+     * árbol lo agrupa solo, sin tocar nada más.
+     */
+    const [wizardGenero, setWizardGenero] = useState('');
+    const [wizardDenom, setWizardDenom] = useState('');
+    const [nuevoGenero, setNuevoGenero] = useState<string | null>(null);
+    const [nuevaDenom, setNuevaDenom] = useState<string | null>(null);
     const [colorNuevoChat, setColorNuevoChat] = useState('');
     const [wizardCreateUnit, setWizardCreateUnit] = useState('unidades');
     const [wizardSpecies, setWizardSpecies] = useState<Array<{brand: string; color: string}>>([{ brand: '', color: '' }]);
@@ -385,6 +404,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         setWizardCreateBrand('');
         setWizardCreateColor('');
         setAnadiendoColor(null); setColorNuevoChat('');
+        setWizardGenero(''); setWizardDenom(''); setNuevoGenero(null); setNuevaDenom(null);
         setWizardCreateUnit('unidades');
         { setWizardCreateFamilia(''); setRestoDecidido(false); };
         setParecidoPendiente(null);
@@ -476,7 +496,9 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         // Si eligió la familia "Pulidora" habiendo escrito "Peludora", ya dijo
         // cuál es la palabra buena. Guardar el error de dedo después de eso es
         // quedarse con la peor de las dos versiones.
-        const nombreBase = nombreCorregido(wizardCreateName, famCanon);
+        // El nombre ya viene armado con familia + género + denominación cuando es
+        // consumible; en herramientas es lo que se escribió.
+        const nombreBase = nombreCorregido(nombreDelNuevo(), famCanon);
         // El grupo dejó de preguntarse. Si la familia ya vive en algún lado del
         // inventario, el ítem nuevo cae donde están sus hermanos.
         const hermano = items.find(i => (i.familia?.trim() || familiaDe(i.name)).toLowerCase() === famCanon.toLowerCase());
@@ -540,6 +562,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         setWizardCreateName(''); setWizardCreateQty(1); setWizardCreateUnit('unidades');
         setWizardSpecies([{ brand: '', color: '' }]); setWizardCreateColor(''); setWizardCreateBrand('');
         setAnadiendoColor(null); setColorNuevoChat('');
+        setWizardGenero(''); setWizardDenom(''); setNuevoGenero(null); setNuevaDenom(null);
         setParecidoPendiente(null);
     };
 
@@ -551,11 +574,27 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
      * "Bisturi" y "Bisturi", mismo tipo y misma familia, creados el mismo día.
      * La causa está justo abajo.
      */
+    /**
+     * El nombre que se va a crear de verdad.
+     *
+     * En un consumible el bodeguero ya no escribe el nombre entero: escribe la
+     * familia y elige género y denominación aparte. El nombre se arma con las
+     * tres piezas, y así el árbol lo agrupa solo. En una herramienta el nombre
+     * es lo escrito, como siempre.
+     */
+    const nombreDelNuevo = (): string => {
+        const esConsumible = wizardCreateType === InventoryType.PPE
+                          || wizardCreateType === InventoryType.SINGLE_USE;
+        return esConsumible
+            ? nombreCompuesto(wizardCreateName, wizardGenero, wizardDenom)
+            : wizardCreateName.trim();
+    };
+
     const elIdenticoDe = (): Item | undefined => {
         if (!wizardCreateType || !wizardCreateName.trim()) return undefined;
         const esHerramienta = wizardCreateType === InventoryType.ELECTRICAL_TOOL
                            || wizardCreateType === InventoryType.HAND_TOOL;
-        const g     = normStr(getGenus(wizardCreateName));
+        const g     = normStr(getGenus(nombreDelNuevo()));
         const color = normStr((esHerramienta ? wizardSpecies[0]?.color : wizardCreateColor) ?? '');
         const marca = normStr((esHerramienta ? wizardSpecies[0]?.brand : wizardCreateBrand) ?? '');
         return items.find(i =>
@@ -573,7 +612,16 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         // Pero si YA eligió familia arriba, esa es la respuesta: volver a
         // preguntarlo acá es preguntar dos veces lo mismo, y el bodeguero está
         // parado en la bodega con la herramienta en la mano.
-        const yaDecidio = wizardCreateFamilia.trim().length > 0;
+        //
+        // Y en un consumible, elegir género o denominación TAMBIÉN es haber
+        // respondido: decir "familia Clavos, género hierro, denominación 3\"" es
+        // decir exactamente con quién se agrupa y en qué se diferencia. Volver a
+        // preguntarle por parecidos después de eso es preguntarle dos veces lo
+        // mismo, con el bodeguero parado en la bodega.
+        const esConsumible = wizardCreateType === InventoryType.PPE
+                          || wizardCreateType === InventoryType.SINGLE_USE;
+        const yaDecidio = wizardCreateFamilia.trim().length > 0
+            || (esConsumible && (wizardGenero.trim().length > 0 || wizardDenom.trim().length > 0));
 
         /**
          * Salvo que sea el MISMO, y ahí siempre se para.
@@ -620,6 +668,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         setWizardCreateName(''); setWizardCreateQty(1); setWizardCreateUnit('unidades');
         setWizardSpecies([{ brand: '', color: '' }]); setWizardCreateColor(''); setWizardCreateBrand('');
         setAnadiendoColor(null); setColorNuevoChat('');
+        setWizardGenero(''); setWizardDenom(''); setNuevoGenero(null); setNuevaDenom(null);
         setParecidoPendiente(null);
     };
 
@@ -1202,12 +1251,93 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                             <p className="text-[10px] font-black text-marca-oscuro uppercase tracking-widest">Nuevo ítem</p>
                                             <input type="text" value={wizardCreateName}
                                                 onChange={e => setWizardCreateName(e.target.value)}
-                                                placeholder={(type === InventoryType.ELECTRICAL_TOOL || type === InventoryType.HAND_TOOL) ? 'Género (ej: Pulidora, Martillo) *' : 'Nombre del ítem *'} autoFocus
+                                                placeholder={(type === InventoryType.ELECTRICAL_TOOL || type === InventoryType.HAND_TOOL) ? 'Género (ej: Pulidora, Martillo) *' : '1. Familia (ej: Clavos) *'} autoFocus
                                                 className="w-full border border-papel-borde rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-marca bg-papel" />
+
+                                            {/* Género y denominación: las dos piezas que hasta hoy había
+                                                que adivinar escribiéndolas dentro del nombre.
+                                                Las dos son OPCIONALES — "Polvo enchape" no tiene
+                                                ninguna—, y las dos ofrecen lo que esa familia ya
+                                                tiene, para que nadie escriba "acero" de tres maneras. */}
+                                            {(type === InventoryType.PPE || type === InventoryType.SINGLE_USE) && wizardCreateName.trim() && (() => {
+                                                const fam = wizardCreateFamilia.trim() || wizardCreateName.trim();
+                                                const deLaFamilia = items.filter(i =>
+                                                    i.inventoryType === type &&
+                                                    raizDeFamilia(i.familia?.trim() || familiaDe(i.name)) === raizDeFamilia(fam));
+                                                const generos = generosDe(deLaFamilia);
+                                                const denoms  = denominacionesDe(deLaFamilia, wizardGenero || undefined);
+                                                const chip = (activo: boolean) =>
+                                                    `px-2 py-1 rounded-full text-[10px] font-bold border transition-all ${
+                                                        activo ? 'border-marca bg-marca text-tinta' : 'border-papel-borde bg-papel text-tinta-suave hover:border-marca'}`;
+                                                return (
+                                                <div className="space-y-2">
+                                                    <div className="space-y-1">
+                                                        <p className="text-[9px] font-black text-tinta-tenue uppercase tracking-wider">2. Género (opcional)</p>
+                                                        <div className="flex flex-wrap gap-1 items-center">
+                                                            <button type="button" title="Agregar un género que no está"
+                                                                onClick={() => setNuevoGenero(nuevoGenero === null ? '' : null)}
+                                                                className={`w-6 h-6 flex items-center justify-center rounded-full border text-sm font-black leading-none ${
+                                                                    nuevoGenero !== null ? 'border-marca bg-marca text-tinta' : 'border-papel-borde bg-papel text-tinta-suave hover:border-marca'}`}>+</button>
+                                                            {generos.map(g => (
+                                                                <button key={g} type="button" className={chip(wizardGenero === g)}
+                                                                    onClick={() => { setWizardGenero(wizardGenero === g ? '' : g); setWizardDenom(''); }}>{g}</button>
+                                                            ))}
+                                                            {wizardGenero && !generos.includes(wizardGenero) && (
+                                                                <button type="button" className={chip(true)} onClick={() => setWizardGenero('')}>{wizardGenero} ✕</button>
+                                                            )}
+                                                        </div>
+                                                        {nuevoGenero !== null && (
+                                                            <div className="flex gap-1.5">
+                                                                <input value={nuevoGenero} autoFocus placeholder="Escribí el género (ej: hierro)"
+                                                                    onChange={e => setNuevoGenero(e.target.value)}
+                                                                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (nuevoGenero.trim()) { setWizardGenero(nuevoGenero.trim()); setNuevoGenero(null); } } }}
+                                                                    className="flex-1 min-w-0 text-xs border border-papel-borde rounded-lg px-2 py-1 bg-papel focus:outline-none focus:ring-2 focus:ring-marca" />
+                                                                <button type="button" disabled={!nuevoGenero.trim()}
+                                                                    onClick={() => { setWizardGenero(nuevoGenero.trim()); setNuevoGenero(null); }}
+                                                                    className="px-2 py-1 text-[10px] font-black bg-marca disabled:bg-papel-borde disabled:text-tinta-suave text-tinta rounded-lg">Poner</button>
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    <div className="space-y-1">
+                                                        <p className="text-[9px] font-black text-tinta-tenue uppercase tracking-wider">3. Denominación (opcional)</p>
+                                                        <div className="flex flex-wrap gap-1 items-center">
+                                                            <button type="button" title="Agregar una denominación que no está"
+                                                                onClick={() => setNuevaDenom(nuevaDenom === null ? '' : null)}
+                                                                className={`w-6 h-6 flex items-center justify-center rounded-full border text-sm font-black leading-none ${
+                                                                    nuevaDenom !== null ? 'border-marca bg-marca text-tinta' : 'border-papel-borde bg-papel text-tinta-suave hover:border-marca'}`}>+</button>
+                                                            {denoms.map(d => (
+                                                                <button key={d} type="button" className={chip(wizardDenom === d)}
+                                                                    onClick={() => setWizardDenom(wizardDenom === d ? '' : d)}>{d}</button>
+                                                            ))}
+                                                            {wizardDenom && !denoms.includes(wizardDenom) && (
+                                                                <button type="button" className={chip(true)} onClick={() => setWizardDenom('')}>{wizardDenom} ✕</button>
+                                                            )}
+                                                        </div>
+                                                        {nuevaDenom !== null && (
+                                                            <div className="flex gap-1.5">
+                                                                <input value={nuevaDenom} autoFocus placeholder={'Escribí la denominación (ej: 3")'}
+                                                                    onChange={e => setNuevaDenom(e.target.value)}
+                                                                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (nuevaDenom.trim()) { setWizardDenom(nuevaDenom.trim()); setNuevaDenom(null); } } }}
+                                                                    className="flex-1 min-w-0 text-xs border border-papel-borde rounded-lg px-2 py-1 bg-papel focus:outline-none focus:ring-2 focus:ring-marca" />
+                                                                <button type="button" disabled={!nuevaDenom.trim()}
+                                                                    onClick={() => { setWizardDenom(nuevaDenom.trim()); setNuevaDenom(null); }}
+                                                                    className="px-2 py-1 text-[10px] font-black bg-marca disabled:bg-papel-borde disabled:text-tinta-suave text-tinta rounded-lg">Poner</button>
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Cómo va a quedar. Se ve antes de guardar, no después. */}
+                                                    <p className="text-[10px] text-marca-oscuro font-bold">
+                                                        Va a quedar: «{nombreCompuesto(wizardCreateName, wizardGenero, wizardDenom)}»
+                                                    </p>
+                                                </div>
+                                                );
+                                            })()}
                                             {(type === InventoryType.ELECTRICAL_TOOL || type === InventoryType.HAND_TOOL) ? null : (
                                                 <input type="number" onFocus={e => e.target.select()} value={wizardCreateQty} min={1}
                                                     onChange={e => setWizardCreateQty(parseInt(e.target.value) || 1)}
-                                                    placeholder="Cantidad *"
+                                                    placeholder="4. Cantidad *"
                                                     className="w-full border border-papel-borde rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-marca bg-papel" />
                                             )}
                                             {(type === InventoryType.ELECTRICAL_TOOL || type === InventoryType.HAND_TOOL) && (
@@ -1711,7 +1841,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                 <>
                                     <input type="number" onFocus={e => e.target.select()} value={loanCreateQty} min={1}
                                         onChange={e => setLoanCreateQty(parseInt(e.target.value) || 1)}
-                                        placeholder="Cantidad *"
+                                        placeholder="4. Cantidad *"
                                         className="w-full border border-papel-borde rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-marca bg-papel" />
                                     <select value={loanCreateUnit} onChange={e => setLoanCreateUnit(e.target.value)}
                                         className="w-full border border-papel-borde rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-marca bg-papel">
