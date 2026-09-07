@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Personnel, Movement, Item, Project, MovementType, InventoryType, ReturnCondition } from '../types';
+import { Personnel, Movement, Item, Project, MovementType, InventoryType, ReturnCondition, UserRole } from '../types';
 import { PeriodPicker, Periodo, periodoPorDefecto } from './PeriodPicker';
 import { AccesoriosDeItem } from './AccesoriosDeItem';
 import { ReturnToolModal } from './ReturnToolModal';
@@ -15,6 +15,13 @@ interface Props {
     onAssignProject?: (movementId: string, projectId: string) => void;
     onCreateProject?: (name: string) => Project;
     onTransferLoan?: (movementId: string, newPersonnelId: string) => void;
+    /**
+     * El Visitante llega hasta acá desde el Kardex —Proyectos, y de ahí a una
+     * persona— y esta ficha tenía Devolver, Recoger y Reasignar sin preguntar
+     * por el rol. Es el mismo hueco que se cerró en Préstamos y en la ficha del
+     * ítem: la vista se puede ver, las acciones no.
+     */
+    userRole?: UserRole;
     onClose: () => void;
 }
 
@@ -38,8 +45,9 @@ const daysSince = (d: Date) => Math.floor((Date.now() - new Date(d).getTime()) /
 export const PersonnelDetailModal: React.FC<Props> = ({
     person, movements, items, projects, allPersonnel = [],
     onReturnLoan, onMarkPendingPickup, onAssignProject, onCreateProject, onTransferLoan,
-    onClose,
+    userRole = UserRole.EMPLOYEE, onClose,
 }) => {
+    const soloMirar = userRole === UserRole.VISITOR;
     const [tab, setTab] = useState<Tab>('manual');
     const [openPanel, setOpenPanel] = useState<{ key: string; type: ActionPanel }>({ key: '', type: null });
     const [returningGroup, setReturningGroup] = useState<LoanGroup | null>(null);
@@ -252,8 +260,8 @@ export const PersonnelDetailModal: React.FC<Props> = ({
                     </span>
                 </div>
 
-                {/* Action buttons */}
-                <div className="flex gap-1.5 px-3 pb-3 flex-wrap">
+                {/* Action buttons — ninguno para quien solo mira. */}
+                {!soloMirar && <div className="flex gap-1.5 px-3 pb-3 flex-wrap">
                     {/* Pickup toggle */}
                     {onMarkPendingPickup && (
                         <button
@@ -305,7 +313,7 @@ export const PersonnelDetailModal: React.FC<Props> = ({
                             ✓ Devolver
                         </button>
                     )}
-                </div>
+                </div>}
 
                 {/* Project panel */}
                 {isProjectOpen && (

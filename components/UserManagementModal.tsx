@@ -134,6 +134,10 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                                     onChange={e => setNewRole(e.target.value as UserRole)}
                                     className="w-full p-3 bg-papel border-2 border-papel-borde rounded-xl focus:border-marca outline-none font-bold text-tinta-suave transition-colors cursor-pointer"
                                 >
+                                    {/* Los tres roles que existen. Faltaba Visitante,
+                                        que es el que solo mira: sin él no había cómo
+                                        crear un acceso de consulta. */}
+                                    <option value={UserRole.VISITOR}>Visitante / Solo mirar</option>
                                     <option value={UserRole.EMPLOYEE}>Bodeguero / Operativo</option>
                                     <option value={UserRole.OWNER}>Administrador Supremo</option>
                                 </select>
@@ -160,13 +164,20 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                                 <div key={user.id} className={`group flex justify-between items-center border-2 p-4 rounded-3xl transition-all ${editingUserId === user.id ? 'bg-marca-suave border-marca-borde' : 'bg-papel border-papel-borde hover:border-papel-borde'}`}>
                                     <div className="flex items-center space-x-4">
                                         <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg ${user.role === UserRole.OWNER ? 'bg-marca-suave text-marca-oscuro' : 'bg-marca-suave text-marca-oscuro'}`}>
-                                            {user.username.charAt(0).toUpperCase()}
+                                            {(user.username || user.name).charAt(0).toUpperCase()}
                                         </div>
                                         <div>
                                             <p className="font-black text-tinta uppercase text-xs tracking-tighter">{user.name}</p>
-                                            <p className="text-[10px] text-tinta-tenue font-bold tracking-widest lowercase">@{user.username}</p>
+                                            {/* Un acceso recién creado no tiene usuario todavía
+                                                —lo elige la persona al entrar—, y salía un «@»
+                                                solo. Mejor decir en qué estado está. */}
+                                            <p className="text-[10px] text-tinta-tenue font-bold tracking-widest lowercase">
+                                                {user.username ? `@${user.username}` : 'sin entrar todavía'}
+                                            </p>
                                             <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase inline-block mt-1 ${user.role === UserRole.OWNER ? 'bg-marca text-tinta' : 'bg-papel-hondo text-tinta-suave'}`}>
-                                                {user.role === UserRole.OWNER ? 'Admin Supremo' : 'Bodeguero'}
+                                                {user.role === UserRole.OWNER ? 'Admin Supremo'
+                                                    : user.role === UserRole.VISITOR ? 'Visitante'
+                                                    : 'Bodeguero'}
                                             </span>
                                         </div>
                                     </div>

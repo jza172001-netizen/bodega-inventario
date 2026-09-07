@@ -145,7 +145,19 @@ const App: React.FC = () => {
             id: `audit-${Date.now()}-${Math.random().toString(36).slice(2)}`,
             timestamp: new Date(),
             action,
-            actor: actorOverride ?? userName,
+            /**
+             * Nunca vacío.
+             *
+             * El 6 de septiembre a las 12:32 quedó un `SYNC_LIMPIEZA` que quitó
+             * 15 movimientos de un dispositivo, con el actor en blanco: la
+             * bitácora registró la operación y no dijo quién fue. Pasa cuando
+             * algo escribe antes de que la sesión haya cargado el nombre.
+             *
+             * Una bitácora que dice "no sé quién" es más honesta que una que
+             * deja el renglón mudo, y la regla de la casa es que TODA operación
+             * sobre datos deja rastro — rastro con nombre.
+             */
+            actor: (actorOverride ?? userName)?.trim() || 'sin identificar',
             description,
         };
         setAuditLogs(prev => [entry, ...prev]);
@@ -216,8 +228,32 @@ const App: React.FC = () => {
         setLoggedIn(false);
     };
 
-    // Auto-save a localStorage en cada cambio
-    useEffect(() => { saveToLocalStorage({ items, movements, personnel, purchaseOrders, projects, users, auditLogs, behaviorLogs }); }, [items, movements, personnel, purchaseOrders, projects, users, auditLogs, behaviorLogs]);
+    /**
+     * Guardado en localStorage, agrupado.
+     *
+     * Antes esto corría en CADA cambio de estado, y `behaviorLogs` crece con
+     * cada toque —cada navegación, cada filtro, cada botón, cada scroll—. O sea
+     * que cada toque disparaba un `JSON.stringify` de todo el dato (78 ítems,
+     * 108 movimientos, 491 registros de bitácora, 1.701 de comportamiento) más
+     * un `localStorage.setItem`, que es SÍNCRONO y bloquea la pantalla mientras
+     * escribe.
+     *
+     * En Chrome eso pasa desapercibido. En el navegador de Huawei, con un motor
+     * más lento, se siente: es la lentitud que reportó Juli, que aparecía en un
+     * navegador y en el otro no.
+     *
+     * Ahora los cambios de medio segundo se juntan en una sola escritura, y al
+     * cerrar la pestaña se guarda lo que quede pendiente para no perder nada.
+     */
+    const guardadoPendiente = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+    useEffect(() => {
+        const datos = { items, movements, personnel, purchaseOrders, projects, users, auditLogs, behaviorLogs };
+        if (guardadoPendiente.current) clearTimeout(guardadoPendiente.current);
+        guardadoPendiente.current = setTimeout(() => saveToLocalStorage(datos), 500);
+        const alSalir = () => { if (guardadoPendiente.current) clearTimeout(guardadoPendiente.current); saveToLocalStorage(datos); };
+        window.addEventListener('pagehide', alSalir);
+        return () => window.removeEventListener('pagehide', alSalir);
+    }, [items, movements, personnel, purchaseOrders, projects, users, auditLogs, behaviorLogs]);
 
     // Notificar herramientas pendientes de recoger cada vez que se abre la app
     useEffect(() => {
@@ -247,11 +283,29 @@ const App: React.FC = () => {
           // el respaldo offline siga funcionando.
           db.fetchUsers().then(data => {
               if (data.length === 0) return;
-              setUsers(prev => migrateUsers(data).map(u => {
-                  const known = prev.find(p => p.id === u.id)
-                      ?? prev.find(p => p.username && p.username === u.username);
-                  return known?.passwordHash ? { ...u, passwordHash: known.passwordHash } : u;
-              }));
+              setUsers(prev => {
+                  const deLaNube = migrateUsers(data).map(u => {
+                      const known = prev.find(p => p.id === u.id)
+                          ?? prev.find(p => p.username && p.username === u.username);
+                      return known?.passwordHash ? { ...u, passwordHash: known.passwordHash } : u;
+                  });
+                  /**
+                   * Lo que está en el teléfono y NO en la nube se sube, no se borra.
+                   *
+                   * Antes esta línea reemplazaba la lista local por la remota, a
+                   * secas. Si un acceso se creó acá y su inserción falló —que es lo
+                   * que pasaba con dos accesos sin configurar, por el UNIQUE del
+                   * nombre de usuario— la siguiente sincronización lo hacía
+                   * desaparecer sin dejar rastro. Así se perdieron Santiago y
+                   * Camilo.
+                   */
+                  const idsRemotos = new Set(deLaNube.map(u => u.id));
+                  const soloLocales = prev.filter(u => !idsRemotos.has(u.id));
+                  for (const u of soloLocales) {
+                      db.addUser(u).catch(e => console.error('[Supabase] reintento de usuario:', u.name, e));
+                  }
+                  return [...deLaNube, ...soloLocales].map(u => NAME_FIX[u.name] ? { ...u, name: NAME_FIX[u.name] } : u);
+              });
           }).catch(e => console.error('[Supabase] users:', e));
 
           Promise.all([
@@ -827,6 +881,11 @@ const App: React.FC = () => {
         };
         setMovements(prev => [apertura, ...prev]);
         db.addMovement(apertura, movId).catch(e => console.error('[Supabase] apertura:', e));
+        // La carga inicial es mercancía ENTRANDO a la bodega, y hasta hoy no
+        // dejaba renglón en la bitácora: el 5 de septiembre se crearon 17 ítems
+        // y hubo cero entradas registradas. El movimiento sí quedaba; la
+        // trazabilidad, no. Ahora se cuenta como lo que es.
+        addAuditLog('STOCK_IN', `📥 Carga inicial: "${item.name}" ×${item.quantity} ${item.unit}`);
     };
 
     const handleImportItems = (newItems: Array<Omit<Item, 'id'>>, inventoryType?: InventoryType) => {
@@ -891,6 +950,53 @@ const App: React.FC = () => {
         registrarApertura(newItem);
         addAuditLog('ITEM_CREATED', `Se agregó "${i.name}" al inventario`);
         return newItem;
+    };
+
+    /**
+     * Deshace los ítems que el asistente creó y que el bodeguero canceló.
+     *
+     * El asistente crea el ítem en el paso 4 —necesita su id para poder
+     * seleccionarlo—, no al confirmar. Si se cancela a mitad, el ítem ya nació.
+     * Acá se devuelve el estado: se borran los que NO alcanzaron a tener
+     * movimientos, con su lápida para que el otro celular no los resucite.
+     *
+     * Los que sí tienen movimientos no se tocan: ahí ya pasó algo de verdad y
+     * borrarlos dejaría el Kardex apuntando al vacío.
+     */
+    const handleDescartarItems = (ids: string[]) => {
+        /**
+         * El asiento de apertura no cuenta como "ya pasó algo".
+         *
+         * Crear un ítem registra su carga inicial —una Entrada— en el mismo
+         * acto. Así que TODO ítem recién creado nace con un movimiento, y la
+         * regla de "no borro lo que tiene movimientos" los protegía a todos:
+         * cancelar no descartaba nada. Se probó en el navegador y el ítem
+         * quedaba igual.
+         *
+         * Lo que sí cuenta es cualquier otro movimiento: una salida, una
+         * merma. Ahí el ítem ya se usó y borrarlo dejaría el Kardex apuntando
+         * al vacío.
+         */
+        const esApertura = (m: Movement) =>
+            m.type === MovementType.CHECK_IN && (m.notes ?? '').startsWith('Carga inicial:');
+        const conMovimiento = new Set(
+            movements.filter(m => ids.includes(m.itemId) && !esApertura(m)).map(m => m.itemId));
+        const aBorrar = ids.filter(id => !conMovimiento.has(id));
+        if (aBorrar.length === 0) return;
+        const nombres = aBorrar.map(id => itemActual(id)?.name).filter(Boolean);
+        setItems(prev => prev.filter(i => !aBorrar.includes(i.id)));
+        itemsRef.current = itemsRef.current.filter(i => !aBorrar.includes(i.id));
+        // Y se va también su carga inicial: si el ítem no existe, esa Entrada
+        // queda apuntando a la nada y el cotejo la reporta para siempre.
+        const aperturas = movements.filter(m => aBorrar.includes(m.itemId) && esApertura(m));
+        if (aperturas.length > 0) {
+            const idsMov = new Set(aperturas.map(m => m.id));
+            setMovements(prev => prev.filter(m => !idsMov.has(m.id)));
+            for (const m of aperturas) withSync(db.deleteMovement(m.id));
+        }
+        for (const id of aBorrar) withSync(db.deleteItem(id));
+        addAuditLog('ITEM_DELETED',
+            `Se descartó lo que el asistente había creado y no se confirmó: ${nombres.join(', ')}`);
     };
 
     const handleEditItem = (entrante: Item) => {
@@ -1177,6 +1283,28 @@ const App: React.FC = () => {
         return newP;
     };
 
+    /**
+     * Saca a todos de la cuadrilla de alguien que ya no es oficial.
+     *
+     * `teamLeaderId` apunta al oficial. Si al oficial le quitan la marca —o lo
+     * borran—, sus trabajadores siguen apuntándole: en Personal desaparecen
+     * (esa lista solo se dibuja cuando el de arriba es oficial), pero el dato
+     * queda ahí, y el cotejo los reporta como que «figuran en la cuadrilla de
+     * X». Quedan colgando de un oficial que no existe.
+     *
+     * Devuelve cuántos se soltaron, para dejarlo dicho en la bitácora.
+     */
+    const soltarCuadrillaDe = (lider: Personnel, motivo: string): number => {
+        const suyos = personnel.filter(x => x.teamLeaderId === lider.id);
+        if (suyos.length === 0) return 0;
+        const sueltos = suyos.map(x => ({ ...x, teamLeaderId: undefined, updatedAt: new Date() }));
+        setPersonnel(ps => ps.map(x => sueltos.find(y => y.id === x.id) ?? x));
+        for (const x of sueltos) withSync(db.updatePersonnel(x));
+        addAuditLog('PERSONNEL_EDITED',
+            `"${lider.name}" ${motivo}: salieron de su cuadrilla ${sueltos.map(x => `"${x.name}"`).join(', ')}`);
+        return sueltos.length;
+    };
+
     const handleEditPersonnel = (entrante: Personnel) => {
         const prev = personnel.find(pers => pers.id === entrante.id);
         const p: Personnel = { ...entrante, updatedAt: new Date() };
@@ -1187,6 +1315,8 @@ const App: React.FC = () => {
         } else {
             addAuditLog('PERSONNEL_EDITED', `Se editó trabajador: "${p.name}"`);
         }
+        // Dejó de ser oficial: su gente no puede quedar en la cuadrilla de nadie.
+        if (prev?.isTeamLeader && !p.isTeamLeader) soltarCuadrillaDe(p, 'dejó de ser oficial');
     };
 
     const handleDeletePersonnel = (id: string) => {
@@ -1195,6 +1325,9 @@ const App: React.FC = () => {
         const detail = hasMovements ? 'Tiene movimientos registrados. Se perderá la referencia en el historial.' : undefined;
         requirePin(
             () => {
+                // Mismo puntero colgando: si el borrado era oficial, su gente
+                // queda apuntando a alguien que ya no está en ninguna lista.
+                if (person) soltarCuadrillaDe(person, 'fue eliminado');
                 setPersonnel(prev => prev.filter(p => p.id !== id));
                 withSync(db.deletePersonnel(id));
                 addAuditLog('PERSONNEL_DELETED', `Se eliminó trabajador: "${person?.name ?? id}"`);
@@ -1452,7 +1585,7 @@ const App: React.FC = () => {
                                 onNavigate={(v, tab) => selectView(v as View, tab as KardexTab | undefined)}
                                 onBehaviorLog={addBehaviorLog}
                                 onAuditLog={addAuditLog}
-                                onRepararPaso={userRole !== UserRole.VISITOR ? handleRepararPaso : undefined}
+                                userRole={userRole}
                             />
                         )}
                         {effectiveView === 'kardex' && (
@@ -1471,6 +1604,7 @@ const App: React.FC = () => {
                                 onDeleteMovement={handleDeleteMovement}
                                 onReturnLoan={handleReturnItem}
                                 onReturnItem={handleReturnItem}
+                                onRepararPaso={userRole !== UserRole.VISITOR ? handleRepararPaso : undefined}
                                 onMarkPendingPickup={handleMarkPendingPickup}
                                 openAddItemModal={() => { setAddItemModalOpen(true); addBehaviorLog('BUTTON', 'Abrió modal Agregar ítem'); }}
                                 onEditItem={(i) => { setItemToEdit(i); setEditModalOpen(true); addBehaviorLog('BUTTON', `Editó ítem: ${i.name}`); }}
@@ -1648,6 +1782,7 @@ const App: React.FC = () => {
                     onCreatePersonnel={handleAddPersonnelSync}
                     onBehaviorLog={addBehaviorLog}
                     auditLogs={auditLogs}
+                    onDescartarItems={handleDescartarItems}
                 />
             )}
         </div>

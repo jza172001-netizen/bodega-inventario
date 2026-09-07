@@ -234,6 +234,7 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
                     onAssignProject={onAssignProject}
                     onCreateProject={onCreateProject}
                     onTransferLoan={onTransferLoan}
+                    userRole={userRole}
                     onClose={() => setDetailPerson(null)}
                 />
             )}

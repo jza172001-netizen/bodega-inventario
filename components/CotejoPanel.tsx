@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState } from 'react';
-import { Item, Movement, Personnel, AuditLog } from '../types';
+import { Item, Movement, Personnel, AuditLog, UserRole } from '../types';
 import * as db from '../services/supabaseService';
 
 interface Props {
@@ -10,6 +10,19 @@ interface Props {
     auditLogs: AuditLog[];
     /** Para dejar constancia de que ya se revisó. */
     onAuditLog?: (action: string, description: string) => void;
+    /**
+     * El Visitante mira, no marca.
+     *
+     * Este panel era el último que escribía sin preguntar por el rol, y no era
+     * un botón cosmético: «✓ Ya lo revisé» da por vistos los hallazgos **para
+     * todos**, así que un descuadre real puede quedar tapado porque alguien que
+     * solo entró a mirar lo dio por visto.
+     *
+     * Y pasó de verdad: el 6 de septiembre a las 12:35, el Visitante dio por
+     * vistos 25 hallazgos. Quedó firmado como "Visitante", que es una cuenta
+     * compartida — o sea que no hay a quién preguntarle qué fue lo que revisó.
+     */
+    userRole?: UserRole;
 }
 
 /** Algo que no cuadra, con la fecha del hecho para saber si ya se revisó. */
@@ -36,7 +49,8 @@ interface Diferencia {
  * Que se vea sin tener que acordarse de buscarlo. Un dato que aparece solo se
  * nota el mismo día, no dos meses después.
  */
-export const CotejoPanel: React.FC<Props> = ({ items, movements, personnel, auditLogs, onAuditLog }) => {
+export const CotejoPanel: React.FC<Props> = ({ items, movements, personnel, auditLogs, onAuditLog, userRole = UserRole.EMPLOYEE }) => {
+    const soloMirar = userRole === UserRole.VISITOR;
     /**
      * El segundo cotejo, y el que la bitácora no puede hacer: lo que muestra
      * ESTE teléfono contra lo que hay de verdad en la base.
@@ -246,11 +260,11 @@ export const CotejoPanel: React.FC<Props> = ({ items, movements, personnel, audi
                             Lo que la bitácora no puede ver: que los dos muestren cosas distintas.
                         </p>
                     </div>
-                    <button type="button" onClick={cotejarConLaBase}
+                    {!soloMirar && <button type="button" onClick={cotejarConLaBase}
                         disabled={contraste.estado === 'mirando'}
                         className="text-[11px] font-black px-3 py-1.5 rounded-lg bg-tinta hover:bg-black disabled:bg-papel-borde text-papel flex-shrink-0">
                         {contraste.estado === 'mirando' ? 'Mirando…' : 'Cotejar'}
-                    </button>
+                    </button>}
                 </div>
 
                 {contraste.estado === 'error' && (
@@ -302,7 +316,7 @@ export const CotejoPanel: React.FC<Props> = ({ items, movements, personnel, audi
                         visto: los 19 ítems que volvieron el 8 de junio son la
                         bodega de verdad. Queda constancia de quién los revisó y
                         cuándo, y lo NUEVO vuelve a salir en rojo. */}
-                    {onAuditLog && (
+                    {onAuditLog && !soloMirar && (
                         <button type="button" onClick={marcarRevisado}
                             className="w-full py-2 text-[11px] font-black rounded-xl border border-papel-borde text-tinta-suave hover:border-marca hover:bg-marca-suave transition-colors">
                             ✓ Ya lo revisé — dar por vistos estos {total}

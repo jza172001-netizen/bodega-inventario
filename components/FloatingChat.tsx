@@ -10,7 +10,7 @@ import { ArbolFamilias } from './ArbolFamilias';
 import { COMO_SE_HACE } from '../services/comoSeHace';
 import { unidadesCon } from '../utils/unidades';
 import { getGenus, familiaDe, esParecido, familiaCanonica, familiasParecidas, coloresDeFamilia, marcasDeFamilia, nombreCorregido } from '../utils/genus';
-import { tonoDe, raizDeColor, coloresUnificados } from '../utils/colores';
+import { tonoDe, raizDeColor, coloresUnificados, PALETA } from '../utils/colores';
 import { medidaDe } from '../utils/medida';
 
 /** Las preguntas de uso, tal cual las responde el asistente. */
@@ -32,6 +32,11 @@ interface FloatingChatProps {
     onCreateProject: (p: Omit<Project, 'id'>) => Project;
     onCreatePersonnel: (p: Omit<Personnel, 'id'>) => Personnel;
     onBehaviorLog?: (action: string, detail: string) => void;
+    /**
+     * Deshace los ítems que el asistente creó si el bodeguero cancela a mitad.
+     * Solo borra los que no alcanzaron a tener movimientos.
+     */
+    onDescartarItems?: (ids: string[]) => void;
     /**
      * La bitácora, para poder mirarla sin salir del chat.
      *
@@ -115,7 +120,7 @@ const INIT_WIZARD: WizardData = {
 export const FloatingChat: React.FC<FloatingChatProps> = ({
     items, movements, personnel, purchaseOrders, projects,
     onLogMovements, onCreateItem, onEditItem, onCreateProject, onCreatePersonnel,
-    onBehaviorLog, auditLogs = [],
+    onBehaviorLog, auditLogs = [], onDescartarItems,
 }) => {
     const [open, setOpen] = useState(false);
     /** El historial de todos, desplegado dentro del chat. */
@@ -140,6 +145,21 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     const [wizardCreateQty, setWizardCreateQty] = useState(1);
     const [wizardCreateBrand, setWizardCreateBrand] = useState('');
     const [wizardCreateColor, setWizardCreateColor] = useState('');
+    /**
+     * El «+» de «¿De qué color?», igual al de la Lista de pedidos.
+     *
+     * Acá los chips salían solo con lo que la familia YA tenía: si la Pulidora
+     * nunca había sido amarilla, no había dónde escribir «amarilla» — y si la
+     * familia no tenía ni un color, el renglón entero desaparecía. Quedaba el
+     * campo de texto de abajo, que para una herramienta ni se mira.
+     *
+     * Mismo camino de allá: `null` cerrado; 'elegir' pregunta de qué se trata;
+     * 'color' pide un color y ofrece el resto de la paleta; 'denominacion' pide
+     * una palabra —*acero*, *hierro*, *madera*— y no ofrece paleta ninguna,
+     * porque no hay nada que pintar. Los dos escriben en la misma casilla.
+     */
+    const [anadiendoColor, setAnadiendoColor] = useState<null | 'elegir' | 'color' | 'denominacion'>(null);
+    const [colorNuevoChat, setColorNuevoChat] = useState('');
     const [wizardCreateUnit, setWizardCreateUnit] = useState('unidades');
     const [wizardSpecies, setWizardSpecies] = useState<Array<{brand: string; color: string}>>([{ brand: '', color: '' }]);
     // El grupo (sub-clasificación). Antes se escribía 'General' a mano en los seis
@@ -324,6 +344,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         setWizardCreateQty(1);
         setWizardCreateBrand('');
         setWizardCreateColor('');
+        setAnadiendoColor(null); setColorNuevoChat('');
         setWizardCreateUnit('unidades');
         { setWizardCreateFamilia(''); setRestoDecidido(false); };
         setParecidoPendiente(null);
@@ -354,7 +375,26 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         onBehaviorLog?.('BUTTON', 'Tocó botón: Agregar al inventario');
     };
 
-    const cancelWizard = () => { setWizardIsAddMode(false); setWizardStep(null); setInput(''); setWizardSel(new Map()); setWizardSubWorkerName(''); resetWizardCreate(); };
+    /**
+     * Los ítems que este asistente creó y que todavía no se han confirmado.
+     *
+     * El asistente crea el ítem en el paso 4 para poder seleccionarlo por id, no
+     * al confirmar. Así que si el bodeguero se arrepiente y cancela, el ítem ya
+     * había nacido y se quedaba en el inventario — Juli lo reprodujo con la
+     * «Pulidora (Amarilla · Brickell)». Acá se lleva la cuenta para poder
+     * deshacerlo si cancela.
+     */
+    const [creadosPorAsistente, setCreadosPorAsistente] = useState<string[]>([]);
+
+    /**
+     * @param descartar true solo cuando el bodeguero CANCELA. Al confirmar, los
+     * ítems creados se quedan: para eso los creó.
+     */
+    const cancelWizard = (descartar = false) => {
+        if (descartar && creadosPorAsistente.length > 0) onDescartarItems?.(creadosPorAsistente);
+        setCreadosPorAsistente([]);
+        setWizardIsAddMode(false); setWizardStep(null); setInput(''); setWizardSel(new Map()); setWizardSubWorkerName(''); resetWizardCreate();
+    };
 
     const toggleWizardSel = (itemId: string) => {
         setWizardSel(prev => {
@@ -418,6 +458,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                 });
                 newEntries.push([newItem.id, wizardCreateQty]);
             }
+            setCreadosPorAsistente(prev => [...prev, ...newEntries.map(([id]) => id)]);
             setWizardSel(prev => { const next = new Map(prev); for (const [id, qty] of newEntries) next.set(id, qty); return next; });
         } else {
             // Color y marca también acá: unos guantes negros y unos rojos son dos
@@ -436,11 +477,16 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                 ...(marca ? { brand: marca } : {}),
                 ...(color ? { color } : {}),
             });
+            // Faltaba llevar la cuenta acá: un consumible creado por el asistente
+            // no quedaba anotado, y al cancelar no había qué deshacer. Con las
+            // herramientas sí se hacía; con los consumibles, no.
+            setCreadosPorAsistente(prev => [...prev, newItem.id]);
             setWizardSel(prev => { const next = new Map(prev); next.set(newItem.id, wizardCreateQty); return next; });
         }
         // Mantener el tipo seleccionado para que el usuario pueda crear otro género inmediatamente
         setWizardCreateName(''); setWizardCreateQty(1); setWizardCreateUnit('unidades');
         setWizardSpecies([{ brand: '', color: '' }]); setWizardCreateColor(''); setWizardCreateBrand('');
+        setAnadiendoColor(null); setColorNuevoChat('');
         setParecidoPendiente(null);
     };
 
@@ -482,6 +528,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         setWizardSel(prev => { const next = new Map(prev); next.set(it.id, wizardCreateQty); return next; });
         setWizardCreateName(''); setWizardCreateQty(1); setWizardCreateUnit('unidades');
         setWizardSpecies([{ brand: '', color: '' }]); setWizardCreateColor(''); setWizardCreateBrand('');
+        setAnadiendoColor(null); setColorNuevoChat('');
         setParecidoPendiente(null);
     };
 
@@ -795,7 +842,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                         </button>
                     </div>
                     <div className="flex gap-2">
-                        <button onClick={cancelWizard} className="px-3 py-2 text-xs text-tinta-tenue hover:text-tinta-suave border border-papel-borde rounded-xl">Cancelar</button>
+                        <button onClick={() => cancelWizard(true)} className="px-3 py-2 text-xs text-tinta-tenue hover:text-tinta-suave border border-papel-borde rounded-xl">Cancelar</button>
                         <button onClick={() => setWizardStep(wizardIsAddMode ? 'enter_items' : 'select_worker')} disabled={wizardData.selectedTypes.length === 0}
                             className="flex-1 py-2 bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-suave text-tinta font-bold rounded-xl text-xs transition-all">
                             Siguiente →
@@ -1215,28 +1262,110 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                                             </div>
                                                         )}
 
-                                                        {colores.length > 0 && (
-                                                            <div className="space-y-1 pt-0.5">
-                                                                <p className="text-[9px] font-black text-tinta-tenue uppercase tracking-wider">
-                                                                    ¿De qué color?
-                                                                </p>
-                                                                <div className="flex flex-wrap gap-1">
-                                                                    {colores.map(c => {
-                                                                        const puesto = raizDeColor(colorActual) === raizDeColor(c);
-                                                                        const tono = tonoDe(c);
-                                                                        return (
-                                                                            <button key={c} onClick={() => ponerColor(c)}
-                                                                                className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold transition-all border ${
-                                                                                    puesto ? 'border-tinta bg-papel-hondo text-tinta' : 'border-papel-borde bg-papel text-tinta-suave hover:border-tinta-tenue'}`}>
-                                                                                <span className="w-2.5 h-2.5 rounded-full border border-black/15 flex-shrink-0"
-                                                                                    style={{ backgroundColor: tono ?? 'transparent' }} />
-                                                                                {c}
-                                                                            </button>
-                                                                        );
-                                                                    })}
-                                                                </div>
+                                                        {/* El renglón va SIEMPRE, tenga la familia colores o no:
+                                                            si la Pulidora nunca fue amarilla, antes no había dónde
+                                                            escribirlo. El «+» va de primero, a la izquierda, igual
+                                                            que en la Lista de pedidos. */}
+                                                        <div className="space-y-1 pt-0.5">
+                                                            <p className="text-[9px] font-black text-tinta-tenue uppercase tracking-wider">
+                                                                ¿De qué color?
+                                                            </p>
+                                                            <div className="flex flex-wrap gap-1 items-center">
+                                                                <button type="button"
+                                                                    onClick={() => { setAnadiendoColor(a => a ? null : 'elegir'); setColorNuevoChat(''); }}
+                                                                    title="Añadir un color o una denominación que no está"
+                                                                    className={`w-6 h-6 flex items-center justify-center rounded-full border text-sm font-black leading-none transition-all ${
+                                                                        anadiendoColor ? 'border-marca bg-marca text-tinta' : 'border-papel-borde bg-papel text-tinta-suave hover:border-marca'}`}>
+                                                                    +
+                                                                </button>
+                                                                {colores.map(c => {
+                                                                    const puesto = raizDeColor(colorActual) === raizDeColor(c);
+                                                                    const tono = tonoDe(c);
+                                                                    return (
+                                                                        <button key={c} onClick={() => ponerColor(c)}
+                                                                            className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold transition-all border ${
+                                                                                puesto ? 'border-tinta bg-papel-hondo text-tinta' : 'border-papel-borde bg-papel text-tinta-suave hover:border-tinta-tenue'}`}>
+                                                                            <span className="w-2.5 h-2.5 rounded-full border border-black/15 flex-shrink-0"
+                                                                                style={{ backgroundColor: tono ?? 'transparent' }} />
+                                                                            {c}
+                                                                        </button>
+                                                                    );
+                                                                })}
+                                                                {/* Lo que se acaba de escribir a mano todavía no está en la
+                                                                    familia: sin esto se guarda bien pero no se ve puesto. */}
+                                                                {colorActual.trim() && !colores.some(c => raizDeColor(c) === raizDeColor(colorActual)) && (
+                                                                    <button onClick={() => ponerColor('')}
+                                                                        className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold border border-tinta bg-papel-hondo text-tinta">
+                                                                        <span className="w-2.5 h-2.5 rounded-full border border-black/15 flex-shrink-0"
+                                                                            style={{ backgroundColor: tonoDe(colorActual) ?? 'transparent' }} />
+                                                                        {colorActual.trim()} ✕
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </div>
+
+                                                        {/* El «+» no lleva derecho a «escribe el color»: primero
+                                                            pregunta de qué se trata lo que falta. Para los clavos,
+                                                            *acero* y *hierro* no son colores — son la denominación. */}
+                                                        {anadiendoColor === 'elegir' && (
+                                                            <div className="rounded-xl border border-dashed border-marca-borde bg-papel p-2 flex gap-1.5">
+                                                                <button type="button" onClick={() => setAnadiendoColor('color')}
+                                                                    className="flex-1 py-2 text-[10px] font-black bg-papel-hondo hover:bg-marca-suave text-tinta-suave rounded-xl">
+                                                                    🎨 Un color
+                                                                </button>
+                                                                <button type="button" onClick={() => setAnadiendoColor('denominacion')}
+                                                                    className="flex-1 py-2 text-[10px] font-black bg-papel-hondo hover:bg-marca-suave text-tinta-suave rounded-xl">
+                                                                    🏷 Otra denominación
+                                                                </button>
                                                             </div>
                                                         )}
+
+                                                        {(anadiendoColor === 'color' || anadiendoColor === 'denominacion') && (() => {
+                                                            const vistos = new Set(colores.map(raizDeColor));
+                                                            const restoDeLaPaleta = PALETA.filter(c => !vistos.has(raizDeColor(c)));
+                                                            const ponerYCerrar = (c: string) => {
+                                                                const v = c.trim();
+                                                                if (!v) return;
+                                                                ponerColor(v);
+                                                                setAnadiendoColor(null);
+                                                                setColorNuevoChat('');
+                                                            };
+                                                            return (
+                                                                <div className="rounded-xl border border-dashed border-marca-borde bg-papel p-2 space-y-2">
+                                                                    <div className="flex gap-1.5">
+                                                                        <input type="text" value={colorNuevoChat} autoFocus
+                                                                            placeholder={anadiendoColor === 'color'
+                                                                                ? 'Escribe el color (ej: blanco)'
+                                                                                : 'Escribe la denominación (ej: madera)'}
+                                                                            onChange={e => setColorNuevoChat(e.target.value)}
+                                                                            onKeyDown={e => {
+                                                                                if (e.key === 'Enter') { e.preventDefault(); ponerYCerrar(colorNuevoChat); }
+                                                                                if (e.key === 'Escape') { setAnadiendoColor(null); setColorNuevoChat(''); }
+                                                                            }}
+                                                                            className="flex-1 min-w-0 text-xs border border-papel-borde rounded-xl px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-marca bg-papel" />
+                                                                        <button type="button" onClick={() => ponerYCerrar(colorNuevoChat)}
+                                                                            disabled={!colorNuevoChat.trim()}
+                                                                            className="px-3 py-1.5 text-[10px] font-black bg-marca hover:bg-marca-fuerte disabled:bg-papel-borde disabled:text-tinta-suave text-tinta rounded-xl flex-shrink-0">
+                                                                            Poner
+                                                                        </button>
+                                                                    </div>
+                                                                    {/* La paleta solo en el camino del color: una
+                                                                        denominación no tiene nada que pintar. */}
+                                                                    {anadiendoColor === 'color' && restoDeLaPaleta.length > 0 && (
+                                                                        <div className="flex flex-wrap gap-1">
+                                                                            {restoDeLaPaleta.map(c => (
+                                                                                <button key={c} type="button" onClick={() => ponerYCerrar(c)}
+                                                                                    className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold border border-papel-borde bg-papel text-tinta-suave hover:border-marca">
+                                                                                    <span className="w-2.5 h-2.5 rounded-full border border-black/10"
+                                                                                        style={{ backgroundColor: tonoDe(c)! }} />
+                                                                                    {c}
+                                                                                </button>
+                                                                            ))}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })()}
 
                                                         {marcas.length > 0 && (
                                                             <div className="space-y-1 pt-0.5">
@@ -1364,7 +1493,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                     </div>
                     <div className="flex gap-2">
                         <button onClick={() => setWizardStep('enter_items')} className="px-3 py-2 text-xs text-tinta-tenue hover:text-tinta-suave border border-papel-borde rounded-xl">← Editar</button>
-                        <button onClick={cancelWizard} className="px-3 py-2 text-xs text-tinta-tenue hover:text-alerta border border-alerta rounded-xl">Cancelar</button>
+                        <button onClick={() => cancelWizard(true)} className="px-3 py-2 text-xs text-tinta-tenue hover:text-alerta border border-alerta rounded-xl">Cancelar</button>
                         <button onClick={handleConfirmWizard} className="flex-1 py-2 bg-bien hover:bg-bien text-papel font-bold rounded-xl text-xs transition-all">
                             {wizardIsAddMode ? '✅ Agregar al inventario' : '🚀 Confirmar'}
                         </button>
@@ -1683,7 +1812,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                         </div>
                         <div className="flex items-center gap-2">
                             {inAction && (
-                                <button onClick={() => { cancelWizard(); closePanel(); }} className="text-tinta-tenue hover:text-tinta text-xs font-semibold px-2 py-1 rounded-lg hover:bg-marca-fuerte transition-colors">
+                                <button onClick={() => { cancelWizard(true); closePanel(); }} className="text-tinta-tenue hover:text-tinta text-xs font-semibold px-2 py-1 rounded-lg hover:bg-marca-fuerte transition-colors">
                                     ✕ Cancelar
                                 </button>
                             )}

@@ -24,6 +24,9 @@ export interface AppData {
     behaviorLogs?: BehaviorLog[];
 }
 
+/** Cuántos registros de comportamiento se guardan en el teléfono. */
+const MAX_BEHAVIOR_LOCAL = 300;
+
 // ── AUTO-SAVE: guarda en localStorage ──────────────────────
 export function saveToLocalStorage(data: Omit<AppData, 'version' | 'savedAt'>): void {
     try {
@@ -32,6 +35,18 @@ export function saveToLocalStorage(data: Omit<AppData, 'version' | 'savedAt'>): 
             savedAt: new Date().toISOString(),
             ...data,
             users: data.users.map(u => ({ ...u, password: '' })),
+            /**
+             * Los registros de comportamiento se guardan topados en el teléfono.
+             *
+             * Crecen con cada toque y no se borran nunca: había 1.701, y todos
+             * se volvían a serializar en cada guardado. Eso es lo que ponía
+             * lento el navegador de Huawei.
+             *
+             * Los viejos NO se pierden: viven en Supabase, que es donde se
+             * consultan desde Trazabilidad. Acá solo se guardan los últimos,
+             * que son los que hacen falta para trabajar sin señal.
+             */
+            behaviorLogs: (data.behaviorLogs ?? []).slice(0, MAX_BEHAVIOR_LOCAL),
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch (e) {

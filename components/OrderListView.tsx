@@ -99,6 +99,65 @@ export const OrderListView: React.FC<Props> = ({
     const [unidad, setUnidad] = useState('');
     const [periodo, setPeriodo] = useState<Periodo>(periodoPorDefecto());
 
+    /**
+     * El panel para decir qué llegó de verdad.
+     *
+     * Vive acá y no dentro de una sola lista porque se usa en las dos: en los
+     * pendientes y en los comprados. Antes solo existía en los comprados, y como
+     * Juli no marca nada como comprado, para él la función no existía. Es una
+     * función, no un componente: si fuera componente React lo remontaría en cada
+     * render y el campo de la cantidad perdería lo escrito a cada tecla.
+     */
+    const panelRecepcion = (n: OrderNote) => {
+        if (!recibiendo || !onRecibirNote) return null;
+        const parecidos = items
+            .filter(i => looseMatch(i.name, n.texto) || looseMatch(getGenus(i.name), n.texto))
+            .slice(0, 8);
+        const resto = items.filter(i => !parecidos.some(p => p.id === i.id))
+            .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+        return (
+            <div key={n.id} className="rounded-xl border border-atencion bg-papel p-2 my-1 space-y-2">
+                <p className="text-[11px] font-black text-atencion">¿Qué llegó de «{n.texto}»?</p>
+                <div className="flex gap-1.5">
+                    <input type="number" min={0} autoFocus value={recibiendo.cantidad}
+                        onChange={e => setRecibiendo(r => r && { ...r, cantidad: e.target.value })}
+                        placeholder="Cant."
+                        className="w-24 flex-shrink-0 text-sm border border-papel-borde rounded-xl px-2 py-2 bg-papel" />
+                    <select value={recibiendo.itemId}
+                        onChange={e => setRecibiendo(r => r && { ...r, itemId: e.target.value })}
+                        className="flex-1 min-w-0 text-sm border border-papel-borde rounded-xl px-2 py-2 bg-papel">
+                        <option value="">➕ Crear «{n.texto}» como consumible</option>
+                        {parecidos.length > 0 && (
+                            <optgroup label="Se parece a">
+                                {parecidos.map(i => <option key={i.id} value={i.id}>{i.name} · {i.quantity} {i.unit}</option>)}
+                            </optgroup>
+                        )}
+                        <optgroup label="Todo el inventario">
+                            {resto.map(i => <option key={i.id} value={i.id}>{i.name} · {i.quantity} {i.unit}</option>)}
+                        </optgroup>
+                    </select>
+                </div>
+                <p className="text-[10px] text-tinta-tenue">
+                    Se pidió {n.cantidad != null ? `${n.cantidad} ${n.unidad ?? ''}`.trim() : 'sin cantidad'}.
+                    Poné lo que de verdad llegó — si llegó menos, va menos.
+                </p>
+                <div className="flex gap-2">
+                    <button onClick={() => setRecibiendo(null)}
+                        className="px-3 py-1.5 text-xs font-bold text-tinta-tenue border border-papel-borde rounded-xl">Cancelar</button>
+                    <button
+                        disabled={!Number(recibiendo.cantidad)}
+                        onClick={() => {
+                            onRecibirNote(n, Number(recibiendo.cantidad), recibiendo.itemId || undefined, n.texto);
+                            setRecibiendo(null);
+                        }}
+                        className="flex-1 py-1.5 text-xs font-black bg-bien disabled:bg-papel-borde disabled:text-tinta-suave text-papel rounded-xl">
+                        📥 Entró a la bodega
+                    </button>
+                </div>
+            </div>
+        );
+    };
+
     const pendientes = notes.filter(n => !n.comprado);
     // Tres estados, no dos: por comprar → comprado y esperando que llegue →
     // recibido y adentro del inventario.
@@ -162,7 +221,9 @@ export const OrderListView: React.FC<Props> = ({
             <div>
                 <h1 className="text-xl font-black text-tinta">🧾 Lista de pedidos</h1>
                 <p className="text-xs text-tinta-tenue mt-0.5">
-                    Lo que hay que comprar. No toca el inventario: acá se anota, nada más.
+                    Lo que hay que comprar. Anotar no toca el inventario; cuando el
+                    material llegue, tocá «📥 Llegó» y decí cuánto llegó de verdad —
+                    eso sí entra al inventario.
                 </p>
             </div>
 
@@ -340,6 +401,7 @@ export const OrderListView: React.FC<Props> = ({
                                 </div>
                             );
                         }
+                        if (recibiendo?.id === n.id && onRecibirNote) return panelRecepcion(n);
                         return (
                             <div key={n.id} className="flex items-center gap-2 px-3 py-2.5 border-b border-papel-borde last:border-0">
                                 <button onClick={() => onToggleNote(n)}
@@ -362,6 +424,17 @@ export const OrderListView: React.FC<Props> = ({
                                         </p>
                                     )}
                                 </button>
+                                {/* «Llegó» también acá, sin tener que marcarlo antes
+                                    como comprado. Estaba solo en la sección de
+                                    comprados y Juli nunca lo vio: para él la función
+                                    sencillamente no existía. */}
+                                {onRecibirNote && (
+                                    <button
+                                        onClick={() => setRecibiendo({ id: n.id, cantidad: n.cantidad != null ? String(n.cantidad) : '', itemId: '' })}
+                                        className="flex-shrink-0 text-[11px] font-black px-2 py-1 rounded-lg bg-atencion text-papel">
+                                        📥 Llegó
+                                    </button>
+                                )}
                                 <button onClick={() => abrirEdicion(n)}
                                     className="text-tinta-tenue hover:text-marca-oscuro px-1 flex-shrink-0 text-sm" title="Corregir">✎</button>
                                 <button onClick={() => onDeleteNote(n)}
@@ -380,54 +453,7 @@ export const OrderListView: React.FC<Props> = ({
                             </p>
                             {compradas.map(n => {
                                 const abierto = recibiendo?.id === n.id;
-                                if (abierto && onRecibirNote) {
-                                    const parecidos = items
-                                        .filter(i => looseMatch(i.name, n.texto) || looseMatch(getGenus(i.name), n.texto))
-                                        .slice(0, 8);
-                                    const resto = items.filter(i => !parecidos.some(p => p.id === i.id))
-                                        .sort((a, b) => a.name.localeCompare(b.name, 'es'));
-                                    return (
-                                        <div key={n.id} className="rounded-xl border border-atencion bg-papel p-2 my-1 space-y-2">
-                                            <p className="text-[11px] font-black text-atencion">¿Qué llegó de «{n.texto}»?</p>
-                                            <div className="flex gap-1.5">
-                                                <input type="number" min={0} autoFocus value={recibiendo.cantidad}
-                                                    onChange={e => setRecibiendo(r => r && { ...r, cantidad: e.target.value })}
-                                                    placeholder="Cant."
-                                                    className="w-24 flex-shrink-0 text-sm border border-papel-borde rounded-xl px-2 py-2 bg-papel" />
-                                                <select value={recibiendo.itemId}
-                                                    onChange={e => setRecibiendo(r => r && { ...r, itemId: e.target.value })}
-                                                    className="flex-1 min-w-0 text-sm border border-papel-borde rounded-xl px-2 py-2 bg-papel">
-                                                    <option value="">➕ Crear «{n.texto}» en el inventario</option>
-                                                    {parecidos.length > 0 && (
-                                                        <optgroup label="Se parece a">
-                                                            {parecidos.map(i => <option key={i.id} value={i.id}>{i.name} · {i.quantity} {i.unit}</option>)}
-                                                        </optgroup>
-                                                    )}
-                                                    <optgroup label="Todo el inventario">
-                                                        {resto.map(i => <option key={i.id} value={i.id}>{i.name} · {i.quantity} {i.unit}</option>)}
-                                                    </optgroup>
-                                                </select>
-                                            </div>
-                                            <p className="text-[10px] text-tinta-tenue">
-                                                Se pidió {n.cantidad != null ? `${n.cantidad} ${n.unidad ?? ''}`.trim() : 'sin cantidad'}.
-                                                Poné lo que de verdad llegó — si llegó menos, va menos.
-                                            </p>
-                                            <div className="flex gap-2">
-                                                <button onClick={() => setRecibiendo(null)}
-                                                    className="px-3 py-1.5 text-xs font-bold text-tinta-tenue border border-papel-borde rounded-xl">Cancelar</button>
-                                                <button
-                                                    disabled={!Number(recibiendo.cantidad)}
-                                                    onClick={() => {
-                                                        onRecibirNote(n, Number(recibiendo.cantidad), recibiendo.itemId || undefined, n.texto);
-                                                        setRecibiendo(null);
-                                                    }}
-                                                    className="flex-1 py-1.5 text-xs font-black bg-bien disabled:bg-papel-borde disabled:text-tinta-suave text-papel rounded-xl">
-                                                    📥 Entró a la bodega
-                                                </button>
-                                            </div>
-                                        </div>
-                                    );
-                                }
+                                if (abierto && onRecibirNote) return panelRecepcion(n);
                                 return (
                                     <div key={n.id} className="flex items-center gap-2 py-1">
                                         <button onClick={() => onToggleNote(n)} title="Volver a pendiente"

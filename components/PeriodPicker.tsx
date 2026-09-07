@@ -64,12 +64,20 @@ export const PeriodPicker: React.FC<Props> = ({ value, onChange, onBehaviorLog }
 
     return (
         <div className="space-y-1.5">
-            {/* El rango de fechas va PRIMERO y siempre a la vista.
-                Era lo que más se usaba y estaba escondido detrás de un botón que
-                además no se veía: se pintaba con letra blanca sobre fondo blanco
-                (`bg-papel text-papel`), así que en el celular se veía una pastilla
-                vacía. Juli lo reportó como "el cronológico me aparece en blanco" —
-                no estaba vacío, era invisible. */}
+            {/* Solo el rango de fechas.
+                Los chips de 7 / 15 / 21 días y Mes se fueron: Juli los pidió
+                quitar dos veces —"deja no más el cronológico con el buscador"— y
+                yo los había dejado "de segundos". Ocupaban un renglón entero
+                para responder una pregunta que casi nunca se hace: lo que se
+                busca es un día concreto, no "los últimos quince".
+
+                El rango, además, estaba escondido detrás de un botón que ni se
+                veía: se pintaba con letra blanca sobre fondo blanco (`bg-papel
+                text-papel`), así que en el celular salía una pastilla vacía. Juli
+                lo reportó como "el cronológico me aparece en blanco" — no estaba
+                vacío, era invisible.
+
+                `PERIODOS` sigue exportado: otras vistas lo usan. */}
             <div className="flex items-center gap-1.5">
                 <input type="date" value={desde} aria-label="Desde"
                     onChange={e => { setDesde(e.target.value); setPersonalizado(true); aplicarPersonalizado(e.target.value, hasta); }}
@@ -85,20 +93,6 @@ export const PeriodPicker: React.FC<Props> = ({ value, onChange, onBehaviorLog }
                         ✕
                     </button>
                 )}
-            </div>
-            <div className="flex flex-wrap gap-1">
-                {PERIODOS.map(p => {
-                    const activo = !personalizado && value.label === p.build().label;
-                    return (
-                        <button key={p.key} type="button"
-                            onClick={() => { setPersonalizado(false); onChange(p.build()); onBehaviorLog?.('FILTER', `Período: ${p.label}`); }}
-                            className={`px-2.5 py-1 rounded-full text-[11px] font-black transition-all ${
-                                activo ? 'bg-marca text-tinta' : 'bg-papel text-tinta-suave border border-papel-borde hover:border-marca'
-                            }`}>
-                            {p.label}
-                        </button>
-                    );
-                })}
             </div>
         </div>
     );
