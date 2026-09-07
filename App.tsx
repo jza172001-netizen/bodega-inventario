@@ -17,6 +17,7 @@ import { FloatingChat } from './components/FloatingChat';
 import { OnboardingModal } from './components/OnboardingModal';
 import { HelpView } from './components/HelpView';
 import { describirCambios, describirEstado } from './utils/cambios';
+import { nombreReal } from './utils/nombres';
 import { PapeleraView } from './components/PapeleraView';
 import { TraceabilityView } from './components/TraceabilityView';
 import { WhatsAppView } from './components/WhatsAppView';
@@ -103,10 +104,9 @@ const App: React.FC = () => {
         try { return JSON.parse(localStorage.getItem(SESSION_KEY) || '{}').role ?? UserRole.OWNER; } catch { return UserRole.OWNER; }
     });
     // Carga inicial síncrona desde localStorage, con fallback a mockData
-    const NAME_FIX: Record<string, string> = { Julio: 'Juli', julio: 'Juli', Administrador: 'Juli', administrador: 'Juli' };
     const [users, setUsers] = useState<AppUser[]>(() => {
         const s = loadInitialData();
-        return migrateUsers(s?.users ?? mockUsers).map(u => NAME_FIX[u.name] ? { ...u, name: NAME_FIX[u.name] } : u);
+        return migrateUsers(s?.users ?? mockUsers).map(u => ({ ...u, name: nombreReal(u.name) }));
     });
 
     const [userName, setUserName] = useState<string>(() => {
@@ -114,12 +114,14 @@ const App: React.FC = () => {
             const session = JSON.parse(localStorage.getItem(SESSION_KEY) || '{}');
             if (!session.name) return '';
             if (session.role === UserRole.VISITOR) return 'Visitante';
-            // Si el nombre guardado coincide exactamente con un seed, usarlo
-            if (seedUsers.some(u => u.name === session.name)) return session.name;
-            // Nombre desactualizado (ej: 'Julio' → 'Juli', 'Administrador' → 'Juli')
-            // Para OWNER siempre hay un único seed; para EMPLOYEE buscamos por rol
-            const seed = seedUsers.find(u => u.role === session.role);
-            return seed?.name ?? session.name;
+            const bueno = nombreReal(session.name);
+            // Y se deja escrito corregido, para que el nombre viejo no siga
+            // saliendo del teléfono cada vez que se abre la app. Antes se
+            // corregía en memoria y el localStorage seguía diciendo "Julio".
+            if (bueno !== session.name) {
+                localStorage.setItem(SESSION_KEY, JSON.stringify({ ...session, name: bueno }));
+            }
+            return bueno;
         } catch { return ''; }
     });
     const [items, setItems] = useState<Item[]>(() => { const s = loadInitialData(); return s?.items ?? []; });
@@ -162,14 +164,12 @@ const App: React.FC = () => {
     const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
         const s = loadInitialData();
         const logs = s?.auditLogs ?? [];
-        const fix: Record<string, string> = { Administrador: 'Juli', administrador: 'Juli', Julio: 'Juli', julio: 'Juli' };
-        return logs.map(l => fix[l.actor] ? { ...l, actor: fix[l.actor] } : l);
+        return logs.map(l => ({ ...l, actor: nombreReal(l.actor) }));
     });
     const [behaviorLogs, setBehaviorLogs] = useState<BehaviorLog[]>(() => {
         const s = loadInitialData();
         const logs = s?.behaviorLogs ?? [];
-        const fix: Record<string, string> = { Julio: 'Juli', julio: 'Juli', Administrador: 'Juli', administrador: 'Juli' };
-        return logs.map(l => fix[l.actor] ? { ...l, actor: fix[l.actor] } : l);
+        return logs.map(l => ({ ...l, actor: nombreReal(l.actor) }));
     });
 
     /** Quién manda algo a la papelera. Misma regla que el actor de la bitácora:
@@ -278,8 +278,7 @@ const App: React.FC = () => {
     };
 
     const handleLoginSuccess = (role: UserRole, name: string) => {
-        const nameFix: Record<string, string> = { Julio: 'Juli', julio: 'Juli', Administrador: 'Juli', administrador: 'Juli' };
-        const fixedName = nameFix[name] ?? name;
+        const fixedName = nombreReal(name);
         setUserRole(role);
         setUserName(fixedName);
         setLoggedIn(true);
@@ -400,12 +399,25 @@ const App: React.FC = () => {
                    * desaparecer sin dejar rastro. Así se perdieron Santiago y
                    * Camilo.
                    */
-                  const idsRemotos = new Set(deLaNube.map(u => u.id));
-                  const soloLocales = prev.filter(u => !idsRemotos.has(u.id));
-                  for (const u of soloLocales) {
-                      db.addUser(u).catch(e => console.error('[Supabase] reintento de usuario:', u.name, e));
-                  }
-                  return [...deLaNube, ...soloLocales].map(u => NAME_FIX[u.name] ? { ...u, name: NAME_FIX[u.name] } : u);
+                  // Para los accesos, la nube manda. Punto.
+                  //
+                  // Acá había una red que conservaba los accesos que estaban en el
+                  // teléfono y no en la nube, y los reintentaba subir. La escribí
+                  // para arreglar los accesos que "se perdían", cuando la causa real
+                  // era otra: `addUser` pedía la fila de vuelta y la seguridad de la
+                  // tabla revertía el insert entero. Eso ya está arreglado.
+                  //
+                  // Con la causa resuelta, la red solo servía para revivir muertos: a
+                  // Juli le quedaron en la pantalla de entrada un "CAMILO", una "Kate"
+                  // repetida y un "Julio" que en la base no existen, y no había forma
+                  // de borrarlos — los borraba y la siguiente sincronización se los
+                  // devolvía.
+                  //
+                  // Ahora un acceso existe si está en la nube. Al crearlo sube de una;
+                  // si no subió, no existe, y eso es más honesto que fingir que sí. El
+                  // costo: un acceso creado sin señal no queda; se vuelve a crear con
+                  // señal y ya.
+                  return deLaNube.map(u => ({ ...u, name: nombreReal(u.name) }));
               });
           }).catch(e => console.error('[Supabase] users:', e));
 
@@ -415,8 +427,8 @@ const App: React.FC = () => {
               db.fetchProjects().catch((): Project[] => []),
               db.fetchPersonnel().catch((): Personnel[] => []),
               db.fetchPurchaseOrders().catch((): PurchaseOrder[] => []),
-              db.fetchAuditLogs().catch((): AuditLog[] => []),
-              db.fetchBehaviorLogs().catch((): BehaviorLog[] => []),
+              db.fetchAuditLogs().then(ls => ls.map(l => ({ ...l, actor: nombreReal(l.actor) }))).catch((): AuditLog[] => []),
+              db.fetchBehaviorLogs().then(ls => ls.map(l => ({ ...l, actor: nombreReal(l.actor) }))).catch((): BehaviorLog[] => []),
               db.fetchBorrados().catch(() => ({ personnel: [] as string[], projects: [] as string[], purchaseOrders: [] as string[], movements: [] as string[], items: [] as string[] })),
           ]).then(([supaItems, supaMovements, supaProjectsRaw, supaPersonnelRaw, supaPOs, supaAuditLogs, supaBehaviorLogs, borrados]) => {
               // Lo que tiene lápida se saca de lo local ANTES de mezclar. Sin esto,
