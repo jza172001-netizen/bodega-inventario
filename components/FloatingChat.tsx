@@ -1365,11 +1365,44 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                                         className="w-full py-1 text-[10px] text-marca-oscuro border border-dashed border-marca-borde rounded-lg hover:border-marca bg-papel">
                                                         + Agregar especie
                                                     </button>
-                                                    {wizardSpecies.filter(s => s.brand.trim() && s.color.trim()).length > 0 && (
-                                                        <p className="text-[10px] text-marca-oscuro font-bold text-center">
-                                                            Se crearán {wizardSpecies.filter(s => s.brand.trim() && s.color.trim()).length} ítem(s) — 1 unidad c/u
-                                                        </p>
-                                                    )}
+                                                    {(() => {
+                                                        /**
+                                                         * Cuántas se van a crear DE VERDAD, y cuántas filas se
+                                                         * van a ignorar.
+                                                         *
+                                                         * Juli agregó dos especies y le salió una sola Pica. La
+                                                         * app hizo lo correcto —una fila sin color ni marca no
+                                                         * crea nada, porque serían dos ítems idénticos— pero no
+                                                         * se lo dijo: el aviso de "se crearán N" solo aparecía
+                                                         * cuando la fila tenía color Y marca, que es la regla de
+                                                         * las eléctricas. En una manual, donde basta uno de los
+                                                         * dos, no salía nunca.
+                                                         *
+                                                         * Cada rama cuenta con su propia regla, y las filas
+                                                         * vacías se nombran en vez de desaparecer en silencio.
+                                                         */
+                                                        const exigeAmbos = type === InventoryType.ELECTRICAL_TOOL;
+                                                        const sirven = wizardSpecies.filter(sp => exigeAmbos
+                                                            ? (sp.brand.trim() && sp.color.trim())
+                                                            : (sp.brand.trim() || sp.color.trim()));
+                                                        const vacias = wizardSpecies.length - sirven.length;
+                                                        if (wizardSpecies.length === 1 && sirven.length === 0) return null;
+                                                        return (
+                                                            <div className="text-[10px] text-center space-y-0.5">
+                                                                <p className="text-marca-oscuro font-bold">
+                                                                    {sirven.length > 0
+                                                                        ? `Se crearán ${sirven.length} ítem(s) — ${wizardCreateQty} c/u`
+                                                                        : 'Se creará 1 ítem, sin color ni marca'}
+                                                                </p>
+                                                                {vacias > 0 && sirven.length > 0 && (
+                                                                    <p className="text-atencion font-bold">
+                                                                        {vacias === 1 ? 'Hay 1 fila vacía y no se va a crear' : `Hay ${vacias} filas vacías y no se van a crear`}
+                                                                        {exigeAmbos ? ' — una eléctrica necesita color y marca.' : ' — poné color o marca.'}
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })()}
                                                 </div>
                                             )}
                                             {(type === InventoryType.PPE || type === InventoryType.SINGLE_USE) && (
