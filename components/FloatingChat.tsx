@@ -13,6 +13,8 @@ import { getGenus, familiaDe, esParecido, familiaCanonica, familiasParecidas, co
 import { tonoDe, raizDeColor, coloresUnificados, PALETA } from '../utils/colores';
 import { generosDe, denominacionesDe, nombreCompuesto } from '../utils/medida';
 import { medidaDe } from '../utils/medida';
+import { leerLote, contarDudas, LoteParseado } from '../utils/lote';
+import { isAsset, isConsumable } from '../utils/inventory';
 
 /** Las preguntas de uso, tal cual las responde el asistente. */
 const PREGUNTAS_DE_AYUDA = COMO_SE_HACE.map(c => c.pregunta);
@@ -213,6 +215,19 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
      * por otro lado.
      */
     const [reposicion, setReposicion] = useState<RechazoStock[] | null>(null);
+
+    /**
+     * El bloque pegado: diez trabajadores en un solo texto.
+     *
+     * `loteTexto` es lo que se pega; `lote` es lo que la app entendió. Son dos
+     * estados y no uno a propósito: el texto se conserva para poder volver a
+     * leerlo después de corregir, sin que toque pegarlo otra vez.
+     */
+    const [loteAbierto, setLoteAbierto] = useState(false);
+    const [loteTexto, setLoteTexto] = useState('');
+    const [lote, setLote] = useState<LoteParseado | null>(null);
+    const [loteProyecto, setLoteProyecto] = useState<string>('');
+    const [loteFecha, setLoteFecha] = useState<string>(todayISO());
     const [reponerQty, setReponerQty] = useState<Map<string, number>>(new Map());
     const [parecidoPendiente, setParecidoPendiente] = useState<Item[] | null>(null);
     const [createSpecies, setCreateSpecies] = useState<Array<{brand: string; color: string}>>([{ brand: '', color: '' }]);
@@ -771,6 +786,223 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         addBot(`Se dejó **${r.nombre}** fuera del pedido.`);
         const quedan = (reposicion ?? []).filter(x => x.itemId !== r.itemId);
         setReposicion(quedan.length > 0 ? quedan : null);
+    };
+
+    // ── El bloque pegado ──────────────────────────────────────────────────
+    const cerrarLote = () => { setLoteAbierto(false); setLote(null); setLoteTexto(''); setLoteProyecto(''); setLoteFecha(todayISO()); };
+
+    const leerElBloque = () => {
+        const r = leerLote(loteTexto, personnel, items);
+        if (r.lineas.length === 0) {
+            addBot('No pude leer ningún renglón. Cada uno va así: **Alex: 3 palas, 1 martillo**');
+            return;
+        }
+        setLote(r);
+    };
+
+    /** Cambia la persona de un renglón, o el ítem de una línea, sin rearmar el lote. */
+    const fijarPersona = (idx: number, personaId: string) => setLote(prev => {
+        if (!prev) return prev;
+        const persona = personnel.find(p => p.id === personaId);
+        const lineas = prev.lineas.map((l, i) => (i === idx ? { ...l, persona, dudosa: !persona } : l));
+        return { ...prev, lineas };
+    });
+
+    const fijarItem = (idx: number, j: number, itemId: string) => setLote(prev => {
+        if (!prev) return prev;
+        const item = items.find(x => x.id === itemId);
+        const lineas = prev.lineas.map((l, i) => (i === idx
+            ? { ...l, items: l.items.map((it, k) => (k === j ? { ...it, item, dudoso: !item } : it)) }
+            : l));
+        return { ...prev, lineas };
+    });
+
+    const fijarCantidad = (idx: number, j: number, cantidad: number) => setLote(prev => {
+        if (!prev) return prev;
+        const lineas = prev.lineas.map((l, i) => (i === idx
+            ? { ...l, items: l.items.map((it, k) => (k === j ? { ...it, cantidad: Math.max(1, cantidad) } : it)) }
+            : l));
+        return { ...prev, lineas };
+    });
+
+    const quitarLinea = (idx: number, j: number) => setLote(prev => {
+        if (!prev) return prev;
+        const lineas = prev.lineas
+            .map((l, i) => (i === idx ? { ...l, items: l.items.filter((_, k) => k !== j) } : l))
+            .filter(l => l.items.length > 0);
+        return { ...prev, lineas };
+    });
+
+    /**
+     * Registra lo que quedó resuelto.
+     *
+     * Lo que sigue sin resolver NO frena el lote: se queda en pantalla. A las
+     * siete de la mañana, con la fila esperando, parar los dieciocho buenos por
+     * dos malos es peor que registrar los dieciocho — siempre y cuando los dos
+     * queden a la vista y no se pierdan, que es justo lo que hace esta pantalla.
+     */
+    const registrarLote = () => {
+        if (!lote) return;
+        const ts = momentoDeFecha(loteFecha);
+        const project = projects.find(p => p.id === loteProyecto);
+        const listos = lote.lineas.filter(l => l.persona && l.items.some(i => i.item));
+
+        const hayConsumible = listos.some(l => l.items.some(i => i.item && isConsumable(i.item)));
+        if (hayConsumible && !project) {
+            addBot('⚠️ Hay consumibles en el bloque y los consumibles necesitan proyecto. Elegí uno arriba.');
+            return;
+        }
+
+        const movs: Array<Omit<Movement, 'id'>> = [];
+        for (const l of listos) {
+            for (const it of l.items) {
+                if (!it.item) continue;
+                movs.push({
+                    itemId: it.item.id,
+                    type: MovementType.CHECK_OUT,
+                    quantity: it.cantidad,
+                    timestamp: ts,
+                    personnelId: l.persona!.id,
+                    projectId: project?.id,
+                    notes: '',
+                    // La regla de préstamo vs. gasto es la de `utils/inventory`, la
+                    // misma que usa el resto de la app. Acá no se escribe otra.
+                    isLoan: isAsset(it.item),
+                    isReturned: false,
+                });
+            }
+        }
+        if (movs.length === 0) {
+            addBot('Todavía no hay nada resuelto para registrar. Completá al menos un renglón.');
+            return;
+        }
+
+        const r = onLogMovements(movs);
+        const personas = new Set(listos.map(l => l.persona!.id)).size;
+        if (r.ok > 0) {
+            addBotYGuarda(`✅ ${r.ok} salida(s) registradas para ${personas} persona(s).`);
+            onBehaviorLog?.('ACTION', `Despachó por bloque pegado: ${r.ok} salidas, ${personas} personas`);
+        }
+        if (r.rechazos.length > 0) {
+            setReponerQty(new Map(r.rechazos.map(x => [x.itemId, Math.max(1, x.pedido - x.hay)])));
+            setReposicion(r.rechazos);
+            cerrarLote();
+            return;
+        }
+        // Solo se van los renglones que SÍ entraron. Lo que quedó sin resolver se
+        // queda en pantalla, porque el movimiento no se puede perder.
+        const quedan = lote.lineas.filter(l => !(l.persona && l.items.some(i => i.item)));
+        if (quedan.length === 0) cerrarLote();
+        else setLote({ ...lote, lineas: quedan });
+    };
+
+    const renderLote = () => {
+        const dudas = lote ? contarDudas(lote) : 0;
+        const sel = 'text-[11px] border border-papel-borde rounded-lg px-1.5 py-1 bg-papel text-tinta max-w-[46%]';
+        return (
+        <div className="flex-1 overflow-y-auto px-3 py-4 space-y-3">
+            <div className="flex items-start justify-between gap-2">
+                <div>
+                    <p className="text-sm font-black text-tinta">Despacho por bloque</p>
+                    <p className="text-[11px] text-tinta-tenue mt-0.5">
+                        Pegá el texto con todos los trabajadores. Un renglón por persona.
+                    </p>
+                </div>
+                <button onClick={cerrarLote} className="text-[11px] font-bold text-tinta-tenue hover:text-tinta flex-shrink-0">Cerrar</button>
+            </div>
+
+            {!lote ? (
+                <>
+                    <textarea
+                        value={loteTexto}
+                        onChange={e => setLoteTexto(e.target.value)}
+                        rows={8}
+                        placeholder={'Alex: 3 palas, 1 martillo y una pica\nJuan: 2 palas, 1 palín\nPedro: 1 escalera, 2 rodilleras'}
+                        className="w-full text-[12px] border border-papel-borde rounded-2xl p-3 bg-papel text-tinta placeholder:text-tinta-tenue resize-none leading-relaxed"
+                    />
+                    <button
+                        onClick={leerElBloque}
+                        disabled={!loteTexto.trim()}
+                        className="w-full py-2.5 bg-tinta text-papel rounded-xl font-bold text-xs disabled:opacity-40">
+                        Leer el bloque
+                    </button>
+                </>
+            ) : (
+                <>
+                    <div className="flex gap-2">
+                        <input type="date" value={loteFecha} onChange={e => setLoteFecha(e.target.value)}
+                            className="flex-1 text-[11px] border border-papel-borde rounded-lg px-2 py-1.5 bg-papel text-tinta" />
+                        <select value={loteProyecto} onChange={e => setLoteProyecto(e.target.value)}
+                            className="flex-1 text-[11px] border border-papel-borde rounded-lg px-2 py-1.5 bg-papel text-tinta">
+                            <option value="">Sin proyecto</option>
+                            {projects.filter(p => p.status === 'active').map(p => (
+                                <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {dudas > 0 && (
+                        <p className="text-[11px] text-atencion font-semibold">
+                            {dudas} cosa(s) por revisar. Lo que quede sin resolver no se registra y se queda acá.
+                        </p>
+                    )}
+
+                    {lote.lineas.map((l, idx) => (
+                        <div key={idx} className={`rounded-2xl p-3 space-y-2 border ${l.persona ? 'border-papel-borde bg-papel' : 'border-atencion bg-atencion-suave'}`}>
+                            <div className="flex items-center gap-2">
+                                <span className="text-[11px] font-black text-tinta flex-shrink-0">{l.personaTexto}</span>
+                                <select value={l.persona?.id ?? ''} onChange={e => fijarPersona(idx, e.target.value)}
+                                    className={`${sel} flex-1 max-w-none ${l.persona ? '' : 'border-atencion'}`}>
+                                    <option value="">¿Quién es?</option>
+                                    {personnel.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                </select>
+                            </div>
+                            {l.items.map((it, j) => (
+                                <div key={j} className="flex items-center gap-1.5">
+                                    <input type="number" min={1} value={it.cantidad}
+                                        onFocus={e => e.target.select()}
+                                        onChange={e => fijarCantidad(idx, j, parseInt(e.target.value) || 1)}
+                                        className="w-12 text-[11px] border border-papel-borde rounded-lg px-1.5 py-1 bg-papel text-tinta text-center" />
+                                    <select value={it.item?.id ?? ''} onChange={e => fijarItem(idx, j, e.target.value)}
+                                        className={`${sel} flex-1 max-w-none ${it.item ? '' : 'border-atencion'}`}>
+                                        <option value="">{it.nombre} — ¿cuál es?</option>
+                                        {it.candidatos.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                        {items.filter(x => !it.candidatos.some(c => c.id === x.id))
+                                            .map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
+                                    </select>
+                                    <button onClick={() => quitarLinea(idx, j)}
+                                        className="text-[11px] text-tinta-tenue hover:text-alerta px-1 flex-shrink-0">✕</button>
+                                </div>
+                            ))}
+                        </div>
+                    ))}
+
+                    {lote.ignoradas.length > 0 && (
+                        <div className="border border-atencion bg-atencion-suave rounded-2xl p-3">
+                            <p className="text-[11px] font-bold text-atencion">Renglones que no pude leer</p>
+                            {lote.ignoradas.map((t, i) => (
+                                <p key={i} className="text-[11px] text-tinta mt-1 break-words">· {t}</p>
+                            ))}
+                            <p className="text-[10px] text-tinta-tenue mt-1.5">
+                                Corregilos en el texto y volvé a leer, o registralos aparte.
+                            </p>
+                        </div>
+                    )}
+
+                    <div className="flex gap-2 pt-1">
+                        <button onClick={() => setLote(null)}
+                            className="flex-1 py-2.5 border border-papel-borde text-tinta rounded-xl font-bold text-xs">
+                            Volver al texto
+                        </button>
+                        <button onClick={registrarLote}
+                            className="flex-1 py-2.5 bg-bien text-papel rounded-xl font-bold text-xs">
+                            Registrar
+                        </button>
+                    </div>
+                </>
+            )}
+        </div>
+        );
     };
 
     const renderReposicion = () => (
@@ -2071,7 +2303,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
 
     // ── Render ───────────────────────────────────────────────────────────────
 
-    const inAction = !!wizardStep || !!activePanel;
+    const inAction = !!wizardStep || !!activePanel || loteAbierto;
 
     return (
         <>
@@ -2107,6 +2339,11 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                     {/* Botones de acción — solo en modo chat */}
                     {!inAction && (
                         <div className="px-3 pt-3 pb-1 flex gap-2 flex-shrink-0">
+                            <button onClick={() => setLoteAbierto(true)}
+                                className="flex-1 py-2 pb-2.5 bg-tinta hover:bg-tinta text-papel rounded-xl flex flex-col items-center justify-center gap-0.5 transition-all shadow-sm">
+                                <span className="font-bold text-xs">📋 Bloque</span>
+                                <span className="text-[9px] opacity-70 leading-tight text-center px-1">Pegá varios trabajadores de una</span>
+                            </button>
                             <button onClick={startWizard}
                                 className="flex-1 py-2 pb-2.5 bg-tinta hover:bg-tinta text-papel rounded-xl flex flex-col items-center justify-center gap-0.5 transition-all shadow-sm">
                                 <span className="font-bold text-xs">🚀 Despacho</span>
@@ -2127,6 +2364,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
 
                     {/* Contenido principal */}
                     {reposicion ? renderReposicion()
+                        : loteAbierto ? renderLote()
                         : wizardStep ? <div key={wizardStep} style={{ display: 'contents' }}>{renderWizard()}</div>
                         : activePanel === 'loan' ? renderLoanPanel()
                         : activePanel === 'create' ? renderCreatePanel()
