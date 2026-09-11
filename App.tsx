@@ -39,6 +39,7 @@ import * as db from './services/supabaseService';
 import { supabase } from './lib/supabase';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { sha256Hex } from './utils/hash';
+import { esRetiro, alcanzaStock } from './utils/inventory';
 
 // Icons
 import { DashboardIcon } from './components/icons/DashboardIcon';
@@ -1199,9 +1200,9 @@ const App: React.FC = () => {
         let ok = 0;
         for (const m of expandido) {
             const it = itemActual(m.itemId);
-            const esSalida = m.type === MovementType.CHECK_OUT || m.type === MovementType.WASTE;
+            const esSalida = esRetiro(m.type);
             const hay = restante.get(m.itemId) ?? 0;
-            if (it && esSalida && m.quantity > hay) {
+            if (it && esSalida && !alcanzaStock(hay, m.quantity)) {
                 rechazos.push({ itemId: it.id, nombre: it.name, unidad: it.unit, hay, pedido: m.quantity, movimiento: m });
                 continue;
             }
@@ -1216,13 +1217,13 @@ const App: React.FC = () => {
     const handleLogMovement = (m: Omit<Movement, 'id'>, stockDisponible?: number): boolean => {
         const ts = m.timestamp instanceof Date ? m.timestamp : new Date(m.timestamp ?? Date.now());
         const currentItem = itemActual(m.itemId);
-        const isWithdrawal = m.type === MovementType.CHECK_OUT || m.type === MovementType.WASTE;
+        const isWithdrawal = esRetiro(m.type);
         // El stock contra el que se valida es el que va quedando en el lote, no el
         // del render — que es el mismo para todas las líneas.
         const hay = stockDisponible ?? currentItem?.quantity ?? 0;
         // Validación central de stock: el kardex debe cuadrar siempre con el inventario.
         // Sin esto, una salida mayor al stock registraría más de lo que descuenta.
-        if (currentItem && isWithdrawal && m.quantity > hay) {
+        if (currentItem && isWithdrawal && !alcanzaStock(hay, m.quantity)) {
             alert(`Stock insuficiente de "${currentItem.name}": hay ${hay} ${currentItem.unit} y se intentó sacar ${m.quantity}. El movimiento NO se registró.`);
             return false;
         }

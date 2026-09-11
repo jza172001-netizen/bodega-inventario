@@ -42,6 +42,28 @@ export const isAsset = (item?: Item): boolean => !!item && LOAN_TYPES.has(item.i
 /** EPP o consumible: es gasto definitivo, no vuelve. */
 export const isConsumable = (item?: Item): boolean => !!item && CONSUMABLE_TYPES.has(item.inventoryType);
 
+// ── Movimiento de stock ──────────────────────────────────────────────
+/**
+ * ¿Este movimiento RESTA del stock?
+ *
+ * La respuesta es la misma en toda la app —salida y merma restan, lo demás
+ * suma— pero estaba escrita a mano en una veintena de sitios, incluidas las dos
+ * puntas del registro: `handleLogMovements` la usaba para armar el rechazo por
+ * falta de existencias y `handleLogMovement` la volvía a escribir para hacer la
+ * resta. Dos copias de la misma frase, y la validación de stock escrita dos
+ * veces con dos finales distintos (una devuelve rechazo, la otra avisa).
+ *
+ * Hoy no produce ningún bug: el segundo chequeo es el que manda. El riesgo es
+ * el día que alguien cambie la regla en una sola de las dos —por decir, dejar
+ * que un consumible salga en negativo— y el lote empiece a opinar distinto que
+ * la línea suelta. Con una sola frase, ese día no llega.
+ */
+export const esRetiro = (type: MovementType): boolean =>
+    type === MovementType.CHECK_OUT || type === MovementType.WASTE;
+
+/** ¿Alcanza lo que hay para lo que se pide? */
+export const alcanzaStock = (hay: number, pedido: number): boolean => pedido <= hay;
+
 // ── Préstamos ────────────────────────────────────────────────────────
 /** Lo que está fuera de bodega y no ha vuelto. */
 export const getActiveLoans = (movements: Movement[]): Movement[] =>
@@ -143,7 +165,7 @@ export const getConsumption = (
     const relevant = movements.filter(m => {
         const t = new Date(m.timestamp);
         if (t < range.from || t > range.to) return false;
-        if (m.type !== MovementType.CHECK_OUT && m.type !== MovementType.WASTE) return false;
+        if (!esRetiro(m.type)) return false;
         if (m.isLoan) return false;
         return isConsumable(itemMap.get(m.itemId));
     });
