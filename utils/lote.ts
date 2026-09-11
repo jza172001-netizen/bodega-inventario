@@ -95,11 +95,18 @@ const MARGEN = 100;
 
 const limpiar = (s: string): string => s.replace(/\s+/g, ' ').trim();
 
-/** Separa "3 palas" en cantidad y nombre. Sin número, es uno. */
+/**
+ * Separa "3 palas" en cantidad y nombre. Sin número, es uno.
+ *
+ * Acepta decimales —"1,5 metros de manguera"— porque no todo se cuenta en
+ * unidades enteras: la manguera se mide en metros y el cemento en kilos. Antes
+ * "1,5 palas" devolvía cantidad 1 y nombre ",5 palas", o sea que perdía el
+ * decimal Y ensuciaba el nombre.
+ */
 export const partirCantidad = (texto: string): { cantidad: number; nombre: string } => {
     const t = limpiar(texto);
-    const conDigito = t.match(/^(\d+)\s*(?:x\s*)?(.+)$/);
-    if (conDigito) return { cantidad: Number(conDigito[1]), nombre: limpiar(conDigito[2]) };
+    const conDigito = t.match(/^(\d+(?:[.,]\d+)?)\s*(?:x\s*)?(.+)$/);
+    if (conDigito) return { cantidad: Number(conDigito[1].replace(',', '.')), nombre: limpiar(conDigito[2]) };
     const palabras = t.split(/\s+/);
     const n = NUMEROS[normStr(palabras[0] ?? '')];
     if (n !== undefined && palabras.length > 1) return { cantidad: n, nombre: limpiar(palabras.slice(1).join(' ')) };
@@ -144,10 +151,26 @@ const buscarItem = (items: Item[], nombre: string): Scored<Item>[] => {
     return (porRaiz[0]?.score ?? 0) > (directo[0]?.score ?? 0) ? porRaiz : directo;
 };
 
-/** Parte la lista de cosas: por coma, por punto y coma, y por la "y" de "3 palas y un martillo". */
+/**
+ * Parte la lista de cosas: por coma, por punto y coma, y por la "y" de
+ * "3 palas y un martillo".
+ *
+ * LA COMA TIENE DOS OFICIOS Y CHOCAN. Separa ítems ("3 palas, 1 martillo") y
+ * también es la coma decimal de "1,5 metros". Partir a ciegas por toda coma
+ * rompía el renglón en dos y fabricaba una línea fantasma:
+ *
+ *     "Alex: 1,5 metros de manguera, 2 palas"
+ *        →  1 x "1"                    (basura)
+ *        →  5 x "metros de manguera"   (cantidad inventada)
+ *        →  2 x "palas"
+ *
+ * La regla que los distingue es simple y no necesita adivinar: una coma
+ * ENTRE DOS DÍGITOS es decimal; cualquier otra separa. Por eso el corte pide
+ * que la coma no tenga dígito antes o no tenga dígito después.
+ */
 const partirItems = (resto: string): string[] =>
     resto
-        .split(/\s*[,;]\s*|\s+y\s+|\s+e\s+/i)
+        .split(/\s*;\s*|\s*(?:(?<!\d),|,(?!\d))\s*|\s+y\s+|\s+e\s+/i)
         .map(limpiar)
         .filter(Boolean);
 
