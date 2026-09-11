@@ -7,15 +7,34 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 npm install          # Install dependencies
 npm run dev          # Start dev server (Vite, localhost:5173)
-npm run build        # TypeScript check + production build
-npm run lint         # Type-check only (tsc --noEmit, no ESLint configured)
+npm run build        # Production build ONLY — does NOT check types
+npm run lint         # Type-check (tsc --noEmit, no ESLint configured)
+npm run test         # Run the test suite (tsx, no framework)
 npm run preview      # Preview production build locally
 ```
 
-Environment variable required:
+**`build` does not type-check.** It is `vite build` and nothing else. Run
+`npm run lint` **and** `npm run build` separately — a type error will not fail
+the build, and this file used to claim otherwise.
+
+Environment variables required (`.env.local`):
 ```
-GEMINI_API_KEY=...   # Set in .env.local for AI copilot features
+VITE_SUPABASE_URL=...        # Supabase project URL
+VITE_SUPABASE_ANON_KEY=...   # Supabase public key
 ```
+
+`GEMINI_API_KEY` appears in the README but is **not read anywhere in the code**.
+It is leftover from the AI Studio template. Likewise `@huggingface/transformers`
+and `initModel()` in `services/copilotService.ts`: nothing calls them. The
+copilot answers through `warehouseQA.ts`, which is plain TypeScript.
+
+## Tests
+
+`tests/` holds plain `tsx` scripts with a thirty-line runner (`tests/correr.ts`),
+not Vitest or Jest. That is deliberate: `npm install` fails in some sandboxes
+because `xlsx` is fetched from `cdn.sheetjs.com`, so a framework that could not
+be executed there would mean writing tests nobody ran. Add a `tests/*.test.ts`
+file and `npm run test` picks it up.
 
 ## Architecture
 
@@ -62,6 +81,26 @@ Inventory view additionally uses `selectedInventoryType` to filter by category f
 
 Login is handled entirely in the frontend. `LoginView` receives the `users` array and validates credentials client-side. Passwords are stored in plain text in localStorage. The logged-in role (`owner` | `employee`) gates certain UI actions (delete, add items, etc.) checked via `userRole` prop throughout components.
 
-### Supabase migration target
+### Supabase is live, not a future migration
 
-The app currently uses localStorage. The planned migration to Supabase should map the six `AppData` entities to database tables, replacing `saveToLocalStorage`/`loadFromLocalStorage` in `storage.ts` with Supabase client calls. The `AppData` interface in `storage.ts` is the canonical shape of all persisted data.
+This section used to say the move to Supabase was "planned". It already
+happened. The app writes to Supabase **and** keeps localStorage, and `App.tsx`
+merges the two on mount — local rows missing from the cloud are uploaded, not
+deleted (that merge exists because two users were once lost by replacing the
+local list wholesale).
+
+Fifteen migrations live in `supabase/migrations/`. **There is no baseline
+migration**: they assume tables, enums and functions that were created outside
+Git, so the repo alone cannot rebuild the server. Before changing the schema,
+read what is actually installed — at least one versioned function is known to
+differ from what the docs claim (`delete_movement_and_revert_stock` still does
+`delete from movements`, despite the tombstone rule).
+
+There is **no backend**. No `api/` directory, no `vercel.json`: the browser
+talks to Supabase directly with `VITE_SUPABASE_ANON_KEY`, which is public by
+design. The stock functions are `security definer` and no migration grants or
+revokes execute on them, so they carry PostgreSQL's default. Anything that needs
+server-side identity has to be built; it does not exist yet.
+
+`storage.ts`'s `AppData` interface is still the canonical shape of persisted
+data.

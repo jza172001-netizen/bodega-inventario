@@ -817,10 +817,13 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         return { ...prev, lineas };
     });
 
+    // `Math.max` con un piso de cero coma uno y no de uno: no todo se cuenta
+    // entero. La manguera va en metros y el cemento en kilos, y redondear "1,5
+    // metros" a "2" es inventar medio metro de material.
     const fijarCantidad = (idx: number, j: number, cantidad: number) => setLote(prev => {
         if (!prev) return prev;
         const lineas = prev.lineas.map((l, i) => (i === idx
-            ? { ...l, items: l.items.map((it, k) => (k === j ? { ...it, cantidad: Math.max(1, cantidad) } : it)) }
+            ? { ...l, items: l.items.map((it, k) => (k === j ? { ...it, cantidad: Math.max(0.1, cantidad) } : it)) }
             : l));
         return { ...prev, lineas };
     });
@@ -959,10 +962,10 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                             </div>
                             {l.items.map((it, j) => (
                                 <div key={j} className="flex items-center gap-1.5">
-                                    <input type="number" min={1} value={it.cantidad}
+                                    <input type="number" min={0.1} step="any" value={it.cantidad}
                                         onFocus={e => e.target.select()}
-                                        onChange={e => fijarCantidad(idx, j, parseInt(e.target.value) || 1)}
-                                        className="w-12 text-[11px] border border-papel-borde rounded-lg px-1.5 py-1 bg-papel text-tinta text-center" />
+                                        onChange={e => fijarCantidad(idx, j, parseFloat(e.target.value) || 1)}
+                                        className="w-14 text-[11px] border border-papel-borde rounded-lg px-1.5 py-1 bg-papel text-tinta text-center" />
                                     <select value={it.item?.id ?? ''} onChange={e => fijarItem(idx, j, e.target.value)}
                                         className={`${sel} flex-1 max-w-none ${it.item ? '' : 'border-atencion'}`}>
                                         <option value="">{it.nombre} — ¿cuál es?</option>
