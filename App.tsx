@@ -39,7 +39,7 @@ import * as db from './services/supabaseService';
 import { supabase } from './lib/supabase';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { sha256Hex } from './utils/hash';
-import { esRetiro, alcanzaStock } from './utils/inventory';
+import { planearLote } from './core/despacho';
 
 // Icons
 import { DashboardIcon } from './components/icons/DashboardIcon';
@@ -1004,26 +1004,6 @@ const App: React.FC = () => {
      * Los accesorios retornables (maleta, llave) NO entran acá: esos vuelven con
      * la herramienta y se revisan en la devolución, no son un movimiento.
      */
-    const expandirAccesorios = (batch: Omit<Movement, 'id'>[]): Omit<Movement, 'id'>[] => {
-        const extra: Omit<Movement, 'id'>[] = [];
-        for (const m of batch) {
-            if (m.type !== MovementType.CHECK_OUT) continue;
-            const herramienta = itemActual(m.itemId);
-            for (const acc of herramienta?.accessories ?? []) {
-                if (!acc.itemId) continue;                    // retornable: no es movimiento
-                const porUnidad = acc.cantidad ?? 1;
-                extra.push({
-                    ...m,
-                    itemId: acc.itemId,
-                    quantity: porUnidad * m.quantity,          // 2 pulidoras → 2 juegos de discos
-                    isLoan: false,                             // se gasta, no se presta
-                    notes: `Sale con ${herramienta?.name ?? 'la herramienta'}`,
-                });
-            }
-        }
-        return [...batch, ...extra];
-    };
-
     const handleAddItem = (i: Omit<Item, 'id'>) => {
         const id = crypto.randomUUID();
         const newItem = { ...i, id };
@@ -1192,73 +1172,74 @@ const App: React.FC = () => {
      * el callejón sin salida que hacía devolverse hasta el primer paso.
      */
     const handleLogMovements = (batch: Omit<Movement, 'id'>[]): LoteResultado => {
-        const expandido = expandirAccesorios(batch);
-        // Del espejo, no de `items`: si el lote incluye un ítem creado hace un
-        // instante, en `items` todavía no está y su salida entraba sin validar.
-        const restante = new Map(itemsRef.current.map(i => [i.id, i.quantity]));
-        const rechazos: RechazoStock[] = [];
-        let ok = 0;
-        for (const m of expandido) {
-            const it = itemActual(m.itemId);
-            const esSalida = esRetiro(m.type);
-            const hay = restante.get(m.itemId) ?? 0;
-            if (it && esSalida && !alcanzaStock(hay, m.quantity)) {
-                rechazos.push({ itemId: it.id, nombre: it.name, unidad: it.unit, hay, pedido: m.quantity, movimiento: m });
-                continue;
-            }
-            if (handleLogMovement(m, hay)) {
-                ok++;
-                if (it) restante.set(m.itemId, esSalida ? hay - m.quantity : hay + m.quantity);
-            }
-        }
-        return { ok, total: expandido.length, rechazos };
-    };
+        // Se valida contra el ESPEJO, no contra `items` del render: si el lote
+        // incluye un ítem creado hace un instante, en `items` todavía no está y
+        // su salida entraba sin validar.
+        const plan = planearLote(batch, itemsRef.current);
 
-    const handleLogMovement = (m: Omit<Movement, 'id'>, stockDisponible?: number): boolean => {
-        const ts = m.timestamp instanceof Date ? m.timestamp : new Date(m.timestamp ?? Date.now());
-        const currentItem = itemActual(m.itemId);
-        const isWithdrawal = esRetiro(m.type);
-        // El stock contra el que se valida es el que va quedando en el lote, no el
-        // del render — que es el mismo para todas las líneas.
-        const hay = stockDisponible ?? currentItem?.quantity ?? 0;
-        // Validación central de stock: el kardex debe cuadrar siempre con el inventario.
-        // Sin esto, una salida mayor al stock registraría más de lo que descuenta.
-        if (currentItem && isWithdrawal && !alcanzaStock(hay, m.quantity)) {
-            alert(`Stock insuficiente de "${currentItem.name}": hay ${hay} ${currentItem.unit} y se intentó sacar ${m.quantity}. El movimiento NO se registró.`);
-            return false;
+        for (const { movimiento, nuevaCantidad, item } of plan.aplicar) {
+            const id = crypto.randomUUID();
+            const ts = movimiento.timestamp instanceof Date ? movimiento.timestamp : new Date(movimiento.timestamp ?? Date.now());
+            setMovements(prev => [{ ...movimiento, id, timestamp: ts }, ...prev]);
+            setItems(prev => prev.map(x => (x.id === item.id ? { ...x, quantity: nuevaCantidad } : x)));
+            ajustarEspejo(item.id, nuevaCantidad);
+            // Una sola transacción en el servidor: movimiento + stock, a prueba
+            // de carreras entre dos teléfonos.
+            withSync(db.logMovementWithStock({ ...movimiento, timestamp: ts }, id, nuevaCantidad));
+
+            const personName = movimiento.personnelId ? personnel.find(p => p.id === movimiento.personnelId)?.name : undefined;
+            const conQuien = personName ? ` — ${personName}` : '';
+            if (movimiento.isLoan) {
+                addAuditLog('LOAN_CREATED', `Préstamo: "${item.name}"${personName ? ` → ${personName}` : ''}`);
+            } else if (movimiento.type === MovementType.CHECK_OUT) {
+                // Antes esto se guardaba como ITEM_EDITED y la entrada como ITEM_CREATED:
+                // la descripción decía la verdad pero la acción no, así que en
+                // Trazabilidad un despacho aparecía archivado como "se editó un
+                // artículo" y las creaciones venían infladas con las entradas.
+                addAuditLog('STOCK_OUT', `📤 Salida: "${item.name}" ×${movimiento.quantity}${conQuien}`);
+            } else if (movimiento.type === MovementType.CHECK_IN) {
+                addAuditLog('STOCK_IN', `📥 Entrada: "${item.name}" ×${movimiento.quantity}${conQuien}`);
+            }
         }
-        const id = crypto.randomUUID();
-        const newMov = { ...m, id, timestamp: ts };
-        setMovements(prev => [newMov, ...prev]);
-        if (currentItem) {
-            const newQty = Math.max(0, isWithdrawal ? hay - m.quantity : hay + m.quantity);
-            setItems(prev => prev.map(item =>
-                item.id === m.itemId ? { ...item, quantity: newQty } : item
-            ));
-            ajustarEspejo(m.itemId, newQty);
-            // Una sola transacción en el servidor: movimiento + stock, a prueba de race conditions
-            withSync(db.logMovementWithStock({ ...m, timestamp: ts }, id, newQty));
-        } else {
-            // Sin ítem no hay stock que mover. Antes esto se alcanzaba con un ítem
-            // recién creado y pasaba callado; ahora solo puede ser un movimiento
-            // huérfano de verdad, y queda dicho para que no vuelva a esconderse.
+
+        // Sin ítem no hay stock que mover, pero el movimiento no se pierde: el
+        // historial es lo único que no se puede reconstruir después.
+        for (const m of plan.huerfanos) {
+            const id = crypto.randomUUID();
+            const ts = m.timestamp instanceof Date ? m.timestamp : new Date(m.timestamp ?? Date.now());
             console.warn('[stock] Movimiento sin ítem en el inventario:', m.itemId);
+            setMovements(prev => [{ ...m, id, timestamp: ts }, ...prev]);
             withSync(db.addMovement({ ...m, timestamp: ts }, id));
         }
-        const itemName   = currentItem?.name ?? 'herramienta';
-        const personName = m.personnelId ? personnel.find(p => p.id === m.personnelId)?.name : undefined;
-        if (m.isLoan) {
-            addAuditLog('LOAN_CREATED', `Préstamo: "${itemName}"${personName ? ` → ${personName}` : ''}`);
-        } else if (m.type === MovementType.CHECK_OUT) {
-            // Antes esto se guardaba como ITEM_EDITED y la entrada como ITEM_CREATED:
-            // la descripción decía la verdad pero la acción no, así que en
-            // Trazabilidad un despacho aparecía archivado como "se editó un
-            // artículo" y las creaciones venían infladas con las entradas.
-            addAuditLog('STOCK_OUT', `📤 Salida: "${itemName}" ×${m.quantity}${personName ? ` — ${personName}` : ''}`);
-        } else if (m.type === MovementType.CHECK_IN) {
-            addAuditLog('STOCK_IN', `📥 Entrada: "${itemName}" ×${m.quantity}${personName ? ` — ${personName}` : ''}`);
+
+        return {
+            ok: plan.aplicar.length + plan.huerfanos.length,
+            total: plan.aplicar.length + plan.huerfanos.length + plan.rechazos.length,
+            rechazos: plan.rechazos,
+        };
+    };
+
+    /**
+     * Una línea suelta. Es `handleLogMovements` con un solo renglón.
+     *
+     * Antes era su propia función con su propia aritmética, y por eso el
+     * formulario directo NO expandía accesorios mientras el chat SÍ: la misma
+     * salida de una pulidora dejaba cinco discos por un lado y cuatro por el
+     * otro. Ahora las dos puertas pasan por el mismo núcleo y no pueden
+     * diverger.
+     *
+     * Devuelve true si quedó registrado. Quien lo llama debe reportar lo que de
+     * verdad pasó: el chatbot decía "✅ registrado" incluso cuando la validación
+     * había rechazado la salida.
+     */
+    const handleLogMovement = (m: Omit<Movement, 'id'>): boolean => {
+        const r = handleLogMovements([m]);
+        const rechazo = r.rechazos[0];
+        if (rechazo) {
+            alert(`Stock insuficiente de "${rechazo.nombre}": hay ${rechazo.hay} ${rechazo.unidad} y se intentó sacar ${rechazo.pedido}. El movimiento NO se registró.`);
+            return false;
         }
-        return true;
+        return r.ok > 0;
     };
 
     const handleDeleteMovement = (id: string) => {
