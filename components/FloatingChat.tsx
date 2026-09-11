@@ -1273,7 +1273,11 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                                     i.inventoryType === type &&
                                                     raizDeFamilia(i.familia?.trim() || familiaDe(i.name)) === raizDeFamilia(fam));
                                                 const generos = generosDe(deLaFamilia);
-                                                const denoms  = denominacionesDe(deLaFamilia, wizardGenero || undefined);
+                                                // `fam` va como tercer dato para que las familias que se miden en
+                                                // pulgadas —tubo, codo, unión— ofrezcan la escalera estándar aunque
+                                                // todavía no haya ni un ítem cargado. El primer codo es justo el que
+                                                // se escribe a mano, y es donde se cuela la medida mal puesta.
+                                                const denoms  = denominacionesDe(deLaFamilia, wizardGenero || undefined, fam);
                                                 const chip = (activo: boolean) =>
                                                     `px-2 py-1 rounded-full text-[10px] font-bold border transition-all ${
                                                         activo ? 'border-marca bg-marca text-tinta' : 'border-papel-borde bg-papel text-tinta-suave hover:border-marca'}`;
