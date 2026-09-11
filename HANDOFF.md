@@ -2,8 +2,31 @@
 
 > Traspaso de contexto. La sesión nueva lee **este archivo completo** antes de
 > tocar nada. Verificado contra producción el **11 de septiembre de 2026**.
+>
+> **⚠️ LEER LA SECCIÓN 0.1 ANTES QUE NADA.** Varias cifras y afirmaciones de
+> este archivo resultaron falsas al verificarlas. Están corregidas ahí.
 
 ---
+
+## 0.1 Lo que este archivo decía mal (corregido el 11-sep-2026, de noche)
+
+Una auditoría externa del commit `ab86bd6` obligó a verificar cosas que acá se
+daban por ciertas. Estas quedaron desmentidas **sumando o abriendo el código**,
+no por opinión:
+
+| Decía | Es |
+|---|---|
+| Apéndice B.1: «96 unidades» | Las filas suman **82** |
+| Apéndice B.5: «25 unidades» pendientes | Las filas suman **24** |
+| «Faltan ~35 eléctricas» | **No se puede afirmar**: sale de restar 96, que no es el total real |
+| «Todo borrado es lápida» | El SQL versionado de `delete_movement_and_revert_stock` hace `delete from movements`, en tres puntos, incluida su definición más nueva |
+| Rama de trabajo `claude/new-session-7548vr` | Hoy es `claude/handoff-md-review-m3j9pp` |
+| `CLAUDE.md`: «build verifica TypeScript» | `build` es `vite build` a secas. El que verifica es `lint`. **Correr los dos.** |
+
+**Que las cifras no cuadren NO significa que falten 14 herramientas.** Significa
+que el documento está inconsistente. **No se carga nada hasta conciliar las
+listas contando en la bodega**, con papel. Cargar con cifras que no suman es
+meterle el error adentro al inventario.
 
 ## 0. Cómo se usa esto
 
@@ -66,7 +89,7 @@ actividad, y todo eso es testeo de Juli.
    dificultad, estimar tokens, plan numerado, esperar «Ejecuta». **No aplica**
    cuando se está pensando o debatiendo — ahí se responde de frente. Si se queja
    del gasto: **parar y proponer reducir, sin justificarse**.
-8. Rama de trabajo: `claude/new-session-7548vr`.
+8. Rama de trabajo: `claude/handoff-md-review-m3j9pp`.
 
 ---
 

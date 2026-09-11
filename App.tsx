@@ -303,7 +303,7 @@ const App: React.FC = () => {
         sha256Hex(password).then(hash =>
             setUsers(prev => prev.map(u => u.id === userId ? { ...u, passwordHash: hash } : u))
         );
-        db.updateUser(updated).catch(e => { console.error('[Supabase] user:', e); setSyncStatus('error'); });
+        db.setUserCredentials(updated).catch(e => { console.error('[Supabase] user:', e); setSyncStatus('error'); });
         addAuditLog('USER_SETUP', `Configuró sus credenciales por primera vez: "${username}"`, user.name);
         handleLoginSuccess(user.role, user.name);
     };
@@ -1537,7 +1537,9 @@ const App: React.FC = () => {
         const seed = seedUsers.find(s => s.id === u.id);
         const normalized = seed ? { ...u, name: seed.name } : u;
         setUsers(prev => prev.map(user => user.id === u.id ? normalized : user));
-        withSync(db.updateUser(normalized));
+        // Perfil, no credenciales: editar el nombre o el rol no puede borrarle
+        // la contraseña a nadie.
+        withSync(db.updateUserProfile(normalized));
         // Se compara contra lo que de verdad se guardó, no contra lo que entró.
         const queCambio = describirCambios(previo, normalized, { name: 'nombre', role: 'rol', username: 'usuario' });
         addAuditLog('PERSONNEL_EDITED',
