@@ -631,10 +631,44 @@ export async function addUser(u: AppUser): Promise<AppUser> {
     return u;
 }
 
-export async function updateUser(u: AppUser): Promise<void> {
+/**
+ * Cambiarle el nombre o el rol a alguien NO le toca la contraseña.
+ *
+ * Antes sí se la tocaba, y la borraba. `fetchUsers()` devuelve `password: ''`
+ * a propósito —la contraseña nunca viaja al cliente— y la pantalla de accesos
+ * edita ESE objeto. Al guardar, `userToDb()` metía `password: ''` en el UPDATE
+ * y la contraseña guardada se reemplazaba por una cadena vacía.
+ *
+ * El daño no se veía de inmediato: en el teléfono donde se hizo el cambio
+ * seguía funcionando el respaldo por hash local, mientras la persona dejaba de
+ * poder entrar desde cualquier otro. Un error que se esconde a quien lo comete
+ * es peor que uno que truena.
+ *
+ * Por eso van dos funciones y no una con banderas: la lista de campos es
+ * explícita, y no hay forma de que un objeto de más arrastre una credencial.
+ */
+export async function updateUserProfile(u: AppUser): Promise<void> {
     const { error } = await supabase
         .from('app_users')
-        .update(userToDb(u))
+        .update({
+            username: u.username?.trim() || null,   // vacío va como NULL: la tabla tiene UNIQUE (username)
+            role: u.role,
+            name: u.name,
+        })
+        .eq('id', u.id);
+    if (error) throw error;
+}
+
+/** El ÚNICO camino que escribe credenciales. */
+export async function setUserCredentials(u: AppUser): Promise<void> {
+    const { error } = await supabase
+        .from('app_users')
+        .update({
+            username: u.username?.trim() || null,
+            password: u.password ?? '',
+            password_hash: u.passwordHash ?? null,
+            setup_complete: u.setupComplete ?? false,
+        })
         .eq('id', u.id);
     if (error) throw error;
 }
