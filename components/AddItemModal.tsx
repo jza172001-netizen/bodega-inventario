@@ -3,6 +3,9 @@ import { Item, UserRole, InventoryType, Accessory } from '../types';
 import { AccessoriesEditor } from './AccessoriesEditor';
 import { CATEGORIES } from '../constants';
 import { unidadesCon } from '../utils/unidades';
+import { PasosDeNombre } from './PasosDeNombre';
+import { nombreCompuesto } from '../utils/medida';
+import { familiaDe } from '../utils/genus';
 import { XIcon } from './icons/XIcon';
 
 interface AddItemModalProps {
@@ -25,6 +28,9 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onA
     const [color, setColor] = useState('');
     const [brand, setBrand] = useState('');
     const [requiresReturnNote, setRequiresReturnNote] = useState(false);
+    // Género y medida: las dos piezas que hasta hoy solo pedía el chat.
+    const [genero, setGenero] = useState('');
+    const [denominacion, setDenominacion] = useState('');
 
     const resetForm = () => {
         setName('');
@@ -38,6 +44,11 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onA
         setBrand('');
         setRequiresReturnNote(false);
         setAccessories([]);
+        // Sin esto el siguiente ítem arrastra el género y la medida del
+        // anterior — el mismo modal no se desmonta al cerrar, y así fue como
+        // quedaron nombres pegados tipo "MartilloPala".
+        setGenero('');
+        setDenominacion('');
     };
 
     const esHerramienta = inventoryType === InventoryType.ELECTRICAL_TOOL || inventoryType === InventoryType.HAND_TOOL;
@@ -71,8 +82,14 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onA
             return;
         }
 
+        // El nombre se ARMA con las piezas, igual que en el chat: es la forma
+        // que `familiaDe`, `materialDe` y `medidaDe` saben descomponer después,
+        // así que el árbol lo agrupa solo sin tocar nada más.
+        const nombreFinal = nombreCompuesto(name.trim(), genero, denominacion);
+
         onAddItem({
-            name: name.trim(),
+            name: nombreFinal,
+            familia: familiaDe(name.trim()) || undefined,
             category,
             subCategory: subCategory.trim(),
             inventoryType,
@@ -103,6 +120,24 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onA
                      <div>
                         <label className="block text-sm font-medium text-tinta-suave mb-1">Nombre del Artículo</label>
                         <input type="text" value={name} onChange={e => setName(e.target.value)} required className="w-full input-style" placeholder="Ej: Martillo de uña 20oz" />
+                        {name.trim() && (
+                            <div className="mt-2">
+                                <PasosDeNombre
+                                    nombre={name}
+                                    items={items}
+                                    filtrarPorTipo={i => i.inventoryType === inventoryType}
+                                    genero={genero}
+                                    denominacion={denominacion}
+                                    onGenero={setGenero}
+                                    onDenominacion={setDenominacion}
+                                />
+                                {(genero || denominacion) && (
+                                    <p className="mt-1 text-[11px] text-tinta-tenue">
+                                        Va a quedar: «{nombreCompuesto(name.trim(), genero, denominacion)}»
+                                    </p>
+                                )}
+                            </div>
+                        )}
                     </div>
                     {/* "Categoría" y "Sub-clasificación" salen del formulario: en la
                         bodega nadie las usa. Lo único que se usa para clasificar es

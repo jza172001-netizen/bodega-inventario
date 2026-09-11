@@ -28,6 +28,45 @@ que el documento está inconsistente. **No se carga nada hasta conciliar las
 listas contando en la bodega**, con papel. Cargar con cifras que no suman es
 meterle el error adentro al inventario.
 
+## 0.2 Lo que se hizo la noche del 11-sep-2026
+
+Cuatro PR mergeados y desplegados (#75, #76, #77, #78):
+
+- **Botón «📋 Bloque»** en el asistente: se pega el texto de todos los
+  trabajadores de una y se registra de un toque. `utils/lote.ts` lo lee sin
+  React; la pantalla de confirmación es donde se atrapa el error del que dictó.
+- **`api/despacho.ts`** — la ventanilla para un asistente de IA. Ver
+  `api/README.md`. **NO funciona hasta crear tres variables en Vercel**
+  (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `BODEGA_API_TOKEN`) y volver a
+  desplegar.
+- **`core/despacho.ts`** — la aritmética del stock afuera de React, para que
+  pueda correr en un servidor. `App.tsx` ya no calcula: aplica.
+- **142 pruebas** en `tests/`. `npm run test`. No es Vitest a propósito: ver
+  `CLAUDE.md`.
+- **`components/PasosDeNombre.tsx`** — género y medida en el formulario de
+  crear, no solo en el chat.
+
+**Tres bugs silenciosos arreglados**, todos encontrados por una auditoría
+externa y verificados antes de tocarlos:
+1. El accesorio salía aunque la herramienta se rechazara por stock.
+2. El formulario no expandía accesorios y el chat sí: dos resultados para la
+   misma salida.
+3. Editar el nombre o el rol de un acceso le borraba la contraseña.
+
+### Lo que sigue abierto y NO se tocó
+
+- **Permisos de la base.** Las funciones de stock son `security definer` y
+  ninguna migración las revoca, así que quedan con el valor por defecto de
+  PostgreSQL: ejecutables por cualquiera con la clave pública, que va dentro del
+  JavaScript publicado. **No se tocó a propósito**: revocarlas sin ajustar los
+  permisos del navegador deja la app sin funcionar, y eso no se hace de noche
+  sin nadie mirando.
+- **El borrado que no es lápida** (`delete from movements` en el SQL versionado).
+  Se resuelve leyendo qué está instalado en el servidor, no el repositorio.
+- **No hay migración base**: el repo no alcanza para recrear el servidor.
+- **Conciliar las listas** (ver 0.1). Papel y conteo, no código.
+- **Kate y KATE**, y la integración de Netlify todavía conectada al repo.
+
 ## 0. Cómo se usa esto
 
 Leelo entero de una. No hace falta que Juli pegue nada más. Si algo de acá
