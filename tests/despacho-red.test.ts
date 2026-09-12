@@ -85,11 +85,17 @@ const app = (items: Item[]) => {
         setItems: () => {}, setMovements: () => {},
         ajustarEspejo: (id: string, q: number) => { espejo.current = espejo.current.map(i => i.id === id ? { ...i, quantity: q } : i); },
         addAuditLog: () => {},
-        withSync: (p: unknown) => p,
-        db: {
-            logMovementsWithStock: (v: Viaje) => { visto.viajes.push(v); },
-            addMovement: (m: Omit<Movement, 'id'>) => { visto.sueltos.push(m); },
+        /**
+         * `withSync` ya no recibe una promesa lanzada: recibe QUÉ se quiere
+         * hacer y CON QUÉ, para poder anotarlo, sobrevivir a cerrar la app y
+         * reintentarlo. Acá se apunta lo que se le pidió mandar.
+         */
+        withSync: (tipo: string, args: unknown[]) => {
+            if (tipo === 'logMovementsWithStock') visto.viajes.push(args[0] as Viaje);
+            if (tipo === 'addMovement') visto.sueltos.push(args[0] as Omit<Movement, 'id'>);
+            return Promise.resolve();
         },
+        db: {},
     };
     return { visto, espejo, fn: sacarDeApp<App>(['handleLogMovements'], c) };
 };

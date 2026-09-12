@@ -60,6 +60,17 @@ interface FloatingChatProps {
      * estaba haciendo.
      */
     auditLogs?: AuditLog[];
+    /**
+     * Cuántas operaciones están guardadas en el teléfono pero todavía NO
+     * confirmadas por el servidor.
+     *
+     * Existe porque la pantalla decía «registrado» y cerraba el bloque aunque no
+     * se hubiera guardado nada allá: se simuló una caída de conexión y el
+     * mensaje salió igual. El dato está a salvo —queda en la cola y se
+     * reintenta— pero decir «registrado» a secas es afirmar algo que todavía no
+     * pasó, y en esta bodega esa diferencia es justo la que importa.
+     */
+    sinSubir?: number;
 }
 
 type WizardStep = 'select_types' | 'select_worker' | 'create_worker' | 'select_sub_worker' | 'create_sub_worker' | 'select_project' | 'create_project' | 'enter_items' | 'confirm';
@@ -133,7 +144,7 @@ const INIT_WIZARD: WizardData = {
 export const FloatingChat: React.FC<FloatingChatProps> = ({
     items, movements, personnel, purchaseOrders, projects,
     onLogMovements, onCreateItem, onEditItem, onCreateProject, onCreatePersonnel,
-    onBehaviorLog, auditLogs = [], onDescartarItems, onResumenChat,
+    onBehaviorLog, auditLogs = [], onDescartarItems, onResumenChat, sinSubir = 0,
 }) => {
     const [open, setOpen] = useState(false);
     /** El historial del asistente: lo que se hizo DESDE acá, no toda la app. */
@@ -1025,7 +1036,23 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         } : undefined);
         const personas = new Set(lote.lineas.filter(l => l.persona && l.items.some(resuelto)).map(l => l.persona!.id)).size;
         if (r.ok > 0) {
-            addBotYGuarda(`✅ ${r.ok} salida(s) registradas para ${personas} persona(s).`);
+            /**
+             * Se dice lo que PASÓ, no lo que se espera que pase.
+             *
+             * Antes acá decía «registradas» y punto, y el bloque se cerraba. Se
+             * simuló una caída de conexión: el mensaje salía igual, la existencia
+             * bajaba en pantalla y el servidor no había recibido nada.
+             *
+             * El dato no se pierde —queda en la cola y se reintenta solo— pero
+             * «registradas» a secas afirma algo que todavía no pasó. Acá la
+             * diferencia entre «lo tengo anotado» y «ya quedó guardado» es justo
+             * la que importa: dos celulares y una sola bodega.
+             */
+            const enElTelefono = sinSubir > 0;
+            addBotYGuarda(enElTelefono
+                ? `✅ ${r.ok} salida(s) anotadas para ${personas} persona(s).`
+                  + ` ⏳ Todavía sin subir al servidor — se suben solas cuando vuelva la señal.`
+                : `✅ ${r.ok} salida(s) registradas para ${personas} persona(s).`);
             onBehaviorLog?.('ACTION', `Despachó por bloque pegado: ${r.ok} salidas, ${personas} personas`);
         }
 

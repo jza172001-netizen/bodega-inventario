@@ -20,7 +20,12 @@ import { describirCambios, describirEstado } from './utils/cambios';
 import { nombreReal } from './utils/nombres';
 import { NOTA_AJUSTE } from './utils/inventory';
 import { fusionarItems, masReciente, hayQueAplicar } from './core/fusion';
+import {
+    Operacion, leerCola, guardarCola, encolar, confirmar, marcarFallo,
+    descartar, reintentar, porIntentar,
+} from './core/cola';
 import { PapeleraView } from './components/PapeleraView';
+import { PendientesView } from './components/PendientesView';
 import { TraceabilityView } from './components/TraceabilityView';
 import { WhatsAppView } from './components/WhatsAppView';
 import { PickupView } from './components/PickupView';
@@ -49,7 +54,7 @@ import { MovementsIcon } from './components/icons/MovementsIcon';
 import { PersonnelIcon } from './components/icons/PersonnelIcon';
 import { WhatsAppIcon } from './components/icons/WhatsAppIcon';
 
-type View = 'dashboard' | 'kardex' | 'personnel' | 'copilot' | 'help' | 'whatsapp' | 'pickup' | 'traceability' | 'familias' | 'pedidos' | 'papelera';
+type View = 'dashboard' | 'kardex' | 'personnel' | 'copilot' | 'help' | 'whatsapp' | 'pickup' | 'traceability' | 'familias' | 'pedidos' | 'papelera' | 'pendientes';
 type KardexTab = 'movements' | 'loans' | 'inventory' | 'projects';
 
 /**
@@ -689,14 +694,24 @@ const App: React.FC = () => {
         };
 
         sincronizar();
+        // Lo que quedó pendiente de la vez pasada se intenta apenas abre.
+        void procesarCola();
 
         // Antes esto corría UNA sola vez, al abrir la app. Con dos teléfonos en la
         // bodega eso quiere decir que lo que uno marca el otro no lo ve hasta cerrar
         // y volver a abrir — y nadie cierra la app en mitad de un despacho. Ahora se
         // vuelve a mirar al volver a la pestaña y al recuperar la señal.
-        const alVolver = () => { if (document.visibilityState === 'visible') sincronizar(); };
+        /**
+         * La cola se vacía en los mismos tres momentos en que ya se sincroniza.
+         *
+         * No hay un temporizador aparte: reintentar cada N segundos gasta batería
+         * y no acierta más. Lo que de verdad cambia el resultado es que vuelva la
+         * señal o que alguien vuelva a mirar la pantalla.
+         */
+        const sincronizarYVaciar = () => { sincronizar(); void procesarCola(); };
+        const alVolver = () => { if (document.visibilityState === 'visible') sincronizarYVaciar(); };
         document.addEventListener('visibilitychange', alVolver);
-        window.addEventListener('online', sincronizar);
+        window.addEventListener('online', sincronizarYVaciar);
 
         // Y en vivo: Supabase avisa cuando algo cambia y se dispara la MISMA
         // sincronización. El tiempo real es solo el aviso — quién gana lo sigue
@@ -748,7 +763,7 @@ const App: React.FC = () => {
         const nota: OrderNote = { id: crypto.randomUUID(), texto, cantidad, unidad, familia, comprado: false, createdAt: new Date(), updatedAt: new Date() };
         setOrderNotes(prev => [nota, ...prev]);
         const { id, ...resto } = nota;
-        withSync(db.addOrderNote(resto, id));
+        withSync('addOrderNote', [resto, id], `Agregar a la lista de pedidos: "${resto.texto}"`);
         addAuditLog('ORDER_NOTE_ADDED', `Anotó para comprar: "${texto}"${cantidad ? ` ×${cantidad}` : ''}`);
     };
 
@@ -801,7 +816,7 @@ const App: React.FC = () => {
             recibidoAt: new Date(), updatedAt: new Date(),
         };
         setOrderNotes(prev => prev.map(x => x.id === n.id ? upd : x));
-        withSync(db.updateOrderNote(upd));
+        withSync('updateOrderNote', [upd], `Marcar "${n.texto}" como ${upd.comprado ? 'comprado' : 'pendiente'}`);
         addAuditLog('ORDER_NOTE_RECEIVED',
             `📥 Llegó del pedido "${n.texto}": ${cantidad} ${destino.unit} de "${destino.name}"` +
             (n.cantidad != null && n.cantidad !== cantidad ? ` — se habían pedido ${n.cantidad}` : ''));
@@ -810,7 +825,7 @@ const App: React.FC = () => {
     const handleToggleOrderNote = (n: OrderNote) => {
         const upd = { ...n, comprado: !n.comprado, updatedAt: new Date() };
         setOrderNotes(prev => prev.map(x => x.id === n.id ? upd : x));
-        withSync(db.updateOrderNote(upd));
+        withSync('updateOrderNote', [upd], `Anotar recibido de "${n.texto}"`);
         addAuditLog(upd.comprado ? 'ORDER_NOTE_BOUGHT' : 'ORDER_NOTE_REOPENED', `"${n.texto}" — ${upd.comprado ? 'comprado' : 'vuelve a pendiente'}`);
     };
 
@@ -824,7 +839,7 @@ const App: React.FC = () => {
     const handleUpdateOrderNote = (n: OrderNote, cambios: Partial<OrderNote>) => {
         const upd = { ...n, ...cambios, updatedAt: new Date() };
         setOrderNotes(prev => prev.map(x => x.id === n.id ? upd : x));
-        withSync(db.updateOrderNote(upd));
+        withSync('updateOrderNote', [upd], `Editar en la lista de pedidos: "${upd.texto}"`);
         const antes = `${n.texto}${n.cantidad != null ? ` (${n.cantidad} ${n.unidad ?? ''})`.trimEnd() + ')' : ''}`;
         const ahora = `${upd.texto}${upd.cantidad != null ? ` (${upd.cantidad} ${upd.unidad ?? ''})`.trimEnd() + ')' : ''}`;
         addAuditLog('ORDER_NOTE_EDITED', `Cambió en la lista de pedidos: ${antes} → ${ahora}`);
@@ -832,30 +847,160 @@ const App: React.FC = () => {
 
     const handleDeleteOrderNote = (n: OrderNote) => {
         setOrderNotes(prev => prev.filter(x => x.id !== n.id));
-        withSync(db.deleteOrderNote(n.id, quienBorra()));
+        withSync('deleteOrderNote', [n.id, quienBorra()], `Quitar de la lista de pedidos: "${n.texto}"`);
         addAuditLog('ORDER_NOTE_DELETED', `Quitó de la lista de pedidos: "${n.texto}"`);
     };
 
     const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle');
     const syncTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-    const withSync = (promise: Promise<unknown>) => {
+
+    /**
+     * El almacenamiento, detrás de una puerta.
+     *
+     * En una ventana privada, con la cuota llena o con las cookies bloqueadas,
+     * `localStorage` no existe o lanza al tocarlo. La cola no puede tumbar la
+     * app por eso: sin almacenamiento se trabaja en memoria y se pierde al
+     * cerrar, que es exactamente como estaba antes — nunca peor.
+     */
+    const almacenLocal = React.useMemo(() => {
+        try {
+            const prueba = '__bodega_prueba__';
+            window.localStorage.setItem(prueba, '1');
+            window.localStorage.removeItem(prueba);
+            return window.localStorage;
+        } catch {
+            const memoria = new Map<string, string>();
+            return {
+                getItem: (k: string) => memoria.get(k) ?? null,
+                setItem: (k: string, v: string) => { memoria.set(k, v); },
+            };
+        }
+    }, []);
+
+    /**
+     * LA COLA DE PENDIENTES — nada de lo que se hace se pierde en silencio.
+     *
+     * Antes `withSync` recibía una promesa YA LANZADA y la olvidaba. Si fallaba
+     * —sin señal, el servidor caído, un corte a mitad de la mañana— lo único que
+     * pasaba era que el indicador se ponía rojo ocho segundos. La operación no
+     * quedaba anotada en ninguna parte y no se volvía a intentar nunca: el
+     * movimiento estaba en el teléfono y NO estaba en la bodega compartida.
+     *
+     * Y no se podía arreglar reintentando esa promesa: una promesa lanzada ya
+     * corrió, y no es un dato que quepa en el almacenamiento del navegador. Por
+     * eso ahora se pasa QUÉ se quiere hacer y CON QUÉ, que sí se puede guardar y
+     * se puede volver a ejecutar mañana.
+     *
+     * El `ref` y no solo el estado: la cola se toca desde manejadores que corren
+     * fuera del render, y con el estado a secas leerían una versión vieja.
+     */
+    const colaRef = React.useRef<Operacion[]>(leerCola(almacenLocal));
+    const [pendientes, setPendientes] = useState<Operacion[]>(colaRef.current);
+    const procesando = React.useRef(false);
+
+    const fijarCola = (cola: Operacion[]) => {
+        colaRef.current = cola;
+        guardarCola(almacenLocal, cola);
+        setPendientes(cola);
+    };
+
+    /** Corre una operación anotada. El nombre decide qué función de `db` se llama. */
+    const ejecutarOperacion = async (op: Operacion): Promise<unknown> => {
+        const fn = (db as unknown as Record<string, (...a: unknown[]) => Promise<unknown>>)[op.tipo];
+        if (typeof fn !== 'function') {
+            // Un tipo que ya no existe —porque se renombró la función— no se
+            // reintenta para siempre: se bloquea y queda a la vista.
+            throw new Error(`La operación "${op.tipo}" ya no existe en esta versión`);
+        }
+        return fn(...op.args);
+    };
+
+    /**
+     * Vacía la fila, EN ORDEN y de a una.
+     *
+     * En orden porque un movimiento sobre un ítem recién creado necesita que el
+     * ítem haya subido primero, o la base lo rechaza por clave foránea. Y se
+     * frena en la primera que falla, por lo mismo: si la de adelante no pasó, la
+     * de atrás probablemente tampoco, y contarle cinco intentos fallidos a algo
+     * que nunca tuvo la culpa lo bloquea sin razón.
+     */
+    const procesarCola = async (): Promise<void> => {
+        if (procesando.current) return;
+        procesando.current = true;
+        try {
+            for (const op of porIntentar(colaRef.current)) {
+                try {
+                    await ejecutarOperacion(op);
+                    fijarCola(confirmar(colaRef.current, op.id));
+                } catch (e) {
+                    fijarCola(marcarFallo(colaRef.current, op.id, e instanceof Error ? e.message : String(e)));
+                    setSyncStatus('error');
+                    if (syncTimer.current) clearTimeout(syncTimer.current);
+                    syncTimer.current = setTimeout(() => setSyncStatus('idle'), 8000);
+                    return;
+                }
+            }
+            if (colaRef.current.length === 0) setSyncStatus('idle');
+        } finally {
+            procesando.current = false;
+        }
+    };
+
+    /**
+     * Anota la operación y la intenta de una.
+     *
+     * Se anota ANTES de intentarla, no después de que falle: si la app se cierra
+     * con la escritura en vuelo, la operación ya está guardada y se reintenta al
+     * abrir. Anotarla solo al fallar pierde justo el caso que más duele.
+     *
+     * Devuelve la promesa del primer intento para quien necesite encadenar algo,
+     * pero NO hay que encadenarle nada que deba pasar sí o sí: ese primer intento
+     * puede fallar y la operación quedar pendiente para después.
+     */
+    const withSync = (tipo: string, args: unknown[], descripcion: string): Promise<unknown> => {
+        const id = crypto.randomUUID();
+        fijarCola(encolar(colaRef.current, { id, tipo, args, descripcion }));
         setSyncStatus('syncing');
         if (syncTimer.current) clearTimeout(syncTimer.current);
-        promise
-            .then(() => {
+        const intento = ejecutarOperacion({ id, tipo, args, descripcion, creadaEn: '', intentos: 0 });
+        intento.then(
+            () => {
+                fijarCola(confirmar(colaRef.current, id));
                 setSyncStatus('idle');
                 syncTimer.current = setTimeout(() => setSyncStatus('idle'), 2000);
-            })
-            .catch(() => {
+                // Si había cosas viejas esperando, esta señal buena las arrastra.
+                if (colaRef.current.length > 0) void procesarCola();
+            },
+            e => {
+                fijarCola(marcarFallo(colaRef.current, id, e instanceof Error ? e.message : String(e)));
                 setSyncStatus('error');
                 syncTimer.current = setTimeout(() => setSyncStatus('idle'), 8000);
-            });
+            },
+        );
+        return intento;
+    };
+
+    /** Un humano pide que se vuelva a intentar algo que quedó bloqueado. */
+    const handleReintentarPendiente = (id: string) => {
+        fijarCola(reintentar(colaRef.current, id));
+        void procesarCola();
+    };
+
+    /**
+     * Un humano decide que algo NO va. Se va de la fila, pero queda en la
+     * bitácora con su motivo: descartar en silencio es lo mismo que perderlo.
+     */
+    const handleDescartarPendiente = (id: string, motivo: string) => {
+        const op = colaRef.current.find(o => o.id === id);
+        fijarCola(descartar(colaRef.current, id));
+        addAuditLog('PENDIENTE_DESCARTADO',
+            `Se descartó sin guardar: ${op?.descripcion ?? id}${motivo ? ` — motivo: ${motivo}` : ''}`);
     };
 
     const [currentView, setCurrentView] = useState<View>('dashboard');
     const [kardexTab, setKardexTab] = useState<KardexTab>('movements');
-    const EMPLOYEE_VIEWS: View[] = ['dashboard', 'kardex', 'personnel', 'help', 'whatsapp', 'pickup', 'traceability', 'copilot', 'familias', 'pedidos', 'papelera'];
-    const VISITOR_VIEWS: View[] = ['dashboard', 'kardex', 'whatsapp', 'traceability', 'papelera'];
+    const EMPLOYEE_VIEWS: View[] = ['dashboard', 'kardex', 'personnel', 'help', 'whatsapp', 'pickup', 'traceability', 'copilot', 'familias', 'pedidos', 'papelera', 'pendientes'];
+    const VISITOR_VIEWS: View[] = ['dashboard', 'kardex', 'whatsapp', 'traceability', 'papelera', 'pendientes'];
     const effectiveView: View = (userRole === UserRole.VISITOR && !VISITOR_VIEWS.includes(currentView))
         ? 'dashboard'
         : (userRole === UserRole.EMPLOYEE && !EMPLOYEE_VIEWS.includes(currentView))
@@ -939,6 +1084,7 @@ const App: React.FC = () => {
      */
 
     const NAV_LABELS: Record<View, string> = {
+        pendientes: 'Pendientes de subir',
         dashboard: 'Resumen',
         kardex: 'Kardex',
         personnel: 'Personal',
@@ -990,7 +1136,7 @@ const App: React.FC = () => {
             isReturned: false,
         };
         setMovements(prev => [apertura, ...prev]);
-        db.addMovement(apertura, movId).catch(e => console.error('[Supabase] apertura:', e));
+        withSync('addMovement', [apertura, movId], `Carga inicial de "${item.name}" ×${item.quantity} ${item.unit}`);
         // La carga inicial es mercancía ENTRANDO a la bodega, y hasta hoy no
         // dejaba renglón en la bitácora: el 5 de septiembre se crearon 17 ítems
         // y hubo cero entradas registradas. El movimiento sí quedaba; la
@@ -1005,7 +1151,7 @@ const App: React.FC = () => {
             inventoryType: inventoryType ?? i.inventoryType,
         }));
         setItems(prev => [...prev, ...created]);
-        created.forEach(({ id, ...rest }) => withSync(db.addItem(rest, id)));
+        created.forEach(({ id, ...rest }) => withSync('addItem', [rest, id], `Crear el ítem "${rest.name}"`));
         created.forEach(registrarApertura);
         addAuditLog('ITEM_CREATED', `Carga masiva: ${created.length} ítem(s) agregados de una vez${created.length <= 5 ? ` — ${created.map(i => i.name).join(', ')}` : ''}`);
     };
@@ -1026,7 +1172,7 @@ const App: React.FC = () => {
         const newItem = { ...i, id };
         setItems(prev => [...prev, newItem]);
         anotarEnEspejo(newItem);
-        withSync(db.addItem(i, id));
+        withSync('addItem', [i, id], `Crear el ítem "${i.name}"`);
         registrarApertura(newItem);
         addAuditLog('ITEM_CREATED', `Se agregó "${i.name}" al inventario`);
     };
@@ -1036,7 +1182,7 @@ const App: React.FC = () => {
         const newItem = { ...i, id };
         setItems(prev => [...prev, newItem]);
         anotarEnEspejo(newItem);
-        withSync(db.addItem(i, id));
+        withSync('addItem', [i, id], `Crear el ítem "${i.name}"`);
         registrarApertura(newItem);
         addAuditLog('ITEM_CREATED', `Se agregó "${i.name}" al inventario`);
         return newItem;
@@ -1082,9 +1228,9 @@ const App: React.FC = () => {
         if (aperturas.length > 0) {
             const idsMov = new Set(aperturas.map(m => m.id));
             setMovements(prev => prev.filter(m => !idsMov.has(m.id)));
-            for (const m of aperturas) withSync(db.deleteMovement(m.id));
+            for (const m of aperturas) withSync('deleteMovement', [m.id], 'Borrar la carga inicial de un ítem descartado');
         }
-        for (const id of aBorrar) withSync(db.deleteItem(id, quienBorra()));
+        for (const id of aBorrar) withSync('deleteItem', [id, quienBorra()], `Descartar el ítem ${itemActual(id)?.name ?? id}`);
         addAuditLog('ITEM_DELETED',
             `Se descartó lo que el asistente había creado y no se confirmó: ${nombres.join(', ')}`);
     };
@@ -1138,7 +1284,7 @@ const App: React.FC = () => {
                     : item.quantity + f.movCantidad;
                 setItems(prev => prev.map(i => i.id === item.id ? { ...i, quantity: qty } : i));
                 ajustarEspejo(item.id, qty);
-                withSync(db.updateItemQuantity(item.id, qty));
+                withSync('updateItemQuantity', [item.id, qty], `Dejar "${item.name}" en ${qty} ${item.unit}`);
             }
         }
         const recargas: Record<string, () => void> = {
@@ -1165,7 +1311,7 @@ const App: React.FC = () => {
         const updated: Item = { ...entrante, updatedAt: new Date() };
         setItems(p => p.map(i => i.id === updated.id ? updated : i));
         ajustarEspejo(updated.id, updated.quantity);
-        withSync(db.updateItem(updated));
+        withSync('updateItem', [updated], `Guardar los cambios de "${updated.name}"`);
 
         /**
          * Corregir la cantidad a mano DEJA MOVIMIENTO.
@@ -1193,7 +1339,7 @@ const App: React.FC = () => {
                 isReturned: false,
             };
             setMovements(p => [{ ...ajuste, id }, ...p]);
-            withSync(db.addMovement(ajuste, id));
+            withSync('addMovement', [ajuste, id], `Ajuste de "${updated.name}": de ${antes} a ${updated.quantity}`);
         }
         // Qué cambió, no solo que cambió. Antes acá decía `Se editó "X"` y punto:
         // si alguien bajaba una cantidad de 3 a 1, la bitácora no lo sabía.
@@ -1219,7 +1365,7 @@ const App: React.FC = () => {
         requirePin(
             () => {
                 setItems(prev => prev.filter(i => i.id !== id));
-                withSync(db.deleteItem(id, quienBorra()));
+                withSync('deleteItem', [id, quienBorra()], `Mandar a la papelera "${item?.name ?? id}"`);
                 // Qué TENÍA lo que se borró. `Se eliminó "Pala"` no dice si tenía
                 // 1 o tenía 40, y eso es justo lo que hace falta para decidir si
                 // devolverlo de la papelera.
@@ -1294,7 +1440,8 @@ const App: React.FC = () => {
             }
         }
 
-        withSync(db.logMovementsWithStock(paraElServidor));
+        withSync('logMovementsWithStock', [paraElServidor],
+            `Registrar ${paraElServidor.length} movimiento(s) de bodega`);
 
         // Sin ítem no hay stock que mover, pero el movimiento no se pierde: el
         // historial es lo único que no se puede reconstruir después.
@@ -1303,7 +1450,7 @@ const App: React.FC = () => {
             const ts = m.timestamp instanceof Date ? m.timestamp : new Date(m.timestamp ?? Date.now());
             console.warn('[stock] Movimiento sin ítem en el inventario:', m.itemId);
             setMovements(prev => [{ ...m, id, timestamp: ts }, ...prev]);
-            withSync(db.addMovement({ ...m, timestamp: ts }, id));
+            withSync('addMovement', [{ ...m, timestamp: ts }, id], 'Registrar un movimiento sin ítem en el inventario');
         }
 
         return {
@@ -1356,7 +1503,8 @@ const App: React.FC = () => {
                     ajustarEspejo(item.id, qty);
                 }
                 setMovements(prev => prev.filter(m => m.id !== id));
-                withSync(db.deleteMovementWithRevert(id, item?.id, newQty, quienBorra()));
+                withSync('deleteMovementWithRevert', [id, item?.id, newQty, quienBorra()],
+                    `Borrar el movimiento de "${itemName}" y devolver su efecto al stock`);
                 addAuditLog('MOVEMENT_DELETED', `Se eliminó registro de movimiento: "${itemName}" (stock revertido)`);
             },
             `Eliminar registro de "${itemName}"`,
@@ -1393,13 +1541,9 @@ const App: React.FC = () => {
             setItems(prev => prev.map(i => i.id === item.id ? { ...i, quantity: qty } : i));
             ajustarEspejo(item.id, qty);
         }
-        withSync(db.returnLoanAndRestoreStock(
-            id,
-            condition as import('./types').ReturnCondition | undefined,
-            notes,
-            item?.id,
-            restoredQty,
-        ));
+        withSync('returnLoanAndRestoreStock',
+            [id, condition as import('./types').ReturnCondition | undefined, notes, item?.id, restoredQty],
+            `Devolver "${itemName}"${personName ? ` de ${personName}` : ''}`);
         addAuditLog('LOAN_RETURNED', `Devuelta: "${itemName}"${personName ? ` de ${personName}` : ''}${condition ? ` — estado: ${condition}` : ''}`);
 
         // Si volvió mal, arranca el ciclo de reparación. Antes el estado se
@@ -1422,7 +1566,7 @@ const App: React.FC = () => {
             };
             setItems(prev => prev.map(i => i.id === item.id ? { ...i, reparacion: conReparacion.reparacion, updatedAt: conReparacion.updatedAt } : i));
             itemsRef.current = itemsRef.current.map(i => i.id === item.id ? { ...i, reparacion: conReparacion.reparacion } : i);
-            withSync(db.updateItem(conReparacion));
+            withSync('updateItem', [conReparacion], `Abrir reparación de "${itemName}"`);
             addAuditLog('REPAIR_OPENED', `🔧 Quedó dañada: "${itemName}"${notes ? ` — ${notes}` : ''}`);
         }
     };
@@ -1443,7 +1587,8 @@ const App: React.FC = () => {
         const actualizado: Item = { ...item, reparacion, updatedAt: ahora };
         setItems(prev => prev.map(i => i.id === itemId ? actualizado : i));
         itemsRef.current = itemsRef.current.map(i => i.id === itemId ? actualizado : i);
-        withSync(db.updateItem(actualizado));
+        withSync('updateItem', [actualizado],
+            paso === 'enviada' ? `Mandar a arreglar "${item.name}"` : `Dar por arreglada "${item.name}"`);
         addAuditLog(paso === 'enviada' ? 'REPAIR_SENT' : 'REPAIR_DONE',
             paso === 'enviada'
                 ? `🔧 Se mandó a arreglar: "${item.name}"`
@@ -1455,7 +1600,8 @@ const App: React.FC = () => {
         const itemName = mov ? items.find(i => i.id === mov.itemId)?.name ?? 'herramienta' : 'herramienta';
         const personName = mov?.personnelId ? personnel.find(p => p.id === mov.personnelId)?.name : undefined;
         setMovements(prev => prev.map(m => m.id === id ? { ...m, pendingPickup: pending, updatedAt: new Date() } : m));
-        withSync(db.markMovementPendingPickup(id, pending));
+        withSync('markMovementPendingPickup', [id, pending],
+            pending ? 'Marcar una herramienta para recoger' : 'Quitar la marca de recoger');
         if (pending) {
             addAuditLog('PICKUP_MARKED', `Marcado a recoger: "${itemName}"${personName ? ` de ${personName}` : ''}`);
         } else {
@@ -1468,7 +1614,7 @@ const App: React.FC = () => {
         const itemName = mov ? items.find(i => i.id === mov.itemId)?.name ?? 'ítem' : 'ítem';
         const projName = projects.find(p => p.id === projectId)?.name ?? projectId;
         setMovements(prev => prev.map(m => m.id === movementId ? { ...m, projectId, updatedAt: new Date() } : m));
-        withSync(db.updateMovementProject(movementId, projectId));
+        withSync('updateMovementProject', [movementId, projectId], 'Asignarle obra a un préstamo');
         addAuditLog('LOAN_PROJECT_ASSIGNED', `Asignó "${itemName}" al proyecto "${projName}"`);
     };
 
@@ -1483,7 +1629,7 @@ const App: React.FC = () => {
         requireConfirm(`¿Traspasar "${itemName}" de ${fromName} a ${toName}?`, () => {
             // Cierra el préstamo original sin tocar el stock (la herramienta no regresó a bodega)
             setMovements(prev => prev.map(m => m.id === movementId ? { ...m, isReturned: true, pendingPickup: false, updatedAt: new Date() } : m));
-            withSync(db.markMovementReturned(movementId));
+            withSync('markMovementReturned', [movementId], 'Cerrar el préstamo que se traspasó');
 
             // Crea nuevo préstamo al trabajador destino, sin ajustar cantidad de inventario
             const newMovId = crypto.randomUUID();
@@ -1497,7 +1643,7 @@ const App: React.FC = () => {
                 notes: `Traspaso desde ${fromName}`,
             };
             setMovements(prev => [newMov, ...prev]);
-            withSync(db.addMovement(newMov, newMovId));
+            withSync('addMovement', [newMov, newMovId], 'Registrar el traspaso a otro trabajador');
             addAuditLog('LOAN_TRANSFERRED', `Traspaso: "${itemName}" de ${fromName} → ${toName}`);
         });
     };
@@ -1506,7 +1652,7 @@ const App: React.FC = () => {
         const id = crypto.randomUUID();
         const newP = { ...p, id };
         setPersonnel(prev => [...prev, newP]);
-        withSync(db.addPersonnel(p, id));
+        withSync('addPersonnel', [p, id], `Crear al trabajador ${p.name}`);
         addAuditLog('PERSONNEL_CREATED', `Se agregó trabajador: "${p.name}"`);
     };
 
@@ -1514,7 +1660,7 @@ const App: React.FC = () => {
         const id = crypto.randomUUID();
         const newP = { ...p, id };
         setPersonnel(prev => [...prev, newP]);
-        withSync(db.addPersonnel(p, id));
+        withSync('addPersonnel', [p, id], `Crear al trabajador ${p.name}`);
         addAuditLog('PERSONNEL_CREATED', `Se agregó trabajador: "${p.name}"`);
         return newP;
     };
@@ -1535,7 +1681,7 @@ const App: React.FC = () => {
         if (suyos.length === 0) return 0;
         const sueltos = suyos.map(x => ({ ...x, teamLeaderId: undefined, updatedAt: new Date() }));
         setPersonnel(ps => ps.map(x => sueltos.find(y => y.id === x.id) ?? x));
-        for (const x of sueltos) withSync(db.updatePersonnel(x));
+        for (const x of sueltos) withSync('updatePersonnel', [x], `Actualizar a ${x.name}`);
         addAuditLog('PERSONNEL_EDITED',
             `"${lider.name}" ${motivo}: salieron de su cuadrilla ${sueltos.map(x => `"${x.name}"`).join(', ')}`);
         return sueltos.length;
@@ -1545,7 +1691,7 @@ const App: React.FC = () => {
         const prev = personnel.find(pers => pers.id === entrante.id);
         const p: Personnel = { ...entrante, updatedAt: new Date() };
         setPersonnel(ps => ps.map(pers => pers.id === p.id ? p : pers));
-        withSync(db.updatePersonnel(p));
+        withSync('updatePersonnel', [p], `Actualizar a ${p.name}`);
         const queCambio = describirCambios(prev, p, ETIQUETAS_PERSONA);
         if (prev?.name !== p.name) {
             const resto = describirCambios(prev, p, { ...ETIQUETAS_PERSONA, name: undefined });
@@ -1569,7 +1715,7 @@ const App: React.FC = () => {
                 // queda apuntando a alguien que ya no está en ninguna lista.
                 if (person) soltarCuadrillaDe(person, 'fue eliminado');
                 setPersonnel(prev => prev.filter(p => p.id !== id));
-                withSync(db.deletePersonnel(id, quienBorra()));
+                withSync('deletePersonnel', [id, quienBorra()], `Mandar a la papelera a ${person?.name ?? id}`);
                 addAuditLog('PERSONNEL_DELETED', `Se eliminó trabajador: "${person?.name ?? id}"`);
             },
             `Eliminar trabajador "${person?.name ?? 'trabajador'}"`,
@@ -1581,7 +1727,7 @@ const App: React.FC = () => {
         const id = crypto.randomUUID();
         const newP = { ...p, id };
         setProjects(prev => [...prev, newP]);
-        withSync(db.addProject(p, id));
+        withSync('addProject', [p, id], `Crear la obra "${p.name}"`);
         addAuditLog('PROJECT_CREATED', `Se creó proyecto: "${p.name}"`);
     };
 
@@ -1589,7 +1735,7 @@ const App: React.FC = () => {
         const id = crypto.randomUUID();
         const newP = { ...p, id };
         setProjects(prev => [...prev, newP]);
-        withSync(db.addProject(p, id));
+        withSync('addProject', [p, id], `Crear la obra "${p.name}"`);
         addAuditLog('PROJECT_CREATED', `Se creó proyecto: "${p.name}"`);
         return newP;
     };
@@ -1601,7 +1747,7 @@ const App: React.FC = () => {
         requirePin(
             () => {
                 setProjects(prev => prev.filter(p => p.id !== id));
-                withSync(db.deleteProject(id, quienBorra()));
+                withSync('deleteProject', [id, quienBorra()], `Mandar a la papelera la obra "${project?.name ?? id}"`);
                 addAuditLog('PROJECT_DELETED', `Se eliminó proyecto: "${project?.name ?? id}"`);
             },
             `Eliminar proyecto "${project?.name ?? 'proyecto'}"`,
@@ -1612,7 +1758,9 @@ const App: React.FC = () => {
         const id = crypto.randomUUID();
         const newO = { ...o, id };
         setPurchaseOrders(prev => [newO, ...prev]);
-        withSync(db.addPurchaseOrder(o, id).then(created => setPurchaseOrders(prev => prev.map(x => x.id === id ? created : x))));
+        withSync('addPurchaseOrder', [o, id], `Crear la orden de compra a ${o.supplier}`)
+            .then(created => setPurchaseOrders(prev => prev.map(x => x.id === id ? (created as PurchaseOrder) : x)))
+            .catch(() => {/* queda en la cola; la orden ya está en pantalla */});
         addAuditLog('PO_CREATED', `Creó orden de compra a "${o.supplier}" (${o.items.length} ítem(s))`);
     };
 
@@ -1623,19 +1771,19 @@ const App: React.FC = () => {
             ? { ...o, status, ...(status === PurchaseOrderStatus.RECEIVED ? { receivedDate: new Date() } : {}) }
             : o
         ));
-        withSync(db.updatePurchaseOrderStatus(id, status));
+        withSync('updatePurchaseOrderStatus', [id, status], `Cambiar la orden de compra a "${status}"`);
     };
 
     const handleDeletePO = (id: string) => {
         const orden = purchaseOrders.find(o => o.id === id);
         setPurchaseOrders(prev => prev.filter(o => o.id !== id));
-        withSync(db.deletePurchaseOrder(id, quienBorra()));
+        withSync('deletePurchaseOrder', [id, quienBorra()], 'Mandar a la papelera una orden de compra');
         addAuditLog('PO_DELETED', `Eliminó orden de compra de "${orden?.supplier ?? id}"`);
     };
 
     const handleAddUser = (u: AppUser) => {
         setUsers(prev => [...prev, u]);
-        withSync(db.addUser(u));
+        withSync('addUser', [u], `Crear el acceso de ${u.name}`);
         // Por el nombre, no por el usuario: ahora el acceso nace sin usuario —lo
         // elige la propia persona al entrar— y la bitácora decía `""`.
         addAuditLog('USER_CREATED', `Se creó acceso para "${u.name}" (${u.role}) — pendiente de que ponga su contraseña`);
@@ -1650,7 +1798,7 @@ const App: React.FC = () => {
         setUsers(prev => prev.map(user => user.id === u.id ? normalized : user));
         // Perfil, no credenciales: editar el nombre o el rol no puede borrarle
         // la contraseña a nadie.
-        withSync(db.updateUserProfile(normalized));
+        withSync('updateUserProfile', [normalized], `Actualizar el acceso de ${normalized.name}`);
         // Se compara contra lo que de verdad se guardó, no contra lo que entró.
         const queCambio = describirCambios(previo, normalized, { name: 'nombre', role: 'rol', username: 'usuario' });
         addAuditLog('PERSONNEL_EDITED',
@@ -1775,6 +1923,28 @@ const App: React.FC = () => {
                             <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 14.25v2.25m3-4.5v4.5m3-6.75v6.75m3-9v9M6 20.25h12A2.25 2.25 0 0 0 20.25 18V6A2.25 2.25 0 0 0 18 3.75H6A2.25 2.25 0 0 0 3.75 6v12A2.25 2.25 0 0 0 6 20.25Z" />
                         </svg>
                         Trazabilidad
+                    </button>
+                    {/* Pendientes va ARRIBA de la papelera y muestra el número.
+                        Un pendiente que hay que ir a buscar es un pendiente que
+                        nadie mira, y el punto entero de la cola es que se vean. */}
+                    <button
+                        onClick={() => selectView('pendientes')}
+                        className={`w-full flex items-center text-left px-4 py-2.5 text-xs font-semibold rounded-xl transition-all ${
+                            effectiveView === 'pendientes'
+                                ? 'bg-marca text-tinta'
+                                : pendientes.length > 0
+                                    ? 'text-alerta hover:bg-papel-hondo'
+                                    : 'text-tinta-tenue hover:bg-papel-hondo hover:text-tinta-suave'}`}
+                    >
+                        <svg className="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.9} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Pendientes
+                        {pendientes.length > 0 && (
+                            <span className="ml-auto text-[10px] font-black bg-alerta text-white rounded-full px-2 py-0.5">
+                                {pendientes.length}
+                            </span>
+                        )}
                     </button>
                     {/* La papelera va al pie, con Trazabilidad: las dos son para ir a
                         mirar qué pasó, no para el trabajo del día. */}
@@ -1955,6 +2125,14 @@ const App: React.FC = () => {
                                 onBehaviorLog={addBehaviorLog}
                             />
                         )}
+                        {effectiveView === 'pendientes' && (
+                            <PendientesView
+                                pendientes={pendientes}
+                                onReintentar={handleReintentarPendiente}
+                                onDescartar={handleDescartarPendiente}
+                                onGoBack={() => selectView('dashboard')}
+                            />
+                        )}
                         {effectiveView === 'whatsapp' && (
                             <WhatsAppView movements={movements} items={items} personnel={personnel} readOnly={userRole === UserRole.VISITOR} onBehaviorLog={addBehaviorLog} onAuditLog={addAuditLog} />
                         )}
@@ -2031,6 +2209,7 @@ const App: React.FC = () => {
                    quede marcado como suyo en la bitácora, cascada incluida —es lo
                    que le permite mostrar su propio historial. Ver `desdeElChat`. */
                 <FloatingChat
+                    sinSubir={pendientes.length}
                     onEditItem={desdeElChat(handleEditItem)}
                     items={items}
                     movements={movements}
