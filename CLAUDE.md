@@ -122,9 +122,22 @@ merges the two on mount — local rows missing from the cloud are uploaded, not
 deleted (that merge exists because two users were once lost by replacing the
 local list wholesale).
 
-Seventeen migrations live in `supabase/migrations/`; **production has 35.**
-**There is no baseline migration**: they assume tables, enums and functions
-created outside Git, so the repo alone cannot rebuild the server.
+`supabase/migrations/` now opens with **`00000000000000_baseline.sql`**, read
+from production on 12 Sep 2026 with `pg_catalog` — types, tables, keys,
+constraints, indexes, triggers, policies and functions, copied from what is
+installed rather than written from memory. The repo **can** rebuild the server
+now; it could not before, and that meant a disaster had no way back.
+
+Verified, not assumed: `node supabase/verificar-baseline.cjs` applies all 18
+migrations to an empty PostgreSQL in order and then registers a dispatch to
+prove the result is usable. **Run it whenever you add a migration** — one that
+only works against the existing database breaks the rebuild silently, and nobody
+finds out until the day it matters. `supabase/RESTAURAR.md` is the recovery
+procedure, including the kardex reconciliation query that must return zero rows.
+
+One deliberate difference: production generates ids with `uuid_generate_v4()`
+(extension `uuid-ossp`); the baseline uses the native `gen_random_uuid()`, so it
+runs anywhere.
 
 Before changing the schema, **read what is actually installed** — that is not
 advice, it is how the last two findings were resolved. Production was read on 12

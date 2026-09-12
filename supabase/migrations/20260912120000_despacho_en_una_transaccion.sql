@@ -117,8 +117,13 @@ $function$;
 -- 0 movimientos con cantidad <= 0, 0 ítems con cantidad < 0.
 -- ============================================================================
 
-alter table movements
-    add constraint movements_cantidad_positiva check (quantity > 0);
+-- Envueltas para que se puedan volver a aplicar: la migración base ya las trae,
+-- así que sobre una base reconstruida desde cero esto llega segundo. Una
+-- migración que solo corre la primera vez no sirve para reconstruir nada.
+do $$ begin
+    alter table movements add constraint movements_cantidad_positiva check (quantity > 0);
+exception when duplicate_object then null; end $$;
 
-alter table items
-    add constraint items_cantidad_no_negativa check (quantity >= 0);
+do $$ begin
+    alter table items add constraint items_cantidad_no_negativa check (quantity >= 0);
+exception when duplicate_object then null; end $$;
