@@ -13,7 +13,8 @@ import { getGenus, familiaDe, esParecido, familiaCanonica, familiasParecidas, co
 import { tonoDe, raizDeColor, coloresUnificados, PALETA } from '../utils/colores';
 import { generosDe, denominacionesDe, nombreCompuesto } from '../utils/medida';
 import { medidaDe } from '../utils/medida';
-import { leerLote, contarDudas, LoteParseado } from '../utils/lote';
+import { leerLote, contarDudas, LoteParseado, ItemLote } from '../utils/lote';
+import { planearLote } from '../core/despacho';
 import { isAsset, isConsumable, adivinarTipo } from '../utils/inventory';
 
 /** Las preguntas de uso, tal cual las responde el asistente. */
@@ -820,25 +821,33 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     };
 
     /** Cambia la persona de un renglón, o el ítem de una línea, sin rearmar el lote. */
-    const fijarPersona = (idx: number, personaId: string) => setLote(prev => {
+    /**
+     * TODO lo de esta pantalla se direcciona por ID, nunca por posición.
+     *
+     * Las decisiones se guardaban bajo claves como `0:1`. Al quitar un renglón
+     * los siguientes se corrían y heredaban las decisiones del vecino: un ítem
+     * marcado «Consumo» se creaba como «Eléctrica», y por esa puerta volvía el
+     * error de préstamo vs. gasto que ya se había arreglado. El índice es un
+     * dato del arreglo; el id es un dato de la cosa.
+     */
+    const fijarPersona = (lineaId: string, personaId: string) => setLote(prev => {
         if (!prev) return prev;
         const persona = personnel.find(p => p.id === personaId);
-        const lineas = prev.lineas.map((l, i) => (i === idx ? { ...l, persona, dudosa: !persona } : l));
-        return { ...prev, lineas };
+        return { ...prev, lineas: prev.lineas.map(l => (l.id === lineaId ? { ...l, persona, dudosa: !persona } : l)) };
     });
 
-    const fijarItem = (idx: number, j: number, itemId: string) => setLote(prev => {
+    const mapearItem = (itemLoteId: string, cambio: (it: ItemLote) => ItemLote) => setLote(prev => {
         if (!prev) return prev;
-        const item = items.find(x => x.id === itemId);
-        const lineas = prev.lineas.map((l, i) => (i === idx
-            ? { ...l, items: l.items.map((it, k) => (k === j ? { ...it, item, dudoso: !item } : it)) }
-            : l));
-        return { ...prev, lineas };
+        return { ...prev, lineas: prev.lineas.map(l => ({
+            ...l, items: l.items.map(it => (it.id === itemLoteId ? cambio(it) : it)),
+        })) };
     });
 
-    // `Math.max` con un piso de cero coma uno y no de uno: no todo se cuenta
-    // entero. La manguera va en metros y el cemento en kilos, y redondear "1,5
-    // metros" a "2" es inventar medio metro de material.
+    const fijarItem = (itemLoteId: string, itemId: string) => {
+        const item = items.find(x => x.id === itemId);
+        mapearItem(itemLoteId, it => ({ ...it, item, dudoso: !item }));
+    };
+
     /**
      * Marcar un renglón para que su ítem NAZCA al registrarlo.
      *
@@ -857,32 +866,33 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
      *
      * Los cuatro botones quedan a la vista, así que corregirlo es un toque.
      */
-    const marcarNuevo = (idx: number, j: number, nombre: string) => {
-        setLoteNuevos(prev => new Map(prev).set(`${idx}:${j}`, adivinarTipo(nombre) ?? InventoryType.HAND_TOOL));
-        fijarItem(idx, j, '');
+    const marcarNuevo = (itemLoteId: string, nombre: string) => {
+        setLoteNuevos(prev => new Map(prev).set(itemLoteId, adivinarTipo(nombre) ?? InventoryType.HAND_TOOL));
+        fijarItem(itemLoteId, '');
     };
 
-    const desmarcarNuevo = (idx: number, j: number) => setLoteNuevos(prev => {
+    const desmarcarNuevo = (itemLoteId: string) => setLoteNuevos(prev => {
         const n = new Map(prev);
-        n.delete(`${idx}:${j}`);
+        n.delete(itemLoteId);
         return n;
     });
 
-    const fijarCantidad = (idx: number, j: number, cantidad: number) => setLote(prev => {
-        if (!prev) return prev;
-        const lineas = prev.lineas.map((l, i) => (i === idx
-            ? { ...l, items: l.items.map((it, k) => (k === j ? { ...it, cantidad: Math.max(0.1, cantidad) } : it)) }
-            : l));
-        return { ...prev, lineas };
-    });
+    // Piso de cero coma uno y no de uno: no todo se cuenta entero. La manguera
+    // va en metros y el cemento en kilos, y redondear "1,5 metros" a "2" es
+    // inventar medio metro de material.
+    const fijarCantidad = (itemLoteId: string, cantidad: number) =>
+        mapearItem(itemLoteId, it => ({ ...it, cantidad: Math.max(0.1, cantidad) }));
 
-    const quitarLinea = (idx: number, j: number) => setLote(prev => {
-        if (!prev) return prev;
-        const lineas = prev.lineas
-            .map((l, i) => (i === idx ? { ...l, items: l.items.filter((_, k) => k !== j) } : l))
-            .filter(l => l.items.length > 0);
-        return { ...prev, lineas };
-    });
+    const quitarLinea = (itemLoteId: string) => {
+        desmarcarNuevo(itemLoteId);
+        setLote(prev => {
+            if (!prev) return prev;
+            const lineas = prev.lineas
+                .map(l => ({ ...l, items: l.items.filter(it => it.id !== itemLoteId) }))
+                .filter(l => l.items.length > 0);
+            return { ...prev, lineas };
+        });
+    };
 
     /**
      * Registra lo que quedó resuelto.
@@ -892,31 +902,45 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
      * dos malos es peor que registrar los dieciocho — siempre y cuando los dos
      * queden a la vista y no se pierdan, que es justo lo que hace esta pantalla.
      */
-    const registrarLote = () => {
-        if (!lote) return;
-        const ts = momentoDeFecha(loteFecha);
-        const project = projects.find(p => p.id === loteProyecto);
-        // Sirve si ya tiene ítem O si se marcó para crear: sin esto la creación
-        // era inalcanzable, porque el renglón se descartaba antes de llegar a ella.
-        const sirve = (l: LoteParseado['lineas'][number], idx: number) =>
-            l.items.some((i, j) => i.item || loteNuevos.has(`${idx}:${j}`));
-        const listos = lote.lineas.filter((l, idx) => l.persona && sirve(l, idx));
+    /**
+     * Qué ítems del lote están listos para registrarse: los que tienen ítem
+     * resuelto, o los que se marcaron para crear.
+     */
+    const resuelto = (it: ItemLote) => !!it.item || loteNuevos.has(it.id);
 
-        const hayConsumible = lote.lineas.some((l, idx) => l.persona && l.items.some((i, j) =>
-            (i.item && isConsumable(i.item)) || loteNuevos.get(`${idx}:${j}`) === InventoryType.SINGLE_USE));
-        if (hayConsumible && !project) {
-            addBot('⚠️ Hay consumibles en el bloque y los consumibles necesitan proyecto. Elegí uno arriba.');
-            return;
-        }
+    /** La ficha con la que nace un ítem que la app no conocía. */
+    const fichaNueva = (nombre: string, tipo: InventoryType) => ({
+        name: nombre.trim(),
+        category: tipo === InventoryType.SINGLE_USE ? 'Materiales' : 'Herramientas',
+        subCategory: '',
+        inventoryType: tipo,
+        quantity: 0,
+        minStock: 0,
+        unit: 'unidades',
+    });
 
+    /**
+     * Arma los movimientos del lote.
+     *
+     * `crear` decide si los ítems nuevos NACEN DE VERDAD o solo se simulan.
+     *
+     * Esa bandera no es un lujo: la vista previa llama a esta misma función para
+     * dibujar el plan, y la vista previa corre EN CADA RENDER. Sin la bandera,
+     * abrir el panel con tres renglones marcados como nuevos creaba tres ítems
+     * en el inventario, y volvía a crearlos con cada tecla. La cuenta de qué
+     * entra tiene que poder hacerse sin tocar nada.
+     *
+     * Devuelve también QUÉ ítems del lote entraron, por su id, porque después
+     * hay que quitar de la pantalla exactamente esos y ni uno más; y las fichas
+     * simuladas, para que el planificador pueda verlas.
+     */
+    const armarMovimientos = (ts: Date, project: Project | undefined, crear: boolean) => {
         const movs: Array<Omit<Movement, 'id'>> = [];
-        // Se recorre el lote COMPLETO con su índice real y se saltan los que no
-        // sirven. Con `indexOf` sobre la lista filtrada, dos renglones iguales
-        // —la misma persona pidiendo lo mismo dos veces— devolvían el mismo
-        // índice y el segundo heredaba las decisiones del primero.
-        for (const [idx, l] of lote.lineas.entries()) {
-            if (!l.persona || !sirve(l, idx)) continue;
-            for (const [j, it] of l.items.entries()) {
+        const registrados = new Set<string>();
+        const nacen: Item[] = [];
+        for (const l of lote?.lineas ?? []) {
+            if (!l.persona) continue;
+            for (const it of l.items) {
                 /**
                  * Un ítem que la app no conocía: nace acá, con cantidad CERO.
                  *
@@ -926,23 +950,24 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                  * veces —una por la carga inicial y otra por el completado— y el
                  * Kardex dejaría de cuadrar.
                  */
-                const tipoNuevo = loteNuevos.get(`${idx}:${j}`);
-                const item = it.item ?? (tipoNuevo ? onCreateItem({
-                    name: it.nombre.trim(),
-                    category: tipoNuevo === InventoryType.SINGLE_USE ? 'Materiales' : 'Herramientas',
-                    subCategory: '',
-                    inventoryType: tipoNuevo,
-                    quantity: 0,
-                    minStock: 0,
-                    unit: 'unidades',
-                }) : undefined);
+                const tipoNuevo = loteNuevos.get(it.id);
+                let item = it.item;
+                if (!item && tipoNuevo) {
+                    const ficha = fichaNueva(it.nombre, tipoNuevo);
+                    if (crear) item = onCreateItem(ficha);
+                    else {
+                        item = { ...ficha, id: `nuevo:${it.id}` } as Item;
+                        nacen.push(item);
+                    }
+                }
                 if (!item) continue;
+                registrados.add(it.id);
                 movs.push({
                     itemId: item.id,
                     type: MovementType.CHECK_OUT,
                     quantity: it.cantidad,
                     timestamp: ts,
-                    personnelId: l.persona!.id,
+                    personnelId: l.persona.id,
                     projectId: project?.id,
                     notes: '',
                     // La regla de préstamo vs. gasto es la de `utils/inventory`, la
@@ -952,6 +977,42 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                 });
             }
         }
+        return { movs, registrados, nacen };
+    };
+
+    /**
+     * Saca del lote SOLO los ítems que entraron, y deja todo lo demás.
+     *
+     * Antes se borraba la línea completa de una persona si tenía al menos un
+     * ítem resuelto. Con «Alex: 1 pala, 1 zorbex», la pala entraba y el zorbex
+     * se iba con ella: la pantalla se cerraba y el pendiente no volvía nunca.
+     * Eso es exactamente lo contrario de la promesa de esta pantalla, que es
+     * que el movimiento no se pierde.
+     */
+    const quitarRegistrados = (registrados: Set<string>) => {
+        if (!lote) return;
+        const lineas = lote.lineas
+            .map(l => ({ ...l, items: l.items.filter(it => !registrados.has(it.id)) }))
+            .filter(l => l.items.length > 0);
+        if (lineas.length === 0 && lote.ignoradas.length === 0) cerrarLote();
+        else setLote({ ...lote, lineas });
+    };
+
+    const registrarLote = () => {
+        if (!lote) return;
+        const ts = momentoDeFecha(loteFecha);
+        const project = projects.find(p => p.id === loteProyecto);
+
+        // Cuenta también los que se van a CREAR como consumible: si no, un
+        // bloque de puros consumibles nuevos se salta la exigencia de proyecto.
+        const hayConsumible = lote.lineas.some(l => l.persona && l.items.some(i =>
+            (i.item && isConsumable(i.item)) || loteNuevos.get(i.id) === InventoryType.SINGLE_USE));
+        if (hayConsumible && !project) {
+            addBot('⚠️ Hay consumibles en el bloque y los consumibles necesitan proyecto. Elegí uno arriba.');
+            return;
+        }
+
+        const { movs, registrados } = armarMovimientos(ts, project, true);
         if (movs.length === 0) {
             addBot('Todavía no hay nada resuelto para registrar. Completá al menos un renglón.');
             return;
@@ -961,26 +1022,51 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             completarFaltante: true,
             notaDeCompletado: 'No estaba registrado en el inventario; se registró al despacharlo',
         } : undefined);
-        const personas = new Set(listos.map(l => l.persona!.id)).size;
+        const personas = new Set(lote.lineas.filter(l => l.persona && l.items.some(resuelto)).map(l => l.persona!.id)).size;
         if (r.ok > 0) {
             addBotYGuarda(`✅ ${r.ok} salida(s) registradas para ${personas} persona(s).`);
             onBehaviorLog?.('ACTION', `Despachó por bloque pegado: ${r.ok} salidas, ${personas} personas`);
         }
+
+        // Lo rechazado por stock abre la reposición, pero el lote NO se cierra:
+        // lo que no entró se queda en pantalla para no perderlo.
+        const rechazados = new Set(r.rechazos.map(x => x.itemId));
+        for (const l of lote.lineas) for (const it of l.items) {
+            if (it.item && rechazados.has(it.item.id)) registrados.delete(it.id);
+        }
+        quitarRegistrados(registrados);
+
         if (r.rechazos.length > 0) {
             setReponerQty(new Map(r.rechazos.map(x => [x.itemId, Math.max(1, x.pedido - x.hay)])));
             setReposicion(r.rechazos);
-            cerrarLote();
-            return;
         }
-        // Solo se van los renglones que SÍ entraron. Lo que quedó sin resolver se
-        // queda en pantalla, porque el movimiento no se puede perder.
-        const quedan = lote.lineas.filter((l, idx) => !(l.persona && sirve(l, idx)));
-        if (quedan.length === 0) cerrarLote();
-        else setLote({ ...lote, lineas: quedan });
     };
 
     const renderLote = () => {
         const dudas = lote ? contarDudas(lote) : 0;
+        /**
+         * La vista previa muestra EL MISMO PLAN que se va a aplicar.
+         *
+         * Antes cada renglón se calculaba por su cuenta contra la cantidad
+         * original de su ítem, mientras el núcleo descuenta acumulativamente
+         * dentro del lote. Con una sola pala y dos personas pidiendo una cada
+         * una, ninguna línea avisaba nada —cada una comparaba 1 contra 1— y al
+         * confirmar se generaba una entrada automática que nadie aprobó.
+         *
+         * Dos cuentas para lo mismo siempre terminan divergiendo. Acá hay una.
+         */
+        const previo = (() => {
+            if (!lote) return new Map<string, number>();
+            const ts = momentoDeFecha(loteFecha);
+            // `false`: dibujar el plan NO puede crear nada. Los ítems que van a
+            // nacer vuelven como fichas en cero para que el planificador los vea.
+            const { movs, nacen } = armarMovimientos(ts, projects.find(p => p.id === loteProyecto), false);
+            if (movs.length === 0) return new Map<string, number>();
+            const plan = planearLote(movs, [...items, ...nacen], loteCompletar ? { completarFaltante: true } : undefined);
+            const porItem = new Map<string, number>();
+            for (const c of plan.completados) porItem.set(c.item.id, (porItem.get(c.item.id) ?? 0) + c.faltaban);
+            return porItem;
+        })();
         const sel = 'text-[11px] border border-papel-borde rounded-lg px-1.5 py-1 bg-papel text-tinta max-w-[46%]';
         return (
         <div className="flex-1 overflow-y-auto px-3 py-4 space-y-3">
@@ -1050,35 +1136,33 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                         </p>
                     )}
 
-                    {lote.lineas.map((l, idx) => (
-                        <div key={idx} className={`rounded-2xl p-3 space-y-2 border ${l.persona ? 'border-papel-borde bg-papel' : 'border-atencion bg-atencion-suave'}`}>
+                    {lote.lineas.map(l => (
+                        <div key={l.id} className={`rounded-2xl p-3 space-y-2 border ${l.persona ? 'border-papel-borde bg-papel' : 'border-atencion bg-atencion-suave'}`}>
                             <div className="flex items-center gap-2">
                                 <span className="text-[11px] font-black text-tinta flex-shrink-0">{l.personaTexto}</span>
-                                <select value={l.persona?.id ?? ''} onChange={e => fijarPersona(idx, e.target.value)}
+                                <select value={l.persona?.id ?? ''} onChange={e => fijarPersona(l.id, e.target.value)}
                                     className={`${sel} flex-1 max-w-none ${l.persona ? '' : 'border-atencion'}`}>
                                     <option value="">¿Quién es?</option>
                                     {personnel.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                                 </select>
                             </div>
-                            {l.items.map((it, j) => {
-                                const clave = `${idx}:${j}`;
-                                const nace = loteNuevos.get(clave);
+                            {l.items.map(it => {
+                                const nace = loteNuevos.get(it.id);
                                 const hay = it.item?.quantity ?? 0;
-                                // Lo que va a entrar antes de salir: o porque el ítem
-                                // nace, o porque no alcanza lo que hay.
-                                const entran = nace ? it.cantidad : (it.item && loteCompletar && it.cantidad > hay ? it.cantidad - hay : 0);
+                                // Sale del plan de verdad, no de una segunda cuenta.
+                                const entran = previo.get(it.item?.id ?? `nuevo:${it.id}`) ?? 0;
                                 return (
-                                <div key={j} className="space-y-1">
+                                <div key={it.id} className="space-y-1">
                                     <div className="flex items-center gap-1.5">
                                         <input type="number" min={0.1} step="any" value={it.cantidad}
                                             onFocus={e => e.target.select()}
-                                            onChange={e => fijarCantidad(idx, j, parseFloat(e.target.value) || 1)}
+                                            onChange={e => fijarCantidad(it.id, parseFloat(e.target.value) || 1)}
                                             className="w-14 text-[11px] border border-papel-borde rounded-lg px-1.5 py-1 bg-papel text-tinta text-center" />
                                         <select
                                             value={nace ? '__nuevo__' : (it.item?.id ?? '')}
                                             onChange={e => {
-                                                if (e.target.value === '__nuevo__') marcarNuevo(idx, j, it.nombre);
-                                                else { desmarcarNuevo(idx, j); fijarItem(idx, j, e.target.value); }
+                                                if (e.target.value === '__nuevo__') marcarNuevo(it.id, it.nombre);
+                                                else { desmarcarNuevo(it.id); fijarItem(it.id, e.target.value); }
                                             }}
                                             className={`${sel} flex-1 max-w-none ${it.item || nace ? '' : 'border-atencion'}`}>
                                             <option value="">{it.nombre} — ¿cuál es?</option>
@@ -1087,7 +1171,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                             {items.filter(x => !it.candidatos.some(c => c.id === x.id))
                                                 .map(x => <option key={x.id} value={x.id}>{x.name} · {x.quantity} {x.unit}</option>)}
                                         </select>
-                                        <button onClick={() => { desmarcarNuevo(idx, j); quitarLinea(idx, j); }}
+                                        <button onClick={() => quitarLinea(it.id)}
                                             className="text-[11px] text-tinta-tenue hover:text-alerta px-1 flex-shrink-0">✕</button>
                                     </div>
 
@@ -1103,7 +1187,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                                 [InventoryType.SINGLE_USE, '📦 Consumo'],
                                             ] as Array<[InventoryType, string]>).map(([t, etiqueta]) => (
                                                 <button key={t} type="button"
-                                                    onClick={() => setLoteNuevos(prev => new Map(prev).set(clave, t))}
+                                                    onClick={() => setLoteNuevos(prev => new Map(prev).set(it.id, t))}
                                                     className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all ${
                                                         nace === t ? 'border-marca bg-marca text-tinta'
                                                                    : 'border-papel-borde bg-papel text-tinta-suave hover:border-marca'}`}>
