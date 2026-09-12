@@ -37,12 +37,18 @@ export const PinConfirmModal: React.FC<PinConfirmModalProps> = ({
         setTimeout(() => setShake(false), 500);
     };
 
-    // Solo un OWNER puede autorizar acciones destructivas.
-    // Valida contra Supabase; si no hay conexión, compara el hash local.
+    /**
+     * Solo un OWNER puede autorizar acciones destructivas.
+     *
+     * Valida contra Supabase; solo si NO SE PUDO PREGUNTAR cae al hash local.
+     * `rechazado` es una respuesta, no una falla: el servidor comparó y dijo que
+     * no, y ahí no se cae al respaldo del teléfono.
+     */
     const verifyOwner = async (username: string, password: string): Promise<boolean> => {
         try {
-            const result = await db.authenticateUser(username, password);
-            if (result) return result.role === UserRole.OWNER;
+            const r = await db.authenticateUser(username, password);
+            if (r.estado === 'ok') return r.usuario.role === UserRole.OWNER;
+            if (r.estado === 'rechazado') return false;
         } catch {
             // Sin conexión — usar respaldo local por hash
         }
