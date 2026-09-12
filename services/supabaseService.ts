@@ -1115,6 +1115,23 @@ export async function restaurar(tabla: TablaPapelera, id: string): Promise<void>
         if (error) throw error;
         return;
     }
+    /**
+     * Un movimiento se restaura CON SU EFECTO DE STOCK, en una transacción.
+     *
+     * Antes esta función le quitaba la lápida de una y la app miraba después si
+     * el stock alcanzaba. Con una salida borrada de 3 palas y una existencia de
+     * 1, quedaba el movimiento activo por 3, el stock intacto en 1, y un mensaje
+     * diciendo que seguía en la papelera. Validar después de escribir no es
+     * validar.
+     *
+     * Ahora si no cabe, el servidor levanta excepción, revierte, y esta función
+     * lanza: la lápida se queda puesta y quien llama se entera de verdad.
+     */
+    if (tabla === 'movements') {
+        const { error } = await supabase.rpc('restore_movement_and_apply_stock', { p_movement_id: id });
+        if (error) throw error;
+        return;
+    }
     const conSello: TablaPapelera[] = ['items', 'movements', 'personnel', 'projects', 'purchase_orders'];
     const cambios: Record<string, unknown> = { deleted_at: null, deleted_by: null };
     if (conSello.includes(tabla)) cambios.updated_at = sello();
