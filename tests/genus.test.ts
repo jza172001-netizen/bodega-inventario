@@ -53,4 +53,4 @@ grupo('normStr y getGenus', () => {
     igual(getGenus('Pulidora grande'), 'Pulidora grande', 'sin paréntesis no toca nada');
 });
 
-cerrar();
+await cerrar();

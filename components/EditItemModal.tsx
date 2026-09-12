@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { cantidadDeTexto } from '../utils/numeros';
 import { Item, InventoryType, Accessory } from '../types';
 import { AccessoriesEditor } from './AccessoriesEditor';
 import { CATEGORIES } from '../constants';
@@ -97,11 +98,11 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, o
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                          <div>
                             <label className="block text-sm font-medium text-tinta-suave mb-1">Cantidad</label>
-                            <input type="number" value={quantity} onChange={e => setQuantity(Math.max(0, parseInt(e.target.value) || 0))} min="0" required className="w-full input-style"/>
+                            <input type="number" value={quantity} onChange={e => setQuantity(cantidadDeTexto(e.target.value, 0))} min="0" required className="w-full input-style"/>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-tinta-suave mb-1">Stock Mínimo</label>
-                            <input type="number" value={minStock} onChange={e => setMinStock(Math.max(0, parseInt(e.target.value) || 0))} min="0" required className="w-full input-style"/>
+                            <input type="number" value={minStock} onChange={e => setMinStock(cantidadDeTexto(e.target.value, 0))} min="0" required className="w-full input-style"/>
                         </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

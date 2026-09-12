@@ -34,16 +34,43 @@ export const igual = (obtenido: unknown, esperado: unknown, nombre: string): voi
 
 export const esCierto = (cond: boolean, nombre: string): void => igual(cond, true, nombre);
 
-export const grupo = (nombre: string, cuerpo: () => void): void => {
-    console.log(`\n${nombre}`);
-    const antes = fallas.length;
-    cuerpo();
-    if (fallas.length === antes) console.log('  ✓ todo bien');
-    else console.log(fallas.slice(antes).join('\n'));
+/**
+ * La fila de grupos. TODOS pasan por acá, incluidos los que no esperan nada.
+ *
+ * Existe por una prueba que pasaba SIN COMPROBAR NADA. Un grupo con cuerpo
+ * asíncrono devolvía una promesa, `grupo` la ignoraba, y el conteo se hacía
+ * cuando todavía no había corrido una sola comprobación: salía «✓ todo bien» y
+ * el total ni se movía. Cuatro grupos enteros de la prueba del ingreso eran
+ * decorado.
+ *
+ * La fila los corre UNO DETRÁS DE OTRO, no todos al tiempo. No es manía de
+ * orden: el reporte de cada grupo es «qué fallas se agregaron desde que
+ * empecé», y si dos corren encima, cada uno reporta las del otro.
+ */
+let fila: Promise<void> = Promise.resolve();
+
+export const grupo = (nombre: string, cuerpo: () => void | Promise<void>): void => {
+    fila = fila.then(async () => {
+        console.log(`\n${nombre}`);
+        const antes = fallas.length;
+        try {
+            await cuerpo();
+        } catch (e) {
+            fallas.push(`  ✗ ${nombre} — reventó: ${e}`);
+        }
+        if (fallas.length === antes) console.log('  ✓ todo bien');
+        else console.log(fallas.slice(antes).join('\n'));
+    });
 };
 
-/** Se llama al final de cada archivo de pruebas. Sale con código 1 si algo falló. */
-export const cerrar = (): void => {
+/**
+ * Se llama al final de cada archivo de pruebas. **Va con `await`.**
+ *
+ * Sin el `await`, los grupos de la fila todavía no terminaron y el conteo sale
+ * en cero — que es exactamente el fallo que hizo escribir todo esto.
+ */
+export const cerrar = async (): Promise<void> => {
+    await fila;
     console.log(`\n${pasadas} pasaron · ${fallas.length} fallaron`);
     if (fallas.length > 0) process.exit(1);
 };

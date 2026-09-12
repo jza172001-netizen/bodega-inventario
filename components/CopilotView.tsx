@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { cantidadDeTexto } from '../utils/numeros';
 import { Item, Movement, Personnel, PurchaseOrder, MovementType, PurchaseOrderStatus, Project, InventoryType , LoteResultado } from '../types';
 import { looseMatch } from '../utils/genus';
 import { generateInventoryAnalysis } from '../services/geminiService';
@@ -446,7 +447,7 @@ const CopilotView: React.FC<CopilotViewProps> = ({
                                                 <span className="text-[10px] text-tinta-tenue flex-shrink-0">{item.quantity} en stock</span>
                                                 {isSelected && (
                                                     <input type="number" value={qty} min={1} max={item.quantity}
-                                                        onChange={e => setLoanQty(item.id, parseInt(e.target.value) || 1)}
+                                                        onChange={e => setLoanQty(item.id, cantidadDeTexto(e.target.value, 0.1))}
                                                         onClick={e => e.stopPropagation()}
                                                         className="w-12 text-xs text-center border border-marca-borde rounded-lg px-1 py-0.5 bg-papel focus:outline-none" />
                                                 )}
@@ -521,7 +522,7 @@ const CopilotView: React.FC<CopilotViewProps> = ({
                     <div className="grid grid-cols-2 gap-2">
                         <div>
                             <label className="text-[10px] font-black text-bien uppercase tracking-wide block mb-1">Cantidad</label>
-                            <input type="number" value={createQty} min={1} onChange={e => setCreateQty(Math.max(1, parseInt(e.target.value) || 1))}
+                            <input type="number" value={createQty} min={1} onChange={e => setCreateQty(cantidadDeTexto(e.target.value, 0.1))}
                                 className="w-full text-sm border border-bien rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-bien" />
                         </div>
                         <div>
