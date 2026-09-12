@@ -107,20 +107,29 @@ const app = (items: Item[], movements: Movement[] = []) => {
         setPersonnel: () => {}, setProjects: () => {}, setPurchaseOrders: () => {},
         setUsers: () => {}, setOrderNotes: () => {},
         migrateUsers: (u: unknown) => u,
-        withSync: (p: unknown) => p,
+        /**
+         * `withSync` ya no recibe una promesa lanzada: recibe QUÉ se quiere
+         * hacer y CON QUÉ, para poder anotarlo en la cola de pendientes,
+         * sobrevivir a cerrar la app y reintentarlo. Acá se apunta lo que se le
+         * pidió mandar, que es lo que antes se espiaba por `db`.
+         */
+        withSync: (tipo: string, args: unknown[]) => {
+            visto.escrituras.push(tipo);
+            if (tipo === 'updateItem') visto.itemsEscritos.push(args[0] as Item);
+            if (tipo === 'updateItemQuantity') {
+                visto.cantidadesEscritas.push({ id: args[0] as string, quantity: args[1] as number });
+            }
+            if (tipo === 'addMovement') visto.movimientosEscritos.push(args[0] as Omit<Movement, 'id'>);
+            if (tipo === 'returnLoanAndRestoreStock') {
+                const itemId = args[3] as string | undefined;
+                const qty = args[4] as number | undefined;
+                if (itemId && qty != null) visto.cantidadesEscritas.push({ id: itemId, quantity: qty });
+            }
+            return Promise.resolve();
+        },
         addAuditLog: (accion: string, texto: string) => visto.bitacora.push({ accion, texto }),
         alert: (x: string) => visto.avisos.push(x),
         db: {
-            updateItem: (i: Item) => { visto.escrituras.push('updateItem'); visto.itemsEscritos.push(i); },
-            updateItemQuantity: (id: string, quantity: number) => {
-                visto.escrituras.push('updateItemQuantity');
-                visto.cantidadesEscritas.push({ id, quantity });
-            },
-            addMovement: (m: Omit<Movement, 'id'>) => { visto.escrituras.push('addMovement'); visto.movimientosEscritos.push(m); },
-            returnLoanAndRestoreStock: (_id: string, _c: unknown, _n: unknown, itemId?: string, qty?: number) => {
-                visto.escrituras.push('returnLoanAndRestoreStock');
-                if (itemId && qty != null) visto.cantidadesEscritas.push({ id: itemId, quantity: qty });
-            },
             fetchItems: () => Promise.resolve([]), fetchMovements: () => Promise.resolve([]),
             fetchPersonnel: () => Promise.resolve([]), fetchProjects: () => Promise.resolve([]),
             fetchPurchaseOrders: () => Promise.resolve([]), fetchUsers: () => Promise.resolve([]),

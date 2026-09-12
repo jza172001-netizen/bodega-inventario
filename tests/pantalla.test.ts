@@ -95,7 +95,7 @@ interface Manejadores {
 }
 
 /** Monta el panel del bloque con un inventario y un texto pegado. */
-const panel = (items: Item[], texto: string, conProyecto = false) => {
+const panel = (items: Item[], texto: string, conProyecto = false, sinSubir = 0) => {
     const visto = { cerrado: false, enviados: [] as Array<Omit<Movement, 'id'>>, creados: [] as Item[], avisos: [] as string[] };
     const c: Record<string, unknown> = {
         lote: leerLote(texto, [ALEX], items),
@@ -105,6 +105,11 @@ const panel = (items: Item[], texto: string, conProyecto = false) => {
         loteNuevos: new Map<string, InventoryType>(),
         projects: conProyecto ? [OBRA] : [],
         items, InventoryType, MovementType, isAsset, isConsumable, planearLote,
+        // Cuántas operaciones quedaron guardadas en el teléfono sin confirmar.
+        // Cambia lo que dice el mensaje: «anotadas» no es lo mismo que
+        // «registradas», y la pantalla llegó a decir lo segundo sin que el
+        // servidor hubiera recibido nada.
+        sinSubir,
         momentoDeFecha: () => new Date('2026-09-12T12:00:00Z'),
         setLote: (v: unknown) => { c.lote = typeof v === 'function' ? (v as (x: unknown) => unknown)(c.lote) : v; },
         setLoteNuevos: (v: unknown) => { c.loteNuevos = typeof v === 'function' ? (v as (x: unknown) => unknown)(c.loteNuevos) : v; },
@@ -235,6 +240,29 @@ grupo('los consumibles no pasan sin proyecto', () => {
     p.fn.registrarLote();
     igual(p.visto.enviados.length, 0, 'no se envió nada');
     esCierto(p.visto.avisos.some(a => /proyecto/i.test(a)), 'y se avisa por qué');
+});
+
+grupo('la pantalla no dice «registrado» si el servidor no lo recibió', () => {
+    /**
+     * Se simuló una caída de conexión: el mensaje salía igual —«1 salida
+     * registrada»—, la existencia bajaba en pantalla y el servidor no había
+     * recibido nada. El dato no se pierde, queda en la cola y se reintenta
+     * solo, pero «registrada» a secas afirma algo que todavía no pasó.
+     *
+     * En esta bodega esa diferencia es justo la que importa: dos celulares y
+     * una sola bodega.
+     */
+    const conPendientes = panel([ficha(PALA, 'Pala', 3)], 'Alex: 1 pala', false, 2);
+    conPendientes.fn.registrarLote();
+    const dicho = conPendientes.visto.avisos.join(' ');
+    esCierto(/sin subir/i.test(dicho), 'avisa que todavía no subió');
+    esCierto(/anotadas/i.test(dicho), 'y no dice «registradas»');
+
+    const todoSubido = panel([ficha(PALA, 'Pala', 3)], 'Alex: 1 pala', false, 0);
+    todoSubido.fn.registrarLote();
+    const dicho2 = todoSubido.visto.avisos.join(' ');
+    esCierto(/registradas/i.test(dicho2), 'con todo subido sí dice registradas');
+    esCierto(!/sin subir/i.test(dicho2), 'y no asusta de más');
 });
 
 await cerrar();

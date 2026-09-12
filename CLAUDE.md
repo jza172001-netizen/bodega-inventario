@@ -65,15 +65,33 @@ reproduce the condition, and only the mutation check caught it.
 as `await cerrar()`. An earlier version ignored a promise-returning body: the
 group printed "✓ todo bien" before a single assertion had run.
 
-Still uncovered: the offline sync queue (A05/A13) — an operation made without
-signal uploads its row without going through the stock RPC, and an edit to a row
-the server already has is never retried.
+**Run `npm run lint` by its EXIT CODE, never by reading its output.** In a
+sandbox without `vite` installed, `tsconfig.json`'s `types: ["vite/client"]`
+makes tsc abort with TS2688 and check **nothing** — it looks clean and is not.
+That hid a shipped break where a changed return type left two of three callers
+broken. If `vite` cannot be installed (the `xlsx` CDN is blocked, which kills any
+`npm install`), install the type-bearing packages into a scratch directory and
+copy them into `node_modules`.
+
+Still uncovered: browser-level journeys (clicking, reloading, verifying what
+persisted) and a true two-session concurrency test — PGlite runs on one
+exclusive connection, so it cannot prove a race.
 
 ## Architecture
 
 **Stack:** React 18 + TypeScript + Vite + Tailwind CSS. No router — single-page app with manual view state. No test framework configured.
 
 **State management:** All app state lives in `App.tsx` as `useState` hooks. State is persisted to `localStorage` on every change via a `useEffect` that calls `storage.ts`. On mount, state initializes from localStorage, falling back to `mockData.ts`.
+
+**Writes go through a durable queue.** `withSync(tipo, args, descripcion)` records
+*what* the app wants to do — not a launched promise — into `core/cola.ts`
+**before** attempting it, so a write in flight when the app closes survives and
+is retried. `tipo` names a function in `services/supabaseService.ts`; `args` must
+be serializable (Dates are revived on read). Failures count up to
+`LIMITE_INTENTOS` and then **block rather than disappear**, surfacing in
+`components/PendientesView.tsx`, where a person can retry or discard **with a
+stated reason**. The previous `withSync(promise)` could not retry anything: a
+launched promise has already run and is not data.
 
 **Data flow:** `App.tsx` owns all data and passes handlers down as props. There is no context, Redux, or other state library.
 
