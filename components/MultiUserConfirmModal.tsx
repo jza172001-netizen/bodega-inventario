@@ -27,12 +27,22 @@ export const MultiUserConfirmModal: React.FC<Props> = ({ title, message, users, 
         setTimeout(() => setShake(false), 500);
     };
 
-    // Valida contra Supabase (las contraseñas no se guardan localmente);
-    // si no hay conexión, compara el hash de respaldo offline.
+    /**
+     * Valida contra Supabase; solo si NO SE PUDO PREGUNTAR cae al hash local.
+     *
+     * Las tres respuestas importan y son distintas:
+     *  · `ok` — el servidor comparó y dijo que sí. Falta que sea ESTA persona.
+     *  · `rechazado` — el servidor comparó y dijo que no. Acá se para: caer al
+     *    respaldo del teléfono dejaría entrar con una contraseña que el servidor
+     *    ya rechazó, y quitarle el acceso a alguien no se lo quitaría.
+     *  · `sinRespuesta` — no se pudo preguntar. Ahí sí vale el hash guardado en
+     *    este dispositivo, porque no saber no puede frenar la bodega.
+     */
     const verifyPassword = async (user: AppUser, password: string): Promise<boolean> => {
         try {
-            const result = await db.authenticateUser(user.username, password);
-            if (result) return result.id === user.id;
+            const r = await db.authenticateUser(user.username, password);
+            if (r.estado === 'ok') return r.usuario.id === user.id;
+            if (r.estado === 'rechazado') return false;
         } catch {
             // Sin conexión — usar respaldo local por hash
         }
