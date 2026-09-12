@@ -1,7 +1,7 @@
 import React from 'react';
 import { Item } from '../types';
 import { familiaDe, raizDeFamilia } from '../utils/genus';
-import { generosDe, denominacionesDe, medidaDe, seMideEnPulgadas } from '../utils/medida';
+import { generosDe, denominacionesDe, medidaDe, seMideEnPulgadas, medidasPrestadas } from '../utils/medida';
 
 /**
  * Género y medida, ofrecidos como lo que la bodega YA tiene.
@@ -60,6 +60,12 @@ export const PasosDeNombre: React.FC<Props> = ({
     // donde se cuela la medida mal puesta.
     const denoms = denominacionesDe(deLaFamilia, genero || undefined, fam);
 
+    // Las medidas que la bodega ya usa en OTRAS familias. Van aparte y no
+    // revueltas porque no valen lo mismo: las de arriba son lo que esta cosa ya
+    // ha sido; estas son una sugerencia prestada. Revueltas harían parecer que
+    // la bodega ya tuvo un codo de 12" cuando el 12 salió de una llave.
+    const prestadas = medidasPrestadas(items, denoms);
+
     // La medida que ya venga escrita adentro del nombre no se vuelve a pedir.
     const yaEnElNombre = medidaDe(nombre);
 
@@ -100,6 +106,20 @@ export const PasosDeNombre: React.FC<Props> = ({
                         <p className="text-[10px] text-tinta-tenue">
                             El nombre ya trae {yaEnElNombre}; solo hace falta elegir acá si querés cambiarla.
                         </p>
+                    )}
+                    {prestadas.length > 0 && (
+                        <div className="pt-1.5 space-y-1">
+                            <p className="text-[10px] text-tinta-tenue">
+                                Otras medidas que la bodega ya usa
+                            </p>
+                            <div className="flex flex-wrap gap-1">
+                                {prestadas.map(d => (
+                                    <button key={d} type="button" onClick={() => onDenominacion(denominacion === d ? '' : d)} className={chip(denominacion === d)}>
+                                        {d}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
                     )}
                 </div>
             )}
