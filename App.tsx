@@ -1243,15 +1243,31 @@ const App: React.FC = () => {
         // su salida entraba sin validar.
         const plan = planearLote(batch, itemsRef.current, opciones);
 
+        /**
+         * EL LOTE ENTERO EN UN SOLO VIAJE.
+         *
+         * Antes se mandaba un RPC por movimiento, y la red no respeta el orden
+         * en que uno los suelta. El plan pone la entrada automática ANTES que
+         * su salida —para que el stock exista antes de salir— pero el servidor
+         * podía recibir la salida primero, rechazarla por falta de stock, y
+         * guardar la entrada después. Acá arriba ya se había cantado éxito y se
+         * mostraba saldo cero; el servidor quedaba con una entrada, ninguna
+         * salida y saldo uno. Dos celulares viendo cosas distintas y ningún
+         * error a la vista.
+         *
+         * Se junta todo y se manda de una: el servidor lo aplica en orden
+         * dentro de una transacción. O entra el despacho completo, o no entra
+         * nada.
+         */
+        const paraElServidor: Array<{ m: Omit<Movement, 'id'>; id: string; fallbackQty: number }> = [];
+
         for (const { movimiento, nuevaCantidad, item } of plan.aplicar) {
             const id = crypto.randomUUID();
             const ts = movimiento.timestamp instanceof Date ? movimiento.timestamp : new Date(movimiento.timestamp ?? Date.now());
             setMovements(prev => [{ ...movimiento, id, timestamp: ts }, ...prev]);
             setItems(prev => prev.map(x => (x.id === item.id ? { ...x, quantity: nuevaCantidad } : x)));
             ajustarEspejo(item.id, nuevaCantidad);
-            // Una sola transacción en el servidor: movimiento + stock, a prueba
-            // de carreras entre dos teléfonos.
-            withSync(db.logMovementWithStock({ ...movimiento, timestamp: ts }, id, nuevaCantidad));
+            paraElServidor.push({ m: { ...movimiento, timestamp: ts }, id, fallbackQty: nuevaCantidad });
 
             const personName = movimiento.personnelId ? personnel.find(p => p.id === movimiento.personnelId)?.name : undefined;
             const conQuien = personName ? ` — ${personName}` : '';
@@ -1267,6 +1283,8 @@ const App: React.FC = () => {
                 addAuditLog('STOCK_IN', `📥 Entrada: "${item.name}" ×${movimiento.quantity}${conQuien}`);
             }
         }
+
+        withSync(db.logMovementsWithStock(paraElServidor));
 
         // Sin ítem no hay stock que mover, pero el movimiento no se pierde: el
         // historial es lo único que no se puede reconstruir después.

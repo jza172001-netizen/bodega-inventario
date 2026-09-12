@@ -293,6 +293,51 @@ export async function logMovementWithStock(
 }
 
 /**
+ * EL DESPACHO ENTERO EN UNA TRANSACCIÓN.
+ *
+ * `logMovementWithStock` manda un viaje por movimiento, y la red no respeta el
+ * orden en que uno los suelta. El núcleo pone la entrada automática ANTES que
+ * la salida —para que el stock exista antes de salir— pero el servidor podía
+ * recibir la salida primero, rechazarla por falta de stock, y guardar la
+ * entrada después. La app ya había cantado éxito y mostraba saldo cero; el
+ * servidor quedaba con una entrada, ninguna salida y saldo uno.
+ *
+ * No se arregla acá arriba: mientras sean dos viajes pueden llegar en cualquier
+ * orden, o puede llegar uno solo. Tiene que ser un viaje. El lote entero va
+ * como JSON y el servidor lo aplica en orden dentro de una transacción: o entra
+ * completo, o no entra nada.
+ *
+ * El camino de respaldo —cuando la migración todavía no está aplicada en algún
+ * ambiente— es el de antes, de a un movimiento. No es atómico, y por eso se
+ * usa solo cuando la función no existe.
+ */
+export async function logMovementsWithStock(
+    movimientos: Array<{ m: Omit<Movement, 'id'>; id: string; fallbackQty: number }>,
+): Promise<void> {
+    if (movimientos.length === 0) return;
+    const { error } = await supabase.rpc('log_movements_and_update_stock', {
+        p_movements: movimientos.map(({ m, id }) => ({
+            id,
+            item_id: m.itemId,
+            type: m.type,
+            quantity: m.quantity,
+            timestamp: m.timestamp instanceof Date ? m.timestamp.toISOString() : m.timestamp,
+            personnel_id: m.personnelId ?? null,
+            notes: m.notes ?? null,
+            project_id: m.projectId ?? null,
+            is_loan: m.isLoan ?? false,
+            is_returned: m.isReturned ?? false,
+            pending_pickup: m.pendingPickup ?? false,
+        })),
+    });
+    if (!error) return;
+    if (!isMissingRpc(error)) throw error;
+    for (const { m, id, fallbackQty } of movimientos) {
+        await logMovementWithStock(m, id, fallbackQty);
+    }
+}
+
+/**
  * Borra un movimiento revirtiendo su efecto en el stock (RPC transaccional).
  * Fallback no atómico si la migración aún no se aplicó.
  */

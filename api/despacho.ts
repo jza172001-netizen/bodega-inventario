@@ -186,68 +186,116 @@ export default async function handler(req: Peticion, res: Respuesta): Promise<vo
     const fallos: Array<{ elemento: string; motivo: string }> = [];
     const nombrePersona = new Map(personnel.map(p => [p.id, p.name]));
 
-    // Cuántas veces ya salió esta misma combinación en este bloque, para que
-    // «Alex: 1 pala, 1 pala» no colapse en un solo movimiento.
+    /**
+     * Los identificadores, deducidos antes de escribir nada.
+     *
+     * El sufijo `repeticion` distingue una misma cosa pedida dos veces en el
+     * mismo bloque, y se cuenta por firma y no por posición: así «Alex: 1 pala,
+     * 1 pala» son dos movimientos y no uno, y un reintento con renglones caídos
+     * no le cambia el identificador a nadie.
+     */
     const repeticiones = new Map<string, number>();
-    /** Si la última herramienta no se pudo guardar, sus accesorios no salen. */
-    let ultimaHerramientaFallo = false;
-
-    for (const { movimiento, nuevaCantidad, item } of plan.aplicar) {
-        /**
-         * Si la herramienta no se pudo guardar, su accesorio NO SE ESCRIBE.
-         *
-         * El núcleo los valida juntos, pero la persistencia es un RPC por
-         * movimiento: si la pulidora falla al escribirse —porque otro usuario le
-         * movió el stock entre la planificación y la escritura— el disco se
-         * descontaba igual y quedaba registrado solo, gastado sin herramienta.
-         *
-         * Esta guarda va ANTES del RPC a propósito. La primera versión la puse
-         * después, y ahí no servía de nada: para cuando preguntaba si la
-         * herramienta había fallado, el disco YA estaba escrito y el stock YA
-         * había bajado. Revisar después de escribir no es revisar.
-         *
-         * La garantía completa pide una transacción por despacho; esto cierra el
-         * caso que se puede cerrar sin migración.
-         */
-        const esAccesorio = !!movimiento.notes?.startsWith('Sale con ');
-        if (esAccesorio && ultimaHerramientaFallo) {
-            fallos.push({ elemento: item.name, motivo: 'No salió porque su herramienta no se pudo registrar' });
-            continue;
-        }
-
+    const aEscribir = plan.aplicar.map(({ movimiento, item }) => {
         const firma = firmaDe(movimiento);
         const repeticion = repeticiones.get(firma) ?? 0;
         repeticiones.set(firma, repeticion + 1);
-        const id = idDeterminista(operacionId, movimiento, repeticion);
-        const { error } = await sb.rpc('log_movement_and_update_stock', {
-            p_id: id,
-            p_item_id: movimiento.itemId,
-            p_type: movimiento.type,
-            p_quantity: movimiento.quantity,
-            p_timestamp: ts.toISOString(),
-            p_personnel_id: movimiento.personnelId ?? null,
-            p_notes: movimiento.notes ?? null,
-            p_project_id: movimiento.projectId ?? null,
-            p_is_loan: movimiento.isLoan ?? false,
-            p_is_returned: false,
-            p_pending_pickup: false,
-        });
-        if (error) {
-            const repetido = /duplicate key|23505/i.test(error.message ?? '');
-            if (!repetido) {
+        return { movimiento, item, id: idDeterminista(operacionId, movimiento, repeticion) };
+    });
+
+    const anotarRegistrado = (item: Item, m: Omit<Movement, 'id'>) =>
+        registrados.push({ elemento: item.name, cantidad: m.quantity, persona: nombrePersona.get(m.personnelId ?? '') });
+
+    const comoFila = (id: string, m: Omit<Movement, 'id'>) => ({
+        id,
+        item_id: m.itemId,
+        type: m.type,
+        quantity: m.quantity,
+        timestamp: ts.toISOString(),
+        personnel_id: m.personnelId ?? null,
+        notes: m.notes ?? null,
+        project_id: m.projectId ?? null,
+        is_loan: m.isLoan ?? false,
+        is_returned: false,
+        pending_pickup: false,
+    });
+
+    /**
+     * EL DESPACHO ENTERO EN UNA TRANSACCIÓN.
+     *
+     * Antes era un RPC por movimiento, y ahí se colaban dos fallos que no se
+     * pueden cerrar de este lado:
+     *
+     *  · El núcleo pone la entrada automática ANTES que su salida, pero la red
+     *    no respeta ese orden. El servidor podía recibir la salida primero,
+     *    rechazarla por falta de stock, y guardar la entrada después.
+     *  · La herramienta y su accesorio se validan juntos pero se escribían
+     *    sueltos: si la pulidora fallaba, el disco ya se había gastado.
+     *
+     * Con un solo viaje, o entra el despacho completo o no entra nada, y los
+     * dos casos desaparecen por construcción en vez de por vigilancia.
+     */
+    const { error: errorLote } = await sb.rpc('log_movements_and_update_stock', {
+        p_movements: aEscribir.map(x => comoFila(x.id, x.movimiento)),
+    });
+
+    // PGRST202 / 42883: la función todavía no está en este proyecto.
+    const faltaLaFuncion = !!errorLote
+        && ((errorLote as { code?: string }).code === 'PGRST202' || (errorLote as { code?: string }).code === '42883');
+
+    if (!errorLote) {
+        for (const { movimiento, item } of aEscribir) anotarRegistrado(item, movimiento);
+    } else if (!faltaLaFuncion) {
+        /**
+         * Falló el lote: NO SE ESCRIBIÓ NADA. Se dice así, completo.
+         *
+         * Es lo contrario de lo que hacía antes, que era reportar renglón por
+         * renglón sobre escrituras que sí habían quedado a medias. Un «no entró
+         * nada» cierto vale más que un «entraron tres de cinco» que hay que ir
+         * a comprobar a mano.
+         */
+        const motivo = (errorLote as { message?: string }).message ?? 'Error al guardar';
+        for (const { item } of aEscribir) fallos.push({ elemento: item.name, motivo });
+    } else {
+        /**
+         * Camino de respaldo, de a un movimiento y SIN atomicidad.
+         *
+         * Solo se llega acá si la migración no está aplicada. Conserva las dos
+         * guardas que se pueden poner de este lado: el accesorio no sale si su
+         * herramienta falló, y una clave repetida se comprueba leyendo la fila
+         * antes de darla por registrada.
+         */
+        let ultimaHerramientaFallo = false;
+        for (const { movimiento, item, id } of aEscribir) {
+            const esAccesorio = !!movimiento.notes?.startsWith('Sale con ');
+            if (esAccesorio && ultimaHerramientaFallo) {
+                fallos.push({ elemento: item.name, motivo: 'No salió porque su herramienta no se pudo registrar' });
+                continue;
+            }
+            const { error } = await sb.rpc('log_movement_and_update_stock', {
+                p_id: id,
+                p_item_id: movimiento.itemId,
+                p_type: movimiento.type,
+                p_quantity: movimiento.quantity,
+                p_timestamp: ts.toISOString(),
+                p_personnel_id: movimiento.personnelId ?? null,
+                p_notes: movimiento.notes ?? null,
+                p_project_id: movimiento.projectId ?? null,
+                p_is_loan: movimiento.isLoan ?? false,
+                p_is_returned: false,
+                p_pending_pickup: false,
+            });
+            if (!error) {
+                if (!esAccesorio) ultimaHerramientaFallo = false;
+                anotarRegistrado(item, movimiento);
+                continue;
+            }
+            if (!/duplicate key|23505/i.test(error.message ?? '')) {
                 if (!esAccesorio) ultimaHerramientaFallo = true;
                 fallos.push({ elemento: item.name, motivo: error.message ?? 'Error al guardar' });
                 continue;
             }
-            /**
-             * Clave repetida NO es prueba de que se guardó ESTO.
-             *
-             * Antes se daba por buena sin mirar, y por ahí se colaba el reporte
-             * falso. Ahora se lee la fila que ya existe y se compara con lo que
-             * se iba a escribir. Si coincide, el reintento está funcionando: ya
-             * estaba. Si no coincide, es un choque de identificadores y hay que
-             * decirlo, no taparlo.
-             */
+            // Clave repetida NO es prueba de que se guardó ESTO: se lee la fila
+            // y se compara. Por ahí se colaba el reporte de registros falsos.
             const { data: yaEsta } = await sb
                 .from('movements')
                 .select('item_id, quantity, personnel_id, type')
@@ -258,20 +306,10 @@ export default async function handler(req: Peticion, res: Respuesta): Promise<vo
                 && fila.item_id === movimiento.itemId
                 && Number(fila.quantity) === movimiento.quantity
                 && (fila.personnel_id ?? null) === (movimiento.personnelId ?? null);
-            if (coincide) {
-                if (!esAccesorio) ultimaHerramientaFallo = false;
-                registrados.push({ elemento: item.name, cantidad: movimiento.quantity, persona: nombrePersona.get(movimiento.personnelId ?? '') });
-            } else {
-                if (!esAccesorio) ultimaHerramientaFallo = true;
-                fallos.push({ elemento: item.name, motivo: 'El identificador ya existe con otro contenido; no se registró' });
-            }
-            continue;
+            if (!esAccesorio) ultimaHerramientaFallo = !coincide;
+            if (coincide) anotarRegistrado(item, movimiento);
+            else fallos.push({ elemento: item.name, motivo: 'El identificador ya existe con otro contenido; no se registró' });
         }
-        // El espejo del stock se deja como lo calculó el núcleo, por si la RPC
-        // no existiera y hubiera que caer al camino no atómico.
-        void nuevaCantidad;
-        if (!esAccesorio) ultimaHerramientaFallo = false;
-        registrados.push({ elemento: item.name, cantidad: movimiento.quantity, persona: nombrePersona.get(movimiento.personnelId ?? '') });
     }
 
     for (const r of plan.rechazos) {
