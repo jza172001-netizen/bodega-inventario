@@ -248,6 +248,105 @@ decidir con Juli** qué es un pendiente, quién lo descarta y con qué motivo.
 
 ---
 
+## 0.7 ESTADO AL CIERRE DEL 12-sep-2026 — leer esto primero
+
+Las secciones 0.1 a 0.6 son el detalle de cada bloque, en orden. **Esta es la
+foto completa.** Si algo de las anteriores contradice a esta, gana esta.
+
+### Nueve PR mergeados y desplegados (#81 a #89)
+
+| | Qué cerró |
+|---|---|
+| **#81** | Los siete fallos que metí yo en los PR #75–#80 |
+| **#82** | El kardex: ajuste con movimiento, devoluciones sin pérdida, restauración honesta |
+| **#83** | El despacho entero en **una transacción**; el repo deja de contradecir al servidor |
+| **#84** | La sincronización deja de confundir «sin señal» con «la nube está vacía» |
+| **#85** | La contraseña rechazada ya no entra; los decimales ya no se redondean |
+| **#86** | **Migración base**: el repo ya alcanza para reconstruir el servidor |
+| **#87** | Dos modales que quedaron rechazando siempre — **rotura que yo mismo desplegué** |
+| **#88** | **La cola de pendientes** con su bandeja: nada se pierde en silencio |
+| **#89** | La papelera valida antes de restaurar; el reintento del asistente deja de mentir |
+
+**322 comprobaciones.** Cada arreglo verificado **reintroduciendo el fallo a
+propósito** y viendo la prueba ponerse roja.
+
+### Las dos lecciones de método, que valen más que los arreglos
+
+**1. `npm run lint` estuvo fallando toda la sesión y yo lo leía como limpio.**
+`tsconfig.json` pide los tipos de `vite/client`; sin `vite` instalado, `tsc`
+aborta con TS2688 y **no revisa ni un archivo**. Yo filtraba la salida buscando
+los errores conocidos del entorno, no veía nada, y daba por bueno. El código de
+salida decía 2 desde el principio. Por ahí se me fue a producción el #87.
+
+> **Un chequeo se cree por su CÓDIGO DE SALIDA, no por lo que uno alcanza a leer
+> en la salida filtrada.** Si `vite` no se puede instalar (el CDN de `xlsx` está
+> bloqueado y tumba cualquier `npm install`), instalá los paquetes con tipos en
+> una carpeta aparte y copialos a `node_modules`.
+
+**2. Una prueba puede pasar con el fallo adentro.** `tests/fusion.test.ts` pasó
+con su defecto porque los identificadores de prueba no tenían forma de UUID, que
+era justo la condición que lo disparaba. Se descubrió comprobando por mutación.
+**Comprobar por mutación no es opcional.**
+
+### Lo que sigue abierto, por tamaño
+
+**Grande y necesita decisiones tuyas:**
+
+1. **El modelo de ubicación** (tu condición 3). Debe distinguir cantidad total,
+   cantidad en bodega, custodia confirmada y responsable histórico. **Tres campos
+   globales en un ítem agregado no alcanzan** si sus unidades están repartidas en
+   varias obras: hay que decidir si se identifica por unidad o por cantidades.
+2. **Las demás operaciones del asistente.** Hoy `api/despacho.ts` **solo registra
+   salidas**. Faltan consultas (quién tiene qué, dónde, desde cuándo),
+   devoluciones, traslados, hallazgos, daños y pedidos. Una URL de despacho
+   aislada no completa la conexión.
+3. **Los permisos (A01/SQL04).** Confirmado contra producción: las ocho funciones
+   tienen `anon=X`, y **las once tablas tienen RLS activo con políticas
+   `for all to public using (true)`** — activo y sin filtrar nada. **No se cierra
+   revocando**: la app entra *como* `anon` y quedaría muerta. Pide identidad de
+   servidor (Supabase Auth, o un servidor que valide sesiones y roles). Llevar
+   las escrituras a una API no basta si su token termina dentro del JavaScript
+   público. Documentarlo NO es cerrarlo.
+
+**Mediano, sin decisiones pendientes:**
+
+4. **Devoluciones parciales** (tu condición 4). `ReturnToolModal` no tiene
+   cantidad: devuelve movimientos enteros. Si se prestan tres y vuelve una, **no
+   hay forma de decirlo**. Debe conservar el préstamo original de 3 y registrar
+   cada devolución vinculada, no reemplazarlo por «prestó 2».
+5. **Recorridos de navegador** (tu condición 6). Sacar los manejadores con el
+   compilador cubre la lógica, **no** el JSX, los eventos, el cierre del modal ni
+   la recarga. Hace falta automatización de navegador de verdad.
+6. **Restaurar una copia y compararla** (tu condición 5). `RESTAURAR.md` y la
+   migración base están, y las 20 migraciones corren sobre una base en blanco;
+   falta **restaurar un respaldo con datos en un ambiente aislado y comparar**.
+7. **A08 — dos devoluciones simultáneas.** Sigue deducido. **Mi plan de probarlo
+   con PGlite estaba equivocado**: PGlite trabaja sobre una conexión exclusiva y
+   no equivale a dos sesiones de PostgreSQL. Hace falta una base de verdad con
+   dos conexiones.
+8. **Los pendientes compartidos.** La cola de `#88` vive en el teléfono. Lo que
+   el responsable tiene que saber no puede existir solo en el celular de la
+   encargada: falta persistencia compartida.
+9. **A16 — dependencias.** Sin reevaluar. A la vista:
+   `@huggingface/transformers` está en `package.json` y lo único que lo importa
+   es `initModel()`, que no llama nadie.
+
+**Fuera de código:**
+
+10. **El inventario definitivo.** ⚠️ **Corrección a lo que decía este archivo:**
+    Juli **ya construyó el inventario definitivo y ya cruzó las listas**. Esa
+    lista manda sobre las cantidades. Lo que falta **no** es volver a contar: es
+    **vincularla** con los ítems y movimientos que ya existen, conservando
+    procedencia y fecha, y dejar las diferencias puntuales como pendientes a
+    resolver. No borrar, no reiniciar, no duplicar entregas ya registradas. Y
+    ojo: el total maestro **incluye préstamos y pendientes**, así que no es stock
+    disponible para despachar.
+11. **Kate y KATE**, el acceso duplicado. **Netlify**, todavía conectado al repo.
+12. **La mañana supervisada** (tu condición 7). Diez trabajadores, sesenta
+    pedidos, con la encargada. Eso no lo reemplaza ninguna prueba automática.
+
+---
+
 ## 0. Cómo se usa esto
 
 Leelo entero de una. No hace falta que Juli pegue nada más. Si algo de acá
