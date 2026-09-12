@@ -100,6 +100,74 @@ grupo('la entrada nunca se rechaza', () => {
     igual(p.aplicar[0].nuevaCantidad, 5, 'y suma');
 });
 
+grupo('completarFaltante — lo que se saca y no estaba registrado', () => {
+    // La regla de Juli: casi nada del inventario está cargado, así que lo que
+    // sale se agrega y se despacha de una. Lo que decide NO es el texto que se
+    // pegó: es la existencia.
+    const vacia = [I('pala', 'Pala', 0, InventoryType.HAND_TOOL)];
+    const p = planearLote([salida('pala', 3)], vacia, { completarFaltante: true });
+    igual(p.rechazos.length, 0, 'no se rechaza');
+    igual(p.aplicar.length, 2, 'una entrada y una salida');
+    igual(p.aplicar[0].movimiento.type, MovementType.CHECK_IN, 'la ENTRADA va primero');
+    igual(p.aplicar[0].movimiento.quantity, 3, 'entran las 3 que faltaban');
+    igual(p.aplicar[1].movimiento.type, MovementType.CHECK_OUT, 'y después la salida');
+    igual(p.aplicar[1].nuevaCantidad, 0, 'queda en cero: entró lo justo y salió todo');
+    igual(p.completados[0].motivo, 'vacio', 'no había ni una');
+    igual(p.completados[0].faltaban, 3, 'y se dice cuántas hubo que dar por existentes');
+});
+
+grupo('LA GUARDA — si hay existencia, no se crea ni entra nada', () => {
+    // «a no ser de que haya existencia en bodega». Si la app ya sabía que la
+    // pala estaba, inventar una entrada sería inflar el inventario.
+    const hay = [I('pala', 'Pala', 10, InventoryType.HAND_TOOL)];
+    const p = planearLote([salida('pala', 3)], hay, { completarFaltante: true });
+    igual(p.aplicar.length, 1, 'SOLO la salida');
+    igual(p.completados.length, 0, 'nada que completar');
+    igual(p.aplicar[0].nuevaCantidad, 7, '10 - 3');
+});
+
+grupo('completa solo el HUECO, nunca de más', () => {
+    // Había 1 y se piden 3: entran 2, no 3. El techo es lo que falta.
+    const corta = [I('pala', 'Pala', 1, InventoryType.HAND_TOOL)];
+    const p = planearLote([salida('pala', 3)], corta, { completarFaltante: true });
+    igual(p.aplicar[0].movimiento.quantity, 2, 'entran 2, que es lo que faltaba');
+    igual(p.completados[0].motivo, 'corto', 'había pero no alcanzaba');
+    igual(p.aplicar[1].nuevaCantidad, 0, '1 + 2 - 3 = 0');
+});
+
+grupo('la entrada dice POR QUÉ existe', () => {
+    // Sin la nota, esa entrada parece inventada. Con ella es un registro que
+    // llegó tarde, que es lo que de verdad es.
+    const p = planearLote([salida('pala', 1)], [I('pala', 'Pala', 0, InventoryType.HAND_TOOL)], { completarFaltante: true });
+    esCierto(String(p.aplicar[0].movimiento.notes).includes('No estaba registrado'), 'lleva su explicación');
+
+    const conNota = planearLote([salida('pala', 1)], [I('pala', 'Pala', 0, InventoryType.HAND_TOOL)],
+        { completarFaltante: true, notaDeCompletado: 'Cargado desde el bloque de Abel' });
+    igual(conNota.aplicar[0].movimiento.notes, 'Cargado desde el bloque de Abel', 'y se puede decir otra cosa');
+});
+
+grupo('completar también cubre los accesorios', () => {
+    // Sale la pulidora con su disco y no hay ninguno de los dos: entran los dos
+    // y salen los dos, sin que el grupo se rompa.
+    const items = [
+        I('pulidora', 'Pulidora grande', 0, InventoryType.ELECTRICAL_TOOL, [{ nombre: 'Disco', itemId: 'disco', cantidad: 1 }]),
+        I('disco', 'Disco', 0, InventoryType.SINGLE_USE),
+    ];
+    const p = planearLote([salida('pulidora', 1)], items, { completarFaltante: true });
+    igual(p.rechazos.length, 0, 'no se rechaza');
+    igual(p.completados.length, 2, 'se completan la herramienta y su disco');
+    igual(p.aplicar.filter(a => a.movimiento.type === MovementType.CHECK_IN).length, 2, 'dos entradas');
+    igual(p.aplicar.filter(a => a.movimiento.type === MovementType.CHECK_OUT).length, 2, 'dos salidas');
+});
+
+grupo('apagado por defecto', () => {
+    // El despacho normal de la pantalla sigue frenando: ahí la falta de stock
+    // sí es señal de que algo está mal.
+    const p = planearLote([salida('pala', 3)], [I('pala', 'Pala', 0, InventoryType.HAND_TOOL)]);
+    igual(p.rechazos.length, 1, 'sin la opción, rechaza como siempre');
+    igual(p.aplicar.length, 0, 'y no entra nada');
+});
+
 grupo('varias personas, un lote', () => {
     const items = [I('pala', 'Pala', 10, InventoryType.HAND_TOOL), I('pica', 'Pica', 1, InventoryType.HAND_TOOL)];
     const p = planearLote(

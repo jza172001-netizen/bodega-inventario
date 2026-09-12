@@ -36,6 +36,27 @@ export interface Aplicacion {
     item: Item;
 }
 
+/**
+ * Una entrada que hubo que inventar para que la salida pudiera pasar.
+ *
+ * NO es stock inventado: es un registro que llega tarde. En la bodega de
+ * Montecielo la herramienta está ahí físicamente, lo que no está es en la app —
+ * el inventario nunca se cargó entero. Cuando alguien despacha una pala que la
+ * app no sabía que existía, lo honesto no es rechazar la salida: es anotar que
+ * la pala estaba y que salió.
+ *
+ * Se devuelve aparte de `aplicar` para que la pantalla pueda MOSTRARLO antes de
+ * que pase. Nada de esto se aplica solo: un asistente de IA equivocado no puede
+ * inflar el inventario a espaldas de nadie.
+ */
+export interface Completado {
+    item: Item;
+    /** Cuántas unidades hubo que dar por existentes. */
+    faltaban: number;
+    /** `vacio`: no había ni una. `corto`: había, pero no alcanzaba. */
+    motivo: 'vacio' | 'corto';
+}
+
 export interface Plan {
     /** Lo que sí entra, en orden. */
     aplicar: Aplicacion[];
@@ -46,6 +67,26 @@ export interface Plan {
      * para que el historial no pierda nada, pero no mueven stock de nadie.
      */
     huerfanos: Array<Omit<Movement, 'id'>>;
+    /** Las entradas que se agregaron para cubrir lo que no alcanzaba. */
+    completados: Completado[];
+}
+
+export interface OpcionesPlan {
+    /**
+     * Cuando no alcanza el stock, en vez de rechazar la salida se registra
+     * primero la entrada que falta.
+     *
+     * La regla es de Juli: *«casi siempre lo que se saca se agrega al sistema y
+     * se marca la salida automáticamente, a no ser de que haya existencia en
+     * bodega»*. Lo que decide no es el texto que se pegó: **es la existencia**.
+     * Si hay, sale y ya; si no hay, entra lo que falta y sale.
+     *
+     * Apagado por defecto. El despacho normal de la pantalla sigue frenando,
+     * porque ahí la falta de stock sí es una señal de que algo está mal.
+     */
+    completarFaltante?: boolean;
+    /** La nota que lleva la entrada inventada, para que el historial lo diga. */
+    notaDeCompletado?: string;
 }
 
 /**
@@ -82,10 +123,11 @@ const accesoriosDe = (m: Omit<Movement, 'id'>, item?: Item): Array<Omit<Movement
 export const planearLote = (
     batch: Array<Omit<Movement, 'id'>>,
     items: Item[],
+    opciones: OpcionesPlan = {},
 ): Plan => {
     const porId = new Map(items.map(i => [i.id, i]));
     const restante = new Map(items.map(i => [i.id, i.quantity]));
-    const plan: Plan = { aplicar: [], rechazos: [], huerfanos: [] };
+    const plan: Plan = { aplicar: [], rechazos: [], huerfanos: [], completados: [] };
 
     for (const m of batch) {
         const item = porId.get(m.itemId);
@@ -97,16 +139,45 @@ export const planearLote = (
         // ¿Alcanza para el grupo COMPLETO? Se prueba contra una copia, para no
         // dejar el saldo tocado si al final el grupo no pasa.
         const tentativo = new Map(restante);
+        const entradas: Aplicacion[] = [];
+        const completados: Completado[] = [];
         let falla: { item: Item; pedido: number; hay: number } | null = null;
 
         for (const linea of grupo) {
             const it = porId.get(linea.itemId);
             if (!it) continue;                       // accesorio huérfano: no frena la herramienta
-            const hay = tentativo.get(linea.itemId) ?? 0;
+            let hay = tentativo.get(linea.itemId) ?? 0;
+
             if (esRetiro(linea.type) && !alcanzaStock(hay, linea.quantity)) {
-                falla = { item: it, pedido: linea.quantity, hay };
-                break;
+                if (!opciones.completarFaltante) {
+                    falla = { item: it, pedido: linea.quantity, hay };
+                    break;
+                }
+                /**
+                 * No alcanza, pero la cosa está en la bodega: lo que faltaba era
+                 * el registro. Entra lo justo —nunca más— y queda dicho por qué.
+                 *
+                 * Entrar de más sería inflar el inventario, que es el miedo
+                 * legítimo de dejar que un asistente escriba. Acá el techo es el
+                 * hueco: `quantity - hay`, ni una unidad más.
+                 */
+                const faltaban = linea.quantity - hay;
+                const entrada: Omit<Movement, 'id'> = {
+                    itemId: linea.itemId,
+                    type: MovementType.CHECK_IN,
+                    quantity: faltaban,
+                    timestamp: linea.timestamp,
+                    notes: opciones.notaDeCompletado
+                        ?? 'No estaba registrado en el inventario; se registró al despacharlo',
+                    isLoan: false,
+                    isReturned: false,
+                };
+                hay += faltaban;
+                tentativo.set(linea.itemId, hay);
+                entradas.push({ movimiento: entrada, nuevaCantidad: hay, item: it });
+                completados.push({ item: it, faltaban, motivo: (hay - faltaban) === 0 ? 'vacio' : 'corto' });
             }
+
             tentativo.set(linea.itemId, esRetiro(linea.type) ? hay - linea.quantity : hay + linea.quantity);
         }
 
@@ -126,6 +197,9 @@ export const planearLote = (
         }
 
         // Pasó completo: se confirma el saldo y se anotan las aplicaciones.
+        // Las entradas van PRIMERO, para que el stock exista antes de salir.
+        plan.aplicar.push(...entradas);
+        plan.completados.push(...completados);
         for (const linea of grupo) {
             const it = porId.get(linea.itemId);
             if (!it) continue;
