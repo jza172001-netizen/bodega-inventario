@@ -14,7 +14,7 @@ import { tonoDe, raizDeColor, coloresUnificados, PALETA } from '../utils/colores
 import { generosDe, denominacionesDe, nombreCompuesto } from '../utils/medida';
 import { medidaDe } from '../utils/medida';
 import { leerLote, contarDudas, LoteParseado } from '../utils/lote';
-import { isAsset, isConsumable } from '../utils/inventory';
+import { isAsset, isConsumable, adivinarTipo } from '../utils/inventory';
 
 /** Las preguntas de uso, tal cual las responde el asistente. */
 const PREGUNTAS_DE_AYUDA = COMO_SE_HACE.map(c => c.pregunta);
@@ -27,7 +27,12 @@ interface FloatingChatProps {
     projects: Project[];
     /** Devuelve cuántos movimientos quedaron realmente registrados: la app puede
      *  rechazar una salida por stock insuficiente y el bot no debe cantar éxito. */
-    onLogMovements: (ms: Array<Omit<Movement, 'id'>>) => LoteResultado;
+    /**
+     * `opciones.completarFaltante` deja que lo que no alcanza entre antes de
+     * salir, en vez de rechazarse. Se usa en el bloque pegado, donde lo normal
+     * es que la herramienta esté en la bodega y no en la app.
+     */
+    onLogMovements: (ms: Array<Omit<Movement, 'id'>>, opciones?: { completarFaltante?: boolean; notaDeCompletado?: string }) => LoteResultado;
     onCreateItem: (item: Omit<Item, 'id'>) => Item;
     /** Para fijarle la familia a un ítem que ya existía cuando se confirma
      *  que el nuevo es una variante suyo. */
@@ -228,6 +233,20 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     const [lote, setLote] = useState<LoteParseado | null>(null);
     const [loteProyecto, setLoteProyecto] = useState<string>('');
     const [loteFecha, setLoteFecha] = useState<string>(todayISO());
+    /**
+     * «Lo que no haya, cárgalo».
+     *
+     * Casi nada del inventario de Montecielo está cargado en la app, así que lo
+     * normal es que lo que sale todavía no exista acá. Con esto encendido, la
+     * herramienta se da por existente y se registra su entrada antes de la
+     * salida, en vez de frenar la fila a las siete de la mañana.
+     *
+     * No es stock inventado: la cosa ESTÁ en la bodega, lo que faltaba era el
+     * registro. Y la guarda es dura — si hay existencia, no entra nada.
+     */
+    const [loteCompletar, setLoteCompletar] = useState(true);
+    /** Los renglones que se van a crear, con el tipo que eligió quien mira. */
+    const [loteNuevos, setLoteNuevos] = useState<Map<string, InventoryType>>(new Map());
     const [reponerQty, setReponerQty] = useState<Map<string, number>>(new Map());
     const [parecidoPendiente, setParecidoPendiente] = useState<Item[] | null>(null);
     const [createSpecies, setCreateSpecies] = useState<Array<{brand: string; color: string}>>([{ brand: '', color: '' }]);
@@ -789,7 +808,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     };
 
     // ── El bloque pegado ──────────────────────────────────────────────────
-    const cerrarLote = () => { setLoteAbierto(false); setLote(null); setLoteTexto(''); setLoteProyecto(''); setLoteFecha(todayISO()); };
+    const cerrarLote = () => { setLoteAbierto(false); setLote(null); setLoteTexto(''); setLoteProyecto(''); setLoteFecha(todayISO()); setLoteNuevos(new Map()); };
 
     const leerElBloque = () => {
         const r = leerLote(loteTexto, personnel, items);
@@ -820,6 +839,35 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     // `Math.max` con un piso de cero coma uno y no de uno: no todo se cuenta
     // entero. La manguera va en metros y el cemento en kilos, y redondear "1,5
     // metros" a "2" es inventar medio metro de material.
+    /**
+     * Marcar un renglón para que su ítem NAZCA al registrarlo.
+     *
+     * Acá SÍ hay valor por defecto, al revés que en la recepción de pedidos, y
+     * es a propósito. En la recepción llega un renglón a la vez y se puede
+     * exigir que alguien elija; acá pueden ser sesenta cosas de diez
+     * trabajadores a las siete de la mañana, y obligar a tocar sesenta veces es
+     * justo la fricción que este botón existe para quitar.
+     *
+     * El defecto es HERRAMIENTA MANUAL por dos razones, no por comodidad:
+     *  · Juli lo dijo: «casi todo va a ser préstamo».
+     *  · Los dos errores no cuestan lo mismo. Una herramienta marcada por error
+     *    como préstamo aparece en Préstamos, donde estorba y se ve. Un consumo
+     *    marcado por error se va callado a las cuentas de gasto y no lo mira
+     *    nadie. Ante la duda, se falla del lado que se nota.
+     *
+     * Los cuatro botones quedan a la vista, así que corregirlo es un toque.
+     */
+    const marcarNuevo = (idx: number, j: number, nombre: string) => {
+        setLoteNuevos(prev => new Map(prev).set(`${idx}:${j}`, adivinarTipo(nombre) ?? InventoryType.HAND_TOOL));
+        fijarItem(idx, j, '');
+    };
+
+    const desmarcarNuevo = (idx: number, j: number) => setLoteNuevos(prev => {
+        const n = new Map(prev);
+        n.delete(`${idx}:${j}`);
+        return n;
+    });
+
     const fijarCantidad = (idx: number, j: number, cantidad: number) => setLote(prev => {
         if (!prev) return prev;
         const lineas = prev.lineas.map((l, i) => (i === idx
@@ -848,20 +896,49 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         if (!lote) return;
         const ts = momentoDeFecha(loteFecha);
         const project = projects.find(p => p.id === loteProyecto);
-        const listos = lote.lineas.filter(l => l.persona && l.items.some(i => i.item));
+        // Sirve si ya tiene ítem O si se marcó para crear: sin esto la creación
+        // era inalcanzable, porque el renglón se descartaba antes de llegar a ella.
+        const sirve = (l: LoteParseado['lineas'][number], idx: number) =>
+            l.items.some((i, j) => i.item || loteNuevos.has(`${idx}:${j}`));
+        const listos = lote.lineas.filter((l, idx) => l.persona && sirve(l, idx));
 
-        const hayConsumible = listos.some(l => l.items.some(i => i.item && isConsumable(i.item)));
+        const hayConsumible = lote.lineas.some((l, idx) => l.persona && l.items.some((i, j) =>
+            (i.item && isConsumable(i.item)) || loteNuevos.get(`${idx}:${j}`) === InventoryType.SINGLE_USE));
         if (hayConsumible && !project) {
             addBot('⚠️ Hay consumibles en el bloque y los consumibles necesitan proyecto. Elegí uno arriba.');
             return;
         }
 
         const movs: Array<Omit<Movement, 'id'>> = [];
-        for (const l of listos) {
-            for (const it of l.items) {
-                if (!it.item) continue;
+        // Se recorre el lote COMPLETO con su índice real y se saltan los que no
+        // sirven. Con `indexOf` sobre la lista filtrada, dos renglones iguales
+        // —la misma persona pidiendo lo mismo dos veces— devolvían el mismo
+        // índice y el segundo heredaba las decisiones del primero.
+        for (const [idx, l] of lote.lineas.entries()) {
+            if (!l.persona || !sirve(l, idx)) continue;
+            for (const [j, it] of l.items.entries()) {
+                /**
+                 * Un ítem que la app no conocía: nace acá, con cantidad CERO.
+                 *
+                 * En cero a propósito. La entrada la pone después
+                 * `completarFaltante`, con su nota diciendo por qué existe. Si
+                 * naciera con la cantidad pedida, esa cantidad entraría dos
+                 * veces —una por la carga inicial y otra por el completado— y el
+                 * Kardex dejaría de cuadrar.
+                 */
+                const tipoNuevo = loteNuevos.get(`${idx}:${j}`);
+                const item = it.item ?? (tipoNuevo ? onCreateItem({
+                    name: it.nombre.trim(),
+                    category: tipoNuevo === InventoryType.SINGLE_USE ? 'Materiales' : 'Herramientas',
+                    subCategory: '',
+                    inventoryType: tipoNuevo,
+                    quantity: 0,
+                    minStock: 0,
+                    unit: 'unidades',
+                }) : undefined);
+                if (!item) continue;
                 movs.push({
-                    itemId: it.item.id,
+                    itemId: item.id,
                     type: MovementType.CHECK_OUT,
                     quantity: it.cantidad,
                     timestamp: ts,
@@ -870,7 +947,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                     notes: '',
                     // La regla de préstamo vs. gasto es la de `utils/inventory`, la
                     // misma que usa el resto de la app. Acá no se escribe otra.
-                    isLoan: isAsset(it.item),
+                    isLoan: isAsset(item),
                     isReturned: false,
                 });
             }
@@ -880,7 +957,10 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             return;
         }
 
-        const r = onLogMovements(movs);
+        const r = onLogMovements(movs, loteCompletar ? {
+            completarFaltante: true,
+            notaDeCompletado: 'No estaba registrado en el inventario; se registró al despacharlo',
+        } : undefined);
         const personas = new Set(listos.map(l => l.persona!.id)).size;
         if (r.ok > 0) {
             addBotYGuarda(`✅ ${r.ok} salida(s) registradas para ${personas} persona(s).`);
@@ -894,7 +974,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         }
         // Solo se van los renglones que SÍ entraron. Lo que quedó sin resolver se
         // queda en pantalla, porque el movimiento no se puede perder.
-        const quedan = lote.lineas.filter(l => !(l.persona && l.items.some(i => i.item)));
+        const quedan = lote.lineas.filter((l, idx) => !(l.persona && sirve(l, idx)));
         if (quedan.length === 0) cerrarLote();
         else setLote({ ...lote, lineas: quedan });
     };
@@ -944,6 +1024,26 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                         </select>
                     </div>
 
+                    {/* Casi nada del inventario de Montecielo está cargado en la app,
+                        así que lo normal es que lo que sale todavía no exista acá.
+                        Encendido por defecto porque ese ES el caso normal — y la
+                        guarda es dura: si hay existencia, no entra nada. */}
+                    <button type="button" onClick={() => setLoteCompletar(v => !v)}
+                        className={`w-full text-left rounded-xl border p-2.5 transition-all ${
+                            loteCompletar ? 'border-marca bg-marca-suave' : 'border-papel-borde bg-papel'}`}>
+                        <div className="flex items-center gap-2">
+                            <span className={`w-4 h-4 rounded border flex items-center justify-center text-[10px] flex-shrink-0 ${
+                                loteCompletar ? 'border-marca bg-marca text-tinta' : 'border-papel-borde bg-papel'}`}>
+                                {loteCompletar ? '✓' : ''}
+                            </span>
+                            <span className="text-[11px] font-bold text-tinta">Lo que no haya, cargalo</span>
+                        </div>
+                        <p className="text-[10px] text-tinta-tenue mt-1 pl-6 leading-snug">
+                            Si hay existencia sale normal. Si no hay, entra lo que falta y sale —
+                            porque la herramienta está en la bodega, lo que falta es el registro.
+                        </p>
+                    </button>
+
                     {dudas > 0 && (
                         <p className="text-[11px] text-atencion font-semibold">
                             {dudas} cosa(s) por revisar. Lo que quede sin resolver no se registra y se queda acá.
@@ -960,23 +1060,71 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                     {personnel.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                                 </select>
                             </div>
-                            {l.items.map((it, j) => (
-                                <div key={j} className="flex items-center gap-1.5">
-                                    <input type="number" min={0.1} step="any" value={it.cantidad}
-                                        onFocus={e => e.target.select()}
-                                        onChange={e => fijarCantidad(idx, j, parseFloat(e.target.value) || 1)}
-                                        className="w-14 text-[11px] border border-papel-borde rounded-lg px-1.5 py-1 bg-papel text-tinta text-center" />
-                                    <select value={it.item?.id ?? ''} onChange={e => fijarItem(idx, j, e.target.value)}
-                                        className={`${sel} flex-1 max-w-none ${it.item ? '' : 'border-atencion'}`}>
-                                        <option value="">{it.nombre} — ¿cuál es?</option>
-                                        {it.candidatos.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                        {items.filter(x => !it.candidatos.some(c => c.id === x.id))
-                                            .map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
-                                    </select>
-                                    <button onClick={() => quitarLinea(idx, j)}
-                                        className="text-[11px] text-tinta-tenue hover:text-alerta px-1 flex-shrink-0">✕</button>
+                            {l.items.map((it, j) => {
+                                const clave = `${idx}:${j}`;
+                                const nace = loteNuevos.get(clave);
+                                const hay = it.item?.quantity ?? 0;
+                                // Lo que va a entrar antes de salir: o porque el ítem
+                                // nace, o porque no alcanza lo que hay.
+                                const entran = nace ? it.cantidad : (it.item && loteCompletar && it.cantidad > hay ? it.cantidad - hay : 0);
+                                return (
+                                <div key={j} className="space-y-1">
+                                    <div className="flex items-center gap-1.5">
+                                        <input type="number" min={0.1} step="any" value={it.cantidad}
+                                            onFocus={e => e.target.select()}
+                                            onChange={e => fijarCantidad(idx, j, parseFloat(e.target.value) || 1)}
+                                            className="w-14 text-[11px] border border-papel-borde rounded-lg px-1.5 py-1 bg-papel text-tinta text-center" />
+                                        <select
+                                            value={nace ? '__nuevo__' : (it.item?.id ?? '')}
+                                            onChange={e => {
+                                                if (e.target.value === '__nuevo__') marcarNuevo(idx, j, it.nombre);
+                                                else { desmarcarNuevo(idx, j); fijarItem(idx, j, e.target.value); }
+                                            }}
+                                            className={`${sel} flex-1 max-w-none ${it.item || nace ? '' : 'border-atencion'}`}>
+                                            <option value="">{it.nombre} — ¿cuál es?</option>
+                                            <option value="__nuevo__">➕ Crear «{it.nombre}»</option>
+                                            {it.candidatos.map(c => <option key={c.id} value={c.id}>{c.name} · {c.quantity} {c.unit}</option>)}
+                                            {items.filter(x => !it.candidatos.some(c => c.id === x.id))
+                                                .map(x => <option key={x.id} value={x.id}>{x.name} · {x.quantity} {x.unit}</option>)}
+                                        </select>
+                                        <button onClick={() => { desmarcarNuevo(idx, j); quitarLinea(idx, j); }}
+                                            className="text-[11px] text-tinta-tenue hover:text-alerta px-1 flex-shrink-0">✕</button>
+                                    </div>
+
+                                    {/* El tipo del que nace. La app propone leyendo el nombre
+                                        y calla cuando no sabe, que es cuando más importa
+                                        preguntar: un tipo equivocado no truena, se esconde. */}
+                                    {nace && (
+                                        <div className="flex flex-wrap gap-1 pl-[3.9rem]">
+                                            {([
+                                                [InventoryType.HAND_TOOL, '🔨 Manual'],
+                                                [InventoryType.ELECTRICAL_TOOL, '⚡ Eléctrica'],
+                                                [InventoryType.PPE, '🦺 Protección'],
+                                                [InventoryType.SINGLE_USE, '📦 Consumo'],
+                                            ] as Array<[InventoryType, string]>).map(([t, etiqueta]) => (
+                                                <button key={t} type="button"
+                                                    onClick={() => setLoteNuevos(prev => new Map(prev).set(clave, t))}
+                                                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all ${
+                                                        nace === t ? 'border-marca bg-marca text-tinta'
+                                                                   : 'border-papel-borde bg-papel text-tinta-suave hover:border-marca'}`}>
+                                                    {etiqueta}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* Que se vea ANTES de que pase. El texto lo produce un
+                                        GPT, y un GPT se equivoca interpretando. */}
+                                    {entran > 0 && (
+                                        <p className="text-[10px] text-atencion pl-[3.9rem]">
+                                            {nace
+                                                ? `Se va a crear y van a entrar ${entran} antes de salir.`
+                                                : `Hay ${hay}: van a entrar ${entran} antes de salir.`}
+                                        </p>
+                                    )}
                                 </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     ))}
 

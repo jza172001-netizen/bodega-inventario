@@ -39,7 +39,7 @@ import * as db from './services/supabaseService';
 import { supabase } from './lib/supabase';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { sha256Hex } from './utils/hash';
-import { planearLote } from './core/despacho';
+import { planearLote, OpcionesPlan } from './core/despacho';
 
 // Icons
 import { DashboardIcon } from './components/icons/DashboardIcon';
@@ -1177,11 +1177,11 @@ const App: React.FC = () => {
      * Sin eso el chat solo podía repetir "falta de stock", que es exactamente
      * el callejón sin salida que hacía devolverse hasta el primer paso.
      */
-    const handleLogMovements = (batch: Omit<Movement, 'id'>[]): LoteResultado => {
+    const handleLogMovements = (batch: Omit<Movement, 'id'>[], opciones?: OpcionesPlan): LoteResultado => {
         // Se valida contra el ESPEJO, no contra `items` del render: si el lote
         // incluye un ítem creado hace un instante, en `items` todavía no está y
         // su salida entraba sin validar.
-        const plan = planearLote(batch, itemsRef.current);
+        const plan = planearLote(batch, itemsRef.current, opciones);
 
         for (const { movimiento, nuevaCantidad, item } of plan.aplicar) {
             const id = crypto.randomUUID();
