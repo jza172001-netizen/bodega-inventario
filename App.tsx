@@ -18,6 +18,7 @@ import { OnboardingModal } from './components/OnboardingModal';
 import { HelpView } from './components/HelpView';
 import { describirCambios, describirEstado } from './utils/cambios';
 import { nombreReal } from './utils/nombres';
+import { NOTA_AJUSTE } from './utils/inventory';
 import { PapeleraView } from './components/PapeleraView';
 import { TraceabilityView } from './components/TraceabilityView';
 import { WhatsAppView } from './components/WhatsAppView';
@@ -1096,9 +1097,35 @@ const App: React.FC = () => {
         if (f.tabla === 'movements' && f.movItemId && f.movCantidad != null && !f.movNetoCero) {
             const item = itemActual(f.movItemId);
             if (item) {
-                const qty = Math.max(0, f.movEsSalida
+                /**
+                 * Si la salida ya no cabe, NO se recorta: no se restaura.
+                 *
+                 * Antes esto era `Math.max(0, ...)`. Restaurar una salida de 3
+                 * habiendo 1 escribía stock cero y seguía como si nada: se
+                 * perdían dos unidades en silencio y el Kardex quedaba
+                 * contando una salida que el stock no respalda.
+                 *
+                 * Recortar es inventar un número. Frenar y decirlo deja el
+                 * problema a la vista, que es lo único honesto acá: el
+                 * movimiento sigue en la papelera y se puede volver a intentar
+                 * cuando el stock dé.
+                 */
+                const cabe = !f.movEsSalida || f.movCantidad <= item.quantity;
+                if (!cabe) {
+                    addAuditLog('MOVEMENT_RESTORE_BLOCKED',
+                        `No se restauró la salida de "${item.name}" ×${f.movCantidad}: `
+                        + `hay ${item.quantity} ${item.unit}. Sigue en la papelera.`);
+                    alert(
+                        `No se pudo restaurar esa salida de "${item.name}".\n\n`
+                        + `La salida era de ${f.movCantidad} y en bodega hay ${item.quantity}. `
+                        + `Restaurarla dejaría el stock en negativo.\n\n`
+                        + `El movimiento sigue en la papelera: registrá primero la entrada que falta y volvé a intentarlo.`,
+                    );
+                    return;
+                }
+                const qty = f.movEsSalida
                     ? item.quantity - f.movCantidad
-                    : item.quantity + f.movCantidad);
+                    : item.quantity + f.movCantidad;
                 setItems(prev => prev.map(i => i.id === item.id ? { ...i, quantity: qty } : i));
                 ajustarEspejo(item.id, qty);
                 withSync(db.updateItemQuantity(item.id, qty));
@@ -1119,12 +1146,45 @@ const App: React.FC = () => {
     };
 
     const handleEditItem = (entrante: Item) => {
-        const prev = items.find(i => i.id === entrante.id);
+        // Del ESPEJO, no de `items` del render: si el ítem se acaba de crear o de
+        // mover, `items` todavía trae la cantidad vieja y el ajuste de abajo
+        // saldría contra un número que ya no es.
+        const prev = itemActual(entrante.id) ?? items.find(i => i.id === entrante.id);
         // El sello es lo que hace que esta corrección le gane al dato viejo de la
         // nube cuando la app vuelva a sincronizar. Sin él, se borraba sola.
         const updated: Item = { ...entrante, updatedAt: new Date() };
         setItems(p => p.map(i => i.id === updated.id ? updated : i));
+        ajustarEspejo(updated.id, updated.quantity);
         withSync(db.updateItem(updated));
+
+        /**
+         * Corregir la cantidad a mano DEJA MOVIMIENTO.
+         *
+         * Antes no: de 5 a 9 sin una sola línea en el libro. La bitácora decía
+         * que alguien había editado el ítem, pero el Kardex —entradas menos
+         * salidas— dejaba de cuadrar contra el stock, y ese cuadre es la única
+         * forma de saber si el inventario dice la verdad.
+         *
+         * El stock ya lo escribió el `updateItem` de arriba, así que esto NO
+         * pasa por `handleLogMovements`: aplicaría la aritmética otra vez. Va
+         * como fila de historial y nada más, que es justo lo que falta.
+         */
+        const antes = prev?.quantity ?? 0;
+        const delta = updated.quantity - antes;
+        if (prev && delta !== 0) {
+            const id = crypto.randomUUID();
+            const ajuste: Omit<Movement, 'id'> = {
+                itemId: updated.id,
+                type: delta > 0 ? MovementType.CHECK_IN : MovementType.WASTE,
+                quantity: Math.abs(delta),
+                timestamp: new Date(),
+                notes: `${NOTA_AJUSTE}: de ${antes} a ${updated.quantity}${userName ? ` — ${userName}` : ''}`,
+                isLoan: false,
+                isReturned: false,
+            };
+            setMovements(p => [{ ...ajuste, id }, ...p]);
+            withSync(db.addMovement(ajuste, id));
+        }
         // Qué cambió, no solo que cambió. Antes acá decía `Se editó "X"` y punto:
         // si alguien bajaba una cantidad de 3 a 1, la bitácora no lo sabía.
         const queCambio = describirCambios(prev, updated, ETIQUETAS_ITEM);
@@ -1280,7 +1340,15 @@ const App: React.FC = () => {
         const mov = movements.find(m => m.id === id);
         // Guarda contra doble devolución: si ya estaba devuelta, no se repone stock otra vez
         if (mov?.isReturned) return;
-        const item = mov ? items.find(i => i.id === mov.itemId) : undefined;
+        /**
+         * Del ESPEJO, no de `items` del render.
+         *
+         * `items` no cambia hasta el siguiente render, así que devolver dos
+         * cosas del mismo ítem seguidas leía las dos veces la misma cantidad
+         * vieja y la reposición de la segunda pisaba la de la primera: se
+         * perdía una unidad. El espejo sí baja y sube movimiento a movimiento.
+         */
+        const item = mov ? itemActual(mov.itemId) : undefined;
         const itemName = item?.name ?? 'herramienta';
         const personName = mov?.personnelId ? personnel.find(p => p.id === mov.personnelId)?.name : undefined;
 
@@ -1310,8 +1378,17 @@ const App: React.FC = () => {
         // guardaba en el movimiento y ahí se quedaba: nadie volvía a acordarse
         // de mandarla a arreglar ni de reclamarla después.
         if (item && CONDICIONES_QUE_DAÑAN.has(condition ?? '') && item.reparacion?.estado !== 'enviada') {
+            /**
+             * Con la cantidad YA REPUESTA, no con la vieja.
+             *
+             * `db.updateItem` manda el objeto entero. Armándolo desde el `item`
+             * de antes de la devolución, viajaba la cantidad vieja, y si esa
+             * escritura llegaba después de la reposición se la borraba: la
+             * herramienta volvía dañada y el stock se quedaba descontado.
+             */
             const conReparacion: Item = {
                 ...item,
+                quantity: restoredQty ?? item.quantity,
                 reparacion: { estado: 'dañada', desde: new Date(), nota: notes || undefined, porQuien: userName || undefined },
                 updatedAt: new Date(),
             };
