@@ -1250,43 +1250,20 @@ const App: React.FC = () => {
      * versión de la verdad.
      */
     const handleRestaurado = (f: import('./services/supabaseService').EnLaPapelera) => {
-        if (f.tabla === 'movements' && f.movItemId && f.movCantidad != null && !f.movNetoCero) {
-            const item = itemActual(f.movItemId);
-            if (item) {
-                /**
-                 * Si la salida ya no cabe, NO se recorta: no se restaura.
-                 *
-                 * Antes esto era `Math.max(0, ...)`. Restaurar una salida de 3
-                 * habiendo 1 escribía stock cero y seguía como si nada: se
-                 * perdían dos unidades en silencio y el Kardex quedaba
-                 * contando una salida que el stock no respalda.
-                 *
-                 * Recortar es inventar un número. Frenar y decirlo deja el
-                 * problema a la vista, que es lo único honesto acá: el
-                 * movimiento sigue en la papelera y se puede volver a intentar
-                 * cuando el stock dé.
-                 */
-                const cabe = !f.movEsSalida || f.movCantidad <= item.quantity;
-                if (!cabe) {
-                    addAuditLog('MOVEMENT_RESTORE_BLOCKED',
-                        `No se restauró la salida de "${item.name}" ×${f.movCantidad}: `
-                        + `hay ${item.quantity} ${item.unit}. Sigue en la papelera.`);
-                    alert(
-                        `No se pudo restaurar esa salida de "${item.name}".\n\n`
-                        + `La salida era de ${f.movCantidad} y en bodega hay ${item.quantity}. `
-                        + `Restaurarla dejaría el stock en negativo.\n\n`
-                        + `El movimiento sigue en la papelera: registrá primero la entrada que falta y volvé a intentarlo.`,
-                    );
-                    return;
-                }
-                const qty = f.movEsSalida
-                    ? item.quantity - f.movCantidad
-                    : item.quantity + f.movCantidad;
-                setItems(prev => prev.map(i => i.id === item.id ? { ...i, quantity: qty } : i));
-                ajustarEspejo(item.id, qty);
-                withSync('updateItemQuantity', [item.id, qty], `Dejar "${item.name}" en ${qty} ${item.unit}`);
-            }
-        }
+        /**
+         * El stock lo aplica EL SERVIDOR, junto con quitar la lápida.
+         *
+         * Acá había una cuenta local que decidía si la salida cabía y, si no,
+         * avisaba y se devolvía. Llegaba tarde: para cuando corría, `db.restaurar`
+         * ya le había quitado la lápida al movimiento. Con una salida borrada de
+         * 3 palas y una existencia de 1 quedaba el movimiento activo por 3, el
+         * stock intacto en 1, y un mensaje diciendo que seguía en la papelera.
+         * La bitácora recibía las dos cosas a la vez.
+         *
+         * Ahora `restore_movement_and_apply_stock` decide y aplica en una
+         * transacción, y si no cabe lanza. Si se llegó hasta acá es porque sí
+         * cabía, así que lo único que falta es volver a leer.
+         */
         const recargas: Record<string, () => void> = {
             items:           () => { db.fetchItems().then(setItems).catch(() => {}); },
             movements:       () => { db.fetchMovements().then(setMovements).catch(() => {}); },

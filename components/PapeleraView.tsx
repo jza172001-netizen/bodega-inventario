@@ -65,7 +65,19 @@ export const PapeleraView: React.FC<Props> = ({ userRole, onRestaurado, onAuditL
             setFilas(prev => (prev ?? []).filter(x => !(x.tabla === f.tabla && x.id === f.id)));
         } catch (e) {
             console.error('[Papelera] devolver', e);
-            setError(`No se pudo devolver "${f.titulo}". Intentá otra vez.`);
+            /**
+             * Se dice EL MOTIVO, no «intentá otra vez».
+             *
+             * El servidor ahora valida y restaura junto: si una salida borrada
+             * de 3 no cabe en una existencia de 1, revierte y la lápida se
+             * queda. «Intentá otra vez» mandaría a repetir algo que va a fallar
+             * igual; lo que hace falta es saber que primero hay que registrar la
+             * entrada que falta.
+             */
+            const motivo = e instanceof Error ? e.message : '';
+            setError(/stock/i.test(motivo)
+                ? `No se pudo devolver "${f.titulo}": ${motivo}. Sigue en la papelera. Registrá primero la entrada que falta.`
+                : `No se pudo devolver "${f.titulo}". Intentá otra vez.`);
         } finally {
             setTrabajando(null);
         }

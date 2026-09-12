@@ -37,7 +37,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { Item, Movement, MovementType, Personnel, InventoryType } from '../types';
 import { planearLote, exigeProyecto } from '../core/despacho';
 import { idDeterminista, firmaDe } from './identidad';
@@ -125,6 +125,48 @@ export default async function handler(req: Peticion, res: Respuesta): Promise<vo
         id: (r as Record<string, unknown>).id as string,
         name: (r as Record<string, unknown>).name as string,
     }));
+
+    /**
+     * EL COMPROBANTE — se consulta ANTES de planear.
+     *
+     * Antes se planeaba de una contra el stock actual, y por ahí se colaba una
+     * respuesta falsa: el asistente manda «Alex: 1 pala», se registra, y manda
+     * exactamente lo mismo otra vez porque se le perdió la respuesta. La pala ya
+     * salió, así que el planificador la rechaza por existencias y el endpoint
+     * contesta **«0 registrados, 1 sin stock»**. No se duplicó nada —los
+     * identificadores deducidos lo impiden— pero a quien lee esa respuesta le
+     * dice que la entrega no se hizo, y lo que sigue es despachar dos veces.
+     *
+     * Los identificadores evitan la fila repetida; el comprobante evita la
+     * respuesta equivocada. Son dos problemas distintos.
+     *
+     * La huella es del CONTENIDO: el mismo identificador con otro contenido no
+     * es un reintento, es un error de quien llama, y taparlo sería peor que
+     * decirlo.
+     */
+    const huella = createHash('sha256')
+        .update([texto, cuerpo.proyectoId ?? '', cuerpo.fecha ?? ''].join('|'))
+        .digest('hex');
+
+    const { data: yaHecha } = await sb
+        .from('operaciones_endpoint')
+        .select('huella, respuesta')
+        .eq('operacion_id', operacionId)
+        .maybeSingle();
+
+    if (yaHecha) {
+        const previa = yaHecha as { huella: string; respuesta: unknown };
+        if (previa.huella !== huella) {
+            res.status(409).json({
+                error: 'Ese operacionId ya se usó con otro contenido. Si es una entrega nueva, mandá otro identificador.',
+            });
+            return;
+        }
+        // Mismo identificador, mismo contenido: es un reintento. Se devuelve lo
+        // que se contestó la primera vez, aunque hoy ya no haya existencias.
+        res.status(200).json(previa.respuesta);
+        return;
+    }
 
     const lote = leerLote(texto, personnel, items);
     const ts = cuerpo.fecha ? new Date(cuerpo.fecha) : new Date();
@@ -317,12 +359,32 @@ export default async function handler(req: Peticion, res: Respuesta): Promise<vo
     }
 
     // Respuesta corta y en cristiano: la residente está trabajando.
-    res.status(200).json({
+    const respuesta = {
         resumen: `${registrados.length} registrado(s)`
             + (fallos.length ? `, ${fallos.length} sin stock` : '')
             + (pendientes.length ? `, ${pendientes.length} por revisar` : ''),
         registrados,
         fallos,
         pendientes,
-    });
+    };
+
+    /**
+     * El comprobante se guarda SIEMPRE, haya entrado todo o nada.
+     *
+     * Que no haya entrado nada también es un resultado, y el reintento tiene que
+     * poder recuperarlo en vez de volver a planear contra un stock que ya cambió.
+     *
+     * Si esta escritura falla no se tumba la respuesta: el despacho SÍ se
+     * registró y decirle que no al asistente sería peor que perder el
+     * comprobante. Lo que se pierde es la protección del siguiente reintento, y
+     * eso ya lo cubren a medias los identificadores deducidos.
+     */
+    const { error: errorComprobante } = await sb
+        .from('operaciones_endpoint')
+        .insert({ operacion_id: operacionId, huella, respuesta });
+    if (errorComprobante) {
+        console.warn('[despacho] No se pudo guardar el comprobante:', errorComprobante.message);
+    }
+
+    res.status(200).json(respuesta);
 }

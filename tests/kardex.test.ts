@@ -224,28 +224,41 @@ grupo('devolver DAÑADA no deshace la reposición', () => {
     igual(guardado?.reparacion?.estado, 'dañada', 'la reparación sí quedó abierta');
 });
 
-grupo('restaurar de la papelera NO recorta a cero', () => {
+grupo('restaurar de la papelera ya NO decide el stock acá', () => {
     /**
-     * Restaurar una salida de 3 habiendo 1 escribía stock cero y seguía como si
-     * nada: se perdían dos unidades en silencio. Recortar es inventar un número.
+     * Esta prueba cambió de lado, y el motivo importa.
+     *
+     * Antes `handleRestaurado` traía su propia cuenta: miraba si la salida
+     * cabía y, si no, avisaba y se devolvía. La cuenta estaba bien y LLEGABA
+     * TARDE: para cuando corría, el servidor ya le había quitado la lápida al
+     * movimiento. Con una salida borrada de 3 palas y una existencia de 1
+     * quedaba el movimiento activo por 3, el stock intacto en 1, y un mensaje
+     * diciendo que seguía en la papelera. La bitácora recibía las dos cosas.
+     *
+     * Validar después de escribir no es validar. Ahora decide y aplica el
+     * servidor, en una transacción, y si no cabe lanza y revierte —eso se
+     * comprueba contra PostgreSQL, no acá—. Lo que se fija en esta prueba es
+     * que la app NO vuelva a meter una segunda cuenta: dos cuentas para lo
+     * mismo siempre terminan divergiendo.
      */
     const a = app([ficha(PALA, 'Pala', 1)]);
     a.fn.handleRestaurado({ tabla: 'movements', movItemId: PALA, movCantidad: 3, movEsSalida: true, movNetoCero: false });
 
-    igual(a.visto.cantidadesEscritas.length, 0, 'no se escribió ninguna cantidad');
-    igual(a.fn.itemActual(PALA)?.quantity, 1, 'el stock se queda como estaba');
-    esCierto(a.visto.bitacora.some(b => b.accion === 'MOVEMENT_RESTORE_BLOCKED'), 'queda dicho en la bitácora');
-    esCierto(a.visto.avisos.some(x => /papelera/i.test(x)), 'y se le avisa a quien lo intentó');
+    igual(a.visto.cantidadesEscritas.length, 0, 'no escribe cantidades: eso lo hizo el servidor');
+    igual(a.fn.itemActual(PALA)?.quantity, 1, 'no toca el espejo por su cuenta');
+    igual(a.visto.avisos.length, 0, 'y no inventa un aviso sobre algo que ya decidió el servidor');
 });
 
-grupo('restaurar lo que SÍ cabe funciona igual', () => {
+grupo('restaurar cualquier cosa vuelve a leer del servidor', () => {
+    // Si se llegó hasta acá, el servidor ya aplicó. Lo único que falta es que
+    // la pantalla deje de mostrar lo viejo.
     const a = app([ficha(PALA, 'Pala', 5)]);
     a.fn.handleRestaurado({ tabla: 'movements', movItemId: PALA, movCantidad: 3, movEsSalida: true, movNetoCero: false });
-    igual(a.visto.cantidadesEscritas[0]?.quantity, 2, 'cinco menos tres, dos');
+    igual(a.visto.cantidadesEscritas.length, 0, 'sin cuentas locales');
 
     const b = app([ficha(PALA, 'Pala', 5)]);
-    b.fn.handleRestaurado({ tabla: 'movements', movItemId: PALA, movCantidad: 3, movEsSalida: false, movNetoCero: false });
-    igual(b.visto.cantidadesEscritas[0]?.quantity, 8, 'una entrada restaurada suma');
+    b.fn.handleRestaurado({ tabla: 'items' });
+    igual(b.visto.cantidadesEscritas.length, 0, 'un ítem restaurado tampoco mueve stock desde acá');
 });
 
 await cerrar();
