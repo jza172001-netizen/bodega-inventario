@@ -151,6 +151,54 @@ fallos a propósito, siete comprobaciones se ponen rojas.
 
 ---
 
+## 0.5 El despacho en una transacción, y lo que se leyó de Supabase (12-sep-2026)
+
+**Primero se leyó qué está instalado en el servidor de verdad**, que era la
+condición del plan. Tres cosas quedaron desmentidas o confirmadas ahí, y todas
+cambian lo que este archivo decía:
+
+| Lo que se creía | Lo que está instalado |
+|---|---|
+| «El SQL versionado borra de verdad, incluida la definición más nueva» | **Falso para producción.** La función instalada pone lápida (`deleted_at`). El que miente es **el repositorio**: le falta la migración `borrar_movimiento_con_lapida`, que sí está aplicada en el servidor. Se agregó a Git |
+| Permisos por defecto de PostgreSQL | **Confirmado y peor de lo que sonaba:** las siete funciones tienen `=X/postgres` y `anon=X`. Cualquiera con la clave pública —que va dentro del JavaScript publicado— las puede ejecutar |
+| «Producción podría tener un CHECK que impida la salida negativa» | **No tenía ninguno.** No había NI UN `check` en toda la base |
+
+Producción tiene **35 migraciones**; el repositorio tenía **15**. Eso es A15 y
+sigue abierto: el repo todavía no alcanza para reconstruir el servidor.
+
+### Lo que se hizo
+
+**`log_movements_and_update_stock`** — el lote entero como JSON, aplicado en
+orden dentro de **una sola transacción**. Si un renglón falla, no queda ninguno.
+Cierra **N04** (la entrada y su salida llegaban en cualquier orden) y **N06** (el
+accesorio se gastaba aunque su herramienta fallara) por construcción, no por
+vigilancia. La función vieja de a uno **se queda**: la app la usa para el
+movimiento suelto y como respaldo mientras esto se despliega.
+
+**Las dos invariantes, en la base:** `movements.quantity > 0` e
+`items.quantity >= 0`. Cierra **SQL03**: una salida con cantidad negativa
+invertía el signo y **sumaba** stock. Verificado contra los datos reales antes
+de ponerlas: 0 movimientos con cantidad ≤ 0, 0 ítems con cantidad < 0.
+
+**La app y el endpoint** mandan ahora el lote de una. El endpoint, cuando el
+lote falla, dice **«no entró nada»** completo en vez de reportar renglón por
+renglón sobre escrituras que quedaron a medias.
+
+Verificado corriendo el SQL de verdad en PostgreSQL embebido: entrada y salida
+en un viaje y en orden · un renglón que falla revierte todo · el reintento no
+aplica dos veces · la salida negativa se rechaza nombrándola · el accesorio no
+sobrevive a su herramienta.
+
+### Lo que sigue abierto de este frente
+
+- **A01 / SQL04 — los permisos.** Confirmado en producción. **No se toca sin
+  Juli delante:** revocar `anon` sin ajustar cómo entra la app la deja muerta.
+- **A15 — no hay migración base.** 35 contra 15.
+- **A08 — dos devoluciones simultáneas.** `return_loan_and_restore_stock` lee
+  sin bloqueo. No se probó con dos conexiones.
+
+---
+
 ## 0. Cómo se usa esto
 
 Leelo entero de una. No hace falta que Juli pegue nada más. Si algo de acá
