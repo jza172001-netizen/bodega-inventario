@@ -31,10 +31,33 @@ copilot answers through `warehouseQA.ts`, which is plain TypeScript.
 ## Tests
 
 `tests/` holds plain `tsx` scripts with a thirty-line runner (`tests/correr.ts`),
-not Vitest or Jest. That is deliberate: `npm install` fails in some sandboxes
-because `xlsx` is fetched from `cdn.sheetjs.com`, so a framework that could not
-be executed there would mean writing tests nobody ran. Add a `tests/*.test.ts`
-file and `npm run test` picks it up.
+not Vitest or Jest. `tsx` is invoked through `npx`, **not** declared as a
+devDependency: adding it to `package.json` without regenerating the lockfile
+broke `npm ci` entirely, and the sandbox that writes this code cannot regenerate
+the lockfile because `xlsx` is fetched from a blocked CDN.
+
+Add a `tests/*.test.ts` file and `npm run test` picks it up.
+
+**Why no framework:** `npm install` fails in some sandboxes because `xlsx` is
+fetched from `cdn.sheetjs.com`. A framework that could not be executed there
+would mean writing tests nobody ran.
+
+**The suites used to cover only the core.** An external audit found eight
+defects in a tree whose suites were fully green — every one of them lived in the
+UI, in the HTTP handler, or in the ORDER of network writes. Two things changed
+because of that, and both are load-bearing:
+
+- `tests/pantalla.test.ts` runs the real batch-dispatch handlers out of
+  `FloatingChat.tsx`, extracted with the TypeScript AST and executed with their
+  dependencies supplied by hand. It is not a copy: rename or move a handler and
+  the test **throws by name** instead of silently passing against old code.
+- The identity that prevents double-registration lives in `api/identidad.ts`,
+  separate from `api/despacho.ts`, so `tests/endpoint.test.ts` can import the
+  deployed function. It previously re-implemented the formula inline and stayed
+  green while the shipped one was reporting phantom writes.
+
+Still uncovered: the ORDER of network writes (one RPC per movement, no
+per-dispatch transaction) and the offline sync queue.
 
 ## Architecture
 
@@ -96,11 +119,18 @@ read what is actually installed — at least one versioned function is known to
 differ from what the docs claim (`delete_movement_and_revert_stock` still does
 `delete from movements`, despite the tombstone rule).
 
-There is **no backend**. No `api/` directory, no `vercel.json`: the browser
-talks to Supabase directly with `VITE_SUPABASE_ANON_KEY`, which is public by
-design. The stock functions are `security definer` and no migration grants or
-revokes execute on them, so they carry PostgreSQL's default. Anything that needs
-server-side identity has to be built; it does not exist yet.
+**There IS a backend now**, added in PR #76: `api/despacho.ts` is a Vercel
+serverless function that lets an external AI assistant register dispatches
+without opening the web app. It uses the Supabase **service role key** and is
+gated by `BODEGA_API_TOKEN`, both of which live only in Vercel's environment
+variables. See `api/README.md`. This file used to say no backend existed; it did
+by the time anyone read that sentence.
+
+The browser still talks to Supabase directly with `VITE_SUPABASE_ANON_KEY`,
+which is public by design. The stock functions are `security definer` and no
+migration grants or revokes execute on them, so they carry PostgreSQL's default:
+**anyone holding the public key can move inventory.** Client-side identity does
+not exist yet and is the largest open risk.
 
 `storage.ts`'s `AppData` interface is still the canonical shape of persisted
 data.

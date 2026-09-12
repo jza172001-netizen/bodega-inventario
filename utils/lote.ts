@@ -29,6 +29,20 @@ import { normStr, raizDeFamilia } from './genus';
 
 /** Un ítem pedido dentro de un renglón. */
 export interface ItemLote {
+    /**
+     * Identidad ESTABLE de este ítem dentro del lote.
+     *
+     * Existe por un bug: las decisiones de la pantalla —qué ítem se eligió, de
+     * qué tipo nace el que se va a crear— se guardaban bajo claves de posición
+     * (`0:1`). Al quitar un renglón, los siguientes se corrían y **heredaban
+     * las decisiones del vecino**: un ítem marcado «Consumo» se creaba como
+     * «Eléctrica», y con eso volvía por otra puerta el error de préstamo vs.
+     * gasto que ya se había arreglado.
+     *
+     * Con un id que no depende del índice, borrar un renglón no le mueve nada a
+     * los demás.
+     */
+    id: string;
     /** El pedazo de texto tal cual venía, para poder mostrarlo si algo falla. */
     texto: string;
     cantidad: number;
@@ -47,6 +61,8 @@ export interface ItemLote {
 
 /** Un renglón: una persona y lo que se lleva. */
 export interface LineaLote {
+    /** Identidad estable del renglón, por lo mismo que la de sus ítems. */
+    id: string;
     /** El nombre tal cual lo escribieron, para mostrarlo si no se resolvió. */
     personaTexto: string;
     persona?: Personnel;
@@ -185,6 +201,12 @@ const partirItems = (resto: string): string[] =>
 export const leerLote = (texto: string, personnel: Personnel[], items: Item[]): LoteParseado => {
     const lineas: LineaLote[] = [];
     const ignoradas: string[] = [];
+    /**
+     * Un contador, no el índice del arreglo. Ese es todo el punto: el índice se
+     * corre cuando alguien borra un renglón; este número ya no vuelve a salir.
+     */
+    let siguiente = 0;
+    const nuevoId = (): string => `L${++siguiente}`;
 
     for (const cruda of texto.split(/\r?\n/)) {
         const renglon = limpiar(cruda);
@@ -208,12 +230,13 @@ export const leerLote = (texto: string, personnel: Personnel[], items: Item[]): 
             const { cantidad, nombre } = partirCantidad(trozo);
             const ri = buscarItem(items, nombre);
             const { elegido: item, dudoso } = escoger(ri);
-            return { texto: trozo, cantidad, nombre, item, candidatos: ri.map(r => r.value), dudoso };
+            return { id: nuevoId(), texto: trozo, cantidad, nombre, item, candidatos: ri.map(r => r.value), dudoso };
         });
 
         if (itemsLinea.length === 0) { ignoradas.push(renglon); continue; }
 
         lineas.push({
+            id: nuevoId(),
             personaTexto,
             persona,
             candidatosPersona: rp.map(r => r.value),

@@ -37,9 +37,10 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { timingSafeEqual } from 'node:crypto';
 import { Item, Movement, MovementType, Personnel, InventoryType } from '../types';
-import { planearLote } from '../core/despacho';
+import { planearLote, exigeProyecto } from '../core/despacho';
+import { idDeterminista, firmaDe } from './identidad';
 import { leerLote } from '../utils/lote';
 import { isAsset } from '../utils/inventory';
 
@@ -59,24 +60,6 @@ interface Respuesta {
     status: (code: number) => Respuesta;
     json: (body: unknown) => void;
 }
-
-/**
- * El identificador de cada movimiento, DEDUCIDO y no sorteado.
- *
- * Es lo que impide el doble registro. Si el asistente manda el mismo bloque dos
- * veces —doble toque, reintento porque se perdió la respuesta, o el bot que se
- * confunde— la segunda vez sale exactamente el mismo identificador, y la base
- * rechaza la fila repetida por clave primaria. Sin esto, un reintento despacha
- * dos veces y la bodega pierde material de verdad.
- *
- * Se arma un UUID a partir del hash de la operación y el número de renglón, con
- * la versión y la variante en su sitio para que sea un UUID válido.
- */
-const idDeterminista = (operacionId: string, indice: number): string => {
-    const h = createHash('sha256').update(`${operacionId}:${indice}`).digest('hex');
-    const v = (parseInt(h[16], 16) & 0x3 | 0x8).toString(16);
-    return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-${v}${h.slice(17, 20)}-${h.slice(20, 32)}`;
-};
 
 /** Comparación que no se delata por el tiempo que tarda. */
 const tokenValido = (dado: string, esperado: string): boolean => {
@@ -183,6 +166,18 @@ export default async function handler(req: Peticion, res: Respuesta): Promise<vo
         pendientes.push({ renglon: ignorada, motivo: 'No se pudo leer el renglón' });
     }
 
+    // La misma regla de la pantalla, desde el mismo sitio: los consumibles
+    // necesitan proyecto. El endpoint la ignoraba y aceptaba una salida de
+    // cemento sin obra, que es un gasto que después no se le puede cobrar a
+    // nadie.
+    if (exigeProyecto(batch, items) && !cuerpo.proyectoId) {
+        res.status(400).json({
+            error: 'Hay consumibles en el bloque y los consumibles necesitan proyecto. Mandá proyectoId.',
+            pendientes,
+        });
+        return;
+    }
+
     // Las mismas reglas de la pantalla: accesorios pegados a su herramienta y
     // freno por existencias.
     const plan = planearLote(batch, items);
@@ -191,9 +186,39 @@ export default async function handler(req: Peticion, res: Respuesta): Promise<vo
     const fallos: Array<{ elemento: string; motivo: string }> = [];
     const nombrePersona = new Map(personnel.map(p => [p.id, p.name]));
 
-    for (let i = 0; i < plan.aplicar.length; i++) {
-        const { movimiento, nuevaCantidad, item } = plan.aplicar[i];
-        const id = idDeterminista(operacionId, i);
+    // Cuántas veces ya salió esta misma combinación en este bloque, para que
+    // «Alex: 1 pala, 1 pala» no colapse en un solo movimiento.
+    const repeticiones = new Map<string, number>();
+    /** Si la última herramienta no se pudo guardar, sus accesorios no salen. */
+    let ultimaHerramientaFallo = false;
+
+    for (const { movimiento, nuevaCantidad, item } of plan.aplicar) {
+        /**
+         * Si la herramienta no se pudo guardar, su accesorio NO SE ESCRIBE.
+         *
+         * El núcleo los valida juntos, pero la persistencia es un RPC por
+         * movimiento: si la pulidora falla al escribirse —porque otro usuario le
+         * movió el stock entre la planificación y la escritura— el disco se
+         * descontaba igual y quedaba registrado solo, gastado sin herramienta.
+         *
+         * Esta guarda va ANTES del RPC a propósito. La primera versión la puse
+         * después, y ahí no servía de nada: para cuando preguntaba si la
+         * herramienta había fallado, el disco YA estaba escrito y el stock YA
+         * había bajado. Revisar después de escribir no es revisar.
+         *
+         * La garantía completa pide una transacción por despacho; esto cierra el
+         * caso que se puede cerrar sin migración.
+         */
+        const esAccesorio = !!movimiento.notes?.startsWith('Sale con ');
+        if (esAccesorio && ultimaHerramientaFallo) {
+            fallos.push({ elemento: item.name, motivo: 'No salió porque su herramienta no se pudo registrar' });
+            continue;
+        }
+
+        const firma = firmaDe(movimiento);
+        const repeticion = repeticiones.get(firma) ?? 0;
+        repeticiones.set(firma, repeticion + 1);
+        const id = idDeterminista(operacionId, movimiento, repeticion);
         const { error } = await sb.rpc('log_movement_and_update_stock', {
             p_id: id,
             p_item_id: movimiento.itemId,
@@ -208,16 +233,44 @@ export default async function handler(req: Peticion, res: Respuesta): Promise<vo
             p_pending_pickup: false,
         });
         if (error) {
-            // Clave repetida = este renglón YA se registró en un envío anterior.
-            // No es un fallo: es justamente la protección funcionando.
             const repetido = /duplicate key|23505/i.test(error.message ?? '');
-            if (repetido) registrados.push({ elemento: item.name, cantidad: movimiento.quantity, persona: nombrePersona.get(movimiento.personnelId ?? '') });
-            else fallos.push({ elemento: item.name, motivo: error.message ?? 'Error al guardar' });
+            if (!repetido) {
+                if (!esAccesorio) ultimaHerramientaFallo = true;
+                fallos.push({ elemento: item.name, motivo: error.message ?? 'Error al guardar' });
+                continue;
+            }
+            /**
+             * Clave repetida NO es prueba de que se guardó ESTO.
+             *
+             * Antes se daba por buena sin mirar, y por ahí se colaba el reporte
+             * falso. Ahora se lee la fila que ya existe y se compara con lo que
+             * se iba a escribir. Si coincide, el reintento está funcionando: ya
+             * estaba. Si no coincide, es un choque de identificadores y hay que
+             * decirlo, no taparlo.
+             */
+            const { data: yaEsta } = await sb
+                .from('movements')
+                .select('item_id, quantity, personnel_id, type')
+                .eq('id', id)
+                .maybeSingle();
+            const fila = yaEsta as Record<string, unknown> | null;
+            const coincide = !!fila
+                && fila.item_id === movimiento.itemId
+                && Number(fila.quantity) === movimiento.quantity
+                && (fila.personnel_id ?? null) === (movimiento.personnelId ?? null);
+            if (coincide) {
+                if (!esAccesorio) ultimaHerramientaFallo = false;
+                registrados.push({ elemento: item.name, cantidad: movimiento.quantity, persona: nombrePersona.get(movimiento.personnelId ?? '') });
+            } else {
+                if (!esAccesorio) ultimaHerramientaFallo = true;
+                fallos.push({ elemento: item.name, motivo: 'El identificador ya existe con otro contenido; no se registró' });
+            }
             continue;
         }
         // El espejo del stock se deja como lo calculó el núcleo, por si la RPC
         // no existiera y hubiera que caer al camino no atómico.
         void nuevaCantidad;
+        if (!esAccesorio) ultimaHerramientaFallo = false;
         registrados.push({ elemento: item.name, cantidad: movimiento.quantity, persona: nombrePersona.get(movimiento.personnelId ?? '') });
     }
 

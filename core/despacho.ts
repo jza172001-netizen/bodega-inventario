@@ -25,7 +25,7 @@
  */
 
 import { Item, Movement, MovementType, RechazoStock } from '../types';
-import { esRetiro, alcanzaStock } from '../utils/inventory';
+import { esRetiro, alcanzaStock, isConsumable } from '../utils/inventory';
 
 /** Un movimiento listo para registrar, con la cantidad en que queda su ítem. */
 export interface Aplicacion {
@@ -88,6 +88,18 @@ export interface OpcionesPlan {
     /** La nota que lleva la entrada inventada, para que el historial lo diga. */
     notaDeCompletado?: string;
 }
+
+/**
+ * ¿Este despacho necesita proyecto?
+ *
+ * La pantalla lo exigía para consumibles y el endpoint no: dos reglas para lo
+ * mismo, que es cómo terminan divergiendo. Vive acá por lo mismo que `esRetiro`
+ * y `isAsset` viven en `utils/inventory`: una regla, un sitio.
+ */
+export const exigeProyecto = (movimientos: Array<Omit<Movement, 'id'>>, items: Item[]): boolean => {
+    const porId = new Map(items.map(i => [i.id, i]));
+    return movimientos.some(m => esRetiro(m.type) && isConsumable(porId.get(m.itemId)));
+};
 
 /**
  * Los accesorios que salen pegados a una herramienta.

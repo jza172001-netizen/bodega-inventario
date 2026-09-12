@@ -99,4 +99,30 @@ grupo('contarDudas', () => {
     igual(contarDudas(r), 2, 'la persona sin resolver y el renglón ilegible');
 });
 
+grupo('cada ítem y cada renglón llevan su propio id', () => {
+    /**
+     * Los ids existen por un fallo: las decisiones de la pantalla se guardaban
+     * por posición, y al quitar un renglón los siguientes se corrían y heredaban
+     * la decisión del vecino. Un ítem marcado «Consumo» nacía «Eléctrica».
+     *
+     * Lo que esta prueba fija es que el id NO sea la posición.
+     */
+    const lote = leerLote('Alex: 1 pala, 1 martillo\nJuan: 2 picas', gente, cosas);
+    const todos = lote.lineas.flatMap(l => [l.id, ...l.items.map(i => i.id)]);
+    igual(new Set(todos).size, todos.length, 'ningún id se repite en el lote');
+    esCierto(todos.every(id => typeof id === 'string' && id.length > 0), 'todos traen id');
+
+    // Leer el mismo texto otra vez da los mismos ids, así que el panel puede
+    // recalcular sin que se le muevan las decisiones ya tomadas.
+    const otra = leerLote('Alex: 1 pala, 1 martillo\nJuan: 2 picas', gente, cosas);
+    igual(otra.lineas.flatMap(l => [l.id, ...l.items.map(i => i.id)]), todos, 'leer lo mismo da los mismos ids');
+
+    // Y lo que de verdad importa: quitar el primero no le cambia el id a los
+    // que quedan. Eso es lo único que hacía que se heredaran las decisiones.
+    const pala = lote.lineas[0].items[0];
+    const antes = lote.lineas[0].items.map(i => i.id);
+    const despues = lote.lineas[0].items.filter(i => i.id !== pala.id).map(i => i.id);
+    igual(despues, antes.slice(1), 'el martillo conserva su id después de quitar la pala');
+});
+
 cerrar();

@@ -30,7 +30,7 @@ meterle el error adentro al inventario.
 
 ## 0.2 Lo que se hizo la noche del 11-sep-2026
 
-Cuatro PR mergeados y desplegados (#75, #76, #77, #78):
+Seis PR mergeados y desplegados (#75 a #80):
 
 - **Botón «📋 Bloque»** en el asistente: se pega el texto de todos los
   trabajadores de una y se registra de un toque. `utils/lote.ts` lo lee sin
@@ -41,8 +41,9 @@ Cuatro PR mergeados y desplegados (#75, #76, #77, #78):
   desplegar.
 - **`core/despacho.ts`** — la aritmética del stock afuera de React, para que
   pueda correr en un servidor. `App.tsx` ya no calcula: aplica.
-- **142 pruebas** en `tests/`. `npm run test`. No es Vitest a propósito: ver
-  `CLAUDE.md`.
+- **191 comprobaciones** en `tests/` (hoy son 222, ver 0.3). `npm run test`. No es Vitest a propósito:
+  ver `CLAUDE.md`. **Cubren el núcleo, no la pantalla ni el endpoint** — una
+  auditoría externa encontró ocho fallos con estas suites en verde.
 - **`components/PasosDeNombre.tsx`** — género y medida en el formulario de
   crear, no solo en el chat.
 
@@ -66,6 +67,64 @@ externa y verificados antes de tocarlos:
 - **No hay migración base**: el repo no alcanza para recrear el servidor.
 - **Conciliar las listas** (ver 0.1). Papel y conteo, no código.
 - **Kate y KATE**, y la integración de Netlify todavía conectada al repo.
+
+## 0.3 Lo que se hizo el 12-sep-2026 — los fallos que yo mismo metí
+
+Una **segunda** auditoría externa revisó los PR #75–#80 y encontró ocho fallos
+nuevos. **Los ocho eran míos**, introducidos al arreglar los anteriores. Se
+arreglaron siete; el octavo necesita una migración y queda para el bloque
+siguiente.
+
+**Todos verificados corriendo el arnés de los auditores, no leyendo el código.**
+
+| | Qué hacía | Cómo quedó |
+|---|---|---|
+| **N01** | «Alex: 1 pala, 1 zorbex»: entraba la pala y se borraba la línea entera, zorbex incluido. El panel se cerraba y el pendiente no volvía | Se quita **solo lo que entró**. Lo sin resolver se queda en pantalla |
+| **N02** | Las decisiones se guardaban por posición. Al quitar un renglón los siguientes heredaban la del vecino: lo marcado «Consumo» nacía «Eléctrica» | Cada ítem y cada renglón llevan un id que no es su posición |
+| **N03** | La vista previa contaba por su cuenta y no mostraba las entradas automáticas acumuladas. Dos personas pedían la única pala y nadie avisaba nada | La vista previa dibuja **el mismo plan** que se va a aplicar |
+| **N03b** | *(este lo encontré yo)* La vista previa llamaba a la función que **crea** ítems, y la vista previa corre en cada render: abrir el panel creaba ítems duplicados con cada tecla | `armarMovimientos` recibe `crear`; dibujar simula, registrar crea |
+| **N05** | El identificador anti-doble-registro salía del índice del plan. En un reintento los índices se corrían, chocaban, y el endpoint respondía que registró un martillo que **no estaba en la base** | Sale de lo que no cambia entre reintentos: operación, ítem, persona, tipo, cantidad. Y ante clave repetida **lee la fila** antes de cantar éxito |
+| **N06** | Si la herramienta fallaba al escribirse, su accesorio se gastaba igual. La guarda que puse estaba **después** del RPC, o sea que revisaba con el disco ya escrito | La guarda va **antes** de escribir |
+| **N07** | La pantalla exigía proyecto para consumibles y el endpoint no: dos reglas para lo mismo | `exigeProyecto` en `core/despacho.ts`, una regla, un sitio |
+| **N08** | `tsx` en `package.json` sin poder regenerar el lockfile: `npm ci` se caía | `tsx` por `npx`. `npm ci` verificado |
+
+### N04 sigue abierto, y es el que importa
+
+**El orden de las escrituras a la red no está garantizado.** El núcleo pone la
+entrada antes que la salida, pero son un RPC por movimiento: el SQL puede
+recibir la salida primero, rechazarla por falta de stock, y guardar la entrada
+después. La app ya cantó éxito y muestra saldo cero; el servidor queda con una
+entrada, ninguna salida y saldo uno.
+
+**Esto NO se arregla en la aplicación.** Pide una transacción por despacho: un
+RPC nuevo con su migración. Y **antes hay que leer qué está instalado en
+Supabase**, porque ya se sabe que el repo y el servidor difieren.
+
+### La lección de método, que es la parte cara
+
+**Las 191 comprobaciones pasaban con los ocho fallos adentro.** Cubrían el
+núcleo, y ninguno de los ocho vivía ahí: vivían en la pantalla, en el endpoint y
+en el orden de las escrituras. Puse las pruebas donde era fácil ponerlas, no
+donde estaban los huecos.
+
+Por eso ahora son **222** y dos de ellas son de otra clase:
+
+- `tests/pantalla.test.ts` **saca los manejadores de verdad** de
+  `FloatingChat.tsx` con el compilador de TypeScript y los corre. No es una
+  copia. Si alguien renombra o mueve una función, la prueba **falla nombrándola**
+  en vez de pasar callada contra código viejo.
+- `api/identidad.ts` existe para que `tests/endpoint.test.ts` pueda importar la
+  función que se despliega. La prueba anterior **copiaba la fórmula adentro** y
+  se quedó en verde mientras la desplegada reportaba registros falsos.
+
+**Y una advertencia para la sesión siguiente:** al correr el arnés de los
+auditores, cuatro pruebas devolvieron `HARNESS_FAILURE`. No era que el fallo
+estuviera arreglado: era que yo había movido las funciones y el arnés no las
+encontraba. **`HARNESS_FAILURE` no es un arreglo.** Hay que leer el motivo de
+cada una, y si hace falta, reescribir la prueba con la lógica de ellos contra el
+código nuevo. Eso es lo que hay en `tests/pantalla.test.ts`.
+
+---
 
 ## 0. Cómo se usa esto
 
@@ -232,8 +291,9 @@ final de este archivo.
 3. **Los cuatro pasos (familia → género → denominación → cantidad)** ya funcionan
    en el chatbot para consumibles y herramientas; **faltan los formularios de
    afuera del chatbot**.
-4. `medidaDe` **no entiende fracciones** (`1 1/2`), solo decimales. Ya mordió una
-   vez; va a volver a morder.
+4. ~~`medidaDe` no entiende fracciones~~ — **ARREGLADO** (#75). Entiende `1/2`,
+   `1 1/2` y el símbolo `½`. Lo que sigue sin modelarse: «Llave 12» se lee como
+   12 pulgadas y son milímetros.
 5. **Marcas mal escritas en producción:** Nn/NN, Truper/Trupper/Trupee, Dwalt.
    Ofrecido, **no tocado sin su visto bueno**.
 6. **Duplicados probables a decidir:** Concretadora / Concretadora Eléctrica ·
