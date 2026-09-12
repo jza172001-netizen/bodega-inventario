@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { cantidadDeTexto } from '../utils/numeros';
 import { Item, Movement, Personnel, UserRole, InventoryType, Project } from '../types';
 import { MovementType } from '../types';
 import { momentoDeFecha } from '../utils/date';
@@ -173,7 +174,7 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-tinta-suave mb-1">Cantidad</label>
-                            <input type="number" value={quantity} onChange={e => setQuantity(Math.max(1, parseInt(e.target.value) || 1))} min="1" required className="w-full input-style"/>
+                            <input type="number" value={quantity} onChange={e => setQuantity(cantidadDeTexto(e.target.value, 0.1))} min="1" required className="w-full input-style"/>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-tinta-suave mb-1">Personal (Opcional)</label>

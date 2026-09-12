@@ -629,20 +629,47 @@ export async function fetchUsers(): Promise<AppUser[]> {
 }
 
 // Autentica credenciales en el servidor — devuelve rol/nombre sin contraseña
+/**
+ * Las TRES respuestas posibles a un intento de entrar.
+ *
+ * Antes eran dos —o entraba, o `null`— y ahí estaba el hueco: «el servidor dice
+ * que esa contraseña no es» y «no pude preguntarle al servidor» se devolvían
+ * igual. Quien llamaba leía `null` como «probá con el respaldo del teléfono», y
+ * **con el respaldo del teléfono entraba**.
+ *
+ * O sea: cambiarle la contraseña a alguien, o quitarle el acceso, no se lo
+ * quitaba. Seguía entrando con la vieja desde su celular, y el servidor no tenía
+ * cómo enterarse.
+ *
+ * `rechazado` es una respuesta, no una falla: el servidor comparó y dijo que no.
+ * Ahí no se cae al respaldo. `sinRespuesta` sí lo permite, porque no saber no
+ * puede dejar a la encargada afuera de la bodega a las siete de la mañana.
+ */
+export type ResultadoLogin =
+    | { estado: 'ok'; usuario: { id: string; role: UserRole; name: string } }
+    | { estado: 'rechazado' }
+    | { estado: 'sinRespuesta' };
+
 export async function authenticateUser(
     username: string,
     password: string
-): Promise<{ id: string; role: UserRole; name: string } | null> {
+): Promise<ResultadoLogin> {
     const { data, error } = await supabase.rpc('authenticate_user', {
         p_username: username,
         p_password: password,
     });
-    if (error || !data || data.length === 0) return null;
+    // Con error no se puede afirmar nada: puede ser la red, puede ser la base.
+    if (error) return { estado: 'sinRespuesta' };
+    // SIN error y sin filas, el servidor SÍ contestó: comparó y dijo que no.
+    if (!data || data.length === 0) return { estado: 'rechazado' };
     const row = data[0] as Record<string, unknown>;
     return {
-        id: row.user_id as string,
-        role: row.user_role as UserRole,
-        name: row.user_name as string,
+        estado: 'ok',
+        usuario: {
+            id: row.user_id as string,
+            role: row.user_role as UserRole,
+            name: row.user_name as string,
+        },
     };
 }
 

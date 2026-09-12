@@ -239,4 +239,4 @@ grupo('restaurar lo que SÍ cabe funciona igual', () => {
     igual(b.visto.cantidadesEscritas[0]?.quantity, 8, 'una entrada restaurada suma');
 });
 
-cerrar();
+await cerrar();

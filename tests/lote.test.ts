@@ -125,4 +125,4 @@ grupo('cada ítem y cada renglón llevan su propio id', () => {
     igual(despues, antes.slice(1), 'el martillo conserva su id después de quitar la pala');
 });
 
-cerrar();
+await cerrar();

@@ -101,4 +101,4 @@ grupo('no se repite en un lote grande', () => {
     igual(vistos.size, 200, '200 renglones, 200 identificadores');
 });
 
-cerrar();
+await cerrar();

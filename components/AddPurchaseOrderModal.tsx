@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { cantidadDeTexto } from '../utils/numeros';
 import { PurchaseOrder, PurchaseOrderItem, Item } from '../types';
 import { PurchaseOrderStatus } from '../types';
 import { XIcon } from './icons/XIcon';
@@ -128,7 +129,7 @@ export const AddPurchaseOrderModal: React.FC<AddPurchaseOrderModalProps> = ({ is
                                 </div>
                                 <div className="col-span-3">
                                     <label className={`text-sm font-medium text-tinta-suave mb-1 ${index !== 0 ? 'hidden' : 'block'}`}>Cantidad</label>
-                                    <input type="number" min="1" value={item.quantity} onChange={e => handleItemChange(item.tempId, 'quantity', parseInt(e.target.value) || 1)} className="w-full input-style" />
+                                    <input type="number" min="1" value={item.quantity} onChange={e => handleItemChange(item.tempId, 'quantity', cantidadDeTexto(e.target.value, 0.1))} className="w-full input-style" />
                                 </div>
                                  <div className="col-span-3">
                                     <label className={`text-sm font-medium text-tinta-suave mb-1 ${index !== 0 ? 'hidden' : 'block'}`}>Precio U.</label>

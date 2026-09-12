@@ -237,4 +237,4 @@ grupo('los consumibles no pasan sin proyecto', () => {
     esCierto(p.visto.avisos.some(a => /proyecto/i.test(a)), 'y se avisa por qué');
 });
 
-cerrar();
+await cerrar();

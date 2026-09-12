@@ -143,4 +143,4 @@ grupo('un lote rechazado entero no manda viaje vacío', () => {
     igual(a.visto.viajes[0].length, 0, '...pero con la lista vacía, que el servicio corta de una');
 });
 
-cerrar();
+await cerrar();

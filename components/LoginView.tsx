@@ -60,15 +60,32 @@ export const LoginView: React.FC<LoginViewProps> = ({ users, onLoginSuccess, onF
         setIsLoading(true);
         try {
             if (selectedUser.username) {
-                const result = await db.authenticateUser(selectedUser.username, password);
-                if (result) {
+                const r = await db.authenticateUser(selectedUser.username, password);
+                if (r.estado === 'ok') {
                     // Guardar hash para que el respaldo offline funcione tras recargar
                     onCredentialVerified?.(selectedUser.id, await sha256Hex(password));
-                    onLoginSuccess(result.role, result.name);
+                    onLoginSuccess(r.usuario.role, r.usuario.name);
+                    return;
+                }
+                /**
+                 * EL SERVIDOR DIJO QUE NO. Acá se para.
+                 *
+                 * Antes esto caía al respaldo del teléfono, porque «contraseña
+                 * equivocada» y «no hay conexión» llegaban como el mismo `null`.
+                 * Con eso, cambiarle la contraseña a alguien no se la cambiaba:
+                 * seguía entrando con la vieja desde su celular.
+                 *
+                 * El respaldo del teléfono es para cuando no se puede preguntar,
+                 * no para cuando la respuesta no gustó.
+                 */
+                if (r.estado === 'rechazado') {
+                    setPassword('');
+                    triggerShake('Contraseña incorrecta');
                     return;
                 }
             }
-            // Fallback offline: hash local (las contraseñas no se persisten en texto plano)
+            // Sin respuesta del servidor: respaldo con el hash guardado en este
+            // dispositivo (las contraseñas no se persisten en texto plano).
             if (await offlineMatch(selectedUser, password)) {
                 onLoginSuccess(selectedUser.role, selectedUser.name);
             } else {

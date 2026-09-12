@@ -118,4 +118,4 @@ grupo('dispositivo nuevo: la nube es todo lo que hay', () => {
     igual(nombres(fusionarItems([], nube, { nubeContesto: true, localVacio: true })), ['Pala', 'Pica'], 'llega todo');
 });
 
-cerrar();
+await cerrar();

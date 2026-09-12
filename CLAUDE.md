@@ -56,8 +56,18 @@ because of that, and both are load-bearing:
   deployed function. It previously re-implemented the formula inline and stayed
   green while the shipped one was reporting phantom writes.
 
-Still uncovered: the ORDER of network writes (one RPC per movement, no
-per-dispatch transaction) and the offline sync queue.
+Every suite also has a **mutation check** behind it: the fix was reverted on
+purpose and the suite was watched to go red. This is not ceremony — one suite
+here passed with its defect inside because the fixture used ids that did not
+reproduce the condition, and only the mutation check caught it.
+
+`tests/correr.ts` awaits async group bodies and runs groups **serially**. Call it
+as `await cerrar()`. An earlier version ignored a promise-returning body: the
+group printed "✓ todo bien" before a single assertion had run.
+
+Still uncovered: the offline sync queue (A05/A13) — an operation made without
+signal uploads its row without going through the stock RPC, and an edit to a row
+the server already has is never retried.
 
 ## Architecture
 
@@ -112,12 +122,26 @@ merges the two on mount — local rows missing from the cloud are uploaded, not
 deleted (that merge exists because two users were once lost by replacing the
 local list wholesale).
 
-Fifteen migrations live in `supabase/migrations/`. **There is no baseline
-migration**: they assume tables, enums and functions that were created outside
-Git, so the repo alone cannot rebuild the server. Before changing the schema,
-read what is actually installed — at least one versioned function is known to
-differ from what the docs claim (`delete_movement_and_revert_stock` still does
-`delete from movements`, despite the tombstone rule).
+Seventeen migrations live in `supabase/migrations/`; **production has 35.**
+**There is no baseline migration**: they assume tables, enums and functions
+created outside Git, so the repo alone cannot rebuild the server.
+
+Before changing the schema, **read what is actually installed** — that is not
+advice, it is how the last two findings were resolved. Production was read on 12
+Sep 2026 and two beliefs in this file turned out backwards:
+
+- `delete_movement_and_revert_stock` **does** use a tombstone in production. The
+  repo was the one lying: it was missing `borrar_movimiento_con_lapida`, applied
+  on the server since 6 Sep but never committed. Anyone applying the repo's
+  migrations to a fresh project installed the version that **really deletes**.
+  The file is now in Git.
+- There was **not one `CHECK`** in the whole database. There are two now
+  (`movements.quantity > 0`, `items.quantity >= 0`).
+
+`log_movements_and_update_stock` applies a whole dispatch **in one transaction**:
+one RPC per movement let the network reorder an automatic entry after its own
+checkout. `log_movement_and_update_stock` stays for single movements and as the
+fallback path.
 
 **There IS a backend now**, added in PR #76: `api/despacho.ts` is a Vercel
 serverless function that lets an external AI assistant register dispatches
@@ -127,10 +151,17 @@ variables. See `api/README.md`. This file used to say no backend existed; it did
 by the time anyone read that sentence.
 
 The browser still talks to Supabase directly with `VITE_SUPABASE_ANON_KEY`,
-which is public by design. The stock functions are `security definer` and no
-migration grants or revokes execute on them, so they carry PostgreSQL's default:
-**anyone holding the public key can move inventory.** Client-side identity does
-not exist yet and is the largest open risk.
+which is public by design. The stock functions are `security definer` and carry
+`anon=X` (verified against production, not inferred): **anyone holding the public
+key can move inventory.**
+
+**This cannot be fixed by revoking.** The app *is* `anon`. The eight functions
+`anon` can execute are exactly the eight the browser calls — login, log movement,
+log batch, delete movement, return loan, read users, read deleted, restore user.
+Revoking leaves the app dead, not safer. Closing it requires server-side identity
+that does not exist: either moving writes behind `api/despacho.ts` with its
+token, or Supabase Auth. Both change how everyone logs in. It is the largest open
+risk and it is a project, not a migration.
 
 `storage.ts`'s `AppData` interface is still the canonical shape of persisted
 data.

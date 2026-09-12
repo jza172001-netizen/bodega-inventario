@@ -92,4 +92,4 @@ grupo('nombreCompuesto y materialDe', () => {
     igual(materialDe('Pala'), null, 'sin género');
 });
 
-cerrar();
+await cerrar();

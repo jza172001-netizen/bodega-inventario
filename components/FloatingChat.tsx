@@ -1,5 +1,6 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { cantidadDeTexto } from '../utils/numeros';
 import { Item, Movement, Personnel, PurchaseOrder, Project, MovementType, InventoryType, RechazoStock, LoteResultado, AuditLog } from '../types';
 import { momentoDeFecha } from '../utils/date';
 import { askCopilot } from '../services/copilotService';
@@ -1262,7 +1263,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                             onFocus={e => e.target.select()}
                             onChange={e => setReponerQty(prev => {
                                 const n = new Map(prev);
-                                n.set(r.itemId, Math.max(1, parseInt(e.target.value) || 1));
+                                n.set(r.itemId, cantidadDeTexto(e.target.value, 0.1));
                                 return n;
                             })}
                             className="w-16 text-sm text-center border border-atencion rounded-lg px-1 py-1 bg-papel focus:outline-none"
@@ -1707,7 +1708,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                                             </span>
                                                             {isSelected && (
                                                                 <input type="number" onFocus={e => e.target.select()} value={qty} min={1}
-                                                                    onChange={e => setWizardSelQty(item.id, parseInt(e.target.value) || 1)}
+                                                                    onChange={e => setWizardSelQty(item.id, cantidadDeTexto(e.target.value, 0.1))}
                                                                     onClick={e => e.stopPropagation()}
                                                                     className="w-11 text-xs text-center border border-marca-borde rounded-lg px-1 py-0.5 bg-papel focus:outline-none" />
                                                             )}
@@ -1817,7 +1818,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                                 cuatro pasos en toda la app. En una herramienta sigue
                                                 valiendo 1 si no se toca, que es como venía. */}
                                             <input type="number" onFocus={e => e.target.select()} value={wizardCreateQty} min={1}
-                                                onChange={e => setWizardCreateQty(parseInt(e.target.value) || 1)}
+                                                onChange={e => setWizardCreateQty(cantidadDeTexto(e.target.value, 0.1))}
                                                 placeholder="4. Cantidad *"
                                                 className="w-full border border-papel-borde rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-marca bg-papel" />
                                             {(type === InventoryType.ELECTRICAL_TOOL || type === InventoryType.HAND_TOOL) && (
@@ -2333,7 +2334,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                             </span>
                                             {isSelected && (
                                                 <input type="number" onFocus={e => e.target.select()} value={qty} min={1} max={item.quantity}
-                                                    onChange={e => setLoanItemQty(item.id, parseInt(e.target.value) || 1)}
+                                                    onChange={e => setLoanItemQty(item.id, cantidadDeTexto(e.target.value, 0.1))}
                                                     onClick={e => e.stopPropagation()}
                                                     className="w-12 text-xs text-center border border-marca-borde rounded-lg px-1 py-0.5 bg-papel focus:outline-none" />
                                             )}
@@ -2353,7 +2354,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                             {(loanInvType !== InventoryType.ELECTRICAL_TOOL && loanInvType !== InventoryType.HAND_TOOL) && (
                                 <>
                                     <input type="number" onFocus={e => e.target.select()} value={loanCreateQty} min={1}
-                                        onChange={e => setLoanCreateQty(parseInt(e.target.value) || 1)}
+                                        onChange={e => setLoanCreateQty(cantidadDeTexto(e.target.value, 0.1))}
                                         placeholder="4. Cantidad *"
                                         className="w-full border border-papel-borde rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-marca bg-papel" />
                                     <select value={loanCreateUnit} onChange={e => setLoanCreateUnit(e.target.value)}
@@ -2511,7 +2512,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                             {createSpecies.filter(s => s.brand.trim() && s.color.trim()).length || 1} ítem(s)
                         </div>
                     ) : (
-                        <input type="number" onFocus={e => e.target.select()} value={createQty} min={1} onChange={e => setCreateQty(Math.max(1, parseInt(e.target.value) || 1))}
+                        <input type="number" onFocus={e => e.target.select()} value={createQty} min={1} onChange={e => setCreateQty(cantidadDeTexto(e.target.value, 0.1))}
                             className="w-full text-sm border border-papel-borde rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-bien" />
                     )}
                 </div>

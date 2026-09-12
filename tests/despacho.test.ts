@@ -180,4 +180,4 @@ grupo('varias personas, un lote', () => {
     igual(p.aplicar[1].nuevaCantidad, 5, '10 - 3 - 2 = 5');
 });
 
-cerrar();
+await cerrar();

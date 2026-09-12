@@ -142,4 +142,4 @@ grupo('resumen de una línea', () => {
     igual(summarizeLoanItems(ms, () => 'Martillo'), 'Martillo ×3', 'suma el mismo ítem');
 });
 
-cerrar();
+await cerrar();

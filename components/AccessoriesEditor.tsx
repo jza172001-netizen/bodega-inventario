@@ -1,5 +1,6 @@
 
 import React, { useState } from 'react';
+import { cantidadDeTexto } from '../utils/numeros';
 import { Accessory, Item, InventoryType } from '../types';
 
 interface Props {
@@ -78,7 +79,7 @@ export const AccessoriesEditor: React.FC<Props> = ({ value, onChange, items }) =
                                     <input
                                         type="number" min={1} value={acc.cantidad ?? 1}
                                         onFocus={e => e.target.select()}
-                                        onChange={e => cambiar(idx, { cantidad: Math.max(1, parseInt(e.target.value) || 1) })}
+                                        onChange={e => cambiar(idx, { cantidad: cantidadDeTexto(e.target.value, 0.1) })}
                                         className="w-12 text-xs text-center border border-papel-borde rounded-md px-1 py-1 bg-papel flex-shrink-0"
                                         title="Cuántos salen por cada herramienta"
                                     />
