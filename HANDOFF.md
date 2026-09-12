@@ -199,6 +199,55 @@ sobrevive a su herramienta.
 
 ---
 
+## 0.6 La sincronización: dos arreglados, dos pendientes (12-sep-2026)
+
+### La raíz común
+
+Cada consulta a la nube era un `.catch(() => [])`. Con eso **«no hay señal» y
+«la nube está vacía» llegaban como la misma lista vacía**, y son lo contrario:
+sin señal hay que conservar lo local a toda costa; con la nube vacía, lo local
+que sobra es basura que ya se borró en otro lado. Ahora cada consulta dice si
+**contestó**, no solo qué trajo.
+
+| | Qué hacía | Cómo quedó |
+|---|---|---|
+| **A04** | Un ítem creado sin conexión **desaparecía** al reconectar. La condición que lo protegía miraba el FORMATO del identificador —buscaba los «temporales»— pero la normalización previa ya les había puesto UUID a todos: era siempre falsa. De dos quedaba uno | No hace falta mirar el identificador: las lápidas ya se aplicaron antes, así que lo que está acá y no allá **nunca subió**, no es un borrado |
+| **A14** | Borrar el último ítem lo dejaba visible **para siempre** en el otro celular: la lista fusionada quedaba vacía y una lista vacía no se aplicaba nunca | Se aplica si la nube **contestó**, aunque venga vacía |
+
+La decisión se sacó a **`core/fusion.ts`**, pura y probada, por lo mismo que
+`core/despacho.ts`: vivía adentro de un `useEffect` de 300 líneas que corre al
+arrancar con la red de por medio, y ahí no se podía ejercitar. Por eso los dos
+fallos duraron tanto.
+
+**Una nota de método que vale más que el arreglo:** la primera versión de
+`tests/fusion.test.ts` **pasaba con el fallo A04 adentro**. Los identificadores
+de prueba eran nombres como `'uuid-creado-sin-senal'`, y la condición vieja
+miraba el formato: con un id que no parece UUID daba el resultado correcto por
+accidente. Se descubrió reintroduciendo el fallo a propósito y viendo la prueba
+en verde. Con UUID de verdad, falla. **Comprobar por mutación no es opcional.**
+
+### A05 y A13 siguen abiertos, y no se parchan acá
+
+- **A05** — una salida hecha sin conexión sube por `bulkUpsertMovements`, que
+  escribe la fila **sin pasar por el RPC de stock**: el movimiento queda, la
+  cantidad no baja.
+- **A13** — editar una fila que ya existe en el servidor nunca se reintenta: la
+  lista de subida solo incluye ids que el servidor no tiene.
+
+Se puede ver el parche desde acá y **es una trampa**: enrutar esos movimientos
+por el RPC de stock arregla el caso del ítem que ya estaba en el servidor y
+**rompe** el del ítem creado sin conexión, porque ahí la cantidad ya viaja
+adentro del ítem y se contaría dos veces. Distinguirlos pide saber **qué
+operación se hizo**, no adivinarlo del estado resultante.
+
+Eso es la cola de operaciones pendientes: cada cosa que se hace se anota como
+operación con su identificador, sobrevive a cerrar la app, y se reintenta hasta
+que el servidor la confirme. Es el mismo aparato que pide la condición 1 de la
+lista de entrega («una bandeja permanente de pendientes»), y **no se empieza sin
+decidir con Juli** qué es un pendiente, quién lo descarta y con qué motivo.
+
+---
+
 ## 0. Cómo se usa esto
 
 Leelo entero de una. No hace falta que Juli pegue nada más. Si algo de acá
