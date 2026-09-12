@@ -19,6 +19,7 @@ import { HelpView } from './components/HelpView';
 import { describirCambios, describirEstado } from './utils/cambios';
 import { nombreReal } from './utils/nombres';
 import { NOTA_AJUSTE } from './utils/inventory';
+import { fusionarItems, masReciente, hayQueAplicar } from './core/fusion';
 import { PapeleraView } from './components/PapeleraView';
 import { TraceabilityView } from './components/TraceabilityView';
 import { WhatsAppView } from './components/WhatsAppView';
@@ -423,16 +424,39 @@ const App: React.FC = () => {
               });
           }).catch(e => console.error('[Supabase] users:', e));
 
+          /**
+           * Un fetch que dice si CONTESTÓ, no solo qué trajo.
+           *
+           * Antes cada uno era `.catch(() => [])`, y eso hacía que «no hay
+           * señal» y «la nube está vacía» llegaran acá como la misma lista
+           * vacía. Son cosas opuestas: en la primera hay que conservar lo local
+           * a toda costa; en la segunda, lo local que sobra es basura que ya se
+           * borró en otro lado.
+           *
+           * De confundirlas salía que borrar el último ítem en un celular lo
+           * dejara visible para siempre en el otro: la lista vacía de la nube se
+           * leía como «no contestó» y no se aplicaba nunca.
+           */
+          const conAcuse = <T,>(p: Promise<T>, vacio: T): Promise<{ ok: boolean; datos: T }> =>
+              p.then(datos => ({ ok: true, datos })).catch(() => ({ ok: false, datos: vacio }));
+
           Promise.all([
-              db.fetchItems().catch((): Item[] => []),
-              db.fetchMovements().catch((): Movement[] => []),
-              db.fetchProjects().catch((): Project[] => []),
-              db.fetchPersonnel().catch((): Personnel[] => []),
-              db.fetchPurchaseOrders().catch((): PurchaseOrder[] => []),
-              db.fetchAuditLogs().then(ls => ls.map(l => ({ ...l, actor: nombreReal(l.actor) }))).catch((): AuditLog[] => []),
-              db.fetchBehaviorLogs().then(ls => ls.map(l => ({ ...l, actor: nombreReal(l.actor) }))).catch((): BehaviorLog[] => []),
+              conAcuse(db.fetchItems(), [] as Item[]),
+              conAcuse(db.fetchMovements(), [] as Movement[]),
+              conAcuse(db.fetchProjects(), [] as Project[]),
+              conAcuse(db.fetchPersonnel(), [] as Personnel[]),
+              conAcuse(db.fetchPurchaseOrders(), [] as PurchaseOrder[]),
+              conAcuse(db.fetchAuditLogs().then(ls => ls.map(l => ({ ...l, actor: nombreReal(l.actor) }))), [] as AuditLog[]),
+              conAcuse(db.fetchBehaviorLogs().then(ls => ls.map(l => ({ ...l, actor: nombreReal(l.actor) }))), [] as BehaviorLog[]),
               db.fetchBorrados().catch(() => ({ personnel: [] as string[], projects: [] as string[], purchaseOrders: [] as string[], movements: [] as string[], items: [] as string[] })),
-          ]).then(([supaItems, supaMovements, supaProjectsRaw, supaPersonnelRaw, supaPOs, supaAuditLogs, supaBehaviorLogs, borrados]) => {
+          ]).then(([itemsRes, movRes, projRes, perRes, poRes, auditRes, behaviorRes, borrados]) => {
+              const supaItems = itemsRes.datos;
+              const supaMovements = movRes.datos;
+              const supaProjectsRaw = projRes.datos;
+              const supaPersonnelRaw = perRes.datos;
+              const supaPOs = poRes.datos;
+              const supaAuditLogs = auditRes.datos;
+              const supaBehaviorLogs = behaviorRes.datos;
               // Lo que tiene lápida se saca de lo local ANTES de mezclar. Sin esto,
               // el teléfono que todavía guarda la fila la vuelve a subir y el
               // borrado se deshace solo — que es como volvieron 19 ítems el 18 de
@@ -575,40 +599,15 @@ const App: React.FC = () => {
               // Existencia se sigue resolviendo como antes (cada entidad tiene su
               // criterio, y hay que respetar los borrados). El contenido de una fila que
               // está en los dos lados ahora lo decide la fecha: gana la más reciente.
-              const masReciente = <T extends { id: string; updatedAt?: Date }>(a: T, b?: T): T => {
-                  if (!b) return a;
-                  const ta = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
-                  const tb = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
-                  return tb > ta ? b : a;
-              };
 
               // Ítems: cuando Supabase está disponible es fuente de verdad para existencia.
               // Esto evita que ítems eliminados en Supabase "resuciten" desde localStorage.
               // Solo se agregan ítems locales con ID temporal (creados offline, nunca sincronizados).
               // Si Supabase no responde (supaItems vacío por error), se conserva todo lo local.
-              const normItemIds = new Set(normItems.map(i => i.id));
-              const localItemById = new Map(normItems.map(i => [i.id, i]));
-              const supaItemById  = new Map(supaItems.map(i => [i.id, i]));
-              const localNameTypeKeys = new Set(
-                  normItems.map(i => `${i.name.trim().toLowerCase()}::${i.inventoryType}`)
-              );
-              const mergedItems: Item[] = localIsEmpty
-                  ? supaItems
-                  : supaItems.length > 0
-                      ? [
-                          // La nube manda sobre QUÉ ítems existen; la fecha manda sobre
-                          // CÓMO está cada uno. Así un ítem borrado sigue borrado y una
-                          // corrección recién hecha acá deja de perderse.
-                          ...supaItems.map(i => masReciente(i, localItemById.get(i.id))),
-                          ...normItems.filter(i => !UUID_RE.test(i.id) && !supaItemIds.has(i.id)),
-                      ]
-                      : [
-                          ...normItems,
-                          ...supaItems.filter(i =>
-                              !normItemIds.has(i.id) &&
-                              !localNameTypeKeys.has(`${i.name.trim().toLowerCase()}::${i.inventoryType}`)
-                          ),
-                      ];
+              const mergedItems: Item[] = fusionarItems(normItems, supaItems, {
+                  nubeContesto: itemsRes.ok,
+                  localVacio: localIsEmpty,
+              });
 
               // Movimientos: merge aditivo (ninguno de los dos lados borra al otro en el
               // arranque), pero el contenido de los compartidos lo decide la fecha. Un
@@ -650,12 +649,23 @@ const App: React.FC = () => {
                   ...supaBehaviorLogs.filter(b => !localBehaviorLogs.some(l => l.id === b.id)),
               ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
-              // Actualizar estado: siempre que haya datos o remapeos
-              if (mergedItems.length > 0     || itemRemap.size > 0)  setItems(mergedItems);
-              if (mergedMovements.length > 0 || movRemap.size > 0)   setMovements(mergedMovements);
-              if (mergedProjects.length > 0  || projRemap.size > 0)  setProjects(mergedProjects);
-              if (mergedPersonnel.length > 0 || perRemap.size > 0)   setPersonnel(mergedPersonnel);
-              if (mergedPOs.length > 0)                              setPurchaseOrders(mergedPOs);
+              /**
+               * Se aplica la lista mezclada SI la nube contestó, aunque venga vacía.
+               *
+               * Antes la condición era `merged.length > 0`, y con eso borrar el
+               * último ítem en un celular lo dejaba visible para siempre en el
+               * otro: la lápida lo sacaba de lo local, la mezcla quedaba vacía, y
+               * una mezcla vacía no se aplicaba nunca. El dato borrado seguía en
+               * pantalla sin forma de quitarlo.
+               *
+               * Que la nube haya contestado es lo que vuelve creíble una lista
+               * vacía. Si no contestó, no se toca nada: puede ser falta de señal.
+               */
+              if (hayQueAplicar(mergedItems,     itemsRes.ok, itemRemap.size > 0)) setItems(mergedItems);
+              if (hayQueAplicar(mergedMovements, movRes.ok,   movRemap.size > 0))  setMovements(mergedMovements);
+              if (hayQueAplicar(mergedProjects,  projRes.ok,  projRemap.size > 0)) setProjects(mergedProjects);
+              if (hayQueAplicar(mergedPersonnel, perRes.ok,   perRemap.size > 0))  setPersonnel(mergedPersonnel);
+              if (hayQueAplicar(mergedPOs,       poRes.ok))                        setPurchaseOrders(mergedPOs);
               if (mergedAuditLogs.length > 0)                        setAuditLogs(mergedAuditLogs);
               if (mergedBehaviorLogs.length > 0)                     setBehaviorLogs(mergedBehaviorLogs);
 
