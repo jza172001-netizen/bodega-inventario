@@ -5,7 +5,7 @@
  * y el error se propagaba solo: la lista de medidas que el asistente ofrece se
  * construye leyendo esta misma función.
  */
-import { medidaDe, valorDeMedida, denominacionesDe, seMideEnPulgadas, nombreCompuesto, materialDe } from '../utils/medida';
+import { medidaDe, valorDeMedida, denominacionesDe, seMideEnPulgadas, nombreCompuesto, materialDe, todasLasMedidas, medidasPrestadas } from '../utils/medida';
 import { igual, esCierto, grupo, cerrar } from './correr';
 
 grupo('medidaDe — fracciones de tubería', () => {
@@ -35,6 +35,16 @@ grupo('medidaDe — lo que NO es medida', () => {
     igual(medidaDe('Buje 2 x 1'), null, 'reducción con equis');
 });
 
+grupo('nombres reales que engañaban', () => {
+    // Los tres salieron de correr esto contra los 121 ítems de producción.
+    // Ninguno rompía la pantalla: los tres ensuciaban el dato en silencio.
+    igual(medidaDe('Lija #2000'), null, 'la almohadilla es referencia, no pulgadas');
+    igual(medidaDe('Lija #1500'), null, 'una lija de 1500 pulgadas no existe');
+    igual(medidaDe('Galón 3 en 1'), null, '"3 en 1" es el nombre del aceite');
+    igual(medidaDe('Tornillos 1½"'), '1 1/2"', 'la fracción en símbolo también cuenta');
+    igual(medidaDe('Tornillos ½"'), '1/2"', 'y sola, sin entero delante');
+});
+
 grupo('valorDeMedida — para poder ordenarlas', () => {
     igual(valorDeMedida('1/2"'), 0.5, 'media');
     igual(valorDeMedida('3/4"'), 0.75, 'tres cuartos');
@@ -57,6 +67,22 @@ grupo('seMideEnPulgadas', () => {
     esCierto(seMideEnPulgadas('Reduccion'), 'reducción sí');
     igual(seMideEnPulgadas('Pala'), false, 'pala no');
     igual(seMideEnPulgadas('Martillo'), false, 'martillo no');
+});
+
+grupo('las medidas cruzan familias', () => {
+    // "Tres pulgadas" es la misma medida así sea un clavo, un tubo o un codo:
+    // es vocabulario de toda la bodega, no propiedad de cada familia.
+    const bodega = [
+        { name: 'Clavos acero 3"' }, { name: 'Clavos hierro 2"' },
+        { name: 'Tubo PVC 1/2' }, { name: 'Pala' }, { name: 'Martillo' },
+    ];
+    igual(todasLasMedidas(bodega), ['1/2"', '2"', '3"'], 'todas las que la bodega usa, ordenadas');
+    igual(todasLasMedidas([{ name: 'Pala' }]), [], 'una bodega sin medidas no inventa ninguna');
+
+    // Las prestadas son las que existen en la bodega y ESTA familia no tiene.
+    // Van aparte para no hacer creer que ya hubo un codo de 3".
+    igual(medidasPrestadas(bodega, ['1/2"']), ['2"', '3"'], 'no repite la que ya se ofrece');
+    igual(medidasPrestadas(bodega, ['1/2"', '2"', '3"']), [], 'si ya están todas, no sobra ninguna');
 });
 
 grupo('nombreCompuesto y materialDe', () => {

@@ -1,11 +1,11 @@
 
 import React, { useMemo, useState } from 'react';
-import { Item, Movement, OrderNote, Personnel } from '../types';
+import { Item, Movement, OrderNote, Personnel, InventoryType } from '../types';
 import { familiaDe, normStr, looseMatch, getGenus } from '../utils/genus';
 import { construirArbol } from '../utils/arbol';
 import { PALETA, raizDeColor, tonoDe } from '../utils/colores';
 import { unidadesCon } from '../utils/unidades';
-import { getConsumption } from '../utils/inventory';
+import { getConsumption, adivinarTipo } from '../utils/inventory';
 import { materialDe, medidaDe } from '../utils/medida';
 import { PeriodPicker, Periodo, periodoPorDefecto } from './PeriodPicker';
 
@@ -22,7 +22,7 @@ interface Props {
      * Confirmar lo que de verdad llegó: registra la entrada al inventario y
      * marca el renglón como recibido. Si el ítem no existe todavía, lo crea.
      */
-    onRecibirNote?: (n: OrderNote, cantidad: number, itemId?: string, nombreNuevo?: string) => void;
+    onRecibirNote?: (n: OrderNote, cantidad: number, itemId?: string, nombreNuevo?: string, tipoNuevo?: InventoryType) => void;
     onBehaviorLog?: (action: string, detail: string) => void;
 }
 
@@ -59,7 +59,7 @@ export const OrderListView: React.FC<Props> = ({
      */
     const [anadiendo, setAnadiendo] = useState<null | 'elegir' | 'color' | 'denominacion'>(null);
     /** El renglón cuya llegada se está confirmando, con lo que se lleva puesto. */
-    const [recibiendo, setRecibiendo] = useState<{ id: string; cantidad: string; itemId: string } | null>(null);
+    const [recibiendo, setRecibiendo] = useState<{ id: string; cantidad: string; itemId: string; tipo: InventoryType | '' } | null>(null);
     const [colorNuevo, setColorNuevo] = useState('');
 
     const ponerColor = (c: string) => {
@@ -126,7 +126,7 @@ export const OrderListView: React.FC<Props> = ({
                     <select value={recibiendo.itemId}
                         onChange={e => setRecibiendo(r => r && { ...r, itemId: e.target.value })}
                         className="flex-1 min-w-0 text-sm border border-papel-borde rounded-xl px-2 py-2 bg-papel">
-                        <option value="">➕ Crear «{n.texto}» como consumible</option>
+                        <option value="">➕ Crear «{n.texto}» como ítem nuevo</option>
                         {parecidos.length > 0 && (
                             <optgroup label="Se parece a">
                                 {parecidos.map(i => <option key={i.id} value={i.id}>{i.name} · {i.quantity} {i.unit}</option>)}
@@ -137,6 +137,44 @@ export const OrderListView: React.FC<Props> = ({
                         </optgroup>
                     </select>
                 </div>
+                {/* El tipo solo se pregunta cuando el ítem NACE acá. Si ya existía
+                    conserva el suyo, y preguntarlo sería una oportunidad de
+                    cambiárselo sin querer.
+
+                    Antes esto no se preguntaba: todo lo que llegaba nacía como
+                    consumible, quemado en el código. Una pulidora comprada entraba
+                    como material de consumo y entonces NUNCA se podía prestar —no
+                    salía en Préstamos, nadie la reclamaba— y en las cuentas pesaba
+                    como gasto. Callado, porque la cantidad sí quedaba bien. */}
+                {!recibiendo.itemId && (
+                    <div className="space-y-1">
+                        <p className="text-[10px] font-bold text-tinta-tenue uppercase tracking-wider">
+                            ¿Qué es? {adivinarTipo(n.texto) ? '· la app propuso uno, cambialo si no es' : '· la app no supo, elegí vos'}
+                        </p>
+                        <div className="flex flex-wrap gap-1">
+                            {[
+                                [InventoryType.HAND_TOOL, '🔨 Manual'],
+                                [InventoryType.ELECTRICAL_TOOL, '⚡ Eléctrica'],
+                                [InventoryType.PPE, '🦺 Protección'],
+                                [InventoryType.SINGLE_USE, '📦 Consumo'],
+                            ].map(([t, etiqueta]) => (
+                                <button key={t} type="button"
+                                    onClick={() => setRecibiendo(r => r && { ...r, tipo: t as InventoryType })}
+                                    className={`px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all ${
+                                        recibiendo.tipo === t
+                                            ? 'border-marca bg-marca text-tinta'
+                                            : 'border-papel-borde bg-papel text-tinta-suave hover:border-marca'}`}>
+                                    {etiqueta}
+                                </button>
+                            ))}
+                        </div>
+                        {recibiendo.tipo === InventoryType.HAND_TOOL || recibiendo.tipo === InventoryType.ELECTRICAL_TOOL ? (
+                            <p className="text-[10px] text-tinta-tenue">Se va a poder prestar y reclamar.</p>
+                        ) : recibiendo.tipo ? (
+                            <p className="text-[10px] text-tinta-tenue">Se entrega y no vuelve: cuenta como gasto.</p>
+                        ) : null}
+                    </div>
+                )}
                 <p className="text-[10px] text-tinta-tenue">
                     Se pidió {n.cantidad != null ? `${n.cantidad} ${n.unidad ?? ''}`.trim() : 'sin cantidad'}.
                     Poné lo que de verdad llegó — si llegó menos, va menos.
@@ -145,9 +183,13 @@ export const OrderListView: React.FC<Props> = ({
                     <button onClick={() => setRecibiendo(null)}
                         className="px-3 py-1.5 text-xs font-bold text-tinta-tenue border border-papel-borde rounded-xl">Cancelar</button>
                     <button
-                        disabled={!Number(recibiendo.cantidad)}
+                        // Un ítem nuevo sin tipo no entra: el tipo equivocado no
+                        // truena, se esconde meses. Mejor un botón apagado que un
+                        // dato callado.
+                        disabled={!Number(recibiendo.cantidad) || (!recibiendo.itemId && !recibiendo.tipo)}
                         onClick={() => {
-                            onRecibirNote(n, Number(recibiendo.cantidad), recibiendo.itemId || undefined, n.texto);
+                            onRecibirNote(n, Number(recibiendo.cantidad), recibiendo.itemId || undefined, n.texto,
+                                recibiendo.itemId ? undefined : (recibiendo.tipo || undefined));
                             setRecibiendo(null);
                         }}
                         className="flex-1 py-1.5 text-xs font-black bg-bien disabled:bg-papel-borde disabled:text-tinta-suave text-papel rounded-xl">
@@ -430,7 +472,7 @@ export const OrderListView: React.FC<Props> = ({
                                     sencillamente no existía. */}
                                 {onRecibirNote && (
                                     <button
-                                        onClick={() => setRecibiendo({ id: n.id, cantidad: n.cantidad != null ? String(n.cantidad) : '', itemId: '' })}
+                                        onClick={() => setRecibiendo({ id: n.id, cantidad: n.cantidad != null ? String(n.cantidad) : '', itemId: '', tipo: adivinarTipo(n.texto) ?? '' })}
                                         className="flex-shrink-0 text-[11px] font-black px-2 py-1 rounded-lg bg-atencion text-papel">
                                         📥 Llegó
                                     </button>
@@ -464,7 +506,7 @@ export const OrderListView: React.FC<Props> = ({
                                         </p>
                                         {onRecibirNote && (
                                             <button
-                                                onClick={() => setRecibiendo({ id: n.id, cantidad: n.cantidad != null ? String(n.cantidad) : '', itemId: '' })}
+                                                onClick={() => setRecibiendo({ id: n.id, cantidad: n.cantidad != null ? String(n.cantidad) : '', itemId: '', tipo: adivinarTipo(n.texto) ?? '' })}
                                                 className="flex-shrink-0 text-[11px] font-black px-2 py-1 rounded-lg bg-atencion text-papel">
                                                 📥 Llegó
                                             </button>

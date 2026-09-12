@@ -754,15 +754,21 @@ const App: React.FC = () => {
      * unidades: así el Kardex nace cuadrado desde el primer movimiento, que es
      * justo lo que les faltó a "clavos 2 acero" y "clavos hierro 2".
      */
-    const handleRecibirOrderNote = (n: OrderNote, cantidad: number, itemId?: string, nombreNuevo?: string) => {
+    const handleRecibirOrderNote = (n: OrderNote, cantidad: number, itemId?: string, nombreNuevo?: string, tipoNuevo?: InventoryType) => {
         if (!cantidad || cantidad <= 0) return;
         let destino = itemId ? itemActual(itemId) : undefined;
         if (!destino) {
             destino = handleAddItemSync({
                 name: (nombreNuevo ?? n.texto).trim(),
-                category: 'Materiales',
+                // El tipo lo decide quien está mirando la mercancía, no el
+                // código. Estaba quemado como consumible, y por eso una pulidora
+                // comprada entraba como material de consumo: `isAsset` decía que
+                // no era herramienta, así que nunca se podía prestar ni reclamar,
+                // y en las cuentas pesaba como gasto. Callado, porque la cantidad
+                // sí quedaba bien.
+                category: tipoNuevo && tipoNuevo !== InventoryType.SINGLE_USE ? 'Herramientas' : 'Materiales',
                 subCategory: '',
-                inventoryType: InventoryType.SINGLE_USE,
+                inventoryType: tipoNuevo ?? InventoryType.SINGLE_USE,
                 quantity: 0,
                 minStock: 0,
                 unit: n.unidad?.trim() || 'unidades',

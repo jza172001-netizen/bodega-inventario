@@ -58,8 +58,30 @@ export const valorDeMedida = (medida: string): number => {
     return parseFloat(m.replace(',', '.')) || 0;
 };
 
+/**
+ * Las fracciones que vienen en UN solo carácter: ½, ¾, ⅜…
+ *
+ * "Tornillos 1½"" es un nombre real de la bodega y devolvía 1", perdiendo la
+ * media pulgada igual que las fracciones escritas con barra. El símbolo se
+ * cambia por su forma larga antes de leer nada, y así hay una sola regla de
+ * fracciones en vez de dos.
+ */
+const FRACCIONES_SIMBOLO: Array<[RegExp, string]> = [
+    [/⅛/g, ' 1/8'], [/¼/g, ' 1/4'], [/⅜/g, ' 3/8'], [/½/g, ' 1/2'],
+    [/⅝/g, ' 5/8'], [/⅔/g, ' 2/3'], [/¾/g, ' 3/4'], [/⅞/g, ' 7/8'], [/⅓/g, ' 1/3'],
+];
+
 export const medidaDe = (nombre: string): string | null => {
-    const sinParentesis = nombre.replace(/\s*\([^)]*\)\s*/g, ' ');
+    let sinParentesis = nombre.replace(/\s*\([^)]*\)\s*/g, ' ');
+    for (const [simbolo, largo] of FRACCIONES_SIMBOLO) sinParentesis = sinParentesis.replace(simbolo, largo);
+    /**
+     * Un número con almohadilla es una REFERENCIA, no una medida.
+     *
+     * "Lija #2000" devolvía 2000" — una lija de dos mil pulgadas. El 2000 es el
+     * grano, que es un código, no un tamaño. Y al ofrecer las medidas de toda la
+     * bodega esa mentira se hubiera regado a todas las familias.
+     */
+    sinParentesis = sinParentesis.replace(/#\s*\d+(?:[.,]\d+)?/g, ' ');
     // Las tres formas, de la más específica a la más general: si "1 1/2" se
     // probara después de "1", la entera ganaría y la fracción se perdería —
     // que es exactamente el bug que había.
@@ -75,11 +97,14 @@ export const medidaDe = (nombre: string): string | null => {
     // pulgada solo sirve para distinguir el tamaño. Sin esto, "Clavos 2 libras"
     // daría medida 2" — y ese 2 son las libras, no las pulgadas.
     if (/^(kg|kilos?|g|gr|gramos?|ml|mililitros?|l|lt|litros?|m|cm|mm|km|lb|lbs|libras?)\b/.test(despues)) return null;
+    // Dos números unidos por una palabra NO son una medida.
+    //
     // Una reducción trae DOS medidas ("Reduccion 2 a 1", "Buje 2 x 1") y ninguna
-    // de las dos sola describe la pieza. Antes se quedaba con la primera y la
-    // reducción de 2 a 1 entraba como si fuera una pieza de 2". Mientras no haya
-    // campo para la segunda medida, no se inventa: se deja sin medida.
-    if (/^(a|x|×|por)\s*\d/.test(despues)) return null;
+    // de las dos sola describe la pieza. Y "Galón 3 en 1" —nombre real de la
+    // bodega— no trae ninguna: el "3 en 1" es cómo se llama el aceite. Antes se
+    // quedaba con el primer número y el galón entraba como pieza de 3".
+    // Mientras no haya campo para una segunda medida, no se inventa.
+    if (/^(a|x|×|por|en)\s*\d/.test(despues)) return null;
     return `${num}"`;
 };
 
@@ -155,6 +180,45 @@ export const denominacionesDe = (
     if (familia && seMideEnPulgadas(familia)) for (const p of PULGADAS_ESTANDAR) vistas.add(p);
     // Por número, no alfabético: 1" antes que 10", y 1/2" antes que 1".
     return [...vistas].sort((a, b) => valorDeMedida(a) - valorDeMedida(b));
+};
+
+/**
+ * TODAS las medidas que la bodega ya usa, vengan de la familia que vengan.
+ *
+ * «Tres pulgadas» es la misma medida así sea un clavo, un tubo o un codo. La
+ * medida es un vocabulario de toda la bodega, no una propiedad de cada familia:
+ * si la bodega ya conoce 3" por los clavos, esa medida debería poderse ofrecer
+ * al cargar tubos — no porque un clavo sea un tubo, sino porque la pulgada es
+ * la misma pulgada.
+ *
+ * Para qué sirve de verdad: es lo que evita que alguien escriba `3"`, otro
+ * `3 pulg` y otro `3 pulgadas` y terminen siendo tres medidas que son una. La
+ * app propone lo que ya existe; nadie inventa una forma nueva de escribirlo.
+ */
+export const todasLasMedidas = (items: { name: string }[]): string[] => {
+    const vistas = new Set<string>();
+    for (const i of items) {
+        const m = medidaDe(i.name);
+        if (m) vistas.add(m);
+    }
+    return [...vistas].sort((a, b) => valorDeMedida(a) - valorDeMedida(b));
+};
+
+/**
+ * Las medidas de OTRAS familias: las que existen en la bodega y esta familia
+ * todavía no tiene.
+ *
+ * Van aparte y no revueltas con las propias porque no valen lo mismo: las de la
+ * familia son lo que esta cosa ya ha sido, y estas son una sugerencia prestada.
+ * Mostrarlas juntas haría parecer que la bodega ya tiene codos de 6" cuando
+ * nunca ha tenido uno.
+ */
+export const medidasPrestadas = (
+    todosLosItems: { name: string }[],
+    yaOfrecidas: string[],
+): string[] => {
+    const propias = new Set(yaOfrecidas);
+    return todasLasMedidas(todosLosItems).filter(m => !propias.has(m));
 };
 
 /**
