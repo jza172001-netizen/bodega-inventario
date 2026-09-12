@@ -154,6 +154,26 @@ export const esRetiro = (type: MovementType): boolean =>
 /** ¿Alcanza lo que hay para lo que se pide? */
 export const alcanzaStock = (hay: number, pedido: number): boolean => pedido <= hay;
 
+/**
+ * El ajuste de inventario: corregir una cantidad a mano DEJANDO RASTRO.
+ *
+ * Editar la cantidad de un ítem cambiaba el stock sin generar ningún
+ * movimiento. De 5 a 9 sin una sola línea en el libro: el renglón de bitácora
+ * decía que alguien lo había editado, pero el Kardex —entradas menos salidas—
+ * dejaba de cuadrar contra el stock, y ese cuadre es la única forma de saber si
+ * el inventario dice la verdad.
+ *
+ * No hay un tipo «Ajuste» en el enum, y agregarlo pide migrar un tipo de
+ * PostgreSQL en un servidor que ya se sabe que difiere del repositorio. Así que
+ * el ajuste va como Entrada o Merma según para dónde se corrigió, y se
+ * distingue por la nota. `esAjuste` existe para que los informes de merma no
+ * cuenten una corrección como material perdido: son cosas distintas.
+ */
+export const NOTA_AJUSTE = 'Ajuste de inventario';
+
+export const esAjuste = (m: { notes?: string }): boolean =>
+    (m.notes ?? '').startsWith(NOTA_AJUSTE);
+
 // ── Préstamos ────────────────────────────────────────────────────────
 /** Lo que está fuera de bodega y no ha vuelto. */
 export const getActiveLoans = (movements: Movement[]): Movement[] =>

@@ -3,6 +3,7 @@
 // Reemplaza geminiService.ts con logica pura TypeScript
 
 import { Item, Movement, InventoryType, MovementType } from '../types';
+import { esAjuste } from '../utils/inventory';
 
 // ─── HELPERS ────────────────────────────────────────────────────────────────
 
@@ -45,8 +46,11 @@ export const generateInventoryAnalysis = async (
             return s + (item ? m.quantity * item.price : 0);
         }, 0);
 
+    // Una corrección de inventario NO es material perdido. Va como Merma
+    // porque el enum no tiene «Ajuste», pero contarla en las mermas del mes
+    // inflaría la pérdida con algo que nunca se perdió.
     const mermas30 = last30
-        .filter(m => m.type === MovementType.WASTE)
+        .filter(m => m.type === MovementType.WASTE && !esAjuste(m))
         .reduce((s, m) => {
             const item = items.find(i => i.id === m.itemId);
             return s + (item ? m.quantity * item.price : 0);

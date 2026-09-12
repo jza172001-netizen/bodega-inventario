@@ -126,6 +126,31 @@ código nuevo. Eso es lo que hay en `tests/pantalla.test.ts`.
 
 ---
 
+## 0.4 El kardex — que el libro cuadre contra el stock (12-sep-2026)
+
+Cuatro fallos de la primera auditoría, todos en código, sin migraciones. Los
+cuatro descuadraban el libro de una manera distinta y **ninguno hacía ruido**:
+la app seguía andando y mostrando números con cara de correctos.
+
+| | Qué hacía | Cómo quedó |
+|---|---|---|
+| **A10** | Editar la cantidad cambiaba el stock **sin generar ningún movimiento**. De 5 a 9 sin una línea en el libro | Deja movimiento de ajuste por la DIFERENCIA, con nota de cuánto a cuánto y quién |
+| **A12** | Dos devoluciones seguidas del mismo ítem leían las dos la cantidad vieja: la segunda pisaba la primera y **se perdía una unidad** | Se lee del espejo, que sí sube movimiento a movimiento |
+| **A06** | Devolver una herramienta **dañada** mandaba el objeto viejo con su cantidad vieja y borraba la reposición: volvía dañada y el stock quedaba descontado | El objeto viaja con la cantidad ya repuesta |
+| **A09** | Restaurar de la papelera una salida de 3 habiendo 1 escribía **stock cero** y seguía como si nada: dos unidades perdidas en silencio | Si no cabe, **no se restaura**: queda en la papelera, se avisa y queda en la bitácora |
+
+**Sobre el ajuste de A10:** el enum `MovementType` no tiene «Ajuste», y agregarlo
+pide migrar un tipo de PostgreSQL en un servidor que ya se sabe que difiere del
+repositorio. Así que el ajuste va como **Entrada** o **Merma** según para dónde
+se corrigió, y se distingue por la nota (`esAjuste` en `utils/inventory.ts`). El
+informe de mermas del mes ya los excluye: una corrección no es material perdido.
+
+Pruebas: `tests/kardex.test.ts`, con la misma técnica de sacar los manejadores
+de verdad de `App.tsx`. **Comprobadas por mutación**: reintroduciendo los tres
+fallos a propósito, siete comprobaciones se ponen rojas.
+
+---
+
 ## 0. Cómo se usa esto
 
 Leelo entero de una. No hace falta que Juli pegue nada más. Si algo de acá

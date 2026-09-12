@@ -25,6 +25,7 @@ const ACTION_META: Record<string, { icon: string; color: string; bg: string }> =
     USER_CREATED:       { icon: '👤', color: 'text-bien',  bg: 'bg-bien-suave' },
     USER_DELETED:       { icon: '🗑️', color: 'text-alerta',    bg: 'bg-alerta-suave' },
     MOVEMENT_DELETED:   { icon: '⚠️', color: 'text-alerta',    bg: 'bg-alerta-suave' },
+    MOVEMENT_RESTORE_BLOCKED: { icon: '🚫', color: 'text-alerta',    bg: 'bg-alerta-suave' },
 };
 
 const FILTER_OPTIONS = [

@@ -68,6 +68,7 @@ const AUDIT_CATEGORY: Record<string, { icon: string; color: string; bg: string }
     USER_LOGIN:         { icon: '🔐', color: 'text-marca-oscuro', bg: 'bg-marca-suave' },
     USER_LOGOUT:        { icon: '🔓', color: 'text-tinta-suave',   bg: 'bg-papel-hondo'   },
     MOVEMENT_DELETED:   { icon: '⚠️', color: 'text-alerta',    bg: 'bg-alerta-suave'    },
+    MOVEMENT_RESTORE_BLOCKED: { icon: '🚫', color: 'text-alerta',    bg: 'bg-alerta-suave'    },
     USER_SETUP:         { icon: '🔑', color: 'text-marca-oscuro', bg: 'bg-marca-suave' },
     CONFIG_CHANGED:     { icon: '⚙️', color: 'text-marca-oscuro',   bg: 'bg-marca-suave'   },
     DATA_EXPORTED:      { icon: '⬇️', color: 'text-atencion',  bg: 'bg-atencion-suave'  },
