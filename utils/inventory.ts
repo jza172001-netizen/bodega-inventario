@@ -42,6 +42,96 @@ export const isAsset = (item?: Item): boolean => !!item && LOAN_TYPES.has(item.i
 /** EPP o consumible: es gasto definitivo, no vuelve. */
 export const isConsumable = (item?: Item): boolean => !!item && CONSUMABLE_TYPES.has(item.inventoryType);
 
+// ── De qué tipo es esto, a juzgar por el nombre ──────────────────────
+/**
+ * Propone el tipo de un ítem nuevo leyendo su nombre.
+ *
+ * Nació de un bug callado: la lista de pedidos creaba TODO lo que llegaba como
+ * `SINGLE_USE`, quemado en el código. Si llegaba una pulidora comprada y no
+ * existía todavía, entraba como material de consumo — y entonces `isAsset` decía
+ * que no era herramienta, así que **nunca se podía prestar**: no aparecía en
+ * Préstamos, nadie la reclamaba, y en las cuentas pesaba como gasto. La pulidora
+ * estaba ahí con su cantidad correcta; la app creía que era un bulto de cemento.
+ *
+ * DEVUELVE `null` CUANDO NO SABE, a propósito. Un tipo equivocado no truena: se
+ * esconde durante meses y se descubre el día que alguien pregunta quién tiene la
+ * pulidora. Antes que adivinar, se le pregunta a quien está mirando la
+ * herramienta de verdad.
+ *
+ * Las palabras salen del inventario REAL de Montecielo, no de una lista
+ * imaginada de ferretería.
+ */
+/**
+ * Pistas que NOMBRAN la cosa. Solo valen en la primera palabra.
+ *
+ * "Cemento" nombra un consumible, pero "Rastrillo de cemento" es una
+ * herramienta: ahí el cemento es para qué sirve, no qué es.
+ */
+const NOMBRAN: Array<[InventoryType, string[]]> = [
+    [InventoryType.PPE, [
+        'guante', 'gafas', 'bota', 'impermeable', 'tapaoido', 'casco', 'arnes',
+        'eslinga', 'rodillera', 'careta', 'respirador', 'tapabocas', 'chaleco', 'overol',
+    ]],
+    [InventoryType.ELECTRICAL_TOOL, [
+        'pulidora', 'radial', 'taladro', 'lijadora', 'mezcladora', 'vibrador', 'vibro',
+        'tronzadora', 'colichadora', 'hidrolavadora', 'soldador', 'compresor', 'canguro',
+        'rana', 'gramera', 'motor', 'cortadora', 'concretadora', 'guadaña', 'planta',
+    ]],
+    [InventoryType.SINGLE_USE, [
+        'clavo', 'tornillo', 'lija', 'brocha', 'cinta', 'estopa', 'trapo', 'gasolina',
+        'barniz', 'acido', 'silicona', 'pegante', 'lechada', 'cemento', 'pintura',
+        'disco', 'broca', 'lampara', 'bombillo', 'galon', 'tubo', 'codo', 'semicodo',
+        'buje', 'sifon', 'lapiz', 'soldadura', 'varilla', 'alambre', 'malla', 'bulto',
+        'arena', 'grava',
+    ]],
+];
+
+/**
+ * Pistas que DESCRIBEN la cosa. Valen en cualquier posición.
+ *
+ * Son adjetivos, no sustantivos: una "extensión eléctrica" o una "pesa
+ * eléctrica" son eléctricas aunque la palabra vaya de segunda. Son pocas a
+ * propósito — cada una que se agregue puede pisar un nombre donde esa palabra
+ * sea contexto y no naturaleza.
+ */
+const DESCRIBEN: Array<[InventoryType, string[]]> = [
+    [InventoryType.ELECTRICAL_TOOL, ['electrica', 'eléctrica', 'electrico', 'eléctrico', 'laser', 'láser', 'inalambrico', 'inalámbrico']],
+];
+
+const sinTildes = (s: string): string =>
+    s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+/** ¿Alguna de estas palabras es una pista de este tipo? */
+const pegaCon = (palabras: string[], pistas: string[]): boolean =>
+    pistas.some(pista => {
+        const p = sinTildes(pista);
+        // Palabra completa o arranque de palabra, nunca `includes` suelto: si no,
+        // "brocha" le pegaría a "broca" por parecerse de letras.
+        return palabras.some(w => w === p || w.startsWith(p));
+    });
+
+export const adivinarTipo = (nombre: string): InventoryType | null => {
+    const palabras = sinTildes(nombre).split(/[\s/()·,.-]+/).filter(Boolean);
+    if (palabras.length === 0) return null;
+
+    /**
+     * LA PRIMERA PALABRA MANDA, igual que en `familiaDe`: el bodeguero dice
+     * primero QUÉ es y después de qué o para qué.
+     *
+     * Sin esta regla, tres nombres reales de Montecielo caían mal porque el
+     * contexto le ganaba a la cosa:
+     *   "Cepillo de alambre"     → alambre → consumible  (y es herramienta)
+     *   "Rastrillo de cemento"   → cemento → consumible  (y es herramienta)
+     *   "Mezclador para taladro" → taladro → eléctrica   (y es manual)
+     */
+    for (const [tipo, pistas] of NOMBRAN) if (pegaCon([palabras[0]], pistas)) return tipo;
+
+    // Los adjetivos sí valen en cualquier posición: "Extensión eléctrica".
+    for (const [tipo, pistas] of DESCRIBEN) if (pegaCon(palabras, pistas)) return tipo;
+
+    return null;
+};
+
 // ── Movimiento de stock ──────────────────────────────────────────────
 /**
  * ¿Este movimiento RESTA del stock?

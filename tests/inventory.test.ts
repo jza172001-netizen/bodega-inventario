@@ -8,7 +8,7 @@
  * diverger en silencio.
  */
 import {
-    isAsset, isConsumable, isAccessory, esRetiro, alcanzaStock,
+    isAsset, isConsumable, isAccessory, esRetiro, alcanzaStock, adivinarTipo,
     getActiveLoans, getActiveLoansByItem, getLoansByPerson, summarizeLoanItems,
 } from '../utils/inventory';
 import { InventoryType, MovementType, Item, Movement } from '../types';
@@ -37,6 +37,48 @@ grupo('activo vs. gasto — se presta o se entrega', () => {
 
     igual(isAsset(undefined), false, 'sin ítem no truena');
     igual(isConsumable(undefined), false, 'sin ítem no truena');
+});
+
+grupo('adivinarTipo — propone, y calla cuando no sabe', () => {
+    // Existe por un bug callado: la lista de pedidos creaba TODO como consumible,
+    // así que una pulidora comprada nunca se podía prestar.
+    igual(adivinarTipo('Pulidora grande'), InventoryType.ELECTRICAL_TOOL, 'pulidora');
+    igual(adivinarTipo('Taladro percutor Bosch'), InventoryType.ELECTRICAL_TOOL, 'taladro');
+    igual(adivinarTipo('Guantes naranjas'), InventoryType.PPE, 'guantes');
+    igual(adivinarTipo('Cascos de seguridad'), InventoryType.PPE, 'cascos');
+    igual(adivinarTipo('Clavos de acero 3"'), InventoryType.SINGLE_USE, 'clavos');
+    igual(adivinarTipo('Tornillos 1½"'), InventoryType.SINGLE_USE, 'tornillos');
+});
+
+grupo('el adjetivo vale en cualquier posición', () => {
+    // "Extensión" sola no dice nada; "eléctrica" sí, y va de segunda.
+    igual(adivinarTipo('Extensión eléctrica'), InventoryType.ELECTRICAL_TOOL, 'extensión eléctrica');
+    igual(adivinarTipo('Pesa eléctrica'), InventoryType.ELECTRICAL_TOOL, 'pesa eléctrica');
+    igual(adivinarTipo('Nivel láser'), InventoryType.ELECTRICAL_TOOL, 'nivel láser');
+});
+
+grupo('el sustantivo SOLO vale de primero', () => {
+    // Tres nombres reales de Montecielo que antes caían mal: el contexto le
+    // ganaba a la cosa. "Rastrillo de cemento" es herramienta, no cemento.
+    igual(adivinarTipo('Rastrillo de cemento'), null, 'el cemento es para qué sirve');
+    igual(adivinarTipo('Cepillo de alambre'), null, 'el alambre es de qué está hecho');
+    igual(adivinarTipo('Mezclador para taladro'), null, 'el taladro es dónde se monta');
+});
+
+grupo('callar es mejor que adivinar mal', () => {
+    // Un tipo equivocado no truena: se esconde meses y se descubre el día que
+    // alguien pregunta quién tiene la pulidora. Antes que adivinar, se pregunta.
+    igual(adivinarTipo('Bichiroqui'), null, 'palabra de la bodega que nadie más usa');
+    igual(adivinarTipo('Falustre'), null, 'ni siquiera bien escrita');
+    igual(adivinarTipo(''), null, 'vacío');
+    igual(adivinarTipo('   '), null, 'solo espacios');
+});
+
+grupo('no confunde palabras parecidas', () => {
+    // "brocha" y "broca" son una letra de diferencia y son cosas distintas;
+    // las dos son consumible, pero por su propia pista, no por contagio.
+    igual(adivinarTipo('Brocha 3"'), InventoryType.SINGLE_USE, 'brocha');
+    igual(adivinarTipo('Martillo'), null, 'martillo no está en ninguna lista, y no se inventa');
 });
 
 grupo('esRetiro — qué resta del stock', () => {
