@@ -11,7 +11,7 @@
  * es amplia y lo que ordena el resultado es el PUNTAJE: lo más parecido arriba.
  */
 
-import { normStr, editDistance } from './genus';
+import { normStr, editDistance } from './genus.js';
 
 // Capas de coincidencia, de mejor a peor. Los saltos son grandes a propósito:
 // una coincidencia exacta siempre debe ganarle a una adivinada, sin importar

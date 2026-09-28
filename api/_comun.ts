@@ -13,10 +13,10 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import {
     Asignacion, InventoryType, Item, Movement, MovementType, Personnel, Project, ReturnCondition,
-} from '../types';
-import type { Bodega } from '../core/consultas';
-import type { PlanRegistro } from '../core/registro';
-import { uuidDe } from './identidad';
+} from '../types.js';
+import type { Bodega } from '../core/consultas.js';
+import type { PlanRegistro } from '../core/registro.js';
+import { uuidDe } from './identidad.js';
 
 export interface Peticion {
     method?: string;

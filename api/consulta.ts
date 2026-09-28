@@ -14,8 +14,8 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
-import { consultar, Consulta, PREGUNTAS } from '../core/consultas';
-import { Peticion, Respuesta, revisarPuerta, leerBodega, Cliente } from './_comun';
+import { consultar, Consulta, PREGUNTAS } from '../core/consultas.js';
+import { Peticion, Respuesta, revisarPuerta, leerBodega, Cliente } from './_comun.js';
 
 export default async function handler(req: Peticion, res: Respuesta): Promise<void> {
     const rechazo = revisarPuerta(req, 'POST');

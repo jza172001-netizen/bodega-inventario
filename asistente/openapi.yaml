@@ -1,0 +1,188 @@
+openapi: 3.1.0
+info:
+  title: Bodega Montecielo
+  version: 1.0.0
+  description: >
+    Registrar y consultar la bodega de Montecielo. Tres ventanillas:
+    despacho (salidas, en bloque de texto), registro (devoluciones, traslados,
+    hallazgos, daños y pedidos) y consulta (solo lee).
+servers:
+  - url: https://bodega-montecielo.vercel.app
+paths:
+  /api/despacho:
+    post:
+      operationId: registrarDespacho
+      summary: Registrar salidas de bodega a trabajadores, en bloque.
+      description: >
+        Un renglón por trabajador: "Nombre: cantidad cosa, cantidad cosa".
+        Las herramientas salen como préstamo; los consumibles como gasto y
+        necesitan obra. Lo que no se reconoce vuelve en `pendientes` y NO se
+        registra.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [texto, operacionId]
+              properties:
+                texto:
+                  type: string
+                  description: 'Renglones "Nombre: cantidad cosa, cantidad cosa", separados por salto de línea.'
+                operacionId:
+                  type: string
+                  description: Identificador único de ESTE envío. Si se reintenta, se manda el MISMO. Ej. 2026-09-29-0730-alex-juan
+                obra:
+                  type: string
+                  description: Nombre de la obra. Obligatorio si hay consumibles (clavos, cemento, guantes...).
+                fecha:
+                  type: string
+                  description: Fecha y hora ISO, solo si NO es ahora.
+      responses:
+        '200':
+          description: Resultado del despacho.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  resumen: { type: string }
+                  registrados:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        elemento: { type: string }
+                        cantidad: { type: number }
+                        persona: { type: string }
+                  fallos:
+                    type: array
+                    description: Sin existencias. NO salieron.
+                    items:
+                      type: object
+                      properties:
+                        elemento: { type: string }
+                        motivo: { type: string }
+                  pendientes:
+                    type: array
+                    description: No se reconoció la persona o el elemento. NO se registraron.
+                    items:
+                      type: object
+                      properties:
+                        renglon: { type: string }
+                        motivo: { type: string }
+        '400': { description: Falta un dato (texto, operacionId u obra para consumibles). }
+        '409': { description: Ese operacionId ya se usó con otro contenido. }
+        '422': { description: La obra no se encontró o es ambigua. Ver `dudas`. }
+  /api/registro:
+    post:
+      operationId: registrarOperacion
+      summary: Devolución, traslado, hallazgo, daño o pedido.
+      description: >
+        Si la frase tiene dos lecturas responde 422 con `dudas` y NO registra
+        nada: hay que preguntarle a la persona y reenviar con el mismo
+        operacionId. En 200 devuelve `resumen` y `fichas` (15 campos; lo no
+        dicho sale "No especificado").
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [operacionId, operacion]
+              properties:
+                operacionId:
+                  type: string
+                  description: Identificador único de ESTE registro. En un reintento, el MISMO.
+                operacion:
+                  type: string
+                  enum: [devolucion, traslado, hallazgo, dano, pedido]
+                persona:
+                  type: string
+                  description: 'devolucion: quién devuelve. traslado: quién la tiene hoy (opcional). hallazgo: quién la tiene. dano: quién la tenía (opcional).'
+                elemento:
+                  type: string
+                  description: La herramienta o material, como lo dijeron. Obligatorio salvo en pedido.
+                cantidad:
+                  type: number
+                  description: Solo si la dijeron. En devolución, sin cantidad = todo lo que tiene afuera.
+                estado:
+                  type: string
+                  description: 'Solo si lo dijeron: bueno, malo, dañada, desgaste, incompleta, mantenimiento.'
+                observacion: { type: string }
+                entregadoPor:
+                  type: string
+                  description: Quién hizo la entrega física, solo si lo dijeron.
+                aPersona:
+                  type: string
+                  description: 'traslado: a quién pasa.'
+                aObra:
+                  type: string
+                  description: 'traslado: a qué obra pasa.'
+                enBodega:
+                  type: boolean
+                  description: 'hallazgo: apareció en la bodega.'
+                obra:
+                  type: string
+                  description: 'hallazgo: en qué obra apareció.'
+                lugar:
+                  type: string
+                  description: 'hallazgo: el lugar, si no es una obra registrada.'
+                texto:
+                  type: string
+                  description: 'pedido: qué hay que comprar.'
+                unidad:
+                  type: string
+                  description: 'pedido: bultos, galones, metros...'
+      responses:
+        '200': { description: Registrado. Leer `resumen`. }
+        '409': { description: Ese operacionId ya se usó con otro contenido. }
+        '422': { description: Duda o dato faltante. NADA se registró. Preguntar con las opciones de `dudas`. }
+        '502': { description: No se registró NADA. }
+  /api/consulta:
+    post:
+      operationId: consultarBodega
+      summary: Preguntar a la bodega. Solo lee.
+      description: Devuelve `texto` listo para leer.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pregunta]
+              properties:
+                pregunta:
+                  type: string
+                  enum: [que_tiene, que_tenia, que_devolvio, donde_esta, quien_tiene, que_hay_en_obra, por_ubicar, que_esta_malo, que_paso]
+                  description: >
+                    que_tiene (hoy), que_tenia (ya no), que_devolvio: con `persona`.
+                    donde_esta, quien_tiene: con `elemento`. que_hay_en_obra: con `obra`.
+                    por_ubicar, que_esta_malo: sin nada. que_paso: con `fecha` opcional.
+                persona: { type: string }
+                elemento: { type: string }
+                obra: { type: string }
+                fecha:
+                  type: string
+                  description: AAAA-MM-DD, hora de Colombia. Sin fecha = hoy.
+      responses:
+        '200':
+          description: Respuesta.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  texto: { type: string }
+                  dudas:
+                    type: array
+                    items: { type: string }
+components:
+  schemas: {}
+  securitySchemes:
+    tokenBodega:
+      type: apiKey
+      in: header
+      name: X-Bodega-Token
+security:
+  - tokenBodega: []

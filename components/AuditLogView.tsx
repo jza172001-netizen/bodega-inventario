@@ -21,6 +21,7 @@ const ACTION_META: Record<string, { icon: string; color: string; bg: string }> =
     ASIGNACION_CREADA:  { icon: '📍', color: 'text-atencion', bg: 'bg-atencion-suave' },
     ASIGNACION_CORREGIDA: { icon: '📍', color: 'text-tinta-suave', bg: 'bg-papel-hondo' },
     ASIGNACION_RESUELTA: { icon: '📍', color: 'text-bien', bg: 'bg-bien-suave' },
+    ASISTENTE_PENDIENTE: { icon: '⚠️', color: 'text-alerta', bg: 'bg-alerta-suave' },
     PICKUP_MARKED:      { icon: '📍', color: 'text-atencion', bg: 'bg-atencion-suave' },
     PICKUP_CANCELLED:   { icon: '✕',  color: 'text-alerta',    bg: 'bg-alerta-suave' },
     PROJECT_CREATED:    { icon: '🏗️', color: 'text-bien',  bg: 'bg-bien-suave' },

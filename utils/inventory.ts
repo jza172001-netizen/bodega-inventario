@@ -16,7 +16,7 @@
  * mostraba dos.
  */
 
-import { Item, InventoryType, Movement, MovementType } from '../types';
+import { Item, InventoryType, Movement, MovementType } from '../types.js';
 
 // ── Naturaleza del ítem ──────────────────────────────────────────────
 export const LOAN_TYPES = new Set<InventoryType>([
