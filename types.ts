@@ -171,6 +171,76 @@ export interface Movement {
      * Y el Kardex sigue cuadrando solo: salida 3, entrada 1, entrada 1.
      */
     devuelveA?: string;
+    /**
+     * En un préstamo nacido de un traslado o traspaso: el préstamo que saldó.
+     *
+     * Es la cadena de custodia. «La tenía Juan y se la entregué a Carlos» deja
+     * de ser un texto en la bitácora y pasa a ser un dato: el préstamo de Carlos
+     * apunta al de Juan, que dice quién, dónde y desde cuándo.
+     */
+    vieneDe?: string;
+    /**
+     * Esta fila es una mitad de traslado o traspaso: la devolución que salda el
+     * préstamo anterior o la salida que abre el nuevo. No es una devolución a
+     * bodega ni un despacho, y «qué volvió hoy» no la cuenta.
+     */
+    esTraslado?: boolean;
+    /** Quién hizo la entrega física. No siempre es quien recibe ni quien registra. */
+    entregadoPor?: string;
+    /** Quién la tenía antes, en palabras, cuando no hay un préstamo anterior registrado. */
+    responsableAnterior?: string;
+    updatedAt?: Date;
+}
+
+/**
+ * Los tres niveles de certeza sobre dónde está algo, en palabras de Juli.
+ *
+ *  · `confirmada`          — se sabe dónde está o quién la tiene hoy.
+ *  · `posible`             — aparece relacionada en kardex o planilla; no se
+ *                            sabe si todavía la tiene.
+ *  · `pendiente_verificar` — existe, sin ubicación ni responsable.
+ */
+export type EstadoAsignacion = 'confirmada' | 'posible' | 'pendiente_verificar';
+
+export type CondicionAsignacion = 'buena' | 'mala' | 'no_especificado';
+
+export type MotivoCierre = 'confirmada_prestamo' | 'hallada_bodega' | 'hallada_obra' | 'perdida' | 'duplicada' | 'corregida';
+
+/**
+ * Algo que está AFUERA sin un préstamo confirmado.
+ *
+ * Estas unidades no están en el libro: no suman al stock de la bodega —no están
+ * ahí— ni cuentan como préstamo —nadie confirmó tenerlas—. Entran al libro solo
+ * al resolverse, y siempre por un movimiento. Una asignación posible NUNCA se
+ * vuelve préstamo sola.
+ */
+export interface Asignacion {
+    id: string;
+    /** El ítem, cuando se sabe cuál. La lista dice «Pulidoras pequeñas 7», no la marca. */
+    itemId?: string;
+    /** Cómo se dijo: «Nivel láser Total», «Pulidoras pequeñas». Obligatorio. */
+    descripcion: string;
+    cantidad: number;
+    estado: EstadoAsignacion;
+    personnelId?: string;
+    /** El nombre tal como viene, cuando no está en el personal o hay dos candidatos. */
+    posibleResponsable?: string;
+    projectId?: string;
+    ubicacion?: string;
+    responsableAnterior?: string;
+    entregadoPor?: string;
+    condicion: CondicionAsignacion;
+    desde?: Date;
+    /** Nadie sabe desde cuándo. Se dice, no se inventa una fecha. */
+    desdeDesconocido: boolean;
+    /** De qué lista salió y con qué fecha de referencia. */
+    procedencia?: string;
+    notas?: string;
+    cerradaEn?: Date;
+    cierreMotivo?: MotivoCierre;
+    cierreNota?: string;
+    cerradaPor?: string;
+    createdAt: Date;
     updatedAt?: Date;
 }
 

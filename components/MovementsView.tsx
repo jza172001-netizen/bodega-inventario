@@ -209,6 +209,13 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
                         {isCheckOut   && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-atencion-suave text-atencion">📤 Salida</span>}
                         {isCheckIn && !esCargaInicial && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-marca-suave text-marca-oscuro">📥 Entrada</span>}
                         {esCargaInicial && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-papel-hondo text-tinta-tenue">📦 Carga inicial</span>}
+                        {/* Una entrada que salda un préstamo no es una compra, y la
+                            mitad de un traslado no es ni devolución ni despacho: se
+                            dice cuál es para que nadie la cuente dos veces. */}
+                        {m.esTraslado && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-papel-hondo text-tinta-suave">🔀 Traslado</span>}
+                        {m.devuelveA && !m.esTraslado && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-bien-suave text-bien">↩ Devolución</span>}
+                        {m.entregadoPor && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-papel-hondo text-tinta-tenue">Entregó: {m.entregadoPor}</span>}
+                        {m.responsableAnterior && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-papel-hondo text-tinta-tenue">La tenía: {m.responsableAnterior}</span>}
                         {/* Mismo aviso y mismo color que en Préstamos: blanco sobre
                             fondo fuerte. En tono suave se perdía. */}
                         {m.pendingPickup && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-atencion text-papel">📍 A recoger</span>}

@@ -19,6 +19,7 @@ import { HelpView } from './components/HelpView';
 import { describirCambios, describirEstado } from './utils/cambios';
 import { nombreReal } from './utils/nombres';
 import { NOTA_AJUSTE, pendienteDe, getActiveLoans } from './utils/inventory';
+import { armarTraspaso, crearAsignacion, resolverAsignacion, ESTADOS, DatosAsignacion, Resolucion } from './core/custodia';
 import { fusionarItems, masReciente, hayQueAplicar } from './core/fusion';
 import {
     Operacion, leerCola, guardarCola, encolar, confirmar, marcarFallo,
@@ -36,7 +37,7 @@ import { requestNotificationPermission, checkAndNotifyPickup } from './services/
 
 import { mockItems, mockMovements, mockPersonnel, mockPurchaseOrders, mockProjects, mockUsers } from './mockData';
 import { realUsers as seedUsers } from './realData';
-import { Item, Movement, MovementType, Personnel, PurchaseOrder, UserRole, InventoryType, Project, AppUser, PurchaseOrderStatus, AuditLog, BehaviorLog, RechazoStock, LoteResultado, OrderNote } from './types';
+import { Item, Movement, MovementType, Personnel, PurchaseOrder, UserRole, InventoryType, Project, AppUser, PurchaseOrderStatus, AuditLog, BehaviorLog, RechazoStock, LoteResultado, OrderNote, Asignacion } from './types';
 import { LoginView } from './components/LoginView';
 import { LandingPage } from './components/LandingPage';
 import { InvoiceReaderModal } from './components/InvoiceReaderModal';
@@ -53,8 +54,10 @@ import { DashboardIcon } from './components/icons/DashboardIcon';
 import { MovementsIcon } from './components/icons/MovementsIcon';
 import { PersonnelIcon } from './components/icons/PersonnelIcon';
 import { WhatsAppIcon } from './components/icons/WhatsAppIcon';
+import { UbicacionIcon } from './components/icons/UbicacionIcon';
+import { AsignacionesView } from './components/AsignacionesView';
 
-type View = 'dashboard' | 'kardex' | 'personnel' | 'copilot' | 'help' | 'whatsapp' | 'pickup' | 'traceability' | 'familias' | 'pedidos' | 'papelera' | 'pendientes';
+type View = 'dashboard' | 'kardex' | 'personnel' | 'copilot' | 'help' | 'whatsapp' | 'pickup' | 'traceability' | 'familias' | 'pedidos' | 'papelera' | 'pendientes' | 'ubicacion';
 type KardexTab = 'movements' | 'loans' | 'inventory' | 'projects';
 
 /**
@@ -1062,8 +1065,8 @@ const App: React.FC = () => {
 
     const [currentView, setCurrentView] = useState<View>('dashboard');
     const [kardexTab, setKardexTab] = useState<KardexTab>('movements');
-    const EMPLOYEE_VIEWS: View[] = ['dashboard', 'kardex', 'personnel', 'help', 'whatsapp', 'pickup', 'traceability', 'copilot', 'familias', 'pedidos', 'papelera', 'pendientes'];
-    const VISITOR_VIEWS: View[] = ['dashboard', 'kardex', 'whatsapp', 'traceability', 'papelera', 'pendientes'];
+    const EMPLOYEE_VIEWS: View[] = ['dashboard', 'kardex', 'personnel', 'help', 'whatsapp', 'pickup', 'traceability', 'copilot', 'familias', 'pedidos', 'papelera', 'pendientes', 'ubicacion'];
+    const VISITOR_VIEWS: View[] = ['dashboard', 'kardex', 'whatsapp', 'traceability', 'papelera', 'pendientes', 'ubicacion'];
     const effectiveView: View = (userRole === UserRole.VISITOR && !VISITOR_VIEWS.includes(currentView))
         ? 'dashboard'
         : (userRole === UserRole.EMPLOYEE && !EMPLOYEE_VIEWS.includes(currentView))
@@ -1159,6 +1162,7 @@ const App: React.FC = () => {
         traceability: 'Trazabilidad',
         papelera: 'Papelera',
         pedidos: 'Lista de pedidos',
+        ubicacion: '¿Dónde está?',
     };
 
     const selectView = (view: View, tab?: KardexTab) => {
@@ -1538,6 +1542,18 @@ const App: React.FC = () => {
          * Se dice qué borrar primero en vez de hacerlo a medias. Borrar la
          * devolución sí es una sola fila y sí revierte limpio.
          */
+        /**
+         * La mitad de un traslado tampoco se borra suelta. Borrar la devolución
+         * reabriría el préstamo anterior con el nuevo todavía vivo —la misma
+         * pulidora contada dos veces—; borrar el préstamo nuevo dejaría una
+         * devolución que no devolvió nada a la bodega. Deshacer un traslado es
+         * trasladar de vuelta, y así queda escrito.
+         */
+        if (mov?.esTraslado) {
+            alert(`Este renglón es la mitad de un traslado de "${itemName}". Para deshacerlo, trasladalo de vuelta: `
+                + 'borrar una sola mitad dejaría la herramienta contada dos veces.');
+            return;
+        }
         const devoluciones = mov ? movements.filter(m => m.devuelveA === id) : [];
         if (devoluciones.length > 0) {
             alert(`"${itemName}" tiene ${devoluciones.length} devolución(es) registrada(s). `
@@ -1753,48 +1769,158 @@ const App: React.FC = () => {
         }
     };
 
+    /**
+     * Mete al libro los movimientos de una operación de custodia —traslado,
+     * traspaso, hallazgo— de una sola vez y en orden.
+     *
+     * Van en UN lote por la misma razón que el despacho: la devolución que
+     * salda el préstamo anterior tiene que llegar antes que la salida del
+     * nuevo, y si se mandaran sueltas la red podría invertirlas y el servidor
+     * rechazaría la salida por falta de stock.
+     */
+    const aplicarCustodia = (movs: Movement[], descripcion: string, cierraPrestamo?: string) => {
+        const paraElServidor: Array<{ m: Omit<Movement, 'id'>; id: string; fallbackQty: number }> = [];
+        for (const m of movs) {
+            const item = itemActual(m.itemId);
+            const antes = item?.quantity ?? 0;
+            const despues = m.type === MovementType.CHECK_OUT || m.type === MovementType.WASTE
+                ? antes - m.quantity : antes + m.quantity;
+            if (item) {
+                ajustarEspejo(item.id, despues);
+                setItems(prev => prev.map(i => i.id === item.id ? { ...i, quantity: despues } : i));
+            }
+            const { id, ...resto } = m;
+            paraElServidor.push({ m: resto, id, fallbackQty: despues });
+        }
+        const ahora = new Date();
+        const cerrar = (m: Movement): Movement => (cierraPrestamo && m.id === cierraPrestamo
+            ? { ...m, isReturned: true, pendingPickup: false, returnedAt: ahora, updatedAt: ahora } : m);
+        movimientosRef.current = [...[...movs].reverse(), ...movimientosRef.current.map(cerrar)];
+        setMovements(prev => [...[...movs].reverse(), ...prev.map(cerrar)]);
+        withSync('logMovementsWithStock', [paraElServidor], descripcion);
+        if (cierraPrestamo) {
+            withSync('markMovementReturned', [cierraPrestamo, undefined, undefined, ahora.toISOString()],
+                'Cerrar el préstamo anterior');
+        }
+    };
+
+    const nombreDePersona = (id?: string) => (id ? personnel.find(p => p.id === id)?.name : undefined);
+    const nombreDeObra = (id?: string) => (id ? projects.find(p => p.id === id)?.name : undefined);
+
+    /**
+     * Mueve un préstamo de obra, de manos, o las dos cosas.
+     *
+     * ANTES: cambiarle la obra a un préstamo era sobrescribir `projectId`, y el
+     * historial quedaba diciendo que siempre había estado en la obra nueva. El
+     * traspaso cerraba un préstamo y abría otro SIN pasar por el stock —el libro
+     * anotaba dos salidas por una sola pulidora— y el nuevo no decía de dónde
+     * venía.
+     *
+     * AHORA: el préstamo anterior se salda con una devolución enlazada y se abre
+     * uno nuevo que dice de cuál viene (`vieneDe`) y quién la tenía
+     * (`responsableAnterior`). Van juntos; el stock sube y baja lo mismo.
+     */
+    const trasladarPrestamo = (movementId: string, destino: { personnelId?: string; projectId?: string },
+                               opciones: { cantidad?: number; entregadoPor?: string; nota?: string } = {}): boolean => {
+        const prestamo = movimientosRef.current.find(m => m.id === movementId);
+        if (!prestamo) return false;
+        const plan = armarTraspaso(prestamo, movimientosRef.current, destino, {
+            ...opciones, ahora: new Date(), nuevoId: () => crypto.randomUUID(),
+            nombreDe: nombreDePersona, obraDe: nombreDeObra,
+        });
+        if ('error' in plan) { alert(plan.error); return false; }
+        const itemName = itemActual(prestamo.itemId)?.name ?? 'herramienta';
+        aplicarCustodia([plan.devolucion, plan.nuevo], `${plan.nuevo.notes ?? 'Traslado'}: "${itemName}"`,
+            plan.cierra ? prestamo.id : undefined);
+        addAuditLog('LOAN_TRANSFERRED', `${plan.nuevo.notes}: "${itemName}"`);
+        return true;
+    };
+
     const handleAssignProjectToLoan = (movementId: string, projectId: string) => {
-        const mov = movements.find(m => m.id === movementId);
-        const itemName = mov ? items.find(i => i.id === mov.itemId)?.name ?? 'ítem' : 'ítem';
-        const projName = projects.find(p => p.id === projectId)?.name ?? projectId;
+        const mov = movimientosRef.current.find(m => m.id === movementId);
+        if (!mov) return;
+        /**
+         * Si el préstamo YA estaba en una obra y cambia a otra, eso es un
+         * traslado y se registra como tal: la obra anterior queda en el
+         * historial. Solo cuando no tenía obra es completar un dato, y ahí sí
+         * se escribe encima.
+         */
+        if (mov.projectId && mov.projectId !== projectId) {
+            trasladarPrestamo(movementId, { projectId });
+            return;
+        }
+        const itemName = itemActual(mov.itemId)?.name ?? 'ítem';
+        const projName = nombreDeObra(projectId) ?? projectId;
+        movimientosRef.current = movimientosRef.current.map(m => m.id === movementId ? { ...m, projectId } : m);
         setMovements(prev => prev.map(m => m.id === movementId ? { ...m, projectId, updatedAt: new Date() } : m));
         withSync('updateMovementProject', [movementId, projectId], 'Asignarle obra a un préstamo');
         addAuditLog('LOAN_PROJECT_ASSIGNED', `Asignó "${itemName}" al proyecto "${projName}"`);
     };
 
     const handleTransferLoan = (movementId: string, newPersonnelId: string) => {
-        const original = movements.find(m => m.id === movementId);
+        const original = movimientosRef.current.find(m => m.id === movementId);
         if (!original) return;
-
-        const fromName = personnel.find(p => p.id === original.personnelId)?.name ?? 'trabajador anterior';
-        const toName   = personnel.find(p => p.id === newPersonnelId)?.name ?? 'trabajador destino';
-        const itemName = items.find(i => i.id === original.itemId)?.name ?? 'herramienta';
-
+        const fromName = nombreDePersona(original.personnelId) ?? 'trabajador anterior';
+        const toName   = nombreDePersona(newPersonnelId) ?? 'trabajador destino';
+        const itemName = itemActual(original.itemId)?.name ?? 'herramienta';
         requireConfirm(`¿Traspasar "${itemName}" de ${fromName} a ${toName}?`, () => {
-            // Cierra el préstamo original sin tocar el stock (la herramienta no regresó a bodega)
-            setMovements(prev => prev.map(m => m.id === movementId ? { ...m, isReturned: true, pendingPickup: false, updatedAt: new Date() } : m));
-            withSync('markMovementReturned', [movementId], 'Cerrar el préstamo que se traspasó');
-
-            // Crea nuevo préstamo al trabajador destino, sin ajustar cantidad de inventario.
-            //
-            // Con LO QUE FALTA POR VOLVER, no con lo que salió: si de tres palas
-            // ya volvió una, lo que pasa de mano son dos. Copiar la cantidad de
-            // la salida le cargaba al otro una pala que está en la bodega.
-            const newMovId = crypto.randomUUID();
-            const newMov: Movement = {
-                ...original,
-                quantity: pendienteDe(original, movimientosRef.current),
-                id: newMovId,
-                timestamp: new Date(),
-                personnelId: newPersonnelId,
-                isReturned: false,
-                pendingPickup: false,
-                notes: `Traspaso desde ${fromName}`,
-            };
-            setMovements(prev => [newMov, ...prev]);
-            withSync('addMovement', [newMov, newMovId], 'Registrar el traspaso a otro trabajador');
-            addAuditLog('LOAN_TRANSFERRED', `Traspaso: "${itemName}" de ${fromName} → ${toName}`);
+            trasladarPrestamo(movementId, { personnelId: newPersonnelId });
         });
+    };
+
+    // ── Asignaciones: lo que está afuera sin préstamo confirmado ──────────
+    /**
+     * Viven en el servidor, como la lista de pedidos: se cargan solas y se
+     * escuchan en vivo. No entran al merge de arranque porque no tienen copia
+     * local que pueda contradecirlas.
+     */
+    const [asignaciones, setAsignaciones] = useState<Asignacion[]>([]);
+    useEffect(() => {
+        const traer = () => db.fetchAsignaciones().then(setAsignaciones).catch(e => console.error('[Supabase] asignaciones:', e));
+        traer();
+        const canal = supabase
+            .channel('asignaciones-en-vivo')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'asignaciones' }, () => { traer(); })
+            .subscribe();
+        return () => { supabase.removeChannel(canal); };
+    }, []);
+
+    const guardarAsignacionLocal = (a: Asignacion, descripcion: string) => {
+        setAsignaciones(prev => prev.some(x => x.id === a.id) ? prev.map(x => x.id === a.id ? a : x) : [a, ...prev]);
+        withSync('guardarAsignacion', [a], descripcion);
+    };
+
+    const handleCrearAsignacion = (d: DatosAsignacion): boolean => {
+        const a = crearAsignacion(d, { ahora: new Date(), nuevoId: () => crypto.randomUUID() });
+        if ('error' in a) { alert(a.error); return false; }
+        guardarAsignacionLocal(a, `Anotar «${a.descripcion}» — ${ESTADOS[a.estado]}`);
+        addAuditLog('ASIGNACION_CREADA', `📍 ${ESTADOS[a.estado]}: ${a.cantidad} × «${a.descripcion}»${a.posibleResponsable || nombreDePersona(a.personnelId) ? ` — ${a.posibleResponsable ?? nombreDePersona(a.personnelId)}` : ''}`);
+        return true;
+    };
+
+    const handleCorregirAsignacion = (a: Asignacion, cambios: Partial<Asignacion>) => {
+        const corregida: Asignacion = { ...a, ...cambios, id: a.id, updatedAt: new Date() };
+        guardarAsignacionLocal(corregida, `Corregir «${a.descripcion}»`);
+        addAuditLog('ASIGNACION_CORREGIDA', `📍 Se corrigió «${a.descripcion}»: ${ESTADOS[corregida.estado]}`);
+    };
+
+    const handleResolverAsignacion = (a: Asignacion, r: Resolucion): boolean => {
+        const plan = resolverAsignacion(a, r, {
+            ahora: new Date(), nuevoId: () => crypto.randomUUID(), porQuien: userName || undefined,
+            nombreDe: nombreDePersona, obraDe: nombreDeObra,
+        });
+        if ('error' in plan) { alert(plan.error); return false; }
+        // Primero el libro, después la asignación: si la cola se corta en el
+        // medio, lo que quedó escrito es el movimiento, que es lo que no se
+        // puede reconstruir.
+        if (plan.movimientos.length > 0) {
+            aplicarCustodia(plan.movimientos, `Resolver «${a.descripcion}»`);
+        }
+        guardarAsignacionLocal(plan.cerrada, `Cerrar «${a.descripcion}»`);
+        if (plan.resto) guardarAsignacionLocal(plan.resto, `Lo que sigue de «${a.descripcion}»`);
+        if (plan.hallada) guardarAsignacionLocal(plan.hallada, `«${a.descripcion}» hallada donde está`);
+        addAuditLog('ASIGNACION_RESUELTA', `📍 «${a.descripcion}»: ${plan.cerrada.cierreNota}`);
+        return true;
     };
 
     const handleAddPersonnel = (p: Omit<Personnel, 'id'>) => {
@@ -2011,6 +2137,11 @@ const App: React.FC = () => {
                     <nav className="px-2 space-y-1">
                         <NavItem icon={DashboardIcon} label="Resumen" onClick={() => selectView('dashboard')} isActive={effectiveView === 'dashboard'} />
                         <NavItem icon={MovementsIcon} label="Kardex" onClick={() => selectView('kardex')} isActive={effectiveView === 'kardex'} />
+                        {/* El tercer estado: ni en bodega ni prestado, sino afuera sin
+                            confirmar. El número es de UNIDADES por ubicar, que es lo
+                            que hay que salir a buscar. */}
+                        <NavItem icon={UbicacionIcon} label="¿Dónde está?" onClick={() => selectView('ubicacion')} isActive={effectiveView === 'ubicacion'}
+                            badge={asignaciones.filter(a => !a.cerradaEn).reduce((n, a) => n + a.cantidad, 0) || undefined} />
                         {/* WhatsApp deja de ser un renglón y pasa a ser el cajón de las
                             tres cosas que salen por WhatsApp: los recordatorios de
                             herramientas, A Recoger y la Lista de pedidos. Eran tres
@@ -2239,6 +2370,17 @@ const App: React.FC = () => {
                             />
                         )}
                         {effectiveView === 'help' && <HelpView />}
+                        {effectiveView === 'ubicacion' && (
+                            <AsignacionesView
+                                asignaciones={asignaciones}
+                                items={items}
+                                personnel={personnel}
+                                projects={projects}
+                                onCrear={userRole !== UserRole.VISITOR ? handleCrearAsignacion : undefined}
+                                onResolver={userRole !== UserRole.VISITOR ? handleResolverAsignacion : undefined}
+                                onCorregir={userRole !== UserRole.VISITOR ? handleCorregirAsignacion : undefined}
+                            />
+                        )}
                         {effectiveView === 'pedidos' && (
                             <OrderListView
                                 notes={orderNotes}

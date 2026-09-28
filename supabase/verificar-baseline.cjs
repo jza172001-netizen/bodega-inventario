@@ -96,6 +96,33 @@ let PGlite;
     console.log(`Devolución parcial: stock ${q2} (esperado 4), devoluciones ${d.length} (esperado 1), `
       + `préstamo ${Number(p.quantity)} sin cerrar (esperado 2) ${bien ? '✓' : '✗'}`);
     if (!bien) process.exitCode = 1;
+
+    // Un traslado: la devolución que salda el préstamo anterior y el préstamo
+    // nuevo que dice de cuál viene, en UN lote. El stock no se mueve y la
+    // cadena de custodia llega completa al servidor.
+    const antes = Number((await pg.query('select quantity from items')).rows[0].quantity);
+    await pg.query(`select log_movements_and_update_stock($1::jsonb)`, [JSON.stringify([
+      { id: '99999999-9999-4999-8999-999999999993', item_id: '11111111-1111-4111-8111-111111111111',
+        type: 'Entrada', quantity: 1, timestamp: '2026-09-12T14:00:00Z',
+        devuelve_a: '99999999-9999-4999-8999-999999999991', es_traslado: true },
+      { id: '99999999-9999-4999-8999-999999999994', item_id: '11111111-1111-4111-8111-111111111111',
+        type: 'Salida', quantity: 1, timestamp: '2026-09-12T14:00:01Z', is_loan: true,
+        personnel_id: '44444444-4444-4444-8444-444444444444',
+        viene_de: '99999999-9999-4999-8999-999999999991', es_traslado: true,
+        entregado_por: 'Kate', responsable_anterior: 'Alex' },
+    ])]);
+    const despues = Number((await pg.query('select quantity from items')).rows[0].quantity);
+    const t = (await pg.query(`select viene_de, es_traslado, entregado_por, responsable_anterior
+                               from movements where id = '99999999-9999-4999-8999-999999999994'`)).rows[0];
+    await pg.query(`insert into asignaciones (descripcion, cantidad, estado, posible_responsable, procedencia)
+                    values ('Nivel láser Total', 1, 'posible', 'Jesús', 'Apéndice B.5')`);
+    const a = (await pg.query(`select condicion, desde, desde_desconocido from asignaciones`)).rows[0];
+    const ok = despues === antes && t.es_traslado && t.entregado_por === 'Kate' && t.responsable_anterior === 'Alex'
+      && t.viene_de === '99999999-9999-4999-8999-999999999991'
+      && a.condicion === 'no_especificado' && a.desde === null && a.desde_desconocido === true;
+    console.log(`Traslado: stock ${antes}→${despues} (no se mueve), custodia completa ${t.es_traslado && !!t.viene_de ? 'sí' : 'NO'}; `
+      + `asignación sin datos inventados ${a.desde === null && a.condicion === 'no_especificado' ? 'sí' : 'NO'} ${ok ? '✓' : '✗'}`);
+    if (!ok) process.exitCode = 1;
   } else {
     process.exitCode = 1;
   }

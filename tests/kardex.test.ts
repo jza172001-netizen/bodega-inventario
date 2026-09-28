@@ -22,6 +22,7 @@ import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { Item, InventoryType, Movement, MovementType, Personnel } from '../types';
 import { NOTA_AJUSTE, esAjuste, pendienteDe, getActiveLoans } from '../utils/inventory';
+import { armarTraspaso } from '../core/custodia';
 import { igual, esCierto, grupo, cerrar } from './correr';
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
@@ -74,6 +75,7 @@ interface App {
     handleReturnItem: (id: string, condition?: string, notes?: string, cantidad?: number) => void;
     handleRestaurado: (f: Record<string, unknown>) => void;
     handleTransferLoan: (movementId: string, newPersonnelId: string) => void;
+    handleAssignProjectToLoan: (movementId: string, projectId: string) => void;
 }
 
 /** Monta `App.tsx` con un inventario y unos movimientos, sin React ni red. */
@@ -86,7 +88,6 @@ const app = (items: Item[], movements: Movement[] = []) => {
         bitacora: [] as Array<{ accion: string; texto: string }>,
         avisos: [] as string[],
         cerrados: [] as string[],
-        traspasos: [] as Movement[],
     };
     const estado = { items: [...items], movements: [...movements] };
     const espejo = { current: [...items] };
@@ -98,7 +99,8 @@ const app = (items: Item[], movements: Movement[] = []) => {
         // que dos llamadas seguidas ven lo que hizo la primera, como en la app.
         movimientosRef: vivos,
         itemsRef: espejo,
-        MovementType, InventoryType, NOTA_AJUSTE, pendienteDe,
+        MovementType, InventoryType, NOTA_AJUSTE, pendienteDe, armarTraspaso,
+        projects: [{ id: 'bonilla', name: 'Bonilla', status: 'active' }, { id: 'cristo', name: 'El Cristo', status: 'active' }],
         crypto: { randomUUID: () => `mov-${visto.movimientosEscritos.length + 1}` },
         userName: 'Prueba',
         CONDICIONES_QUE_DAÑAN: new Set(['damaged', 'incomplete', 'needs_maintenance']),
@@ -134,7 +136,6 @@ const app = (items: Item[], movements: Movement[] = []) => {
                 }
             }
             if (tipo === 'markMovementReturned') visto.cerrados.push(args[0] as string);
-            if (tipo === 'addMovement') visto.traspasos.push(args[0] as Movement);
             if (tipo === 'returnLoanAndRestoreStock') {
                 const itemId = args[3] as string | undefined;
                 const qty = args[4] as number | undefined;
@@ -153,7 +154,8 @@ const app = (items: Item[], movements: Movement[] = []) => {
         },
     };
     const fn = sacarDeApp<App>(
-        ['itemActual', 'ajustarEspejo', 'handleEditItem', 'handleReturnItem', 'handleRestaurado', 'handleTransferLoan'],
+        ['itemActual', 'ajustarEspejo', 'handleEditItem', 'handleReturnItem', 'handleRestaurado',
+         'aplicarCustodia', 'nombreDePersona', 'nombreDeObra', 'trasladarPrestamo', 'handleTransferLoan', 'handleAssignProjectToLoan'],
         c,
     );
     // `items` en el contexto es la lista del render: se congela a propósito, que
@@ -317,8 +319,44 @@ grupo('traspasar un préstamo devuelto en parte pasa SOLO lo que falta', () => {
     const a = app([ficha(PALA, 'Pala', 0)], [prestamo('p1', PALA, 3)]);
     a.fn.handleReturnItem('p1', 'good', '', 1);
     a.fn.handleTransferLoan('p1', 'otro');
-    igual(a.visto.traspasos.map(m => m.quantity), [2],
-        'de tres palas volvió una: al otro le pasan dos, no tres');
+    const nuevo = a.vivos.current.find(m => m.vieneDe === 'p1');
+    igual(nuevo?.quantity, 2, 'de tres palas volvió una: al otro le pasan dos, no tres');
+});
+
+grupo('el traspaso pasa POR EL STOCK y el libro cuadra', () => {
+    /**
+     * Antes el traspaso cerraba el préstamo sin devolución y abría otro con
+     * `addMovement`, que NO toca el stock: el libro anotaba dos salidas por una
+     * sola pala y dejaba de cuadrar para siempre.
+     */
+    const a = app([ficha(PALA, 'Pala', 0)], [prestamo('p1', PALA, 1)]);
+    a.fn.handleTransferLoan('p1', 'otro');
+    esCierto(!a.visto.escrituras.includes('addMovement'), 'ya no se usa la escritura que salta el stock');
+    igual(a.fn.itemActual(PALA)?.quantity, 0, 'la bodega sigue en cero: la pala no volvió');
+    const libro = a.vivos.current.reduce((s, m) =>
+        s + (m.type === MovementType.CHECK_OUT || m.type === MovementType.WASTE ? -m.quantity : m.quantity), 0);
+    igual(1 + libro, 0, 'stock antes del préstamo (1) + libro = lo que hay (0)');
+    const nuevo = a.vivos.current.find(m => m.vieneDe === 'p1');
+    igual(nuevo?.responsableAnterior, 'Alex', 'y el nuevo dice quién la tenía');
+    igual(a.visto.cerrados, ['p1'], 'el de Alex se cierra');
+});
+
+grupo('cambiarle la obra a un préstamo que ya tenía una es un TRASLADO', () => {
+    /**
+     * Antes se sobrescribía `projectId` y el historial decía que siempre había
+     * estado en la obra nueva: se perdía que estuvo en Bonilla.
+     */
+    const a = app([ficha(PALA, 'Pala', 0)], [{ ...prestamo('p1', PALA, 1), projectId: 'bonilla' }]);
+    a.fn.handleAssignProjectToLoan('p1', 'cristo');
+    igual(a.vivos.current.find(m => m.id === 'p1')?.projectId, 'bonilla', 'el préstamo original SIGUE diciendo Bonilla');
+    igual(a.vivos.current.find(m => m.vieneDe === 'p1')?.projectId, 'cristo', 'el nuevo dice El Cristo');
+    esCierto(!a.visto.escrituras.includes('updateMovementProject'), 'no se sobrescribió nada');
+});
+
+grupo('ponerle obra a un préstamo que no tenía es completar un dato', () => {
+    const a = app([ficha(PALA, 'Pala', 0)], [prestamo('p1', PALA, 1)]);
+    a.fn.handleAssignProjectToLoan('p1', 'cristo');
+    igual(a.visto.escrituras, ['updateMovementProject'], 'se completa, sin traslado');
 });
 
 grupo('restaurar de la papelera ya NO decide el stock acá', () => {
