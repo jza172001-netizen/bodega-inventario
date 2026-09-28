@@ -14,11 +14,11 @@
  * dice «posible asignación → verificar», siempre, en toda respuesta.
  */
 
-import { Asignacion, Item, Movement, MovementType, Personnel, Project } from '../types';
-import { getActiveLoans, pendienteDe, daysSince } from '../utils/inventory';
-import { rankMatches } from '../utils/search';
-import { itemsQueResponden, resolverPersona } from '../utils/lote';
-import { ESTADOS, NO_ESPECIFICADO, estaAbierta } from './custodia';
+import { Asignacion, Item, Movement, MovementType, Personnel, Project } from '../types.js';
+import { getActiveLoans, pendienteDe, daysSince } from '../utils/inventory.js';
+import { rankMatches } from '../utils/search.js';
+import { itemsQueResponden, resolverPersona } from '../utils/lote.js';
+import { ESTADOS, NO_ESPECIFICADO, estaAbierta } from './custodia.js';
 
 export interface Bodega {
     items: Item[];

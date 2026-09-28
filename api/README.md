@@ -46,7 +46,7 @@ Cuerpo:
 {
   "texto": "Alex: 3 palas, 1 martillo y una pica\nJuan: 2 palas, 1 palín",
   "operacionId": "2026-09-12-0730-alex-juan",
-  "proyectoId": "opcional",
+  "obra": "opcional, el NOMBRE de la obra (ej. El Cristo); obligatoria si hay consumibles",
   "fecha": "opcional, ISO; si no va, es ahora"
 }
 ```
@@ -76,7 +76,12 @@ personas alcanza: `2026-09-12-0730-alex-juan`.
 - **registrados** — entraron. Ya están en el Kardex.
 - **fallos** — no había existencias. **No entraron.**
 - **pendientes** — la app no adivinó quién o qué era, **y no lo inventó**. Hay
-  que resolverlos desde la app.
+  que resolverlos desde la app. **Quedan escritos en Trazabilidad** (⚠ «El
+  asistente no pudo registrar…»), así no dependen de que el asistente los repita.
+
+Si `obra` no se encuentra o se parece a dos, responde **422** con las opciones en
+`dudas` y no registra nada. (`proyectoId`, el identificador interno, se sigue
+aceptando, pero un asistente no tiene cómo saberlo: usá `obra`.)
 
 ## Las instrucciones para el asistente
 

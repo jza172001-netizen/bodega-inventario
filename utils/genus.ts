@@ -1,4 +1,4 @@
-import { Item } from '../types';
+import { Item } from '../types.js';
 
 export const getGenus = (name: string): string =>
     name.replace(/\s*\([^)]+\)\s*$/, '').trim();

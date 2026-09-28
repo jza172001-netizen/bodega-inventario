@@ -18,11 +18,11 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
-import { planearRegistro, Operacion, OPERACIONES } from '../core/registro';
+import { planearRegistro, Operacion, OPERACIONES } from '../core/registro.js';
 import {
     Peticion, Respuesta, revisarPuerta, leerBodega, aplicarPlan, huellaDe, generadorDeIds,
     buscarComprobante, guardarComprobante, Cliente,
-} from './_comun';
+} from './_comun.js';
 
 const ACCION: Record<Operacion['operacion'], string> = {
     devolucion: 'LOAN_RETURNED',

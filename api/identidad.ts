@@ -12,7 +12,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { Movement } from '../types';
+import { Movement } from '../types.js';
 
 /** Un UUID válido deducido de una semilla, con versión y variante en su sitio. */
 export const uuidDe = (semilla: string): string => {

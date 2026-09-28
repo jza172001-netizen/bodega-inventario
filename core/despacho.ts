@@ -24,8 +24,8 @@
  *    el grupo completo, o no pasa nada del grupo.
  */
 
-import { Item, Movement, MovementType, RechazoStock } from '../types';
-import { esRetiro, alcanzaStock, isConsumable } from '../utils/inventory';
+import { Item, Movement, MovementType, RechazoStock } from '../types.js';
+import { esRetiro, alcanzaStock, isConsumable } from '../utils/inventory.js';
 
 /** Un movimiento listo para registrar, con la cantidad en que queda su ítem. */
 export interface Aplicacion {

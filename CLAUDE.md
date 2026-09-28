@@ -224,6 +224,15 @@ one RPC per movement let the network reorder an automatic entry after its own
 checkout. `log_movement_and_update_stock` stays for single movements and as the
 fallback path.
 
+**Every relative import reachable from `api/` MUST end in `.js`.** `package.json`
+is `"type": "module"` and Vercel compiles each file separately, so Node's ESM
+resolver runs for real: `'../core/despacho'` does not exist, `'../core/despacho.js'`
+does. All three endpoints crashed in production with `ERR_MODULE_NOT_FOUND` from
+PR #76 until 28 Sep 2026 while every suite was green, because `tsx` fills in the
+missing extension. `tests/servidor.test.ts` transpiles the whole import graph and
+loads each handler in a **separate plain `node`** process (inside tsx the same
+check passes with the defect in — it did). Vite and tsc resolve `.js` to `.ts`.
+
 **There IS a backend now**, added in PR #76: `api/despacho.ts` is a Vercel
 serverless function that lets an external AI assistant register dispatches
 without opening the web app. It uses the Supabase **service role key** and is

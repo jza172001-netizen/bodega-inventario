@@ -17,12 +17,12 @@
 
 import {
     Asignacion, EstadoReparacion, Item, Movement, MovementType, OrderNote, Personnel, ReturnCondition,
-} from '../types';
-import { getActiveLoans, pendienteDe, repartirDevolucion } from '../utils/inventory';
-import { rankMatches } from '../utils/search';
-import { itemsQueResponden, resolverItem, resolverPersona } from '../utils/lote';
-import { NO_ESPECIFICADO, armarTraspaso, estaAbierta, resolverAsignacion } from './custodia';
-import type { Bodega } from './consultas';
+} from '../types.js';
+import { getActiveLoans, pendienteDe, repartirDevolucion } from '../utils/inventory.js';
+import { rankMatches } from '../utils/search.js';
+import { itemsQueResponden, resolverItem, resolverPersona } from '../utils/lote.js';
+import { NO_ESPECIFICADO, armarTraspaso, estaAbierta, resolverAsignacion } from './custodia.js';
+import type { Bodega } from './consultas.js';
 
 export type Operacion =
     | { operacion: 'devolucion'; persona: string; elemento: string; cantidad?: number; estado?: string; observacion?: string; entregadoPor?: string }

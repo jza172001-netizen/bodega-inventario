@@ -38,11 +38,13 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { Item, Movement, MovementType, Personnel, InventoryType } from '../types';
-import { planearLote, exigeProyecto } from '../core/despacho';
-import { idDeterminista, firmaDe } from './identidad';
-import { leerLote } from '../utils/lote';
-import { isAsset } from '../utils/inventory';
+import { Item, Movement, MovementType, Personnel, InventoryType } from '../types.js';
+import { planearLote, exigeProyecto } from '../core/despacho.js';
+import { idDeterminista, firmaDe } from './identidad.js';
+import { leerLote } from '../utils/lote.js';
+import { isAsset } from '../utils/inventory.js';
+import { rankMatches } from '../utils/search.js';
+import { uuidDe } from './identidad.js';
 
 /**
  * Tipos mínimos de la petición y la respuesta.
@@ -98,7 +100,7 @@ export default async function handler(req: Peticion, res: Respuesta): Promise<vo
     const dado = String(req.headers['x-bodega-token'] ?? '');
     if (!tokenValido(dado, esperado)) { res.status(401).json({ error: 'Token inválido' }); return; }
 
-    const cuerpo = (req.body ?? {}) as { texto?: string; operacionId?: string; proyectoId?: string; fecha?: string };
+    const cuerpo = (req.body ?? {}) as { texto?: string; operacionId?: string; proyectoId?: string; obra?: string; fecha?: string };
     const texto = (cuerpo.texto ?? '').trim();
     if (!texto) { res.status(400).json({ error: 'Falta el texto del bloque' }); return; }
 
@@ -111,11 +113,12 @@ export default async function handler(req: Peticion, res: Respuesta): Promise<vo
 
     const sb = createClient(url, clave, { auth: { persistSession: false } });
 
-    const [itemsRes, personalRes] = await Promise.all([
+    const [itemsRes, personalRes, obrasRes] = await Promise.all([
         sb.from('items').select('*').is('deleted_at', null),
         sb.from('personnel').select('*').is('deleted_at', null),
+        sb.from('projects').select('id, name').is('deleted_at', null),
     ]);
-    if (itemsRes.error || personalRes.error) {
+    if (itemsRes.error || personalRes.error || obrasRes.error) {
         res.status(502).json({ error: 'No se pudo leer la bodega' });
         return;
     }
@@ -125,6 +128,30 @@ export default async function handler(req: Peticion, res: Respuesta): Promise<vo
         id: (r as Record<string, unknown>).id as string,
         name: (r as Record<string, unknown>).name as string,
     }));
+
+    /**
+     * LA OBRA POR SU NOMBRE.
+     *
+     * Antes solo se aceptaba `proyectoId`, el identificador interno de la base.
+     * Un asistente no tiene cómo saberlo, y como los consumibles exigen obra,
+     * **ningún asistente podía despachar un consumible**: siempre recibía 400.
+     * Ahora basta con el nombre («El Cristo»). Si no se encuentra o se parece a
+     * dos, se contesta con las opciones y NO se escribe nada.
+     */
+    const obras = (obrasRes.data ?? []) as Array<{ id: string; name: string }>;
+    let proyectoId = cuerpo.proyectoId;
+    if (!proyectoId && cuerpo.obra?.trim()) {
+        const r = rankMatches(obras, cuerpo.obra, o => [o.name], 3);
+        if (!r[0] || r[0].score < 500) {
+            res.status(422).json({ error: `No encontré la obra «${cuerpo.obra}».`, dudas: obras.map(o => o.name) });
+            return;
+        }
+        if (r[1] && r[0].score - r[1].score < 100) {
+            res.status(422).json({ error: `«${cuerpo.obra}» puede ser más de una obra.`, dudas: r.map(x => x.value.name) });
+            return;
+        }
+        proyectoId = r[0].value.id;
+    }
 
     /**
      * EL COMPROBANTE — se consulta ANTES de planear.
@@ -145,7 +172,7 @@ export default async function handler(req: Peticion, res: Respuesta): Promise<vo
      * decirlo.
      */
     const huella = createHash('sha256')
-        .update([texto, cuerpo.proyectoId ?? '', cuerpo.fecha ?? ''].join('|'))
+        .update([texto, proyectoId ?? '', cuerpo.fecha ?? ''].join('|'))
         .digest('hex');
 
     const { data: yaHecha } = await sb
@@ -197,7 +224,7 @@ export default async function handler(req: Peticion, res: Respuesta): Promise<vo
                 quantity: it.cantidad,
                 timestamp: ts,
                 personnelId: linea.persona.id,
-                projectId: cuerpo.proyectoId,
+                projectId: proyectoId,
                 notes: '',
                 isLoan: isAsset(it.item),
                 isReturned: false,
@@ -212,9 +239,9 @@ export default async function handler(req: Peticion, res: Respuesta): Promise<vo
     // necesitan proyecto. El endpoint la ignoraba y aceptaba una salida de
     // cemento sin obra, que es un gasto que después no se le puede cobrar a
     // nadie.
-    if (exigeProyecto(batch, items) && !cuerpo.proyectoId) {
+    if (exigeProyecto(batch, items) && !proyectoId) {
         res.status(400).json({
-            error: 'Hay consumibles en el bloque y los consumibles necesitan proyecto. Mandá proyectoId.',
+            error: 'Hay consumibles en el bloque y los consumibles necesitan obra. Mandá `obra` con su nombre.',
             pendientes,
         });
         return;
@@ -367,6 +394,33 @@ export default async function handler(req: Peticion, res: Respuesta): Promise<vo
         fallos,
         pendientes,
     };
+
+    /**
+     * LO QUE NO SE PUDO REGISTRAR QUEDA ESCRITO EN LA APP.
+     *
+     * Antes los pendientes solo viajaban en esta respuesta. Si el asistente no
+     * los repetía —o se le perdía la respuesta—, ese despacho no existía en
+     * ninguna parte, y la regla de la bodega es que el movimiento no se
+     * pierda. Ahora cada uno queda en la bitácora, visible en Trazabilidad,
+     * con el renglón tal cual se dictó. El id sale de la operación: un
+     * reintento no lo duplica.
+     */
+    if (pendientes.length > 0 || fallos.length > 0) {
+        const filas = [
+            ...pendientes.map((p, i) => ({ texto: `⚠ El asistente no pudo registrar «${p.renglon}»: ${p.motivo}. Hay que hacerlo a mano.`, i })),
+            ...fallos.map((f, i) => ({ texto: `⚠ Sin existencias, NO salió: ${f.elemento} — ${f.motivo}.`, i: 1000 + i })),
+        ].map(({ texto: description, i }) => ({
+            id: uuidDe(`${operacionId}|pendiente|${i}`),
+            timestamp: new Date().toISOString(),
+            actor: 'Asistente',
+            action: 'ASISTENTE_PENDIENTE',
+            description,
+            origen: 'asistente',
+            operacion_id: operacionId,
+        }));
+        const { error: errorBitacora } = await sb.from('audit_logs').upsert(filas, { onConflict: 'id' });
+        if (errorBitacora) console.warn('[despacho] No se pudieron anotar los pendientes:', errorBitacora.message);
+    }
 
     /**
      * El comprobante se guarda SIEMPRE, haya entrado todo o nada.

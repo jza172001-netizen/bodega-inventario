@@ -23,8 +23,8 @@
  * sin quién entregó, vacío — y la pantalla escribe «No especificado».
  */
 
-import { Asignacion, CondicionAsignacion, EstadoAsignacion, Movement, MovementType, MotivoCierre } from '../types';
-import { pendienteDe } from '../utils/inventory';
+import { Asignacion, CondicionAsignacion, EstadoAsignacion, Movement, MovementType, MotivoCierre } from '../types.js';
+import { pendienteDe } from '../utils/inventory.js';
 
 /** Lo que se muestra cuando un dato no se dijo. Nunca se guarda en su lugar. */
 export const NO_ESPECIFICADO = 'No especificado';

@@ -23,9 +23,9 @@
  * FloatingChat.tsx ya tiene 2.300 líneas.
  */
 
-import { Item, Personnel } from '../types';
-import { rankMatches, Scored } from './search';
-import { normStr, raizDeFamilia } from './genus';
+import { Item, Personnel } from '../types.js';
+import { rankMatches, Scored } from './search.js';
+import { normStr, raizDeFamilia } from './genus.js';
 
 /** Un ítem pedido dentro de un renglón. */
 export interface ItemLote {
