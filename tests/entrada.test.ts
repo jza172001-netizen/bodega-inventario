@@ -93,7 +93,13 @@ interface Login { handlePasswordSubmit: (e: { preventDefault: () => void }) => P
 /** El hash que este dispositivo guardó de la contraseña VIEJA. */
 const HASH_VIEJO = 'hash-de-la-contrasena-vieja';
 
-const login = (respuestaDelServidor: Respuesta | (() => never)) => {
+/**
+ * `identidad` es lo que contesta la vía NUEVA (el servidor sabe quién sos), y
+ * `respuestaDelServidor` lo que contesta la vieja (comparar contra una tabla).
+ * Durante la transición conviven, y lo que hay que fijar es EL ORDEN: la nueva
+ * manda, y un rechazo suyo no cae a la vieja.
+ */
+const login = (respuestaDelServidor: Respuesta | (() => never), identidad: Respuesta = { estado: 'sinRespuesta' }) => {
     const visto = { entro: null as string | null, sacudidas: [] as string[] };
     const usuario = {
         id: 'u1', username: 'kate', name: 'Kate',
@@ -113,6 +119,7 @@ const login = (respuestaDelServidor: Respuesta | (() => never)) => {
         sha256Hex: async () => HASH_VIEJO,
         offlineMatch: async () => true,
         db: {
+            entrarConIdentidad: async () => identidad,
             authenticateUser: async () => {
                 if (typeof respuestaDelServidor === 'function') respuestaDelServidor();
                 return respuestaDelServidor;
@@ -158,6 +165,111 @@ grupo('si la consulta revienta, el respaldo sigue siendo el respaldo', () => {
     return t.fn.handlePasswordSubmit({ preventDefault: () => {} }).then(() => {
         igual(t.visto.entro, 'Kate', 'entra por el respaldo');
     });
+});
+
+grupo('la identidad de servidor manda sobre el camino viejo', () => {
+    /**
+     * Las dos vías conviven solo durante la transición. Si el servidor ya sabe
+     * quién es esta persona, eso gana: es la única de las dos que le dice algo
+     * al servidor sobre quién está escribiendo.
+     */
+    const t = login({ estado: 'ok', usuario: { id: 'u1', role: UserRole.EMPLOYEE, name: 'El viejo' } },
+                    { estado: 'ok', usuario: { id: 'u1', role: UserRole.OWNER, name: 'El de identidad' } });
+    return t.fn.handlePasswordSubmit({ preventDefault: () => {} }).then(() => {
+        igual(t.visto.entro, 'El de identidad', 'entra con lo que dijo la identidad');
+    });
+});
+
+grupo('si la IDENTIDAD rechaza, NO se prueba por la otra puerta', () => {
+    /**
+     * Esto es lo mismo que se cerró en el PR #85, un piso más arriba. Si el
+     * servidor comparó y dijo que no, volver a intentar por el camino viejo
+     * —que compara contra una tabla y no sabe de permisos— sería dejar entrar a
+     * quien el servidor acaba de rechazar.
+     *
+     * La vía vieja está puesta en `ok` a propósito: si el manejador cayera a
+     * ella, la persona entraría. Que no entre es el punto.
+     */
+    const t = login({ estado: 'ok', usuario: { id: 'u1', role: UserRole.OWNER, name: 'No debería' } },
+                    { estado: 'rechazado' });
+    return t.fn.handlePasswordSubmit({ preventDefault: () => {} }).then(() => {
+        igual(t.visto.entro, null, 'NO entró');
+        esCierto(t.visto.sacudidas.length > 0, 'y se le dice que la contraseña está mala');
+    });
+});
+
+grupo('si la identidad NO CONTESTA, el camino viejo sigue sirviendo', () => {
+    // Durante la transición esto es lo normal: el servidor todavía no tiene
+    // creados los usuarios. Nadie se puede quedar afuera por eso.
+    const t = login({ estado: 'ok', usuario: { id: 'u1', role: UserRole.EMPLOYEE, name: 'Kate' } },
+                    { estado: 'sinRespuesta' });
+    return t.fn.handlePasswordSubmit({ preventDefault: () => {} }).then(() => {
+        igual(t.visto.entro, 'Kate', 'entra por el camino viejo');
+    });
+});
+
+/**
+ * EL PRIMER INGRESO — el hueco más grande que tuvo esta app.
+ *
+ * Un acceso creado por el administrador quedaba "en espera" y aparecía en la
+ * lista de la pantalla de entrada. Cualquiera que abriera la dirección de la app
+ * podía elegirlo, ponerle la contraseña que quisiera y entrar. Con un acceso de
+ * DUEÑO esperando —que era el caso en producción— eso le daba permiso de borrar
+ * todo al primero que pasara: sin claves, sin saber nada, solo abriendo la
+ * página.
+ */
+interface Alta { handleSetupSubmit: (e: { preventDefault: () => void }) => void }
+
+const alta = (codigoGuardado: string | null, codigoEscrito: string, clave = 'nueva123') => {
+    const visto = { creado: null as string | null, sacudidas: [] as string[] };
+    const c: Record<string, unknown> = {
+        selectedUser: { id: 'u9', name: 'Camilo', password: codigoGuardado, role: UserRole.OWNER } as unknown as AppUser,
+        setupCodigo: codigoEscrito,
+        setupPassword: clave,
+        setupConfirm: clave,
+        users: [],
+        normStr: (x: string) => x.toLowerCase(),
+        triggerShake: (m: string) => visto.sacudidas.push(m),
+        onFirstSetup: (_id: string, usuario: string) => { visto.creado = usuario; },
+    };
+    return { visto, fn: sacarDeLogin<Alta>(['handleSetupSubmit'], c) };
+};
+
+grupo('sin código de alta NO se puede reclamar un acceso', () => {
+    // El caso exacto de producción: CAMILO, dueño, con la contraseña vacía.
+    const t = alta('', 'LOQUESEA');
+    t.fn.handleSetupSubmit({ preventDefault: () => {} });
+    igual(t.visto.creado, null, 'NO se creó la cuenta');
+    esCierto(t.visto.sacudidas.some(m => /código de alta/i.test(m)), 'y se dice por qué');
+});
+
+grupo('con el código equivocado tampoco', () => {
+    const t = alta('AB3KP9', 'XXXXXX');
+    t.fn.handleSetupSubmit({ preventDefault: () => {} });
+    igual(t.visto.creado, null, 'no entra');
+    esCierto(t.visto.sacudidas.some(m => /incorrecto/i.test(m)), 'se le dice que el código no es');
+});
+
+grupo('con el código correcto SÍ', () => {
+    const t = alta('AB3KP9', 'AB3KP9');
+    t.fn.handleSetupSubmit({ preventDefault: () => {} });
+    igual(t.visto.creado, 'camilo', 'la persona a la que le dieron el código sí entra');
+});
+
+grupo('el código no distingue mayúsculas ni espacios', () => {
+    // Se dicta por teléfono y se escribe en un celular. Exigir la mayúscula
+    // exacta sería hacer fallar a quien tiene el código correcto.
+    for (const escrito of ['ab3kp9', ' AB3KP9 ', 'Ab3Kp9']) {
+        const t = alta('AB3KP9', escrito);
+        t.fn.handleSetupSubmit({ preventDefault: () => {} });
+        igual(t.visto.creado, 'camilo', `"${escrito}" sirve`);
+    }
+});
+
+grupo('una contraseña muy corta sigue sin pasar', () => {
+    const t = alta('AB3KP9', 'AB3KP9', 'ab');
+    t.fn.handleSetupSubmit({ preventDefault: () => {} });
+    igual(t.visto.creado, null, 'la regla vieja sigue');
 });
 
 await cerrar();
