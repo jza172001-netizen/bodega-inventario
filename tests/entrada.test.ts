@@ -272,4 +272,79 @@ grupo('una contraseña muy corta sigue sin pasar', () => {
     igual(t.visto.creado, null, 'la regla vieja sigue');
 });
 
+/**
+ * EL CAMBIO OBLIGATORIO DE CONTRASEÑA.
+ *
+ * Las tres contraseñas que había eran de DOS caracteres. Mientras la llave
+ * pública estuvo abierta eso casi no importaba —había puertas más grandes— pero
+ * al cerrar todo lo demás pasan a ser lo único que separa el inventario de
+ * internet, y los nombres de usuario son adivinables.
+ *
+ * No se cambian por detrás: alguien que llega en la mañana con la contraseña que
+ * conoce y no entra es la encargada parada en la puerta de la bodega.
+ */
+interface Cambio { handleCambioSubmit: (e: { preventDefault: () => void }) => Promise<void> }
+
+const cambio = (nueva: string, repetida: string, guardar: 'bien' | 'falla' = 'bien') => {
+    const visto = { entro: null as string | null, sacudidas: [] as string[], guardadas: [] as string[] };
+    const c: Record<string, unknown> = {
+        selectedUser: { id: 'u1', name: 'Kate' } as unknown as AppUser,
+        pendienteDeEntrar: { role: UserRole.EMPLOYEE, name: 'Kate' },
+        isLoading: false,
+        setIsLoading: () => {},
+        setupPassword: nueva,
+        setupConfirm: repetida,
+        triggerShake: (m: string) => visto.sacudidas.push(m),
+        onLoginSuccess: (_r: UserRole, n: string) => { visto.entro = n; },
+        onCredentialVerified: () => {},
+        sha256Hex: async () => 'hash',
+        db: {
+            cambiarClave: async (_id: string, clave: string) => {
+                if (guardar === 'falla') throw new Error('sin conexión');
+                visto.guardadas.push(clave);
+            },
+        },
+    };
+    return { visto, fn: sacarDeLogin<Cambio>(['handleCambioSubmit'], c) };
+};
+
+grupo('una contraseña nueva de verdad deja entrar', () => {
+    const t = cambio('montecielo47', 'montecielo47');
+    return t.fn.handleCambioSubmit({ preventDefault: () => {} }).then(() => {
+        igual(t.visto.guardadas, ['montecielo47'], 'se guardó');
+        igual(t.visto.entro, 'Kate', 'y entró');
+    });
+});
+
+grupo('una contraseña corta NO pasa', () => {
+    // Seis es el mínimo. Si esto dejara pasar dos caracteres, todo el cambio
+    // sería un paso extra que no protege nada.
+    const t = cambio('ab', 'ab');
+    return t.fn.handleCambioSubmit({ preventDefault: () => {} }).then(() => {
+        igual(t.visto.entro, null, 'no entró');
+        igual(t.visto.guardadas.length, 0, 'ni se guardó');
+        esCierto(t.visto.sacudidas.some(m => /6 caracteres/i.test(m)), 'y se dice el mínimo');
+    });
+});
+
+grupo('si no coinciden, no pasa', () => {
+    const t = cambio('montecielo47', 'montecielo48');
+    return t.fn.handleCambioSubmit({ preventDefault: () => {} }).then(() => {
+        igual(t.visto.entro, null, 'no entró');
+        esCierto(t.visto.sacudidas.some(m => /no coinciden/i.test(m)), 'y se dice por qué');
+    });
+});
+
+grupo('si no se pudo guardar, NO se entra igual', () => {
+    /**
+     * Dejar pasar «por esta vez» es cómo nadie cambia la contraseña nunca. Y no
+     * se pierde nada: la de siempre sigue sirviendo y se vuelve a intentar.
+     */
+    const t = cambio('montecielo47', 'montecielo47', 'falla');
+    return t.fn.handleCambioSubmit({ preventDefault: () => {} }).then(() => {
+        igual(t.visto.entro, null, 'no entró');
+        esCierto(t.visto.sacudidas.some(m => /conexión/i.test(m)), 'y se dice que hay que reintentar');
+    });
+});
+
 await cerrar();
