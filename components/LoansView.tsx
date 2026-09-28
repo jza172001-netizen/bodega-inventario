@@ -6,7 +6,7 @@ import { ClockIcon } from './icons/ClockIcon';
 import { ReturnToolModal } from './ReturnToolModal';
 import { getGenus, looseMatch } from '../utils/genus';
 import { AccesoriosDeItem, AgregarAccesorio } from './AccesoriosDeItem';
-import { getActiveToolLoans, getConsumedMovements } from '../utils/inventory';
+import { getActiveToolLoans, getConsumedMovements, getActiveLoans, pendienteDeVarios, repartirDevolucion } from '../utils/inventory';
 
 /**
  * Dos lentes sobre la misma pantalla, porque son dos preguntas distintas:
@@ -21,7 +21,7 @@ interface LoansViewProps {
     movements: Movement[];
     items: Item[];
     personnel: Personnel[];
-    onReturnItem: (movementId: string, condition?: string, notes?: string) => void;
+    onReturnItem: (movementId: string, condition?: string, notes?: string, cantidad?: number) => void;
     onMarkPendingPickup: (movementId: string, pending: boolean) => void;
     /** Con qué lente abre la vista. El deep-link desde el Resumen decide cuál. */
     initialLens?: LoansLens;
@@ -159,12 +159,14 @@ export const LoansView: React.FC<LoansViewProps> = ({
         setReturningLoan(loan);
     };
 
-    const confirmReturn = (ids: string[], condition: ReturnCondition, notes: string) => {
-        ids.forEach(id => {
-            const loan = movements.find(m => m.id === id);
-            if (loan) onBehaviorLog?.('ACTION', `Confirmó devolución: ${getItemName(loan.itemId)} de ${getPersonName(loan.personnelId)} — ${condition}`);
-            onReturnItem(id, condition, notes);
-        });
+    const confirmReturn = (ids: string[], condition: ReturnCondition, notes: string, cantidad?: number) => {
+        // Quien devuelve dice CUÁNTAS trae, no de cuál salida — nadie se acuerda
+        // de eso. El reparto las asigna al préstamo más viejo primero.
+        for (const parte of repartirDevolucion(ids, movements, cantidad)) {
+            const loan = movements.find(m => m.id === parte.id);
+            if (loan) onBehaviorLog?.('ACTION', `Confirmó devolución: ${parte.cantidad} × ${getItemName(loan.itemId)} de ${getPersonName(loan.personnelId)} — ${condition}`);
+            onReturnItem(parte.id, condition, notes, parte.cantidad);
+        }
         setReturningLoan(null);
     };
 
@@ -453,6 +455,7 @@ export const LoansView: React.FC<LoansViewProps> = ({
                         item={item}
                         personName={getPersonName(returningLoan.personnelId)}
                         movementIds={[returningLoan.id]}
+                        pendienteTotal={pendienteDeVarios([returningLoan.id], movements)}
                         onConfirm={confirmReturn}
                         onClose={() => setReturningLoan(null)}
                     />

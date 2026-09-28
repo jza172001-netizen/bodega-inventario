@@ -6,6 +6,7 @@ import { momentoDeFecha } from '../utils/date';
 import { XIcon } from './icons/XIcon';
 import { ConfirmDialog } from './ConfirmDialog';
 import { AddItemModal } from './AddItemModal';
+import { getActiveLoans } from '../utils/inventory';
 
 interface LogMovementModalProps {
     isOpen: boolean;
@@ -107,7 +108,7 @@ export const LogMovementModal: React.FC<LogMovementModalProps> = ({ isOpen, onCl
             return;
         }
         if (type === MovementType.CHECK_OUT && esPrestamo && movements) {
-            const activeLoan = movements.find(m => m.itemId === itemId && m.isLoan && !m.isReturned);
+            const activeLoan = getActiveLoans(movements).find(m => m.itemId === itemId);
             if (activeLoan) {
                 const owner = personnel.find(p => p.id === activeLoan.personnelId)?.name ?? 'alguien';
                 const date = new Date(activeLoan.timestamp).toLocaleDateString('es-CO');

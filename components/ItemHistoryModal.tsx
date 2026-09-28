@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Item, Movement, Personnel, MovementType, Project, UserRole } from '../types';
 import { XIcon } from './icons/XIcon';
-import { isAsset, daysSince } from '../utils/inventory';
+import { isAsset, daysSince, getActiveLoans } from '../utils/inventory';
 
 interface ItemHistoryModalProps {
     isOpen: boolean;
@@ -53,7 +53,7 @@ export const ItemHistoryModal: React.FC<ItemHistoryModalProps> = ({
 
     // filter, no find: con find(), un martillo que tienen Adrián y Abel mostraba
     // un solo tenedor y el otro desaparecía de la pantalla.
-    const activeLoans = history.filter(m => m.isLoan && !m.isReturned);
+    const activeLoans = getActiveLoans(history);
     const unidadesFuera = activeLoans.reduce((s, m) => s + m.quantity, 0);
     const activeProjects = projects.filter(p => p.status === 'active');
     const esHerramienta = isAsset(item);

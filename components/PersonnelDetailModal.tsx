@@ -3,6 +3,7 @@ import { Personnel, Movement, Item, Project, MovementType, InventoryType, Return
 import { PeriodPicker, Periodo, periodoPorDefecto } from './PeriodPicker';
 import { AccesoriosDeItem } from './AccesoriosDeItem';
 import { ReturnToolModal } from './ReturnToolModal';
+import { getActiveLoans, pendienteDeVarios, repartirDevolucion } from '../utils/inventory';
 
 interface Props {
     person: Personnel;
@@ -10,7 +11,7 @@ interface Props {
     items: Item[];
     projects: Project[];
     allPersonnel?: Personnel[];
-    onReturnLoan?: (movementId: string, condition?: string, notes?: string) => void;
+    onReturnLoan?: (movementId: string, condition?: string, notes?: string, cantidad?: number) => void;
     onMarkPendingPickup?: (movementId: string, pending: boolean) => void;
     onAssignProject?: (movementId: string, projectId: string) => void;
     onCreateProject?: (name: string) => Project;
@@ -117,12 +118,12 @@ export const PersonnelDetailModal: React.FC<Props> = ({
 
     const activeManual = useMemo(() => {
         const ids = itemByType(InventoryType.HAND_TOOL);
-        return groupLoans(liveMovements.filter(m => m.isLoan && !m.isReturned && ids.has(m.itemId)));
+        return groupLoans(getActiveLoans(liveMovements).filter(m => ids.has(m.itemId)));
     }, [liveMovements, items, periodo]);
 
     const activeElectric = useMemo(() => {
         const ids = itemByType(InventoryType.ELECTRICAL_TOOL);
-        return groupLoans(liveMovements.filter(m => m.isLoan && !m.isReturned && ids.has(m.itemId)));
+        return groupLoans(getActiveLoans(liveMovements).filter(m => ids.has(m.itemId)));
     }, [liveMovements, items, periodo]);
 
     const consumoYear = useMemo(() => {
@@ -176,8 +177,12 @@ export const PersonnelDetailModal: React.FC<Props> = ({
         setReturningGroup(g);
     };
 
-    const confirmReturn = (ids: string[], condition: ReturnCondition, notes: string) => {
-        ids.forEach(id => onReturnLoan?.(id, condition, notes));
+    const confirmReturn = (ids: string[], condition: ReturnCondition, notes: string, cantidad?: number) => {
+        // El grupo «Pala ×3» puede ser un préstamo de tres o tres de uno. La
+        // persona dice cuántas trae y el reparto las saca del más viejo primero.
+        for (const parte of repartirDevolucion(ids, movements, cantidad)) {
+            onReturnLoan?.(parte.id, condition, notes, parte.cantidad);
+        }
         setReturningGroup(null);
     };
 
@@ -519,6 +524,7 @@ export const PersonnelDetailModal: React.FC<Props> = ({
                     item={items.find(i => i.id === returningGroup.itemId) ?? { id: '', name: itemName(returningGroup.itemId), requiresReturnNote: false } as Item}
                     personName={person.name}
                     movementIds={returningGroup.movementIds}
+                    pendienteTotal={pendienteDeVarios(returningGroup.movementIds, movements)}
                     onConfirm={confirmReturn}
                     onClose={() => setReturningGroup(null)}
                 />

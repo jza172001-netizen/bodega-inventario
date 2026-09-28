@@ -18,7 +18,7 @@ import { OnboardingModal } from './components/OnboardingModal';
 import { HelpView } from './components/HelpView';
 import { describirCambios, describirEstado } from './utils/cambios';
 import { nombreReal } from './utils/nombres';
-import { NOTA_AJUSTE } from './utils/inventory';
+import { NOTA_AJUSTE, pendienteDe, getActiveLoans } from './utils/inventory';
 import { fusionarItems, masReciente, hayQueAplicar } from './core/fusion';
 import {
     Operacion, leerCola, guardarCola, encolar, confirmar, marcarFallo,
@@ -158,6 +158,16 @@ const App: React.FC = () => {
         itemsRef.current = itemsRef.current.map(i => i.id === id ? { ...i, quantity } : i);
     };
     const [movements, setMovements] = useState<Movement[]>(() => { const s = loadInitialData(); return s?.movements ?? []; });
+    /**
+     * El espejo de `movements`, por la misma razón que el de `items`.
+     *
+     * Con la devolución parcial, lo que queda afuera se CALCULA de los
+     * movimientos. Leído de `movements` del render, dos toques seguidos sobre
+     * el mismo préstamo veían los dos el mismo pendiente y devolvían dos veces
+     * la misma pala: la bodega ganaba una herramienta que no existe.
+     */
+    const movimientosRef = React.useRef<Movement[]>(movements);
+    useEffect(() => { movimientosRef.current = movements; }, [movements]);
     const [personnel, setPersonnel] = useState<Personnel[]>(() => {
         const s = loadInitialData();
         const ls = s?.personnel;
@@ -1063,7 +1073,7 @@ const App: React.FC = () => {
     // ítems". Ese botón salió de la barra, así que el conteo —que recorría todos
     // los ítems en cada render— ya no alimenta nada.
 
-    const pendingPickupCount = movements.filter(m => m.isLoan && !m.isReturned && m.pendingPickup).length;
+    const pendingPickupCount = getActiveLoans(movements).filter(m => m.pendingPickup).length;
     /** Las tres pantallas que salen por WhatsApp, juntas bajo un solo renglón. */
     const GRUPO_WHATSAPP: View[] = ['whatsapp', 'pickup', 'pedidos'];
     const [whatsappAbierto, setWhatsappAbierto] = useState(false);
@@ -1516,6 +1526,26 @@ const App: React.FC = () => {
     const handleDeleteMovement = (id: string) => {
         const mov = movements.find(m => m.id === id);
         const itemName = mov ? items.find(i => i.id === mov.itemId)?.name ?? mov.itemId : id;
+
+        /**
+         * Un préstamo con devoluciones enlazadas NO se borra suelto.
+         *
+         * Borrarlo dejaría en el libro las entradas que lo devolvían, sin la
+         * salida que las explica: el Kardex quedaría diciendo que entraron dos
+         * palas que nunca salieron. Y revertir el stock tampoco arregla nada,
+         * porque la reposición ya la hicieron esas entradas.
+         *
+         * Se dice qué borrar primero en vez de hacerlo a medias. Borrar la
+         * devolución sí es una sola fila y sí revierte limpio.
+         */
+        const devoluciones = mov ? movements.filter(m => m.devuelveA === id) : [];
+        if (devoluciones.length > 0) {
+            alert(`"${itemName}" tiene ${devoluciones.length} devolución(es) registrada(s). `
+                + 'Borrá primero esas devoluciones; si no, quedarían entradas sin la salida que las explica '
+                + 'y el Kardex dejaría de cuadrar.');
+            return;
+        }
+
         requirePin(
             () => {
                 // Revertir el efecto del movimiento sobre el stock antes de borrarlo:
@@ -1542,10 +1572,44 @@ const App: React.FC = () => {
         );
     };
 
-    const handleReturnItem = (id: string, condition?: string, notes?: string) => {
-        const mov = movements.find(m => m.id === id);
-        // Guarda contra doble devolución: si ya estaba devuelta, no se repone stock otra vez
-        if (mov?.isReturned) return;
+    /**
+     * Devolver — entera o de a pedazos.
+     * =================================
+     * ANTES: devolver era marcarle una casilla al préstamo y reponer el stock
+     * por detrás. Si salían tres palas y volvía una **no había dónde
+     * escribirlo**: o se marcaban las tres —y la bodega creía tener dos palas
+     * que están en la obra— o no se marcaba ninguna y la que volvió seguía
+     * figurando afuera. Las dos son mentira, y a la encargada le tocaba elegir
+     * cuál.
+     *
+     * AHORA: la devolución es una ENTRADA propia, enlazada al préstamo por
+     * `devuelveA`. El préstamo **no se toca** —sigue diciendo tres, que es con
+     * lo que se reclama— y lo que falta se calcula. Dos devoluciones de una son
+     * dos renglones con su fecha y su estado, no un préstamo que cambió de
+     * número.
+     *
+     * De paso, el Kardex cuadra sin excepciones: salida 3, entrada 1, entrada 1.
+     * La reposición deja de ser un efecto invisible de marcar una casilla y pasa
+     * a ser una línea del libro, como cualquier otra entrada.
+     *
+     * `cantidad` sin decir = vuelve todo lo que quedaba afuera, que es la
+     * devolución de siempre.
+     */
+    const handleReturnItem = (id: string, condition?: string, notes?: string, cantidad?: number) => {
+        const vivos = movimientosRef.current;
+        const mov = vivos.find(m => m.id === id);
+        if (!mov) return;
+
+        /**
+         * Guarda contra la doble devolución, ahora por lo que FALTA.
+         *
+         * `isReturned` sigue mirándose porque lo traen escrito los miles de
+         * movimientos de antes; para los nuevos lo que manda es el pendiente.
+         */
+        const pendiente = pendienteDe(mov, vivos);
+        if (mov.isReturned || pendiente <= 0) return;
+        const vuelven = Math.max(1, Math.min(cantidad ?? pendiente, pendiente));
+
         /**
          * Del ESPEJO, no de `items` del render.
          *
@@ -1554,27 +1618,77 @@ const App: React.FC = () => {
          * vieja y la reposición de la segunda pisaba la de la primera: se
          * perdía una unidad. El espejo sí baja y sube movimiento a movimiento.
          */
-        const item = mov ? itemActual(mov.itemId) : undefined;
+        const item = itemActual(mov.itemId);
         const itemName = item?.name ?? 'herramienta';
-        const personName = mov?.personnelId ? personnel.find(p => p.id === mov.personnelId)?.name : undefined;
+        const personName = mov.personnelId ? personnel.find(p => p.id === mov.personnelId)?.name : undefined;
+        const ahora = new Date();
+        const deQuien = personName ? ` de ${personName}` : '';
 
-        setMovements(prev => prev.map(m => m.id === id
-            ? { ...m, isReturned: true, pendingPickup: false, returnCondition: condition as import('./types').ReturnCondition | undefined, returnNotes: notes, returnedAt: new Date(), updatedAt: new Date() }
-            : m));
+        // La herramienta vuelve a la bodega: su entrada repone el stock. Sin
+        // esto el stock quedaba descontado para siempre (el "AGOTADO" falso).
+        // Solo una salida devuelve unidades; una merma no vuelve de ninguna parte.
+        const reponeStock = !!item && mov.type === MovementType.CHECK_OUT;
+        const restoredQty = reponeStock ? item!.quantity + vuelven : undefined;
 
-        // La herramienta vuelve a la bodega: hay que reponer la unidad al inventario.
-        // Sin esto el stock quedaba descontado para siempre (causa del "AGOTADO" falso).
-        let restoredQty: number | undefined;
-        if (mov && item && mov.type === MovementType.CHECK_OUT) {
-            restoredQty = item.quantity + mov.quantity;
-            const qty = restoredQty;
-            setItems(prev => prev.map(i => i.id === item.id ? { ...i, quantity: qty } : i));
-            ajustarEspejo(item.id, qty);
+        const idDevolucion = crypto.randomUUID();
+        const devolucion: Movement = {
+            id: idDevolucion,
+            itemId: mov.itemId,
+            type: MovementType.CHECK_IN,
+            quantity: vuelven,
+            timestamp: ahora,
+            personnelId: mov.personnelId,
+            projectId: mov.projectId,
+            devuelveA: mov.id,
+            returnCondition: condition as import('./types').ReturnCondition | undefined,
+            returnNotes: notes,
+            returnedAt: ahora,
+            notes: `Devolución${deQuien}${vuelven < pendiente ? ` — parcial, ${vuelven} de ${pendiente}` : ''}`,
+            updatedAt: ahora,
+        };
+
+        const quedaPendiente = pendiente - vuelven;
+        const cierra = quedaPendiente === 0;
+
+        const cerrarEste = (m: Movement): Movement => (cierra && m.id === id
+            ? { ...m, isReturned: true, pendingPickup: false,
+                returnCondition: condition as import('./types').ReturnCondition | undefined,
+                returnNotes: notes, returnedAt: ahora, updatedAt: ahora }
+            : m);
+        movimientosRef.current = [devolucion, ...vivos.map(cerrarEste)];
+        setMovements(prev => [
+            devolucion,
+            // El préstamo solo se marca cuando ya no queda nada afuera, y se
+            // marca para que las miles de pantallas que preguntan por
+            // `isReturned` sigan diciendo la verdad. Su cantidad NO se toca.
+            ...prev.map(cerrarEste),
+        ]);
+
+        if (reponeStock && item && restoredQty !== undefined) {
+            setItems(prev => prev.map(i => i.id === item.id ? { ...i, quantity: restoredQty } : i));
+            ajustarEspejo(item.id, restoredQty);
         }
-        withSync('returnLoanAndRestoreStock',
-            [id, condition as import('./types').ReturnCondition | undefined, notes, item?.id, restoredQty],
-            `Devolver "${itemName}"${personName ? ` de ${personName}` : ''}`);
-        addAuditLog('LOAN_RETURNED', `Devuelta: "${itemName}"${personName ? ` de ${personName}` : ''}${condition ? ` — estado: ${condition}` : ''}`);
+
+        /**
+         * La entrada va por el mismo camino que cualquier movimiento: fila y
+         * stock en una sola transacción, y un reintento que no aplica dos veces
+         * porque el identificador ya viaja decidido desde acá.
+         */
+        const { id: _sinId, ...paraGuardar } = devolucion;
+        withSync('logMovementsWithStock',
+            [[{ m: paraGuardar, id: idDevolucion, fallbackQty: restoredQty ?? item?.quantity ?? 0 }]],
+            `Devolver ${vuelven} × "${itemName}"${deQuien}`);
+
+        if (cierra) {
+            // Cerrar es SOLO marcar. `returnLoanAndRestoreStock` repone stock, y
+            // eso ya lo hizo la entrada de arriba: usarla acá lo subiría dos veces.
+            withSync('markMovementReturned',
+                [id, condition as import('./types').ReturnCondition | undefined, notes, ahora.toISOString()],
+                `Cerrar el préstamo de "${itemName}"${deQuien}`);
+        }
+
+        addAuditLog('LOAN_RETURNED',
+            `Devuelta: "${itemName}"${deQuien}${vuelven < pendiente ? ` — ${vuelven} de ${pendiente}, quedan ${quedaPendiente}` : ''}${condition ? ` — estado: ${condition}` : ''}`);
 
         // Si volvió mal, arranca el ciclo de reparación. Antes el estado se
         // guardaba en el movimiento y ahí se quedaba: nadie volvía a acordarse
@@ -1591,8 +1705,8 @@ const App: React.FC = () => {
             const conReparacion: Item = {
                 ...item,
                 quantity: restoredQty ?? item.quantity,
-                reparacion: { estado: 'dañada', desde: new Date(), nota: notes || undefined, porQuien: userName || undefined },
-                updatedAt: new Date(),
+                reparacion: { estado: 'dañada', desde: ahora, nota: notes || undefined, porQuien: userName || undefined },
+                updatedAt: ahora,
             };
             setItems(prev => prev.map(i => i.id === item.id ? { ...i, reparacion: conReparacion.reparacion, updatedAt: conReparacion.updatedAt } : i));
             itemsRef.current = itemsRef.current.map(i => i.id === item.id ? { ...i, reparacion: conReparacion.reparacion } : i);
@@ -1661,10 +1775,15 @@ const App: React.FC = () => {
             setMovements(prev => prev.map(m => m.id === movementId ? { ...m, isReturned: true, pendingPickup: false, updatedAt: new Date() } : m));
             withSync('markMovementReturned', [movementId], 'Cerrar el préstamo que se traspasó');
 
-            // Crea nuevo préstamo al trabajador destino, sin ajustar cantidad de inventario
+            // Crea nuevo préstamo al trabajador destino, sin ajustar cantidad de inventario.
+            //
+            // Con LO QUE FALTA POR VOLVER, no con lo que salió: si de tres palas
+            // ya volvió una, lo que pasa de mano son dos. Copiar la cantidad de
+            // la salida le cargaba al otro una pala que está en la bodega.
             const newMovId = crypto.randomUUID();
             const newMov: Movement = {
                 ...original,
+                quantity: pendienteDe(original, movimientosRef.current),
                 id: newMovId,
                 timestamp: new Date(),
                 personnelId: newPersonnelId,

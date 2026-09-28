@@ -98,9 +98,26 @@ having i.quantity <> coalesce(sum(case when m.type in ('Entrada','Compra') then 
 **La consulta 4 tiene que devolver CERO FILAS.** Cada fila que devuelva es un
 ítem cuyo stock no lo respalda su historial.
 
-> **Ojo con los préstamos:** una salida prestada y devuelta suma y resta, así que
-> su efecto neto es cero y el cuadre funciona igual. Un préstamo **sin devolver**
-> sí descuenta, y así debe ser: la herramienta no está en la bodega.
+> **Ojo con los préstamos — hay dos épocas.** Desde el 28-sep-2026 cada
+> devolución es una **Entrada** propia enlazada al préstamo (`devuelve_a`), así
+> que salida y devoluciones suman y restan en el libro y el cuadre funciona sin
+> excepciones. **Antes de esa fecha no**: devolver marcaba `is_returned` y
+> reponía el stock por `return_loan_and_restore_stock` **sin dejar entrada**. Un
+> préstamo viejo devuelto aparece en el libro como salida y en el stock como
+> repuesto. Si la consulta 4 devuelve filas, lo primero es descontar esos
+> préstamos viejos antes de concluir que algo se perdió:
+>
+> ```sql
+> -- Unidades devueltas por el camino viejo (sin entrada en el libro), por ítem
+> select item_id, sum(quantity) as devueltas_sin_entrada
+> from movements m
+> where is_loan and is_returned and deleted_at is null
+>   and not exists (select 1 from movements d where d.devuelve_a = m.id and d.deleted_at is null)
+> group by item_id;
+> ```
+>
+> Un préstamo **sin devolver** sí descuenta, y así debe ser: la herramienta no
+> está en la bodega.
 
 ---
 

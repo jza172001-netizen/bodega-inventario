@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { Item, Movement, MovementType, InventoryType } from '../types';
+import { getActiveLoans } from '../utils/inventory';
 
 interface PrintReportViewProps {
     items: Item[];
@@ -38,7 +39,7 @@ export const PrintReportView = React.forwardRef<HTMLDivElement, PrintReportViewP
 
         // ── KPIs ──
         const kpis = useMemo(() => {
-            const activeLoans = movements.filter(m => m.isLoan && !m.isReturned);
+            const activeLoans = getActiveLoans(movements);
             const checkOuts = filtered.filter(m => m.type === MovementType.CHECK_OUT).reduce((s, m) => s + m.quantity, 0);
             const checkIns  = filtered.filter(m => m.type === MovementType.CHECK_IN || m.type === MovementType.PURCHASE).reduce((s, m) => s + m.quantity, 0);
             const lowStock  = items.filter(i => i.quantity <= i.minStock && i.minStock > 0).length;

@@ -9,6 +9,7 @@ import { HistoryIcon } from './icons/HistoryIcon';
 import { getGenus, normStr, clusterGenera, looseMatch } from '../utils/genus';
 import { construirArbol, detalleDe } from '../utils/arbol';
 import { tonoDe } from '../utils/colores';
+import { getActiveLoans } from '../utils/inventory';
 
 interface InventoryViewProps {
     items: Item[];
@@ -49,7 +50,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, movements =
     const [search, setSearch] = useState('');
     const [expandedGenus, setExpandedGenus] = useState<Set<string>>(new Set());
     const bottomSentinelRef = useRef<HTMLDivElement>(null);
-    const activeLoans = useMemo(() => movements.filter(m => m.isLoan && !m.isReturned), [movements]);
+    const activeLoans = useMemo(() => getActiveLoans(movements), [movements]);
 
     /**
      * Acá había un observador que anotaba «Llegó al fondo: Inventario» cada vez

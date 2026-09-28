@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 // `typescript` es CommonJS: en módulo ES la forma que trae las APIs es la default.
 import ts from 'typescript';
 import { Item, InventoryType, Movement, MovementType, Personnel } from '../types';
-import { NOTA_AJUSTE, esAjuste } from '../utils/inventory';
+import { NOTA_AJUSTE, esAjuste, pendienteDe, getActiveLoans } from '../utils/inventory';
 import { igual, esCierto, grupo, cerrar } from './correr';
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
@@ -71,8 +71,9 @@ interface App {
     itemActual: (id?: string) => Item | undefined;
     ajustarEspejo: (id: string, q: number) => void;
     handleEditItem: (i: Item) => void;
-    handleReturnItem: (id: string, condition?: string, notes?: string) => void;
+    handleReturnItem: (id: string, condition?: string, notes?: string, cantidad?: number) => void;
     handleRestaurado: (f: Record<string, unknown>) => void;
+    handleTransferLoan: (movementId: string, newPersonnelId: string) => void;
 }
 
 /** Monta `App.tsx` con un inventario y unos movimientos, sin React ni red. */
@@ -84,14 +85,20 @@ const app = (items: Item[], movements: Movement[] = []) => {
         movimientosEscritos: [] as Array<Omit<Movement, 'id'>>,
         bitacora: [] as Array<{ accion: string; texto: string }>,
         avisos: [] as string[],
+        cerrados: [] as string[],
+        traspasos: [] as Movement[],
     };
     const estado = { items: [...items], movements: [...movements] };
     const espejo = { current: [...items] };
+    const vivos = { current: [...movements] };
 
     const c: Record<string, unknown> = {
         items: estado.items, movements: estado.movements, personnel: [ALEX],
+        // El espejo de movimientos: el manejador lo lee y lo deja al día, así
+        // que dos llamadas seguidas ven lo que hizo la primera, como en la app.
+        movimientosRef: vivos,
         itemsRef: espejo,
-        MovementType, InventoryType, NOTA_AJUSTE,
+        MovementType, InventoryType, NOTA_AJUSTE, pendienteDe,
         crypto: { randomUUID: () => `mov-${visto.movimientosEscritos.length + 1}` },
         userName: 'Prueba',
         CONDICIONES_QUE_DAÑAN: new Set(['damaged', 'incomplete', 'needs_maintenance']),
@@ -120,6 +127,14 @@ const app = (items: Item[], movements: Movement[] = []) => {
                 visto.cantidadesEscritas.push({ id: args[0] as string, quantity: args[1] as number });
             }
             if (tipo === 'addMovement') visto.movimientosEscritos.push(args[0] as Omit<Movement, 'id'>);
+            if (tipo === 'logMovementsWithStock') {
+                for (const x of args[0] as Array<{ m: Omit<Movement, 'id'>; fallbackQty: number }>) {
+                    visto.movimientosEscritos.push(x.m);
+                    visto.cantidadesEscritas.push({ id: x.m.itemId, quantity: x.fallbackQty });
+                }
+            }
+            if (tipo === 'markMovementReturned') visto.cerrados.push(args[0] as string);
+            if (tipo === 'addMovement') visto.traspasos.push(args[0] as Movement);
             if (tipo === 'returnLoanAndRestoreStock') {
                 const itemId = args[3] as string | undefined;
                 const qty = args[4] as number | undefined;
@@ -129,6 +144,7 @@ const app = (items: Item[], movements: Movement[] = []) => {
         },
         addAuditLog: (accion: string, texto: string) => visto.bitacora.push({ accion, texto }),
         alert: (x: string) => visto.avisos.push(x),
+        requireConfirm: (_: string, hacer: () => void) => hacer(),
         db: {
             fetchItems: () => Promise.resolve([]), fetchMovements: () => Promise.resolve([]),
             fetchPersonnel: () => Promise.resolve([]), fetchProjects: () => Promise.resolve([]),
@@ -137,12 +153,12 @@ const app = (items: Item[], movements: Movement[] = []) => {
         },
     };
     const fn = sacarDeApp<App>(
-        ['itemActual', 'ajustarEspejo', 'handleEditItem', 'handleReturnItem', 'handleRestaurado'],
+        ['itemActual', 'ajustarEspejo', 'handleEditItem', 'handleReturnItem', 'handleRestaurado', 'handleTransferLoan'],
         c,
     );
     // `items` en el contexto es la lista del render: se congela a propósito, que
     // es justo lo que hacía perder unidades. El espejo sí se mueve.
-    return { visto, estado, espejo, fn };
+    return { visto, estado, espejo, vivos, fn };
 };
 
 const prestamo = (id: string, itemId: string, quantity: number): Movement => ({
@@ -222,6 +238,87 @@ grupo('devolver DAÑADA no deshace la reposición', () => {
     esCierto(!!guardado, 'se guardó el ítem con su reparación abierta');
     igual(guardado?.quantity, 1, 'Y CON LA CANTIDAD YA REPUESTA, no con la vieja');
     igual(guardado?.reparacion?.estado, 'dañada', 'la reparación sí quedó abierta');
+});
+
+grupo('prestar 3, devolver 1, devolver 1 — el préstamo sigue diciendo 3 y queda 1', () => {
+    /**
+     * La aceptación que pidió Juli, palabra por palabra: «prestar 3 y devolver
+     * 1 debe conservar el préstamo original, registrar esa devolución y dejar 2
+     * pendientes». Antes no había forma de decirlo: devolver era todo o nada.
+     */
+    const a = app([ficha(PALA, 'Pala', 0)], [prestamo('p1', PALA, 3)]);
+
+    a.fn.handleReturnItem('p1', 'good', '', 1);
+    igual(getActiveLoans(a.vivos.current).map(m => m.quantity), [2], 'tras la primera: quedan 2 afuera');
+
+    a.fn.handleReturnItem('p1', 'worn', 'mango flojo', 1);
+
+    const original = a.vivos.current.find(m => m.id === 'p1')!;
+    igual(original.quantity, 3, 'el préstamo original NO se tocó: sigue diciendo 3');
+    igual(original.isReturned, false, 'y NO se cerró: todavía falta una');
+
+    const devoluciones = a.vivos.current.filter(m => m.devuelveA === 'p1');
+    igual(devoluciones.length, 2, 'DOS devoluciones, dos renglones');
+    igual(devoluciones.map(d => d.quantity), [1, 1], 'de una cada una');
+    igual(devoluciones.map(d => d.type), [MovementType.CHECK_IN, MovementType.CHECK_IN], 'cada una es una Entrada del libro');
+    esCierto(devoluciones.some(d => d.returnCondition === 'worn' && d.returnNotes === 'mango flojo'),
+        'cada una guarda SU estado y su nota');
+
+    igual(getActiveLoans(a.vivos.current).map(m => m.quantity), [1], 'queda 1 pendiente');
+    igual(a.fn.itemActual(PALA)?.quantity, 2, 'y la bodega tiene las 2 que volvieron');
+    igual(a.visto.cerrados, [], 'el préstamo no se mandó a cerrar');
+});
+
+grupo('la última devolución cierra el préstamo SIN reponer dos veces', () => {
+    const a = app([ficha(PALA, 'Pala', 0)], [prestamo('p1', PALA, 3)]);
+    a.fn.handleReturnItem('p1', 'good', '', 1);
+    a.fn.handleReturnItem('p1', 'good');          // sin cantidad: lo que falta
+
+    igual(a.vivos.current.filter(m => m.devuelveA === 'p1').map(d => d.quantity), [2, 1],
+        'la segunda devuelve lo que faltaba, no las 3 de la salida');
+    igual(a.fn.itemActual(PALA)?.quantity, 3, 'la bodega recupera exactamente 3');
+    igual(a.visto.cerrados, ['p1'], 'y ahí sí se cierra el préstamo');
+    esCierto(!a.visto.escrituras.includes('returnLoanAndRestoreStock'),
+        'cerrar NO usa la función que repone: la entrada ya repuso');
+    igual(getActiveLoans(a.vivos.current).length, 0, 'no queda nada afuera');
+});
+
+grupo('el Kardex cuadra: salida 3, entrada 1, entrada 2', () => {
+    const a = app([ficha(PALA, 'Pala', 0)], [prestamo('p1', PALA, 3)]);
+    a.fn.handleReturnItem('p1', 'good', '', 1);
+    a.fn.handleReturnItem('p1', 'good', '', 2);
+    const libro = a.vivos.current.reduce((s, m) =>
+        s + (m.type === MovementType.CHECK_OUT || m.type === MovementType.WASTE ? -m.quantity : m.quantity), 0);
+    // Stock antes del préstamo: 3. Libro desde ahí: −3 +1 +2 = 0 → stock 3.
+    igual(3 + libro, a.fn.itemActual(PALA)?.quantity, 'lo que dice el libro es lo que hay');
+});
+
+grupo('dos toques seguidos no devuelven más de lo que salió', () => {
+    /**
+     * Leído de `movements` del render, el segundo toque veía el mismo pendiente
+     * que el primero. Con el espejo, el segundo ya ve la devolución del primero.
+     */
+    const a = app([ficha(PALA, 'Pala', 0)], [prestamo('p1', PALA, 1)]);
+    a.fn.handleReturnItem('p1');
+    a.fn.handleReturnItem('p1');
+    igual(a.vivos.current.filter(m => m.devuelveA === 'p1').length, 1, 'una sola devolución');
+    igual(a.fn.itemActual(PALA)?.quantity, 1, 'y una sola unidad repuesta');
+});
+
+grupo('pedir devolver más de lo que hay afuera devuelve solo lo que hay', () => {
+    const a = app([ficha(PALA, 'Pala', 0)], [prestamo('p1', PALA, 2)]);
+    a.fn.handleReturnItem('p1', 'good', '', 5);
+    igual(a.vivos.current.filter(m => m.devuelveA === 'p1').map(d => d.quantity), [2],
+        'devolver 5 de 2 inventaría tres palas que la bodega nunca tuvo');
+    igual(a.fn.itemActual(PALA)?.quantity, 2, 'stock: 2');
+});
+
+grupo('traspasar un préstamo devuelto en parte pasa SOLO lo que falta', () => {
+    const a = app([ficha(PALA, 'Pala', 0)], [prestamo('p1', PALA, 3)]);
+    a.fn.handleReturnItem('p1', 'good', '', 1);
+    a.fn.handleTransferLoan('p1', 'otro');
+    igual(a.visto.traspasos.map(m => m.quantity), [2],
+        'de tres palas volvió una: al otro le pasan dos, no tres');
 });
 
 grupo('restaurar de la papelera ya NO decide el stock acá', () => {

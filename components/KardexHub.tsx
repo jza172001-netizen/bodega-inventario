@@ -7,6 +7,7 @@ import { InventoryView } from './InventoryView';
 import { DañadasPanel } from './DañadasPanel';
 import { ProjectsView } from './ProjectsView';
 import { ReturnToolModal } from './ReturnToolModal';
+import { pendienteDeVarios, repartirDevolucion } from '../utils/inventory';
 
 type KardexTab = 'movements' | 'loans' | 'inventory' | 'projects';
 
@@ -30,7 +31,7 @@ interface KardexHubProps {
     onDeleteMovement?: (id: string) => void;
     onReturnLoan?: (movementId: string) => void;
     // loans handlers
-    onReturnItem: (movementId: string, condition?: string, notes?: string) => void;
+    onReturnItem: (movementId: string, condition?: string, notes?: string, cantidad?: number) => void;
     onMarkPendingPickup: (movementId: string, pending: boolean) => void;
     // inventory handlers
     openAddItemModal: () => void;
@@ -166,8 +167,11 @@ export const KardexHub: React.FC<KardexHubProps> = ({
                         item={item}
                         personName={personnel.find(p => p.id === devolviendo.personnelId)?.name ?? 'Sin asignar'}
                         movementIds={[devolviendo.id]}
-                        onConfirm={(ids, condition, notes) => {
-                            ids.forEach(id => onReturnItem(id, condition, notes));
+                        pendienteTotal={pendienteDeVarios([devolviendo.id], movements)}
+                        onConfirm={(ids, condition, notes, cantidad) => {
+                            for (const parte of repartirDevolucion(ids, movements, cantidad)) {
+                                onReturnItem(parte.id, condition, notes, parte.cantidad);
+                            }
                             setDevolviendo(null);
                         }}
                         onClose={() => setDevolviendo(null)}

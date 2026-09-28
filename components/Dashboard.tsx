@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { AuditLog, Item, Movement, Personnel, PurchaseOrder, PurchaseOrderStatus, UserRole } from '../types';
 import StatisticsView from './StatisticsView';
 import { CotejoPanel } from './CotejoPanel';
+import { getActiveLoans } from '../utils/inventory';
 
 interface DashboardProps {
     items: Item[];
@@ -43,7 +44,7 @@ interface Pendiente {
 export const Dashboard: React.FC<DashboardProps> = ({ items, movements, purchaseOrders, personnel = [], auditLogs = [], onNavigate, onBehaviorLog, onAuditLog, userRole }) => {
     const pendientes = useMemo<Pendiente[]>(() => {
         const dias = (d: Date) => Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
-        const fuera = movements.filter(m => m.isLoan && !m.isReturned);
+        const fuera = getActiveLoans(movements);
         const aRecoger = fuera.filter(m => m.pendingPickup).length;
         const vencidos = fuera.filter(m => dias(m.timestamp) > 7).length;
         const pedidos  = purchaseOrders.filter(o =>

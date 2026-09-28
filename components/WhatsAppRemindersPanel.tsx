@@ -13,6 +13,7 @@ import {
     REMINDER_INTERVAL_DAYS,
     TEST_PHONE_DISPLAY,
 } from '../services/whatsappService';
+import { getActiveLoans } from '../utils/inventory';
 
 interface Props {
     movements: Movement[];
@@ -32,7 +33,7 @@ export const WhatsAppRemindersPanel: React.FC<Props> = ({ movements, items, pers
     const [sentAll, setSentAll] = useState(false);
 
     const itemMap = new Map(items.map(i => [i.id, i]));
-    const activeLoans = movements.filter(m => m.isLoan && !m.isReturned);
+    const activeLoans = getActiveLoans(movements);
 
     const groups: PersonGroup[] = [];
     const seen = new Set<string>();

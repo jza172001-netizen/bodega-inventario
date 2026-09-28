@@ -6,6 +6,7 @@ import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
 import { PersonnelDetailModal } from './PersonnelDetailModal';
 import { TrashIcon } from './icons/TrashIcon';
 import { looseMatch } from '../utils/genus';
+import { getActiveLoans } from '../utils/inventory';
 
 interface ProjectsViewProps {
     projects: Project[];
@@ -115,7 +116,7 @@ const ProjectDetail: React.FC<{
         return ids.map(id => {
             const person = personnelMap.get(id);
             const wMov = pMovements.filter(m => m.personnelId === id);
-            const activeLoans = wMov.filter(m => m.isLoan && !m.isReturned);
+            const activeLoans = getActiveLoans(wMov);
             const returnedLoans = wMov.filter(m => m.isLoan && m.isReturned);
             const consumables = wMov.filter(m => {
                 const it = itemMap.get(m.itemId);
@@ -127,7 +128,7 @@ const ProjectDetail: React.FC<{
 
     // Active loans for this project
     const activeLoans = useMemo(
-        () => pMovements.filter(m => m.isLoan && !m.isReturned),
+        () => getActiveLoans(pMovements),
         [pMovements]
     );
 
@@ -381,7 +382,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                 const item = items.find(i => i.id === m.itemId);
                 return item && LOAN_TYPES.has(item.inventoryType);
             }).length;
-            const activeLoans = movements.filter(m => m.projectId === project.id && m.isLoan && !m.isReturned).length;
+            const activeLoans = getActiveLoans(movements).filter(m => m.projectId === project.id).length;
             const workerCount = new Set(movements.filter(m => m.projectId === project.id && m.personnelId).map(m => m.personnelId!)).size;
             return { ...project, consumableCount, toolsCount, activeLoans, workerCount };
         });

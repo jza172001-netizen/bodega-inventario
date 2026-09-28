@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Item, Movement, Personnel, InventoryType } from '../types';
 import { getGenus } from '../utils/genus';
 import { rankMatches } from '../utils/search';
-import { getActiveLoansByItem } from '../utils/inventory';
+import { getActiveLoansByItem, getActiveLoans } from '../utils/inventory';
 
 interface GlobalSearchModalProps {
     items: Item[];
@@ -92,8 +92,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                 kind: 'person' as const,
                 score,
                 person,
-                loanItems: movements
-                    .filter(m => m.personnelId === person.id && m.isLoan && !m.isReturned)
+                loanItems: getActiveLoans(movements)
+                    .filter(m => m.personnelId === person.id)
                     .map(m => itemMap.get(m.itemId))
                     .filter(Boolean) as Item[],
             }));

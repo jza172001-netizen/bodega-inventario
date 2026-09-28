@@ -1,4 +1,5 @@
 import { Movement, Item } from '../types';
+import { getActiveLoans } from '../utils/inventory';
 
 function showNotification(title: string, options: NotificationOptions) {
     if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
@@ -25,7 +26,7 @@ export async function requestNotificationPermission(): Promise<boolean> {
 export function checkAndNotifyPickup(movements: Movement[], items: Item[]) {
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
 
-    const pending = movements.filter(m => m.isLoan && !m.isReturned && m.pendingPickup);
+    const pending = getActiveLoans(movements).filter(m => m.pendingPickup);
     if (pending.length === 0) return;
 
     const names = pending
