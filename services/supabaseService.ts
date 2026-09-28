@@ -5,6 +5,7 @@
  */
 
 import { supabase } from '../lib/supabase';
+import { correoInterno } from '../core/identidad';
 import {
     Item, Movement, Personnel, Project, PurchaseOrder,
     PurchaseOrderItem, AppUser, AuditLog, BehaviorLog, InventoryType, MovementType,
@@ -649,6 +650,62 @@ export type ResultadoLogin =
     | { estado: 'ok'; usuario: { id: string; role: UserRole; name: string } }
     | { estado: 'rechazado' }
     | { estado: 'sinRespuesta' };
+
+/**
+ * Entrar CON IDENTIDAD DE SERVIDOR.
+ *
+ * Hoy la app entra a Supabase como `anon`: una sola llave pública, la misma para
+ * todo el mundo, metida dentro del JavaScript publicado. El servidor no tiene
+ * cómo saber quién está escribiendo, así que no puede negarle nada a nadie —
+ * cualquiera con esa llave mueve el inventario entero.
+ *
+ * Esto abre el otro camino: cada acceso es un usuario de verdad del servidor, y
+ * el servidor sabe quién es. La pantalla de entrada NO CAMBIA: la persona sigue
+ * escribiendo su nombre y su contraseña de siempre, y la app traduce el nombre a
+ * su correo interno por debajo (`core/identidad.ts`).
+ *
+ * Devuelve `sinRespuesta` cuando no se pudo preguntar, para que quien llama
+ * decida si cae al camino de antes. Durante la transición los dos sirven: primero
+ * se comprueba que los cinco accesos entran por acá, y **solo entonces** se le
+ * quita el permiso a la llave pública.
+ */
+export async function entrarConIdentidad(
+    username: string,
+    password: string
+): Promise<ResultadoLogin> {
+    const { data, error } = await supabase.auth.signInWithPassword({
+        email: correoInterno(username),
+        password,
+    });
+    if (error) {
+        /**
+         * Credenciales malas es una RESPUESTA; no llegar es otra cosa.
+         *
+         * Supabase contesta 400 con «Invalid login credentials» cuando comparó y
+         * dijo que no. Cualquier otra cosa —red caída, servidor dormido— es no
+         * saber, y ahí hay que dejar que el camino viejo lo intente en vez de
+         * dejar a la encargada afuera de la bodega.
+         */
+        const rechazo = error.status === 400
+            || /invalid login credentials|email not confirmed/i.test(error.message ?? '');
+        return rechazo ? { estado: 'rechazado' } : { estado: 'sinRespuesta' };
+    }
+    const uid = data.user?.id;
+    if (!uid) return { estado: 'sinRespuesta' };
+
+    // Quién es esta persona EN LA BODEGA —su nombre y su rol— lo sigue diciendo
+    // `app_users`. Auth solo responde «sí, es quien dice ser».
+    const { data: fila, error: errorFila } = await supabase
+        .from('app_users')
+        .select('id, name, role')
+        .eq('auth_uid', uid)
+        .is('deleted_at', null)
+        .maybeSingle();
+    if (errorFila || !fila) return { estado: 'sinRespuesta' };
+
+    const f = fila as { id: string; name: string; role: UserRole };
+    return { estado: 'ok', usuario: { id: f.id, role: f.role, name: f.name } };
+}
 
 export async function authenticateUser(
     username: string,

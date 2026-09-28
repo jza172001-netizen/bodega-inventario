@@ -26,6 +26,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ users, onLoginSuccess, onF
     const [isLoading, setIsLoading] = useState(false);
     const passwordRef = useRef<HTMLInputElement>(null);
     const setupUsernameRef = useRef<HTMLInputElement>(null);
+    /** El código que el administrador le pasó a esta persona. */
+    const [setupCodigo, setSetupCodigo] = useState('');
 
     useEffect(() => {
         if (screen === 'password') setTimeout(() => passwordRef.current?.focus(), 100);
@@ -48,6 +50,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ users, onLoginSuccess, onF
             setSetupUsername('');
             setSetupPassword('');
             setSetupConfirm('');
+            setSetupCodigo('');
             setScreen('setup');
         } else {
             setScreen('password');
@@ -60,6 +63,32 @@ export const LoginView: React.FC<LoginViewProps> = ({ users, onLoginSuccess, onF
         setIsLoading(true);
         try {
             if (selectedUser.username) {
+                /**
+                 * Primero la identidad de servidor, después el camino de antes.
+                 *
+                 * Son dos vías A PROPÓSITO, y solo durante la transición. La
+                 * nueva le pregunta al servidor quién es esta persona; la vieja
+                 * compara la contraseña contra una tabla y no le dice nada al
+                 * servidor. Mientras las dos estén vivas nadie se queda afuera,
+                 * y cuando esté comprobado que los cinco accesos entran por la
+                 * nueva, se corta la llave pública y la vieja sobra.
+                 *
+                 * Un RECHAZO de la nueva NO cae a la vieja: si el servidor
+                 * comparó y dijo que no, probar otra vez por otra puerta es
+                 * exactamente el agujero que se cerró en el PR #85.
+                 */
+                const conIdentidad = await db.entrarConIdentidad(selectedUser.username, password);
+                if (conIdentidad.estado === 'ok') {
+                    onCredentialVerified?.(selectedUser.id, await sha256Hex(password));
+                    onLoginSuccess(conIdentidad.usuario.role, conIdentidad.usuario.name);
+                    return;
+                }
+                if (conIdentidad.estado === 'rechazado') {
+                    setPassword('');
+                    triggerShake('Contraseña incorrecta');
+                    return;
+                }
+
                 const r = await db.authenticateUser(selectedUser.username, password);
                 if (r.estado === 'ok') {
                     // Guardar hash para que el respaldo offline funcione tras recargar
@@ -114,6 +143,35 @@ export const LoginView: React.FC<LoginViewProps> = ({ users, onLoginSuccess, onF
     const handleSetupSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedUser) return;
+
+        /**
+         * EL CÓDIGO DE ALTA. Sin esto, esta pantalla regalaba la bodega.
+         *
+         * Una tarjeta en espera la veía cualquiera que abriera la dirección de
+         * la app, y se la podía quedar: elegirla, ponerle la contraseña que
+         * quisiera y entrar. Con un acceso de DUEÑO esperando —que era el caso
+         * en producción— eso le daba permiso de borrar todo al primero que
+         * pasara. Sin claves, sin saber nada, solo abriendo la página.
+         *
+         * El código lo crea el administrador al abrir el acceso y se lo pasa a
+         * la persona. Él conoce el código temporal, NO la contraseña que la
+         * persona elija después, que era la intención original y sigue en pie.
+         *
+         * SIN CÓDIGO GUARDADO NO HAY ALTA, y esa es la parte que importa: los
+         * accesos que ya estaban esperando con la contraseña vacía dejan de ser
+         * reclamables por nadie. No se borran —eso lo decide su dueño— pero la
+         * puerta queda cerrada.
+         */
+        const codigoEsperado = (selectedUser.password ?? '').trim();
+        if (!codigoEsperado) {
+            triggerShake('Este acceso no tiene código de alta. Pedile al administrador que lo cree de nuevo.');
+            return;
+        }
+        if (setupCodigo.trim().toUpperCase() !== codigoEsperado.toUpperCase()) {
+            triggerShake('Código de alta incorrecto');
+            return;
+        }
+
         if (setupPassword.length < 3) { triggerShake('La contraseña debe tener al menos 3 caracteres'); return; }
         if (setupPassword !== setupConfirm) { triggerShake('Las contraseñas no coinciden'); return; }
         /**
@@ -288,10 +346,30 @@ export const LoginView: React.FC<LoginViewProps> = ({ users, onLoginSuccess, onF
                             </div>
 
                             <form onSubmit={handleSetupSubmit} className="space-y-4">
+                                {/* El código va PRIMERO y con el foco: sin él no
+                                    hay alta, así que pedirlo de último sería
+                                    hacer escribir dos contraseñas para nada. */}
+                                <div>
+                                    <label className="text-[10px] font-black text-tinta-tenue uppercase tracking-widest mb-1 block">
+                                        Código de alta
+                                    </label>
+                                    <input
+                                        ref={setupUsernameRef}
+                                        type="text"
+                                        value={setupCodigo}
+                                        onChange={e => { setSetupCodigo(e.target.value); setError(''); }}
+                                        placeholder="Los 6 caracteres que te dieron"
+                                        autoCapitalize="characters"
+                                        autoComplete="off"
+                                        className="w-full px-4 py-3 rounded-xl border-2 border-papel-borde focus:border-marca outline-none text-tinta font-black tracking-[0.2em] uppercase"
+                                    />
+                                    <p className="text-[10px] text-tinta-tenue mt-1">
+                                        Te lo da quien te abrió el acceso. Sin eso no se puede entrar la primera vez.
+                                    </p>
+                                </div>
                                 <div>
                                     <label className="text-[10px] font-black text-tinta-tenue uppercase tracking-widest mb-1 block">Contraseña</label>
                                     <input
-                                        ref={setupUsernameRef}
                                         type="password"
                                         value={setupPassword}
                                         onChange={e => { setSetupPassword(e.target.value); setError(''); }}

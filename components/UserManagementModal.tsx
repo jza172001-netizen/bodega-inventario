@@ -15,6 +15,15 @@ interface UserManagementModalProps {
 }
 
 export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClose, users, onAddUser, onDeleteUser, onEditUser }) => {
+    /**
+     * El código de alta recién creado, para mostrárselo UNA vez a quien lo creó.
+     *
+     * No se vuelve a mostrar y no se guarda en ninguna pantalla: si se pierde
+     * antes de dárselo a la persona, el acceso se borra y se crea otro. Eso es a
+     * propósito — un código que se puede consultar cuando sea es una contraseña
+     * más, no un código de un solo uso.
+     */
+    const [codigoNuevo, setCodigoNuevo] = useState<{ nombre: string; codigo: string } | null>(null);
     const [newName, setNewName] = useState('');
     const [newRole, setNewRole] = useState<UserRole>(UserRole.EMPLOYEE);
     const [editingUserId, setEditingUserId] = useState<string | null>(null);
@@ -46,26 +55,40 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                 return;
             }
             /**
-             * El acceso se crea VACÍO: sin usuario y sin contraseña.
+             * El acceso nace con un CÓDIGO DE ALTA, no vacío.
              *
-             * Antes el administrador escribía la clave del otro, y con eso la
-             * sabía para siempre. Ahora la tarjeta queda esperando: la primera
-             * vez que esa persona la toca, la app le pide que ponga su usuario y
-             * su contraseña (la pantalla de primer ingreso que ya existía, la
-             * que se dispara con `setupComplete` en falso).
+             * La intención original era buena: que el administrador no sepa la
+             * contraseña de nadie. La tarjeta quedaba esperando y la persona
+             * ponía su clave la primera vez que entraba.
              *
-             * Resultado: Juli ve en Trazabilidad todo lo que cada quien hace, y
-             * no puede entrar haciéndose pasar por nadie.
+             * El problema es que esa tarjeta **la podía reclamar cualquiera**.
+             * Quien abriera la dirección de la app veía la lista, elegía la
+             * tarjeta en espera, le ponía la contraseña que quisiera y entraba.
+             * Con un acceso de dueño esperando, eso era **regalarle la bodega al
+             * primero que pasara** — sin claves, sin saber nada, solo abriendo la
+             * página. Estaba así en producción.
+             *
+             * El código de alta lo cierra sin perder la intención: son seis
+             * caracteres que el administrador le pasa a la persona (por WhatsApp,
+             * de viva voz, como sea). Sin ese código no hay primer ingreso. El
+             * administrador conoce el código temporal, NO la contraseña que la
+             * persona elija después.
+             *
+             * Sin letras confundibles a propósito: se dicta por teléfono.
              */
+            const alfabeto = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+            const codigo = Array.from(crypto.getRandomValues(new Uint32Array(6)))
+                .map(n => alfabeto[n % alfabeto.length]).join('');
             const newUser: AppUser = {
                 id: crypto.randomUUID(),
                 username: '',
-                password: '',
+                password: codigo,
                 name: newName.trim(),
                 role: newRole,
                 setupComplete: false,
             };
             onAddUser(newUser);
+            setCodigoNuevo({ nombre: newName.trim(), codigo });
         }
 
         setNewName('');
@@ -87,6 +110,28 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
     return (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50">
             <div className="bg-papel rounded-3xl shadow-2xl p-8 w-full max-w-4xl m-4 max-h-[90vh] overflow-hidden flex flex-col border border-papel-borde">
+                {/* El código de alta, una sola vez. Si se pierde, el acceso se
+                    borra y se crea otro: un código que se puede volver a mirar
+                    es una contraseña más, no un código de un solo uso. */}
+                {codigoNuevo && (
+                    <div className="mb-6 rounded-2xl border-2 border-marca bg-marca-suave p-4">
+                        <p className="text-sm font-black text-tinta">
+                            Código de alta para {codigoNuevo.nombre}
+                        </p>
+                        <p className="text-3xl font-black tracking-[0.3em] text-tinta my-2 select-all">
+                            {codigoNuevo.codigo}
+                        </p>
+                        <p className="text-[11px] text-tinta-tenue">
+                            Pasáselo a {codigoNuevo.nombre} — sin este código no puede entrar la primera vez.
+                            <strong> No se vuelve a mostrar.</strong> Si se pierde, borrá el acceso y creá otro.
+                        </p>
+                        <button
+                            onClick={() => setCodigoNuevo(null)}
+                            className="mt-3 text-[11px] font-black px-3 py-1.5 rounded-lg bg-marca text-tinta">
+                            Ya lo anoté
+                        </button>
+                    </div>
+                )}
                 <div className="flex justify-between items-center mb-8">
                     <div>
                         <h2 className="text-3xl font-black text-tinta tracking-tighter uppercase">Gestión de Accesos</h2>
