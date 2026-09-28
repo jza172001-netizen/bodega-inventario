@@ -119,7 +119,8 @@ por si el dictado se cuela crudo.
 - **No se salta las reglas.** Pasa por el mismo núcleo que la pantalla:
   préstamo vs. gasto, accesorios pegados a su herramienta —si la pulidora no
   sale, su disco tampoco—, y freno por existencias.
-- **No hace devoluciones ni traslados todavía.** Solo despachos.
+- **Solo despachos.** Devoluciones, traslados, hallazgos, daños y pedidos van
+  por `/api/registro`; las preguntas, por `/api/consulta`. Abajo.
 
 ## Probarlo
 
@@ -133,3 +134,85 @@ curl -X POST https://bodega-montecielo.vercel.app/api/despacho \
 Mandá el mismo comando **dos veces**: la segunda no debe duplicar nada. Si el
 resumen dice lo mismo las dos veces y en la app aparece una sola salida, la
 protección está funcionando.
+
+---
+
+# Preguntar: `/api/consulta`
+
+Solo **lee**. El asistente traduce lo que pregunta la residente a una de estas
+preguntas y lee en voz alta el campo `texto` de la respuesta.
+
+```
+POST https://bodega-montecielo.vercel.app/api/consulta
+X-Bodega-Token: TU_TOKEN
+{ "pregunta": "que_tiene", "persona": "Abel" }
+```
+
+| `pregunta` | Qué contesta | Campos |
+|---|---|---|
+| `que_tiene` | Lo que la persona tiene **hoy**, y aparte lo *posible* sin confirmar | `persona` |
+| `que_tenia` | Lo que tuvo y ya no, y si volvió a bodega o pasó a otro | `persona` |
+| `que_devolvio` | Sus devoluciones, con fecha y estado | `persona` |
+| `donde_esta` | Todas las que responden al nombre: en bodega, prestadas, sin confirmar | `elemento` |
+| `quien_tiene` | Lo mismo, solo quién las tiene | `elemento` |
+| `que_hay_en_obra` | Lo prestado y lo confirmado en esa obra | `obra` |
+| `por_ubicar` | Lo que falta por verificar y las posibles asignaciones | — |
+| `que_esta_malo` | Dañadas en bodega, en el taller, y lo de afuera en mal estado | — |
+| `que_paso` | Qué salió, volvió, entró, se trasladó y se perdió ese día (hora de Colombia) | `fecha` (AAAA-MM-DD, opcional: hoy) |
+
+*Actual*, *histórico* y *devuelto* son tres preguntas distintas a propósito: no
+es lo mismo lo que Abel tiene que lo que tuvo el mes pasado.
+
+Una **posible asignación** siempre sale como *«posible asignación: Jesús →
+verificar»*, nunca como *«lo tiene Jesús»*.
+
+---
+
+# Registrar: `/api/registro`
+
+```
+POST https://bodega-montecielo.vercel.app/api/registro
+X-Bodega-Token: TU_TOKEN
+{ "operacionId": "…", "operacion": "devolucion", "persona": "Abel",
+  "elemento": "pulidora", "cantidad": 1, "estado": "bueno", "observacion": "…" }
+```
+
+| `operacion` | Campos | Qué hace |
+|---|---|---|
+| `devolucion` | `persona`, `elemento`, `cantidad`?, `estado`?, `observacion`?, `entregadoPor`? | Total o **parcial**: 3 afuera, vuelve 1, quedan 2. Si vuelve mala, abre la reparación |
+| `traslado` | `elemento`, `persona`?, `aPersona`?, `aObra`?, `cantidad`?, `entregadoPor`?, `observacion`? | De obra, de manos, o las dos. Queda quién la tenía antes |
+| `hallazgo` | `elemento` + uno de: `enBodega: true` · `persona` · `obra`/`lugar` | Saca algo de *por ubicar* sin borrar su historial |
+| `dano` | `elemento`, `observacion`?, `persona`? | Cambia el estado a dañada. **No** la saca del inventario |
+| `pedido` | `texto`, `cantidad`?, `unidad`? | A la lista de pedidos |
+
+`estado` se escribe como se dice: *bueno*, *malo*, *dañada*, *desgaste*,
+*incompleta*, *mantenimiento*. Si no se reconoce, **no se adivina**: queda sin
+estado.
+
+### Lo que responde
+
+- **200** — registrado. `resumen` para leer en voz alta, y `fichas`: los quince
+  campos del registro (fecha, hora, movimiento, elemento, cantidad, marca,
+  color, responsable anterior, responsable nuevo, quién entrega, quién recibe,
+  origen, destino, estado, observación). **El que no se dijo sale «No
+  especificado»**: no se rellena con nada.
+- **422** — hay más de una lectura (dos pulidoras distintas, dos Carlos) o falta
+  un dato. **No se escribió nada.** En `dudas` vienen las opciones: el asistente
+  se las pregunta a la residente y vuelve a mandar con el **mismo**
+  `operacionId`.
+- **409** — ese `operacionId` ya se usó con otro contenido.
+- **502** — no se pudo guardar. *«No se registró NADA»* es literal: el lote
+  entra completo o no entra.
+
+Si en un 200 viene `avisos`, el movimiento **sí** quedó; lo que avisa es algo
+secundario (la bitácora, cerrar el préstamo) que conviene mirar en la app.
+
+### Lo que no hace, a propósito
+
+- **No escoge entre dos.** «La pulidora» cuando Abel tiene una Makita y una
+  DeWalt vuelve con las dos opciones, salvo que devuelva todas.
+- **No devuelve más de lo que salió.**
+- **No «halla» lo que no estaba pendiente.** Si no hay nada por ubicar que se
+  parezca, lo dice; si es algo nuevo, es una entrada.
+- **No convierte una posible asignación en préstamo sola.** Hace falta que
+  alguien diga quién la tiene (`persona`).

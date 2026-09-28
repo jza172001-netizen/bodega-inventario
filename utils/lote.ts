@@ -168,6 +168,41 @@ const buscarItem = (items: Item[], nombre: string): Scored<Item>[] => {
 };
 
 /**
+ * Resolver una persona o un ítem sueltos, con la MISMA regla del bloque.
+ *
+ * El endpoint de consulta y el de registro tienen que reconocer a «Abel» y a
+ * «la pulidora» igual que el bloque pegado: si cada puerta tuviera su propio
+ * buscador, la misma frase encontraría cosas distintas según por dónde entre.
+ */
+export const resolverPersona = (texto: string, personnel: Personnel[]): { elegido?: Personnel; dudoso: boolean; candidatos: Personnel[] } => {
+    const r = rankMatches(personnel, texto, p => [p.name], 4);
+    return { ...escoger(r), candidatos: r.map(x => x.value) };
+};
+
+export const resolverItem = (texto: string, items: Item[]): { elegido?: Item; dudoso: boolean; candidatos: Item[] } => {
+    const { cantidad: _c, nombre } = partirCantidad(texto);
+    const r = buscarItem(items, nombre);
+    return { ...escoger(r), candidatos: r.map(x => x.value) };
+};
+
+/**
+ * TODOS los ítems que responden a un nombre, no uno solo.
+ *
+ * «¿Dónde están las pulidoras?» no pregunta por una: pregunta por la familia
+ * entera —grandes, pequeñas, de cada marca—. Elegir la mejor coincidencia
+ * contestaría por una y callaría las otras cinco.
+ */
+export const itemsQueResponden = (texto: string, items: Item[], tope = 25): Item[] => {
+    const { nombre } = partirCantidad(texto);
+    const textos = (i: Item) => [i.name, i.familia ?? '', i.subCategory ?? ''];
+    const buenos = (t: string) => rankMatches(items, t, textos, tope).filter(x => x.score >= MINIMO).map(x => x.value);
+    const directos = buenos(nombre);
+    const raiz = raizDeFamilia(nombre);
+    const porRaiz = raiz === normStr(nombre) ? [] : buenos(raiz);
+    return [...new Map([...directos, ...porRaiz].map(i => [i.id, i])).values()];
+};
+
+/**
  * Parte la lista de cosas: por coma, por punto y coma, y por la "y" de
  * "3 palas y un martillo".
  *
