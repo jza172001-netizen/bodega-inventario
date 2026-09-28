@@ -65,6 +65,13 @@ reproduce the condition, and only the mutation check caught it.
 as `await cerrar()`. An earlier version ignored a promise-returning body: the
 group printed "✓ todo bien" before a single assertion had run.
 
+**Run `node verificar-lint.cjs`, and judge it by its EXIT CODE.** Plain
+`npm run lint` always exits 2 here — six real dependencies cannot be installed
+(`xlsx` comes from a blocked CDN and kills any `npm install`), so a permanently
+red exit code trains you to read the output by eye, which is how the break below
+shipped. The wrapper separates environment errors from code errors, and **fails
+loudly when tsc aborts without checking anything**.
+
 **Run `npm run lint` by its EXIT CODE, never by reading its output.** In a
 sandbox without `vite` installed, `tsconfig.json`'s `types: ["vite/client"]`
 makes tsc abort with TS2688 and check **nothing** — it looks clean and is not.
@@ -82,6 +89,14 @@ exclusive connection, so it cannot prove a race.
 **Stack:** React 18 + TypeScript + Vite + Tailwind CSS. No router — single-page app with manual view state. No test framework configured.
 
 **State management:** All app state lives in `App.tsx` as `useState` hooks. State is persisted to `localStorage` on every change via a `useEffect` that calls `storage.ts`. On mount, state initializes from localStorage, falling back to `mockData.ts`.
+
+**One writer per row.** The startup merge and the queue both fire when the signal
+returns, and they used to race: the merge uploaded a movement row through
+`bulkUpsertMovements` — which writes **without the stock RPC** — and the queue
+then found the id already present and skipped it, so **the row landed and the
+quantity never moved**. `idsTocados(cola)` in `core/cola.ts` lists what the queue
+owns; the merge skips those ids, and `procesarCola()` runs *before* the merge
+rather than beside it.
 
 **Writes go through a durable queue.** `withSync(tipo, args, descripcion)` records
 *what* the app wants to do — not a launched promise — into `core/cola.ts`

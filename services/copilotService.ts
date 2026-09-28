@@ -6,32 +6,26 @@ import { answerQuestion } from './warehouseQA';
 export interface CopilotMessage { role: 'user' | 'assistant'; content: string; timestamp: Date; }
 export interface WarehouseContext { items: Item[]; movements: Movement[]; personnel: Personnel[]; purchaseOrders: PurchaseOrder[]; projects?: Project[]; }
 
-let transformersPipeline: any = null;
-let modelLoading = false;
-let modelLoaded = false;
-let modelError: string | null = null;
-
-export const getModelStatus = () => ({ modelLoading, modelLoaded, modelError });
-
-export const initModel = async (onProgress?: (msg: string) => void): Promise<boolean> => {
-    if (modelLoaded) return true;
-    if (modelLoading) return false;
-    modelLoading = true;
-    try {
-        onProgress?.('Cargando motor IA open-source...');
-        // Empaquetado por Vite (chunk aparte vía import dinámico) — sin código remoto de CDN
-        const { pipeline, env } = await import('@huggingface/transformers');
-        env.allowLocalModels = false;
-        env.useBrowserCache = true;
-        onProgress?.('Descargando modelo (primera vez ~250MB)...');
-        transformersPipeline = await pipeline('text2text-generation', 'Xenova/LaMini-Flan-T5-248M', {
-            progress_callback: (info: any) => { if (info.status === 'downloading') onProgress?.('Descargando: ' + Math.round(info.progress || 0) + '%'); }
-        });
-        modelLoaded = true; modelLoading = false;
-        onProgress?.('Modelo listo.');
-        return true;
-    } catch (e: any) { modelError = e.message; modelLoading = false; return false; }
-};
+/**
+ * ACÁ VIVÍA UN MODELO DE IA QUE NUNCA SE USÓ.
+ *
+ * `initModel()` bajaba un modelo de 250 MB al navegador desde
+ * `@huggingface/transformers`, y `getModelStatus()` reportaba su progreso.
+ * **No los llamaba nadie.** Ni una pantalla, ni un botón, ni otro servicio: se
+ * comprobó buscando los dos nombres en todo el repositorio.
+ *
+ * El copiloto contesta por `answerQuestion` de `warehouseQA.ts`, que es
+ * TypeScript a secas: cuenta préstamos, busca ítems y arma la frase. Nunca hubo
+ * un modelo de por medio.
+ *
+ * Y no era gratis estar ahí: el paquete seguía en `package.json`, se bajaba en
+ * cada instalación, y **el `import` dinámico rompía la compilación** en
+ * cualquier entorno donde no estuviera instalado — que es donde se escribe este
+ * código, porque `xlsx` viene de un CDN bloqueado y tumba el `npm install`.
+ *
+ * Si algún día se quiere un modelo de verdad, se trae con su pantalla y su
+ * botón. Dejarlo apagado «por si acaso» costaba peso y build.
+ */
 
 export const askCopilot = async (message: string, ctx: WarehouseContext): Promise<string> => {
     if (!message.trim()) return 'En que te puedo ayudar?';

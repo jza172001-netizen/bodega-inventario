@@ -22,7 +22,7 @@ import { NOTA_AJUSTE } from './utils/inventory';
 import { fusionarItems, masReciente, hayQueAplicar } from './core/fusion';
 import {
     Operacion, leerCola, guardarCola, encolar, confirmar, marcarFallo,
-    descartar, reintentar, porIntentar,
+    descartar, reintentar, porIntentar, idsTocados, CLAVE_MIGRACION,
 } from './core/cola';
 import { PapeleraView } from './components/PapeleraView';
 import { PendientesView } from './components/PendientesView';
@@ -674,17 +674,63 @@ const App: React.FC = () => {
               if (mergedAuditLogs.length > 0)                        setAuditLogs(mergedAuditLogs);
               if (mergedBehaviorLogs.length > 0)                     setBehaviorLogs(mergedBehaviorLogs);
 
+              /**
+               * LO QUE LA COLA POSEE, ESTA SINCRONIZACIÓN NO LO TOCA.
+               *
+               * Los dos corren con el mismo evento cuando vuelve la señal, y se
+               * pisaban: esta subía la fila del movimiento por `bulkUpsert`, que
+               * escribe **sin pasar por el RPC de stock**, y cuando la cola
+               * llegaba a aplicarlo el SQL lo veía ya escrito y lo saltaba. El
+               * movimiento quedaba en el servidor y **la cantidad nunca bajaba**
+               * — el mismo fallo que la cola vino a cerrar, por otra puerta.
+               *
+               * Con los ítems es el mismo choque con otra cara: esta sube la
+               * cantidad de ahora mientras la cola trae la de cuando se creó.
+               *
+               * Un escritor por fila. El que tiene la operación anotada gana,
+               * porque es el único que sabe QUÉ se quiso hacer.
+               */
+              const deLaCola = idsTocados(colaRef.current);
+
               // Subir diferencias a Supabase en segundo plano (bulk upsert — idempotente)
-              const itemsToSync  = mergedItems.filter(i     => !supaItemIds.has(i.id));
-              const movsToSync   = mergedMovements.filter(m => !supaMovIds.has(m.id));
+              const itemsToSync  = mergedItems.filter(i     => !supaItemIds.has(i.id) && !deLaCola.has(i.id));
+              const movsToSync   = mergedMovements.filter(m => !supaMovIds.has(m.id)  && !deLaCola.has(m.id));
               const projsToSync  = mergedProjects.filter(p  => !supaProjIds.has(p.id));
               const perToSync    = mergedPersonnel.filter(p => !supaPerIds.has(p.id));
               const posToSync    = mergedPOs.filter(o       => !supaPOIds.has(o.id));
               const auditToSync  = localAuditLogs.filter(a  => !supaAuditIds.has(a.id));
               const behaviorToSync = localBehaviorLogs.filter(b => !supaBehaviorIds.has(b.id));
 
+              /**
+               * LA MUDANZA, UNA SOLA VEZ.
+               *
+               * Los movimientos que quedaron en este teléfono de ANTES de que
+               * existiera la cola nunca pasaron por el RPC de stock: subirlos por
+               * `bulkUpsert` deja la fila y no mueve la cantidad, que es el fallo
+               * viejo. Se encolan para que suban por donde deben.
+               *
+               * Los ítems NO: el ítem lleva su cantidad adentro, así que subirlo
+               * tal cual es correcto y encolarlo lo contaría dos veces.
+               *
+               * La marca es para que esto pase una vez y no cada arranque.
+               */
+              if (!almacenLocal.getItem(CLAVE_MIGRACION)) {
+                  for (const m of movsToSync) {
+                      const nombre = itemActual(m.itemId)?.name ?? 'un ítem';
+                      withSync('logMovementsWithStock',
+                          [[{ m, id: m.id, fallbackQty: itemActual(m.itemId)?.quantity ?? 0 }]],
+                          `Subir un movimiento de "${nombre}" que quedó de antes`);
+                  }
+                  almacenLocal.setItem(CLAVE_MIGRACION, new Date().toISOString());
+                  if (movsToSync.length > 0) {
+                      addAuditLog('SYNC_MIGRACION',
+                          `Se pasaron ${movsToSync.length} movimiento(s) viejos a la cola, para que suban con su efecto de stock`);
+                  }
+              } else if (movsToSync.length > 0) {
+                  db.bulkUpsertMovements(movsToSync).catch(e => console.error('[Supabase] movements:', e));
+              }
+
               if (itemsToSync.length  > 0) db.bulkUpsertItems(itemsToSync).catch(e => console.error('[Supabase] items:', e));
-              if (movsToSync.length   > 0) db.bulkUpsertMovements(movsToSync).catch(e => console.error('[Supabase] movements:', e));
               if (projsToSync.length  > 0) db.bulkUpsertProjects(projsToSync).catch(e => console.error('[Supabase] projects:', e));
               if (perToSync.length    > 0) db.bulkUpsertPersonnel(perToSync).catch(e => console.error('[Supabase] personnel:', e));
               if (posToSync.length    > 0) db.bulkUpsertPurchaseOrders(posToSync).catch(e => console.error('[Supabase] POs:', e));
@@ -693,22 +739,29 @@ const App: React.FC = () => {
           }).finally(() => { sincronizando.current = false; });
         };
 
-        sincronizar();
-        // Lo que quedó pendiente de la vez pasada se intenta apenas abre.
-        void procesarCola();
-
-        // Antes esto corría UNA sola vez, al abrir la app. Con dos teléfonos en la
-        // bodega eso quiere decir que lo que uno marca el otro no lo ve hasta cerrar
-        // y volver a abrir — y nadie cierra la app en mitad de un despacho. Ahora se
-        // vuelve a mirar al volver a la pestaña y al recuperar la señal.
         /**
-         * La cola se vacía en los mismos tres momentos en que ya se sincroniza.
+         * La cola PRIMERO, y la sincronización cuando la cola termine.
          *
-         * No hay un temporizador aparte: reintentar cada N segundos gasta batería
-         * y no acierta más. Lo que de verdad cambia el resultado es que vuelva la
-         * señal o que alguien vuelva a mirar la pantalla.
+         * En paralelo se estorbaban: la sincronización alcanzaba a subir por su
+         * cuenta lo que la cola tenía anotado, y entonces la cola lo encontraba
+         * ya escrito y lo saltaba sin aplicar el stock. Con la cola de primera,
+         * cuando la sincronización mira lo que falta, ya no falta.
+         *
+         * `then(sincronizar, sincronizar)`: la sincronización corre **pase lo que
+         * pase** con la cola. Que una operación pendiente falle no puede dejar
+         * al teléfono sin ver lo que hizo el otro.
+         *
+         * No hay temporizador aparte: reintentar cada N segundos gasta batería y
+         * no acierta más. Lo que cambia el resultado es que vuelva la señal o que
+         * alguien vuelva a mirar la pantalla — que son los momentos de abajo.
          */
-        const sincronizarYVaciar = () => { sincronizar(); void procesarCola(); };
+        const sincronizarYVaciar = () => { void procesarCola().then(sincronizar, sincronizar); };
+
+        // Al abrir. Antes esto corría UNA sola vez y nada más: con dos teléfonos
+        // en la bodega, lo que uno marcaba el otro no lo veía hasta cerrar y
+        // volver a abrir — y nadie cierra la app en mitad de un despacho.
+        sincronizarYVaciar();
+
         const alVolver = () => { if (document.visibilityState === 'visible') sincronizarYVaciar(); };
         document.addEventListener('visibilitychange', alVolver);
         window.addEventListener('online', sincronizarYVaciar);

@@ -14,7 +14,6 @@
     "test": "for f in tests/*.test.ts; do npx --yes tsx \"$f\" || exit 1; done"
   },
   "dependencies": {
-    "@huggingface/transformers": "^4.2.0",
     "@supabase/supabase-js": "^2.105.3",
     "@types/dompurify": "^3.0.5",
     "docx": "^9.7.1",
