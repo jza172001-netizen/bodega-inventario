@@ -144,6 +144,24 @@ Closing a loan after its last return uses `markMovementReturned` (a plain
 update), **not** `returnLoanAndRestoreStock` — the return's entrada already
 restored the stock, and that function would restore it a second time.
 
+**Custody lives in `core/custodia.ts`** (shared by the app and the API, like
+`core/despacho.ts`). A transfer between people or worksites is **not** a new
+movement type: the stock functions treat anything that is not `Salida`/`Merma`
+as an entry, so a `Traslado` type would ADD a tool to the warehouse on every
+transfer. Instead the old loan is settled by a linked return and a new loan is
+opened with `vieneDe` (the previous loan) and `responsableAnterior` — both rows
+`esTraslado`, in ONE batch, stock net zero. Changing the project of a loan that
+already had one is a transfer; only filling an empty project overwrites.
+
+**`asignaciones`** holds what is out WITHOUT a confirmed loan — Juli's three
+levels: `confirmada` / `posible` / `pendiente_verificar`. Those units are **not
+in the book** (not stock, not a loan). They enter it only when resolved, always
+through a movement (`Hallazgo` entrada, plus a loan salida if someone has it).
+Resolving never rewrites: the original row is closed as it was and any
+remainder opens as a new row. A `posible` never becomes a loan by itself.
+Unknown fields stay empty and render as «No especificado» — note that `sello()`
+fills *now*, so it must never be used for `desde` or `cerrada_en`.
+
 ### Views (`App.tsx` `View` type)
 
 `dashboard` | `inventory` | `movements` | `purchaseOrders` | `personnel` | `projects` | `loans` | `copilot`

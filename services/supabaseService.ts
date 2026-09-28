@@ -9,7 +9,7 @@ import { correoInterno } from '../core/identidad';
 import {
     Item, Movement, Personnel, Project, PurchaseOrder,
     PurchaseOrderItem, AppUser, AuditLog, BehaviorLog, InventoryType, MovementType,
-    PurchaseOrderStatus, UserRole, ReturnCondition, OrderNote,
+    PurchaseOrderStatus, UserRole, ReturnCondition, OrderNote, Asignacion,
 } from '../types';
 
 // ─── HELPERS DE MAPEO ────────────────────────────────────────────────────────
@@ -27,6 +27,14 @@ import {
  */
 const sello = (d?: Date): string =>
     (d instanceof Date ? d : new Date()).toISOString();
+
+/**
+ * Una fecha que puede no saberse. NO es `sello`: `sello` rellena con la hora de
+ * ahora, que es lo correcto para «cuándo se tocó esto» y un invento para «desde
+ * cuándo la tiene» o «cuándo se cerró». Lo que no se sabe queda vacío.
+ */
+const fechaOVacio = (d?: Date | string): string | null =>
+    d instanceof Date ? d.toISOString() : (d ?? null);
 
 function dbToItem(row: Record<string, unknown>): Item {
     return {
@@ -99,6 +107,10 @@ function dbToMovement(row: Record<string, unknown>): Movement {
         returnNotes: row.return_notes as string | undefined,
         returnedAt: row.returned_at ? new Date(row.returned_at as string) : undefined,
         devuelveA: row.devuelve_a as string | undefined,
+        vieneDe: (row.viene_de as string | null) ?? undefined,
+        esTraslado: (row.es_traslado as boolean | null) ?? undefined,
+        entregadoPor: (row.entregado_por as string | null) ?? undefined,
+        responsableAnterior: (row.responsable_anterior as string | null) ?? undefined,
         updatedAt: row.updated_at ? new Date(row.updated_at as string) : undefined,
     };
 }
@@ -119,6 +131,10 @@ function movementToDb(m: Omit<Movement, 'id'>): Record<string, unknown> {
         return_notes: m.returnNotes ?? null,
         returned_at: m.returnedAt instanceof Date ? m.returnedAt.toISOString() : (m.returnedAt ?? null),
         devuelve_a: m.devuelveA ?? null,
+        viene_de: m.vieneDe ?? null,
+        es_traslado: m.esTraslado ?? false,
+        entregado_por: m.entregadoPor ?? null,
+        responsable_anterior: m.responsableAnterior ?? null,
         updated_at: sello(m.updatedAt),
     };
 }
@@ -288,7 +304,7 @@ export async function logMovementWithStock(
      * todas las columnas. Es el camino de respaldo, no el de todos los días:
      * solo se llega acá si la función del lote no está instalada.
      */
-    if (m.devuelveA) {
+    if (m.devuelveA || m.vieneDe) {
         await addMovement(m, id);
         await updateItemQuantity(m.itemId, fallbackQty);
         return;
@@ -356,6 +372,13 @@ export async function logMovementsWithStock(
             return_condition: m.returnCondition ?? null,
             return_notes: m.returnNotes ?? null,
             returned_at: m.returnedAt instanceof Date ? m.returnedAt.toISOString() : (m.returnedAt ?? null),
+            // La cadena de custodia: de qué préstamo viene, quién entregó, quién
+            // la tenía. Sin esto un traslado llegaba al servidor como un
+            // préstamo cualquiera y se perdía de dónde venía.
+            viene_de: m.vieneDe ?? null,
+            es_traslado: m.esTraslado ?? false,
+            entregado_por: m.entregadoPor ?? null,
+            responsable_anterior: m.responsableAnterior ?? null,
         })),
     });
     if (!error) return;
@@ -1122,6 +1145,76 @@ export async function deleteOrderNote(id: string, quien?: string): Promise<void>
 }
 
 
+
+// ─── ASIGNACIONES: lo que está afuera sin préstamo confirmado ────────────────
+
+function dbToAsignacion(row: Record<string, unknown>): Asignacion {
+    const fecha = (v: unknown) => (v ? new Date(v as string) : undefined);
+    const texto = (v: unknown) => (v as string | null) ?? undefined;
+    return {
+        id: row.id as string,
+        itemId: texto(row.item_id),
+        descripcion: row.descripcion as string,
+        cantidad: Number(row.cantidad),
+        estado: row.estado as Asignacion['estado'],
+        personnelId: texto(row.personnel_id),
+        posibleResponsable: texto(row.posible_responsable),
+        projectId: texto(row.project_id),
+        ubicacion: texto(row.ubicacion),
+        responsableAnterior: texto(row.responsable_anterior),
+        entregadoPor: texto(row.entregado_por),
+        condicion: (row.condicion as Asignacion['condicion']) ?? 'no_especificado',
+        desde: fecha(row.desde),
+        desdeDesconocido: !!row.desde_desconocido,
+        procedencia: texto(row.procedencia),
+        notas: texto(row.notas),
+        cerradaEn: fecha(row.cerrada_en),
+        cierreMotivo: (row.cierre_motivo as Asignacion['cierreMotivo'] | null) ?? undefined,
+        cierreNota: texto(row.cierre_nota),
+        cerradaPor: texto(row.cerrada_por),
+        createdAt: new Date(row.created_at as string),
+        updatedAt: fecha(row.updated_at),
+    };
+}
+
+export async function fetchAsignaciones(): Promise<Asignacion[]> {
+    const { data, error } = await supabase.from('asignaciones').select('*')
+        .is('deleted_at', null).order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map(dbToAsignacion);
+}
+
+/**
+ * Guarda una asignación entera. `upsert` y no `insert`: la cola reintenta, y
+ * un reintento de algo que sí alcanzó a llegar no puede fallar por repetido.
+ */
+export async function guardarAsignacion(a: Asignacion): Promise<void> {
+    const { error } = await supabase.from('asignaciones').upsert({
+        id: a.id,
+        item_id: a.itemId ?? null,
+        descripcion: a.descripcion,
+        cantidad: a.cantidad,
+        estado: a.estado,
+        personnel_id: a.personnelId ?? null,
+        posible_responsable: a.posibleResponsable ?? null,
+        project_id: a.projectId ?? null,
+        ubicacion: a.ubicacion ?? null,
+        responsable_anterior: a.responsableAnterior ?? null,
+        entregado_por: a.entregadoPor ?? null,
+        condicion: a.condicion,
+        desde: fechaOVacio(a.desde),
+        desde_desconocido: a.desdeDesconocido,
+        procedencia: a.procedencia ?? null,
+        notas: a.notas ?? null,
+        cerrada_en: fechaOVacio(a.cerradaEn),
+        cierre_motivo: a.cierreMotivo ?? null,
+        cierre_nota: a.cierreNota ?? null,
+        cerrada_por: a.cerradaPor ?? null,
+        created_at: sello(a.createdAt),
+        updated_at: sello(a.updatedAt),
+    }, { onConflict: 'id' });
+    if (error) throw error;
+}
 
 // ─── PAPELERA ────────────────────────────────────────────────────────────────
 
