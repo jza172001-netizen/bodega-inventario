@@ -8,6 +8,43 @@
 
 ---
 
+## 0.0 ESTADO AL 28-sep-2026 — leer esto primero
+
+**Datos verificados en producción:** 129 ítems, 234 movimientos vivos (23 más en
+la papelera), 22 préstamos activos. **El último movimiento es del 8-sep**: la app
+no se ha usado desde entonces (Supabase estuvo pausado por inactividad y se
+reactivó el 28-sep).
+
+**Desplegado hoy (PR #91 a #96, todos READY en Vercel):**
+- #91 La cola y la sincronización ya no se pisan (movimiento sin efecto de stock).
+- #92 Cerrado el hueco: CAMILO (dueño) y KATE se podían reclamar sin clave. Ahora
+  un acceso nuevo exige código de alta.
+- #93 Identidad de servidor (Supabase Auth) para juli, kate y visita, con sus
+  contraseñas de siempre; las de 2 caracteres se cambian al entrar.
+- #94 Devoluciones parciales: la devolución es una Entrada enlazada (`devuelve_a`).
+- #95 Custodia: tabla `asignaciones` (Confirmado / Posible / Falta por verificar),
+  pantalla «¿Dónde está?», traslados y traspasos con responsable anterior.
+- #96 Asistente: `/api/consulta` y `/api/registro` (ver `api/README.md`).
+
+**Informe en seco del inventario definitivo:** `herramientas/INFORME-VINCULACION.md`
+(se regenera con `npx tsx herramientas/vincular-inventario.ts <foto.json>`). NO se
+ha aplicado nada. Hay una decisión de Juli pendiente: si la Lista 5 es custodia
+actual (préstamo) o histórica (posible).
+
+**Abierto, en orden:**
+1. **Corte de seguridad** (quitarle a `anon` mover inventario). Frenado hasta que
+   Juli confirme que él y Kate entraron con la contraseña nueva.
+2. **Aplicar el informe de vinculación** después de que Juli lo revise.
+3. **Verificación de navegador (Playwright) y restauración de respaldo aislada**:
+   NO se hicieron.
+4. **A08** — dos devoluciones simultáneas desde dos teléfonos: necesita dos
+   conexiones reales, PGlite no sirve.
+5. **Kate/KATE** (dos accesos) y **Netlify** conectado al repo: sin tocar.
+6. `npm audit`: 8 vulnerabilidades (2 moderadas, 6 altas), entre ellas `sharp`.
+   Sin revisar si alguna llega al navegador.
+
+---
+
 ## 0.1 Lo que este archivo decía mal (corregido el 11-sep-2026, de noche)
 
 Una auditoría externa del commit `ab86bd6` obligó a verificar cosas que acá se
