@@ -153,3 +153,59 @@ export const porIntentar = (cola: Operacion[]): Operacion[] =>
 /** Las que ya nadie va a reintentar solo: lo que la bandeja tiene que gritar. */
 export const bloqueadas = (cola: Operacion[]): Operacion[] =>
     cola.filter(o => o.bloqueada);
+
+/**
+ * Los ids de ítems y movimientos que la cola TIENE PENDIENTES.
+ * ===========================================================
+ * EL FALLO QUE CIERRA — y es mío, del PR que trajo la cola.
+ *
+ * Cuando vuelve la señal se disparan dos escritores con el mismo evento:
+ *
+ *  · la sincronización de arranque sube las filas que el servidor no tiene, por
+ *    `bulkUpsertMovements`, que escribe la fila **sin pasar por el RPC de
+ *    stock**;
+ *  · la cola trae ese mismo movimiento como `logMovementsWithStock`, y ese SQL
+ *    empieza con «si ya existe este id, seguir» — o sea, **lo salta, porque la
+ *    sincronización se le adelantó**.
+ *
+ * Resultado reproducido: el movimiento queda en el servidor y **la cantidad
+ * nunca baja**. Es exactamente el fallo que la cola vino a cerrar, entrando por
+ * otra puerta.
+ *
+ * Con los ítems es el mismo choque con otra cara: la sincronización sube el ítem
+ * con la cantidad local de ahora, mientras la cola trae un `addItem` con la
+ * cantidad de cuando se creó. Dos escritores, una fila, y gana el que llegue.
+ *
+ * LA REGLA: **lo que la cola posee, la sincronización no lo toca.**
+ *
+ * Se leen de los argumentos porque ahí es donde están: el primer argumento de
+ * `addItem`/`updateItem` es el ítem, el de `addMovement` es el movimiento, y
+ * `logMovementsWithStock` recibe la lista entera. No hace falta que la cola
+ * entienda de bodega para eso — solo mirar si lo que carga tiene `id`.
+ */
+export const idsTocados = (cola: Operacion[]): Set<string> => {
+    const ids = new Set<string>();
+
+    const anotar = (v: unknown): void => {
+        if (!v || typeof v !== 'object') return;
+        if (Array.isArray(v)) { for (const x of v) anotar(x); return; }
+        const o = v as Record<string, unknown>;
+        // La forma que usa `logMovementsWithStock`: { m, id, fallbackQty }.
+        if (typeof o.id === 'string') ids.add(o.id);
+        if (o.m) anotar(o.m);
+        if (typeof o.itemId === 'string') ids.add(o.itemId);
+    };
+
+    for (const op of cola) {
+        for (const arg of op.args) {
+            // Un argumento que es un id suelto: `deleteItem(id, quien)`,
+            // `updateItemQuantity(id, cantidad)`, `addItem(ficha, id)`.
+            if (typeof arg === 'string') ids.add(arg);
+            else anotar(arg);
+        }
+    }
+    return ids;
+};
+
+/** La marca de que la mudanza de lo viejo a la cola ya se hizo. No se repite. */
+export const CLAVE_MIGRACION = 'bodega-cola-migracion-hecha';

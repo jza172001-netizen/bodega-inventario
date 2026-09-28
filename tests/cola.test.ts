@@ -12,7 +12,7 @@
 import {
     Operacion, LIMITE_INTENTOS, CLAVE_COLA,
     leerCola, guardarCola, encolar, confirmar, marcarFallo,
-    descartar, reintentar, porIntentar, bloqueadas,
+    descartar, reintentar, porIntentar, bloqueadas, idsTocados,
 } from '../core/cola';
 import { igual, esCierto, grupo, cerrar } from './correr';
 
@@ -151,6 +151,67 @@ grupo('basura en el almacenamiento tampoco', () => {
     igual(leerCola(almacen({ [CLAVE_COLA]: 'esto no es JSON' })), [], 'texto cualquiera');
     igual(leerCola(almacen({ [CLAVE_COLA]: '{"no":"es un arreglo"}' })), [], 'JSON que no es lista');
     igual(leerCola(almacen()), [], 'vacío');
+});
+
+/**
+ * LO QUE LA COLA POSEE, LA SINCRONIZACIÓN NO LO TOCA.
+ *
+ * El fallo: los dos corren con el mismo evento cuando vuelve la señal. La
+ * sincronización subía la fila del movimiento por `bulkUpsert` —que escribe SIN
+ * pasar por el RPC de stock— y cuando la cola llegaba a aplicarlo, el SQL lo
+ * veía ya escrito y lo saltaba. El movimiento quedaba en el servidor y la
+ * cantidad nunca bajaba: el mismo fallo que la cola vino a cerrar, por otra
+ * puerta.
+ */
+const MOV = 'aaaaaaaa-1111-4111-8111-111111111111';
+const ITEM = 'bbbbbbbb-2222-4222-8222-222222222222';
+
+grupo('los ids que la cola tiene pendientes se reconocen', () => {
+    // Así es como los manda `App.tsx`: la lista entera en un solo argumento.
+    const cola = encolar([], {
+        id: 'op1', tipo: 'logMovementsWithStock',
+        args: [[{ m: { itemId: ITEM, quantity: 2 }, id: MOV, fallbackQty: 3 }]],
+        descripcion: 'Registrar 1 movimiento',
+    });
+    const ids = idsTocados(cola);
+    esCierto(ids.has(MOV), 'el movimiento pendiente se reconoce');
+    esCierto(ids.has(ITEM), 'y el ítem al que le mueve el stock también');
+});
+
+grupo('se reconocen las demás formas de operación', () => {
+    let cola: Operacion[] = [];
+    cola = encolar(cola, { id: 'a', tipo: 'addItem', args: [{ name: 'Pala' }, ITEM], descripcion: 'Crear' });
+    cola = encolar(cola, { id: 'b', tipo: 'addMovement', args: [{ itemId: ITEM, quantity: 1 }, MOV], descripcion: 'Mover' });
+    cola = encolar(cola, { id: 'c', tipo: 'deleteItem', args: ['cccccccc-3333-4333-8333-333333333333', 'Juli'], descripcion: 'Borrar' });
+    const ids = idsTocados(cola);
+    esCierto(ids.has(ITEM), 'el id que va de segundo argumento en addItem');
+    esCierto(ids.has(MOV), 'el id del movimiento');
+    esCierto(ids.has('cccccccc-3333-4333-8333-333333333333'), 'el id suelto de un borrado');
+});
+
+grupo('una cola vacía no bloquea nada', () => {
+    igual(idsTocados([]).size, 0, 'sin pendientes, la sincronización sube todo lo suyo');
+});
+
+grupo('lo confirmado deja de estar tomado', () => {
+    // Apenas el servidor confirma, la fila vuelve a ser de la sincronización.
+    const cola = encolar([], {
+        id: 'op1', tipo: 'addMovement', args: [{ itemId: ITEM }, MOV], descripcion: 'x',
+    });
+    esCierto(idsTocados(cola).has(MOV), 'mientras está pendiente, es de la cola');
+    igual(idsTocados(confirmar(cola, 'op1')).size, 0, 'confirmada, ya no');
+});
+
+grupo('lo BLOQUEADO sigue siendo de la cola', () => {
+    /**
+     * Cuenta igual aunque ya no se reintente solo. Si la sincronización lo
+     * agarrara, subiría la fila sin stock y taparía el problema justo cuando hay
+     * una persona mirándolo en la bandeja para decidir qué hacer.
+     */
+    let cola = encolar([], { id: 'op1', tipo: 'addMovement', args: [{ itemId: ITEM }, MOV], descripcion: 'x' });
+    for (let i = 0; i < LIMITE_INTENTOS; i++) cola = marcarFallo(cola, 'op1', 'no');
+    igual(cola[0].bloqueada, true, 'está bloqueada');
+    esCierto(idsTocados(cola).has(MOV), 'y sigue siendo de la cola');
 });
 
 await cerrar();
