@@ -14,6 +14,20 @@ export interface AppUser {
     role: UserRole;
     name: string;
     setupComplete?: boolean;
+    /**
+     * Tiene que cambiar su contraseña ANTES de poder seguir.
+     *
+     * Las tres contraseñas que había eran de dos caracteres. Mientras la llave
+     * pública estuvo abierta eso casi no importaba —había puertas más grandes—
+     * pero al cerrar todo lo demás pasan a ser lo único que separa el inventario
+     * de internet, y los nombres de usuario son adivinables.
+     *
+     * No se cambian por detrás: alguien que llega en la mañana con la contraseña
+     * que conoce y no entra es la encargada parada en la puerta de la bodega. Se
+     * le pide al entrar, con la vieja, que es la única forma de que nadie tenga
+     * que recordar algo de antemano.
+     */
+    debeCambiarClave?: boolean;
 }
 
 export enum InventoryType {

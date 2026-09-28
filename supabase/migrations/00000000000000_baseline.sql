@@ -46,6 +46,41 @@ exception when others then
     raise notice 'uuid-ossp no está disponible; se usa gen_random_uuid() y no hace falta';
 end $$;
 
+-- ── Los roles de Supabase ───────────────────────────────────────────────────
+-- En un proyecto de Supabase ya existen; en un PostgreSQL pelado no. Sin ellos,
+-- cualquier migración que diga `to authenticated` revienta, y con eso el repo
+-- deja de servir para reconstruir — que es exactamente para lo que existe este
+-- archivo. Se crean solo si faltan, así que sobre Supabase esto no hace nada.
+--
+-- `nologin` a propósito: no son cuentas para entrar, son las etiquetas con las
+-- que PostgREST marca a quien llega con la llave pública (`anon`), a quien se
+-- autenticó (`authenticated`) y a lo que corre en el servidor (`service_role`).
+
+do $$ begin create role anon nologin noinherit;           exception when duplicate_object then null; end $$;
+do $$ begin create role authenticated nologin noinherit;  exception when duplicate_object then null; end $$;
+do $$ begin create role service_role nologin noinherit bypassrls; exception when duplicate_object then null; end $$;
+
+-- ── El esquema `auth`, solo si falta ────────────────────────────────────────
+-- Supabase lo trae con su propio `auth.uid()`, que lee quién es el usuario del
+-- token. En un PostgreSQL pelado no existe, y sin él cualquier política que
+-- pregunte «¿esta fila es tuya?» revienta.
+--
+-- Se crea SOLO SI NO ESTÁ. Nunca se reemplaza: pisar el `auth.uid()` de un
+-- Supabase real con este sustituto rompería la identidad de todo el proyecto.
+
+create schema if not exists auth;
+
+do $$
+begin
+    if not exists (
+        select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'auth' and p.proname = 'uid'
+    ) then
+        execute 'create function auth.uid() returns uuid language sql stable as '
+             || '$f$ select nullif(current_setting(''request.jwt.claim.sub'', true), '''')::uuid $f$';
+    end if;
+end $$;
+
 -- ── Los tipos ───────────────────────────────────────────────────────────────
 -- `Accesorio` está en `inventory_type` pero no en el enum de TypeScript: es un
 -- valor que quedó en la base y que el código no produce. No se quita acá; quitar

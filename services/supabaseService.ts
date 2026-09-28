@@ -156,6 +156,7 @@ function dbToUser(row: Record<string, unknown>): AppUser {
         name: row.name as string,
         setupComplete: !!row.setup_complete,
         passwordHash: (row.password_hash as string | null) ?? undefined,
+        debeCambiarClave: !!row.debe_cambiar_clave,
     };
 }
 
@@ -647,7 +648,7 @@ export async function fetchUsers(): Promise<AppUser[]> {
  * puede dejar a la encargada afuera de la bodega a las siete de la mañana.
  */
 export type ResultadoLogin =
-    | { estado: 'ok'; usuario: { id: string; role: UserRole; name: string } }
+    | { estado: 'ok'; usuario: { id: string; role: UserRole; name: string; debeCambiarClave?: boolean } }
     | { estado: 'rechazado' }
     | { estado: 'sinRespuesta' };
 
@@ -669,6 +670,29 @@ export type ResultadoLogin =
  * se comprueba que los cinco accesos entran por acá, y **solo entonces** se le
  * quita el permiso a la llave pública.
  */
+/**
+ * Cambia la contraseña de quien acaba de entrar, en los DOS lados.
+ *
+ * Hay dos sitios donde vive la credencial mientras dura la transición: el
+ * servidor de identidad (Auth) y la tabla `app_users`, que es lo que compara el
+ * camino viejo. Cambiar solo uno deja a la persona entrando con la vieja por la
+ * otra puerta, que es exactamente lo que este cambio viene a cerrar.
+ *
+ * El orden importa: primero Auth. Si eso falla no se toca nada más y la persona
+ * conserva la contraseña que ya tenía — quedarse sin poder entrar es peor que
+ * quedarse con una contraseña corta un día más.
+ */
+export async function cambiarClave(userId: string, nueva: string): Promise<void> {
+    const { error: errorAuth } = await supabase.auth.updateUser({ password: nueva });
+    if (errorAuth) throw errorAuth;
+
+    const { error } = await supabase
+        .from('app_users')
+        .update({ password: nueva, debe_cambiar_clave: false })
+        .eq('id', userId);
+    if (error) throw error;
+}
+
 export async function entrarConIdentidad(
     username: string,
     password: string
@@ -697,14 +721,17 @@ export async function entrarConIdentidad(
     // `app_users`. Auth solo responde «sí, es quien dice ser».
     const { data: fila, error: errorFila } = await supabase
         .from('app_users')
-        .select('id, name, role')
+        .select('id, name, role, debe_cambiar_clave')
         .eq('auth_uid', uid)
         .is('deleted_at', null)
         .maybeSingle();
     if (errorFila || !fila) return { estado: 'sinRespuesta' };
 
-    const f = fila as { id: string; name: string; role: UserRole };
-    return { estado: 'ok', usuario: { id: f.id, role: f.role, name: f.name } };
+    const f = fila as { id: string; name: string; role: UserRole; debe_cambiar_clave: boolean };
+    return {
+        estado: 'ok',
+        usuario: { id: f.id, role: f.role, name: f.name, debeCambiarClave: !!f.debe_cambiar_clave },
+    };
 }
 
 export async function authenticateUser(

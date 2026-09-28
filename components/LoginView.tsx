@@ -12,7 +12,7 @@ interface LoginViewProps {
     onCredentialVerified?: (userId: string, passwordHash: string) => void;
 }
 
-type Screen = 'main' | 'users' | 'password' | 'setup';
+type Screen = 'main' | 'users' | 'password' | 'setup' | 'cambiarClave';
 
 export const LoginView: React.FC<LoginViewProps> = ({ users, onLoginSuccess, onFirstSetup, onCredentialVerified }) => {
     const [screen, setScreen] = useState<Screen>('main');
@@ -28,6 +28,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ users, onLoginSuccess, onF
     const setupUsernameRef = useRef<HTMLInputElement>(null);
     /** El código que el administrador le pasó a esta persona. */
     const [setupCodigo, setSetupCodigo] = useState('');
+    /** Quién quedó autenticado y esperando a cambiar su contraseña para entrar. */
+    const [pendienteDeEntrar, setPendienteDeEntrar] = useState<{ role: UserRole; name: string } | null>(null);
 
     useEffect(() => {
         if (screen === 'password') setTimeout(() => passwordRef.current?.focus(), 100);
@@ -79,6 +81,23 @@ export const LoginView: React.FC<LoginViewProps> = ({ users, onLoginSuccess, onF
                  */
                 const conIdentidad = await db.entrarConIdentidad(selectedUser.username, password);
                 if (conIdentidad.estado === 'ok') {
+                    /**
+                     * Con la contraseña vieja se AUTENTICA pero no se entra.
+                     *
+                     * Las tres contraseñas que había eran de dos caracteres. Al
+                     * cerrar todo lo demás, esas dos letras pasaban a ser lo
+                     * único que separa el inventario de internet. No se cambian
+                     * por detrás —eso deja a la encargada parada en la puerta—
+                     * sino acá, con la suya vieja en la mano.
+                     */
+                    if (conIdentidad.usuario.debeCambiarClave) {
+                        setPendienteDeEntrar({ role: conIdentidad.usuario.role, name: conIdentidad.usuario.name });
+                        setSetupPassword('');
+                        setSetupConfirm('');
+                        setError('');
+                        setScreen('cambiarClave');
+                        return;
+                    }
                     onCredentialVerified?.(selectedUser.id, await sha256Hex(password));
                     onLoginSuccess(conIdentidad.usuario.role, conIdentidad.usuario.name);
                     return;
@@ -138,6 +157,36 @@ export const LoginView: React.FC<LoginViewProps> = ({ users, onLoginSuccess, onF
         if (user.passwordHash) return (await sha256Hex(password)) === user.passwordHash;
         // Compatibilidad con sesiones antiguas que aún tengan la contraseña en memoria
         return !!user.password && password === user.password;
+    };
+
+    /**
+     * El cambio obligatorio de contraseña, con la persona YA autenticada.
+     *
+     * Esto corre después de que el servidor dijo «sí, es quien dice ser», así
+     * que hay sesión abierta y `cambiarClave` puede escribir en los dos lados:
+     * el servidor de identidad y la tabla que usa el camino viejo. Cambiar uno
+     * solo dejaría a la persona entrando con la vieja por la otra puerta.
+     *
+     * Si falla, NO se entra pero tampoco se pierde nada: la contraseña de
+     * siempre sigue sirviendo y se puede volver a intentar. Preferir eso a
+     * dejarla adentro sin cambiarla es a propósito — si se deja pasar «por esta
+     * vez», nadie la cambia nunca.
+     */
+    const handleCambioSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedUser || !pendienteDeEntrar || isLoading) return;
+        if (setupPassword.length < 6) { triggerShake('La contraseña nueva debe tener al menos 6 caracteres'); return; }
+        if (setupPassword !== setupConfirm) { triggerShake('Las contraseñas no coinciden'); return; }
+        setIsLoading(true);
+        try {
+            await db.cambiarClave(selectedUser.id, setupPassword);
+            onCredentialVerified?.(selectedUser.id, await sha256Hex(setupPassword));
+            onLoginSuccess(pendienteDeEntrar.role, pendienteDeEntrar.name);
+        } catch {
+            triggerShake('No se pudo guardar la contraseña nueva. Revisá la conexión e intentá otra vez.');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const handleSetupSubmit = (e: React.FormEvent) => {
@@ -322,6 +371,54 @@ export const LoginView: React.FC<LoginViewProps> = ({ users, onLoginSuccess, onF
                 )}
 
                 {/* ── PRIMER SETUP ── */}
+                {screen === 'cambiarClave' && selectedUser && (
+                    <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                        <div className="mb-5">
+                            <p className="text-lg font-black text-tinta">Hola, {selectedUser.name}</p>
+                            <p className="text-sm text-tinta-tenue mt-1">
+                                Tu contraseña era muy corta para lo que ahora protege. Poné una nueva
+                                —de <strong>seis caracteres o más</strong>— y seguís.
+                            </p>
+                            <p className="text-[11px] text-tinta-tenue mt-2">
+                                Es una sola vez. Nadie más la sabe, ni siquiera quien te abrió el acceso.
+                            </p>
+                        </div>
+                        <form onSubmit={handleCambioSubmit} className="space-y-4">
+                            <div>
+                                <label className="text-[10px] font-black text-tinta-tenue uppercase tracking-widest mb-1 block">
+                                    Contraseña nueva
+                                </label>
+                                <input
+                                    autoFocus
+                                    type="password"
+                                    value={setupPassword}
+                                    onChange={e => { setSetupPassword(e.target.value); setError(''); }}
+                                    placeholder="••••••••"
+                                    autoComplete="new-password"
+                                    className="w-full px-4 py-3 rounded-xl border-2 border-papel-borde focus:border-marca outline-none text-tinta font-bold"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-black text-tinta-tenue uppercase tracking-widest mb-1 block">
+                                    Repetila
+                                </label>
+                                <input
+                                    type="password"
+                                    value={setupConfirm}
+                                    onChange={e => { setSetupConfirm(e.target.value); setError(''); }}
+                                    placeholder="••••••••"
+                                    autoComplete="new-password"
+                                    className="w-full px-4 py-3 rounded-xl border-2 border-papel-borde focus:border-marca outline-none text-tinta font-bold"
+                                />
+                            </div>
+                            {error && <p className="text-sm text-alerta font-semibold text-center">{error}</p>}
+                            <button type="submit" disabled={isLoading}
+                                className="w-full bg-marca hover:bg-marca-fuerte disabled:opacity-60 text-tinta font-black py-3 rounded-xl transition-all text-sm">
+                                {isLoading ? 'Guardando…' : 'Guardar y entrar →'}
+                            </button>
+                        </form>
+                    </div>
+                )}
                 {screen === 'setup' && selectedUser && (
                     <div className={shake ? 'animate-bounce' : ''}>
                         <button onClick={goBack} className="flex items-center gap-2 text-sm text-tinta-tenue hover:text-tinta-suave mb-5 transition-colors">
