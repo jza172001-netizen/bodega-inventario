@@ -98,6 +98,7 @@ function dbToMovement(row: Record<string, unknown>): Movement {
         returnCondition: row.return_condition as ReturnCondition | undefined,
         returnNotes: row.return_notes as string | undefined,
         returnedAt: row.returned_at ? new Date(row.returned_at as string) : undefined,
+        devuelveA: row.devuelve_a as string | undefined,
         updatedAt: row.updated_at ? new Date(row.updated_at as string) : undefined,
     };
 }
@@ -117,6 +118,7 @@ function movementToDb(m: Omit<Movement, 'id'>): Record<string, unknown> {
         return_condition: m.returnCondition ?? null,
         return_notes: m.returnNotes ?? null,
         returned_at: m.returnedAt instanceof Date ? m.returnedAt.toISOString() : (m.returnedAt ?? null),
+        devuelve_a: m.devuelveA ?? null,
         updated_at: sello(m.updatedAt),
     };
 }
@@ -275,6 +277,22 @@ export async function logMovementWithStock(
     id: string,
     fallbackQty: number
 ): Promise<void> {
+    /**
+     * Una devolución NO puede ir por esta función.
+     *
+     * `log_movement_and_update_stock` recibe los campos uno por uno y no tiene
+     * dónde recibir `devuelve_a`. Agregárselos cambiaría su firma, y en
+     * PostgreSQL eso no reemplaza la función: crea una segunda con el mismo
+     * nombre, y las llamadas viejas siguen yendo a la de antes. Así que la
+     * devolución se escribe por la vía normal —fila y cantidad— que sí lleva
+     * todas las columnas. Es el camino de respaldo, no el de todos los días:
+     * solo se llega acá si la función del lote no está instalada.
+     */
+    if (m.devuelveA) {
+        await addMovement(m, id);
+        await updateItemQuantity(m.itemId, fallbackQty);
+        return;
+    }
     const { error } = await supabase.rpc('log_movement_and_update_stock', {
         p_id: id,
         p_item_id: m.itemId,
@@ -330,6 +348,14 @@ export async function logMovementsWithStock(
             is_loan: m.isLoan ?? false,
             is_returned: m.isReturned ?? false,
             pending_pickup: m.pendingPickup ?? false,
+            // Los campos de la devolución. Sin ellos, una devolución parcial
+            // entraba al servidor como una entrada suelta: el préstamo seguía
+            // figurando completo afuera y el siguiente intento reponía el stock
+            // por segunda vez.
+            devuelve_a: m.devuelveA ?? null,
+            return_condition: m.returnCondition ?? null,
+            return_notes: m.returnNotes ?? null,
+            returned_at: m.returnedAt instanceof Date ? m.returnedAt.toISOString() : (m.returnedAt ?? null),
         })),
     });
     if (!error) return;
@@ -369,10 +395,29 @@ export async function deleteMovementWithRevert(id: string, fallbackItemId?: stri
     }
 }
 
-export async function markMovementReturned(id: string, condition?: ReturnCondition, notes?: string): Promise<void> {
-    const update: Record<string, unknown> = { is_returned: true };
+/**
+ * Cierra un préstamo: lo marca devuelto y NO toca el stock.
+ *
+ * Con la devolución convertida en movimiento propio, la reposición ya la hizo
+ * esa entrada. Usar `returnLoanAndRestoreStock` para cerrar el préstamo subiría
+ * el stock una segunda vez por la misma herramienta.
+ *
+ * `cerradoEn` llega desde la devolución que lo saldó, para que la fecha del
+ * préstamo cerrado sea la de la devolución de verdad y no la del momento en que
+ * la cola alcanzó a mandarlo —que puede ser al otro día, cuando vuelva la señal.
+ * Los traspasos entre trabajadores no la mandan: ahí la herramienta no volvió a
+ * la bodega y no hay fecha de regreso que contar.
+ */
+export async function markMovementReturned(
+    id: string,
+    condition?: ReturnCondition,
+    notes?: string,
+    cerradoEn?: string | Date,
+): Promise<void> {
+    const update: Record<string, unknown> = { is_returned: true, pending_pickup: false };
     if (condition) update.return_condition = condition;
     if (notes) update.return_notes = notes;
+    if (cerradoEn) update.returned_at = cerradoEn instanceof Date ? cerradoEn.toISOString() : cerradoEn;
     const { error } = await supabase.from('movements').update(update).eq('id', id);
     if (error) throw error;
 }

@@ -1,5 +1,6 @@
 
 import { Movement, Item, Personnel, InventoryType, MovementType } from '../types';
+import { getActiveLoans } from '../utils/inventory';
 
 export const REMINDER_LOG_KEY = 'bodega_wa_reminders';
 export const REMINDER_INTERVAL_DAYS = 8;
@@ -67,8 +68,8 @@ export const buildPersonGroups = (
     const itemMap = new Map(items.map(i => [i.id, i]));
     const sevenDaysAgo = new Date(Date.now() - windowDays * 86400000);
 
-    const activeLoans = movements.filter(
-        m => m.personnelId === person.id && m.isLoan && !m.isReturned
+    const activeLoans = getActiveLoans(movements).filter(
+        m => m.personnelId === person.id
     );
 
     const recentCheckouts = movements.filter(

@@ -6,6 +6,7 @@ import { TrashIcon } from './icons/TrashIcon';
 import { EditIcon } from './icons/EditIcon';
 import { PersonnelDetailModal } from './PersonnelDetailModal';
 import { EditPersonnelModal } from './EditPersonnelModal';
+import { getActiveLoans } from '../utils/inventory';
 interface PersonnelViewProps {
     personnel: Personnel[];
     movements: Movement[];
@@ -63,7 +64,7 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
 
     const handleDelete = (e: React.MouseEvent, p: Personnel) => {
         e.stopPropagation();
-        const hasLoans = movements.some(m => m.personnelId === p.id && m.isLoan && !m.isReturned);
+        const hasLoans = getActiveLoans(movements).some(m => m.personnelId === p.id);
         if (hasLoans) {
             alert(`${p.name} tiene herramientas activas en préstamo. Márcalas como devueltas antes de eliminar.`);
             return;
@@ -110,7 +111,7 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
                         // decía siempre cero mientras su cuadrilla tenía media bodega
                         // afuera — Alex, con Jhon jader y Rafael, mostraba 0.
                         const enFoco = new Set([p.id, ...subWorkers.map(w => w.id)]);
-                        const activeLoans = movements.filter(m => m.personnelId && enFoco.has(m.personnelId) && m.isLoan && !m.isReturned);
+                        const activeLoans = getActiveLoans(movements).filter(m => m.personnelId && enFoco.has(m.personnelId));
                         const activeItems = activeLoans.map(m => items.find(i => i.id === m.itemId)).filter(Boolean) as Item[];
                         const visibleChips = activeItems.slice(0, 3);
                         const extra = activeItems.length - visibleChips.length;

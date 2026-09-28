@@ -5,7 +5,15 @@ interface Props {
     item: Item;
     personName: string;
     movementIds: string[];
-    onConfirm: (ids: string[], condition: ReturnCondition, notes: string) => void;
+    /**
+     * Cuántas unidades siguen afuera en esos préstamos.
+     *
+     * Sin esto el modal solo sabía devolver TODO: si salían tres palas y volvía
+     * una, no había dónde decirlo. Cuando es una sola unidad no se pregunta
+     * nada — preguntarle a alguien «¿cuántas de la única que tiene?» es ruido.
+     */
+    pendienteTotal?: number;
+    onConfirm: (ids: string[], condition: ReturnCondition, notes: string, cantidad: number) => void;
     onClose: () => void;
 }
 
@@ -17,9 +25,14 @@ const CONDITIONS: { value: ReturnCondition; label: string; color: string; icon: 
     { value: 'needs_maintenance', label: 'Requiere mantenimiento',        color: 'border-marca bg-marca-suave text-marca-oscuro', icon: '🔨' },
 ];
 
-export const ReturnToolModal: React.FC<Props> = ({ item, personName, movementIds, onConfirm, onClose }) => {
+export const ReturnToolModal: React.FC<Props> = ({ item, personName, movementIds, pendienteTotal, onConfirm, onClose }) => {
     const [condition, setCondition] = useState<ReturnCondition | null>(null);
     const [notes, setNotes] = useState('');
+    // Sin dato de pendiente —pantallas que todavía no lo pasan— se comporta
+    // como siempre: vuelve todo.
+    const afuera = Math.max(1, pendienteTotal ?? 1);
+    const [cuantas, setCuantas] = useState(afuera);
+    const parcial = cuantas < afuera;
 
     // Solo los retornables se revisan: un disco se gastó, no tiene por qué volver.
     const retornables = (item.accessories ?? []).filter(a => !a.itemId);
@@ -46,7 +59,7 @@ export const ReturnToolModal: React.FC<Props> = ({ item, personName, movementIds
         // para reclamarle nada a nadie.
         const detalle = faltantes.length > 0 ? `Faltó: ${faltantes.join(', ')}.` : '';
         const nota = [detalle, notes.trim()].filter(Boolean).join(' ');
-        onConfirm(movementIds, condition, nota);
+        onConfirm(movementIds, condition, nota, cuantas);
     };
 
     return (
@@ -61,6 +74,46 @@ export const ReturnToolModal: React.FC<Props> = ({ item, personName, movementIds
                 </div>
 
                 <div className="px-5 py-4 space-y-4">
+                    {afuera > 1 && (
+                        <div>
+                            <label className="text-xs font-black text-tinta-tenue uppercase tracking-wide">
+                                ¿Cuántas volvieron?
+                            </label>
+                            <p className="text-[10px] text-tinta-tenue mt-0.5 mb-1.5">
+                                Hay {afuera} afuera. Si vuelven menos, el resto queda pendiente — el préstamo no se cierra.
+                            </p>
+                            <div className="flex items-center gap-2">
+                                <button type="button" aria-label="Una menos"
+                                    onClick={() => setCuantas(c => Math.max(1, c - 1))}
+                                    disabled={cuantas <= 1}
+                                    className="w-11 h-11 rounded-xl border border-papel-borde bg-papel-hondo text-xl font-black text-tinta-suave disabled:opacity-40">
+                                    −
+                                </button>
+                                <input
+                                    type="number" inputMode="numeric" min={1} max={afuera} value={cuantas}
+                                    onChange={e => {
+                                        const n = Math.round(Number(e.target.value));
+                                        // Nunca más de lo que hay afuera: devolver cuatro de
+                                        // tres inventa una herramienta que la bodega no tenía.
+                                        setCuantas(Number.isFinite(n) ? Math.min(afuera, Math.max(1, n)) : 1);
+                                    }}
+                                    className="flex-1 text-center text-lg font-black border border-papel-borde rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-marca"
+                                />
+                                <button type="button" aria-label="Una más"
+                                    onClick={() => setCuantas(c => Math.min(afuera, c + 1))}
+                                    disabled={cuantas >= afuera}
+                                    className="w-11 h-11 rounded-xl border border-papel-borde bg-papel-hondo text-xl font-black text-tinta-suave disabled:opacity-40">
+                                    +
+                                </button>
+                            </div>
+                            {parcial && (
+                                <p className="text-[11px] text-atencion font-bold mt-1.5">
+                                    Quedan {afuera - cuantas} pendiente(s) a nombre de {personName}.
+                                </p>
+                            )}
+                        </div>
+                    )}
+
                     {retornables.length > 0 && (
                         <div>
                             <label className="text-xs font-black text-tinta-tenue uppercase tracking-wide">
@@ -148,7 +201,7 @@ export const ReturnToolModal: React.FC<Props> = ({ item, personName, movementIds
                         disabled={!canSubmit}
                         className="flex-1 py-2.5 text-sm font-bold bg-bien hover:bg-bien text-papel rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                        Confirmar devolución
+                        {parcial ? `Devolver ${cuantas} de ${afuera}` : 'Confirmar devolución'}
                     </button>
                 </div>
             </div>

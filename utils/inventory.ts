@@ -175,9 +175,129 @@ export const esAjuste = (m: { notes?: string }): boolean =>
     (m.notes ?? '').startsWith(NOTA_AJUSTE);
 
 // ── Préstamos ────────────────────────────────────────────────────────
-/** Lo que está fuera de bodega y no ha vuelto. */
-export const getActiveLoans = (movements: Movement[]): Movement[] =>
-    movements.filter(m => m.isLoan && !m.isReturned);
+
+/**
+ * Las devoluciones enlazadas a un préstamo.
+ *
+ * Devolver ya no es marcar el préstamo y listo: es un movimiento propio que
+ * apunta al préstamo que salda. Así «presté tres, volvió una» tiene dónde
+ * escribirse, y las dos devoluciones de una quedan como dos renglones con su
+ * fecha y su estado — no como un préstamo que cambió de número.
+ */
+export const devolucionesDe = (prestamoId: string, movimientos: Movement[]): Movement[] =>
+    movimientos.filter(m => m.devuelveA === prestamoId);
+
+/**
+ * Cuánto de un préstamo sigue afuera.
+ *
+ * El préstamo NO se modifica nunca: sigue diciendo con cuánto salió, que es el
+ * dato que hace falta para reclamar. Lo que falta se calcula.
+ */
+export const pendienteDe = (prestamo: Movement, movimientos: Movement[]): number => {
+    const devuelto = devolucionesDe(prestamo.id, movimientos).reduce((s, m) => s + m.quantity, 0);
+    return Math.max(0, prestamo.quantity - devuelto);
+};
+
+/**
+ * Cuánto se devolvió de cada préstamo, en una pasada.
+ *
+ * `pendienteDe` recorre todos los movimientos por cada préstamo, y con
+ * doscientos préstamos eso es recorrer la lista doscientas veces. Para las
+ * funciones que miran TODOS los préstamos se arma el índice una sola vez.
+ */
+const devueltoPorPrestamo = (movimientos: Movement[]): Map<string, number> => {
+    const acum = new Map<string, number>();
+    for (const m of movimientos) {
+        if (!m.devuelveA) continue;
+        acum.set(m.devuelveA, (acum.get(m.devuelveA) ?? 0) + m.quantity);
+    }
+    return acum;
+};
+
+/**
+ * Lo que está fuera de bodega y no ha vuelto — o no ha vuelto DEL TODO.
+ *
+ * DEVUELVE LA CANTIDAD QUE SIGUE AFUERA, NO CON LA QUE SALIÓ. Es el punto: si
+ * salieron tres palas y volvió una, esta lista dice **dos**. Toda la app
+ * pregunta lo mismo por acá —«¿qué hay afuera?»— y lo que necesita saber es
+ * cuánto falta, no cuánto salió alguna vez; el préstamo original, intacto,
+ * sigue en `movements` para quien necesite la historia.
+ *
+ * Se devuelve el movimiento tal cual cuando no ha vuelto nada, que es el caso
+ * de casi todos: solo se hace copia cuando de verdad hay algo que descontar.
+ *
+ * `isReturned` se conserva porque lo traen escrito los miles de movimientos que
+ * ya existen, de cuando devolver era todo o nada.
+ */
+export const getActiveLoans = (movements: Movement[]): Movement[] => {
+    const devuelto = devueltoPorPrestamo(movements);
+    const afuera: Movement[] = [];
+    for (const m of movements) {
+        if (!m.isLoan || m.isReturned) continue;
+        const ya = devuelto.get(m.id) ?? 0;
+        if (ya === 0) { afuera.push(m); continue; }
+        const pendiente = m.quantity - ya;
+        if (pendiente > 0) afuera.push({ ...m, quantity: pendiente });
+    }
+    return afuera;
+};
+
+/** Lo que falta por volver de un grupo de préstamos, por sus ids. */
+export const pendienteDeVarios = (ids: string[], movimientos: Movement[]): number => {
+    const devuelto = devueltoPorPrestamo(movimientos);
+    const enJuego = new Set(ids);
+    let total = 0;
+    for (const m of movimientos) {
+        if (!enJuego.has(m.id) || !m.isLoan || m.isReturned) continue;
+        total += Math.max(0, m.quantity - (devuelto.get(m.id) ?? 0));
+    }
+    return total;
+};
+
+/**
+ * Reparte una devolución entre los préstamos que la pueden recibir.
+ *
+ * La pantalla de una persona agrupa: «Pala ×3» puede ser un préstamo de 3 o
+ * tres préstamos de 1 de días distintos. Quien devuelve dice cuántas trae, no
+ * de cuál salida — nadie se acuerda de eso, ni tiene por qué.
+ *
+ * **Se salda del más viejo primero.** Es lo que uno haría con la libreta en la
+ * mano: la deuda que primero se abre es la que primero se cierra. También es lo
+ * que deja el pendiente restante con la fecha más nueva, que es la que sirve
+ * para reclamar sin acusar de más.
+ *
+ * Lo que no alcanza a repartirse se devuelve como sobrante: quien llama decide
+ * si eso es un error que se avisa o algo que se ignora. Aquí no se inventa un
+ * préstamo para acomodarlo.
+ */
+export const repartirDevolucion = (
+    ids: string[],
+    movimientos: Movement[],
+    cantidad?: number,
+): Array<{ id: string; cantidad: number }> => {
+    const porId = new Map(movimientos.map(m => [m.id, m]));
+    const prestamos = ids
+        .map(id => porId.get(id))
+        .filter((m): m is Movement => !!m)
+        .sort((a, b) => +new Date(a.timestamp) - +new Date(b.timestamp));
+
+    const devuelto = devueltoPorPrestamo(movimientos);
+    const pendienteDeCadaUno = prestamos.map(p => Math.max(0, p.quantity - (devuelto.get(p.id) ?? 0)));
+    const total = pendienteDeCadaUno.reduce((s, n) => s + n, 0);
+
+    // Sin cantidad dicha, vuelve todo lo que está afuera: es la devolución de
+    // siempre, la de «ya la entregó».
+    let queda = cantidad === undefined ? total : Math.max(0, Math.min(cantidad, total));
+
+    const partes: Array<{ id: string; cantidad: number }> = [];
+    for (let i = 0; i < prestamos.length && queda > 0; i++) {
+        const toma = Math.min(pendienteDeCadaUno[i], queda);
+        if (toma <= 0) continue;
+        partes.push({ id: prestamos[i].id, cantidad: toma });
+        queda -= toma;
+    }
+    return partes;
+};
 
 /**
  * Índice ítem → TODOS sus préstamos activos.
@@ -212,6 +332,8 @@ export const getLoansByPerson = (
     personNameOf: (id?: string) => string,
 ): PersonLoanSummary[] => {
     const porPersona = new Map<string, PersonLoanSummary>();
+    // `getActiveLoans` ya entrega lo que falta por volver, no con cuánto salió:
+    // si se llevó tres y devolvió una, acá suma dos.
     for (const m of getActiveLoans(movements)) {
         const key = m.personnelId ?? '__sin_asignar__';
         if (!porPersona.has(key)) {

@@ -71,6 +71,31 @@ let PGlite;
     const n = (await pg.query('select count(*)::int as n from movements')).rows[0].n;
     console.log(`\nBase en blanco reconstruida y usable: stock ${q} (esperado 3), movimientos ${n} (esperado 1)`);
     if (q !== 3 || n !== 1) process.exitCode = 1;
+
+    // Una devolución PARCIAL tiene que llegar entera: con su enlace al préstamo,
+    // su estado y su fecha. Si el lote botara `devuelve_a`, el préstamo seguiría
+    // figurando completo afuera y el siguiente reintento repondría otra vez.
+    // Se manda DOS veces a propósito: el reintento no puede reponer dos veces.
+    const devolucion = {
+      id: '99999999-9999-4999-8999-999999999992', item_id: '11111111-1111-4111-8111-111111111111',
+      type: 'Entrada', quantity: 1, timestamp: '2026-09-12T13:00:00Z',
+      personnel_id: '44444444-4444-4444-8444-444444444444',
+      devuelve_a: '99999999-9999-4999-8999-999999999991',
+      return_condition: 'worn', return_notes: 'mango flojo', returned_at: '2026-09-12T13:00:00Z',
+    };
+    for (let i = 0; i < 2; i++) {
+      await pg.query(`select log_movements_and_update_stock($1::jsonb)`, [JSON.stringify([devolucion])]);
+    }
+    const q2 = Number((await pg.query('select quantity from items')).rows[0].quantity);
+    const d = (await pg.query(`select devuelve_a, return_condition, returned_at is not null as fecha
+                               from movements where devuelve_a is not null`)).rows;
+    const p = (await pg.query(`select quantity, is_returned from movements
+                               where id = '99999999-9999-4999-8999-999999999991'`)).rows[0];
+    const bien = q2 === 4 && d.length === 1 && d[0].return_condition === 'worn' && d[0].fecha
+      && Number(p.quantity) === 2 && !p.is_returned;
+    console.log(`Devolución parcial: stock ${q2} (esperado 4), devoluciones ${d.length} (esperado 1), `
+      + `préstamo ${Number(p.quantity)} sin cerrar (esperado 2) ${bien ? '✓' : '✗'}`);
+    if (!bien) process.exitCode = 1;
   } else {
     process.exitCode = 1;
   }

@@ -2,6 +2,7 @@
 import React, { useMemo, useEffect, useState, useRef, useCallback } from 'react';
 import { Item, Movement, MovementType, InventoryType, Personnel, Project } from '../types';
 import { generateRotationAnalysis } from '../services/geminiService';
+import { getActiveLoans } from '../utils/inventory';
 // docxExportService se carga bajo demanda (import dinámico) para no inflar el bundle inicial
 
 interface StatisticsViewProps {
@@ -120,7 +121,7 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
         const checkouts30d = recentMovements.filter(m => m.type === MovementType.CHECK_OUT);
         const totalSalidas = checkouts30d.reduce((s, m) => s + m.quantity, 0);
         const totalItems = items.filter(i => i.quantity > 0).length;
-        const activeLoans = movements.filter(m => m.isLoan && !m.isReturned);
+        const activeLoans = getActiveLoans(movements);
         const activeLoanCount = activeLoans.length;
         const pendingPickupCount = activeLoans.filter(m => m.pendingPickup).length;
         const lowStockItems = items.filter(i => i.quantity <= i.minStock && i.minStock > 0).length;

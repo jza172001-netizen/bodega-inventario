@@ -156,6 +156,21 @@ export interface Movement {
      *  vuelto y en qué estado, nunca cuándo: una devolución de hoy seguía
      *  apareciendo en el historial con la fecha de su salida. */
     returnedAt?: Date;
+    /**
+     * El préstamo que ESTA entrada devuelve.
+     *
+     * Antes devolver era marcar el préstamo como devuelto, y punto. Si se
+     * prestaban tres palas y volvía una, **no había forma de decirlo**: o volvían
+     * las tres o no volvía ninguna.
+     *
+     * Ahora la devolución es un movimiento propio, enlazado. El préstamo NO se
+     * toca — sigue diciendo tres— y lo que falta se calcula: tres menos lo que
+     * devolvieron. Dos devoluciones de una son **dos renglones**, cada uno con su
+     * fecha y su estado, no un préstamo mutado.
+     *
+     * Y el Kardex sigue cuadrando solo: salida 3, entrada 1, entrada 1.
+     */
+    devuelveA?: string;
     updatedAt?: Date;
 }
 

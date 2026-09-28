@@ -10,6 +10,7 @@
 import {
     isAsset, isConsumable, isAccessory, esRetiro, alcanzaStock, adivinarTipo,
     getActiveLoans, getActiveLoansByItem, getLoansByPerson, summarizeLoanItems,
+    pendienteDe, pendienteDeVarios, repartirDevolucion,
 } from '../utils/inventory';
 import { InventoryType, MovementType, Item, Movement } from '../types';
 import { igual, esCierto, grupo, cerrar } from './correr';
@@ -140,6 +141,43 @@ grupo('resumen de una línea', () => {
         mov({ id: '2', itemId: 'martillo', quantity: 1, isLoan: true }),
     ];
     igual(summarizeLoanItems(ms, () => 'Martillo'), 'Martillo ×3', 'suma el mismo ítem');
+});
+
+grupo('devolución parcial — lo que queda afuera se calcula, el préstamo no cambia', () => {
+    const prestamo = mov({ id: 'p', isLoan: true, quantity: 3, personnelId: 'abel' });
+    const dev = (id: string, q: number) => mov({ id, type: MovementType.CHECK_IN, quantity: q, devuelveA: 'p' });
+    const ms = [prestamo, dev('d1', 1)];
+
+    igual(pendienteDe(prestamo, ms), 2, 'salieron 3, volvió 1: faltan 2');
+    igual(getActiveLoans(ms).map(m => m.quantity), [2], 'la lista de afuera dice 2, no 3');
+    igual(prestamo.quantity, 3, 'y el préstamo mismo NO se mutó');
+    igual(getLoansByPerson(ms, () => 'Abel')[0].unidades, 2, 'Abel debe 2');
+    igual(summarizeLoanItems(getActiveLoans(ms), () => 'Pala'), 'Pala ×2', 'el resumen dice ×2');
+
+    const saldado = [prestamo, dev('d1', 1), dev('d2', 2)];
+    igual(getActiveLoans(saldado).length, 0, 'devuelto del todo por partes: ya no está afuera');
+    igual(getActiveLoans([prestamo])[0], prestamo, 'sin devoluciones se entrega el MISMO objeto, sin copiar');
+});
+
+grupo('repartir una devolución — del préstamo más viejo primero', () => {
+    const viejo = mov({ id: 'viejo', isLoan: true, quantity: 2, timestamp: new Date('2026-09-01') });
+    const nuevo = mov({ id: 'nuevo', isLoan: true, quantity: 2, timestamp: new Date('2026-09-20') });
+    const ms = [nuevo, viejo];
+
+    igual(pendienteDeVarios(['viejo', 'nuevo'], ms), 4, 'afuera: 4');
+    igual(repartirDevolucion(['nuevo', 'viejo'], ms, 3),
+        [{ id: 'viejo', cantidad: 2 }, { id: 'nuevo', cantidad: 1 }],
+        'salda primero el viejo, sin importar el orden en que vengan los ids');
+    igual(repartirDevolucion(['viejo', 'nuevo'], ms),
+        [{ id: 'viejo', cantidad: 2 }, { id: 'nuevo', cantidad: 2 }],
+        'sin cantidad: vuelve todo');
+    igual(repartirDevolucion(['viejo'], ms, 9), [{ id: 'viejo', cantidad: 2 }],
+        'nunca más de lo que hay afuera');
+
+    const conParcial = [...ms, mov({ id: 'd', type: MovementType.CHECK_IN, quantity: 1, devuelveA: 'viejo' })];
+    igual(repartirDevolucion(['viejo', 'nuevo'], conParcial, 2),
+        [{ id: 'viejo', cantidad: 1 }, { id: 'nuevo', cantidad: 1 }],
+        'lo ya devuelto se descuenta antes de repartir');
 });
 
 await cerrar();

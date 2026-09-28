@@ -256,7 +256,7 @@ const fichaPersona = (person: Personnel, ctx: QAContext): string => {
 const fichaProyecto = (project: Project, ctx: QAContext): string => {
     const movs = ctx.movements.filter(m => m.projectId === project.id);
     const itemDe = (id: string) => ctx.items.find(i => i.id === id);
-    const prestados = movs.filter(m => m.isLoan && !m.isReturned);
+    const prestados = getActiveLoans(movs);
     const consumidos = movs.filter(m => m.type === MovementType.CHECK_OUT && !m.isLoan);
 
     const L: string[] = [`**${project.name}** (${project.status === 'active' ? 'activo' : 'terminado'})`];
@@ -460,7 +460,7 @@ const fichaCruce = (f: Filtros, ctx: QAContext): string => {
 
     if (movs.length === 0) return `${titulo}\n\nNo hay movimientos que cumplan eso.`;
 
-    const prestados = movs.filter(m => m.isLoan && !m.isReturned);
+    const prestados = getActiveLoans(movs);
     const gastados  = movs.filter(m => !m.isLoan);
     const L = [titulo];
 

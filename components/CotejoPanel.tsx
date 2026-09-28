@@ -2,6 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import { Item, Movement, Personnel, AuditLog, UserRole } from '../types';
 import * as db from '../services/supabaseService';
+import { getActiveLoans } from '../utils/inventory';
 
 interface Props {
     items: Item[];
@@ -89,7 +90,7 @@ export const CotejoPanel: React.FC<Props> = ({ items, movements, personnel, audi
 
             // Los préstamos abiertos son lo que hay que reclamar: si no coinciden,
             // alguien va a reclamar una herramienta que ya volvió, o al revés.
-            const abiertos = (ms: Movement[]) => new Set(ms.filter(m => m.isLoan && !m.isReturned).map(m => m.id));
+            const abiertos = (ms: Movement[]) => new Set(getActiveLoans(ms).map(m => m.id));
             const locAbiertos = abiertos(movements), remAbiertos = abiertos(remMovs);
             const nombreItem = (id: string) => items.find(x => x.id === id)?.name ?? '?';
             for (const m of movements) {

@@ -125,7 +125,24 @@ launched promise has already run and is not data.
 
 **Movement types** (`MovementType` enum): `PURCHASE`, `CHECK_IN`, `CHECK_OUT`, `WASTE`. `CHECK_OUT` and `WASTE` decrease item quantity; others increase it.
 
-**Loan tracking:** A `Movement` with `isLoan: true` and `type: CHECK_OUT` represents a loan. `isReturned: true` marks it as returned. `LoansView` filters movements by these flags.
+**Loan tracking:** A `Movement` with `isLoan: true` and `type: CHECK_OUT` represents a loan.
+**A return is its own `CHECK_IN` movement pointing at the loan through `devuelveA`**
+(since 28 Sep 2026). The loan row is never mutated in quantity: what is still out
+is `quantity − sum(returns)`, computed by `pendienteDe`. Lend 3, return 1, return 1
+→ one loan of 3, two return rows, 1 pending. `isReturned` is set only when nothing
+is left out, and is kept because thousands of older rows were closed that way
+(all-or-nothing, stock restored by `return_loan_and_restore_stock` with **no**
+entrada row).
+
+**Always ask `getActiveLoans` what is out — never filter `isLoan && !isReturned`
+by hand.** It returns each loan with `quantity` set to what is STILL out (a copy
+only when something came back). There were ~20 hand-rolled filters; they were
+all routed through it when partial returns landed, because a hand-rolled one
+shows "Pala ×3" after one of the three came back.
+
+Closing a loan after its last return uses `markMovementReturned` (a plain
+update), **not** `returnLoanAndRestoreStock` — the return's entrada already
+restored the stock, and that function would restore it a second time.
 
 ### Views (`App.tsx` `View` type)
 

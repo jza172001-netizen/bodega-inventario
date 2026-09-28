@@ -3,7 +3,7 @@
 // Reemplaza geminiService.ts con logica pura TypeScript
 
 import { Item, Movement, InventoryType, MovementType } from '../types';
-import { esAjuste } from '../utils/inventory';
+import { esAjuste, getActiveLoans } from '../utils/inventory';
 
 // ─── HELPERS ────────────────────────────────────────────────────────────────
 
@@ -59,7 +59,7 @@ export const generateInventoryAnalysis = async (
     // ── 2. Control de Activos ────────────────────────────────────────────────
     const herramientas = assetItems.map(item => {
         const outs = movements.filter(m => m.itemId === item.id && m.type === MovementType.CHECK_OUT);
-        const loans = movements.filter(m => m.itemId === item.id && m.isLoan && !m.isReturned);
+        const loans = getActiveLoans(movements).filter(m => m.itemId === item.id);
         const lastMov = movements
             .filter(m => m.itemId === item.id)
             .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];

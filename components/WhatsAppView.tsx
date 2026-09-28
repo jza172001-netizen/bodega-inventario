@@ -13,7 +13,7 @@ import {
     daysSince,
     REMINDER_INTERVAL_DAYS,
 } from '../services/whatsappService';
-import { isConsumable, CONSUMABLE_TYPES } from '../utils/inventory';
+import { isConsumable, CONSUMABLE_TYPES, getActiveLoans } from '../utils/inventory';
 import { ConfirmDialog } from './ConfirmDialog';
 import { ConfirmLoteWhatsApp, LinaPersona } from './ConfirmLoteWhatsApp';
 
@@ -144,7 +144,7 @@ export const WhatsAppView: React.FC<Props> = ({ movements, items, personnel, rea
     });
 
     const itemMap = new Map(items.map(i => [i.id, i]));
-    const activeLoans = movements.filter(m => m.isLoan && !m.isReturned);
+    const activeLoans = getActiveLoans(movements);
 
     const consumoCutoff = new Date(Date.now() - CONSUMO_WINDOW_DAYS * 86400000);
     const recentConsumos = movements.filter(m =>

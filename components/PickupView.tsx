@@ -4,6 +4,7 @@ import { Movement, Item, Personnel, Project, InventoryType, ReturnCondition, Use
 import { buildConsolidatedPickupUrl, buildConsolidatedPickupText } from '../services/whatsappService';
 import { ReturnToolModal } from './ReturnToolModal';
 import { ConfirmDialog } from './ConfirmDialog';
+import { getActiveLoans, pendienteDeVarios, repartirDevolucion } from '../utils/inventory';
 
 interface Props {
     movements: Movement[];
@@ -12,7 +13,7 @@ interface Props {
     projects: Project[];
     userRole?: UserRole;
     onMarkPendingPickup: (movementId: string, pending: boolean) => void;
-    onReturnItem: (movementId: string, condition?: string, notes?: string) => void;
+    onReturnItem: (movementId: string, condition?: string, notes?: string, cantidad?: number) => void;
     onBehaviorLog?: (action: string, detail: string) => void;
     onAuditLog?: (action: string, description: string) => void;
 }
@@ -47,7 +48,7 @@ export const PickupView: React.FC<Props> = ({
     const projectMap = useMemo(() => new Map(projects.map(p => [p.id, p])), [projects]);
 
     const pending = useMemo(
-        () => movements.filter(m => m.isLoan && !m.isReturned && m.pendingPickup),
+        () => getActiveLoans(movements).filter(m => m.pendingPickup),
         [movements]
     );
 
@@ -232,8 +233,11 @@ export const PickupView: React.FC<Props> = ({
                         item={item}
                         personName={personMap.get(returningMovement.personnelId ?? '')?.name ?? 'Sin asignar'}
                         movementIds={[returningMovement.id]}
-                        onConfirm={(ids, condition, notes) => {
-                            ids.forEach(id => onReturnItem(id, condition, notes));
+                        pendienteTotal={pendienteDeVarios([returningMovement.id], movements)}
+                        onConfirm={(ids, condition, notes, cantidad) => {
+                            for (const parte of repartirDevolucion(ids, movements, cantidad)) {
+                                onReturnItem(parte.id, condition, notes, parte.cantidad);
+                            }
                             setReturningMovement(null);
                         }}
                         onClose={() => setReturningMovement(null)}
