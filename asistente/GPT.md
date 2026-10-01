@@ -3,6 +3,16 @@
 Configuración lista para copiar en **ChatGPT → Explorar GPTs → Crear → Configurar**.
 El GPT **registra y consulta directo en la app** por las tres ventanillas.
 
+> **Ojo con el plan (consultado el 1-oct-2026 en el centro de ayuda de OpenAI;
+> la página no se pudo abrir directo, el dato sale de sus extractos de
+> búsqueda — PENDIENTE DE VERIFICAR):** crear GPTs nuevos **no** está disponible
+> en cuentas personales — Free, Go, Plus **ni Pro**. Sí en espacios **Business,
+> Enterprise y Edu**. Un GPT creado ANTES del cambio se puede seguir editando, y
+> a ese sí se le puede agregar esta acción.
+>
+> Sin plan de empresa, la vía que no depende de OpenAI es la del Gem
+> (`asistente/GEM.md`): arma el bloque y se pega en la app.
+
 ---
 
 ## 1. Antes: una sola cosa en Vercel
