@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { cantidadDeTexto } from '../utils/numeros';
 import { Item, Movement, Personnel, PurchaseOrder, Project, MovementType, InventoryType, RechazoStock, LoteResultado, AuditLog } from '../types';
-import { momentoDeFecha } from '../utils/date';
+import { momentoDeFecha, momentoConHora } from '../utils/date';
 import { askCopilot } from '../services/copilotService';
 import { suggestQuestions } from '../services/warehouseQA';
 import { scoreMatch } from '../utils/search';
@@ -14,8 +14,9 @@ import { getGenus, familiaDe, esParecido, familiaCanonica, familiasParecidas, co
 import { tonoDe, raizDeColor, coloresUnificados, PALETA } from '../utils/colores';
 import { generosDe, denominacionesDe, nombreCompuesto } from '../utils/medida';
 import { medidaDe } from '../utils/medida';
-import { leerLote, contarDudas, LoteParseado, ItemLote } from '../utils/lote';
-import { planearLote } from '../core/despacho';
+import { leerLote, contarDudas, LoteParseado, ItemLote, LineaLote, moverItem } from '../utils/lote';
+import { verificarLote, listoParaRegistrar, obraDe } from '../core/verificacion';
+import { planearLote, tipoExigeObra } from '../core/despacho';
 import { isAsset, isConsumable, adivinarTipo } from '../utils/inventory';
 
 /** Las preguntas de uso, tal cual las responde el asistente. */
@@ -260,6 +261,11 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     const [loteCompletar, setLoteCompletar] = useState(true);
     /** Los renglones que se van a crear, con el tipo que eligió quien mira. */
     const [loteNuevos, setLoteNuevos] = useState<Map<string, InventoryType>>(new Map());
+    /**
+     * Los elementos con algo que NO cuadra y que alguien ya miró (✓ Verificado).
+     * Mover un elemento a otra persona lo saca de acá: nadie mueve sin mirar.
+     */
+    const [loteMirados, setLoteMirados] = useState<Set<string>>(new Set());
     const [reponerQty, setReponerQty] = useState<Map<string, number>>(new Map());
     const [parecidoPendiente, setParecidoPendiente] = useState<Item[] | null>(null);
     const [createSpecies, setCreateSpecies] = useState<Array<{brand: string; color: string}>>([{ brand: '', color: '' }]);
@@ -754,7 +760,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             ?? (wizardData.newProjectName.trim() ? onCreateProject({ name: wizardData.newProjectName.trim(), status: 'active' }) : null);
 
         // Validate: consumables require a project
-        const hasSingleUseItems = [...wizardSel.keys()].some(id => items.find(i => i.id === id)?.inventoryType === InventoryType.SINGLE_USE);
+        const hasSingleUseItems = [...wizardSel.keys()].some(id => tipoExigeObra(items.find(i => i.id === id)?.inventoryType));
         if (hasSingleUseItems && !project) {
             addBot('⚠️ Los consumibles requieren un proyecto. Vuelve al Paso 3 y elige uno.');
             return;
@@ -821,16 +827,51 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     };
 
     // ── El bloque pegado ──────────────────────────────────────────────────
-    const cerrarLote = () => { setLoteAbierto(false); setLote(null); setLoteTexto(''); setLoteProyecto(''); setLoteFecha(todayISO()); setLoteNuevos(new Map()); };
+    const cerrarLote = () => { setLoteAbierto(false); setLote(null); setLoteTexto(''); setLoteProyecto(''); setLoteFecha(todayISO()); setLoteNuevos(new Map()); setLoteMirados(new Set()); };
 
     const leerElBloque = () => {
-        const r = leerLote(loteTexto, personnel, items);
+        const r = leerLote(loteTexto, personnel, items, projects.filter(p => p.status === 'active'));
         if (r.lineas.length === 0) {
             addBot('No pude leer ningún renglón. Cada uno va así: **Alex: 3 palas, 1 martillo**');
             return;
         }
         setLote(r);
+        setLoteMirados(new Set());
     };
+
+    /**
+     * La obra de arriba es UNA PREGUNTA, como el paso de proyecto del chat:
+     * '' = nadie decidió todavía; '__sin__' = «Sin proyecto», decidido; o una obra.
+     * Antes '' significaba «sin proyecto» callado: el bloque nunca preguntaba.
+     */
+    const obraGeneral = (): string | null | undefined =>
+        loteProyecto === '' ? undefined : loteProyecto === '__sin__' ? null : loteProyecto;
+
+    /** Cambia algo de UN renglón (obra, para quién, crear persona) por su id. */
+    const mapearLinea = (lineaId: string, cambio: (l: LineaLote) => LineaLote) => setLote(prev => {
+        if (!prev) return prev;
+        return { ...prev, lineas: prev.lineas.map(l => (l.id === lineaId ? cambio(l) : l)) };
+    });
+
+    const fijarObraLinea = (lineaId: string, valor: string) => mapearLinea(lineaId, l => ({
+        ...l,
+        obraId: valor === '' ? undefined : valor === '__sin__' ? null : valor === '__nueva__' ? undefined : valor,
+        obraNueva: valor === '__nueva__' ? (l.encabezado?.obraTexto ?? l.obraNueva) : undefined,
+    }));
+
+    /** Pasa un elemento a otra persona. Su verificación vuelve a cero. */
+    const moverA = (itemLoteId: string, personaId: string) => {
+        const persona = personnel.find(p => p.id === personaId);
+        if (!persona) return;
+        setLote(prev => (prev ? moverItem(prev, itemLoteId, persona, `M-${crypto.randomUUID()}`) : prev));
+        setLoteMirados(prev => { const n = new Set(prev); n.delete(itemLoteId); return n; });
+    };
+
+    const alternarMirado = (itemLoteId: string) => setLoteMirados(prev => {
+        const n = new Set(prev);
+        if (n.has(itemLoteId)) n.delete(itemLoteId); else n.add(itemLoteId);
+        return n;
+    });
 
     /** Cambia la persona de un renglón, o el ítem de una línea, sin rearmar el lote. */
     /**
@@ -845,7 +886,9 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     const fijarPersona = (lineaId: string, personaId: string) => setLote(prev => {
         if (!prev) return prev;
         const persona = personnel.find(p => p.id === personaId);
-        return { ...prev, lineas: prev.lineas.map(l => (l.id === lineaId ? { ...l, persona, dudosa: !persona } : l)) };
+        // Elegir otra persona deshace lo que se había decidido para la anterior:
+        // para quién de su cuadrilla, o crearla.
+        return { ...prev, lineas: prev.lineas.map(l => (l.id === lineaId ? { ...l, persona, dudosa: !persona, paraId: undefined, crear: undefined } : l)) };
     });
 
     const mapearItem = (itemLoteId: string, cambio: (it: ItemLote) => ItemLote) => setLote(prev => {
@@ -946,13 +989,34 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
      * hay que quitar de la pantalla exactamente esos y ni uno más; y las fichas
      * simuladas, para que el planificador pueda verlas.
      */
-    const armarMovimientos = (ts: Date, project: Project | undefined, crear: boolean) => {
+    const armarMovimientos = (crear: boolean, op: {
+        /** Solo lo que ya está listo (decidido y mirado). Sin esto: todo, para la vista previa. */
+        listo?: (l: LineaLote, it: ItemLote) => boolean;
+        /** Obras nuevas ya creadas, por el nombre con que se pidieron. */
+        obras?: Map<string, string>;
+        /** Personas creadas en este registro, por renglón. */
+        personas?: Map<string, Personnel>;
+    } = {}) => {
         const movs: Array<Omit<Movement, 'id'>> = [];
         const registrados = new Set<string>();
         const nacen: Item[] = [];
+        const general = obraGeneral();
         for (const l of lote?.lineas ?? []) {
-            if (!l.persona) continue;
+            /**
+             * Para QUIÉN sale, con la lógica del chat: si el renglón es de un
+             * oficial y se eligió a alguien de su cuadrilla, es de esa persona;
+             * si se eligió al oficial mismo, «sin especificar», es del oficial.
+             * Si la persona se va a crear, es la recién creada.
+             */
+            const quien = op.personas?.get(l.id)?.id
+                ?? (l.paraId && l.paraId !== '__crear__' ? l.paraId : l.persona?.id);
+            if (!quien) continue;
+            // La obra y la hora de SU encabezado, no una para todo el bloque.
+            const obra = obraDe(l, general);
+            const projectId = obra && obra.startsWith('nueva:') ? op.obras?.get(obra.slice(6)) : (obra ?? undefined);
+            const ts = momentoConHora(loteFecha, l.encabezado?.hora);
             for (const it of l.items) {
+                if (op.listo && !op.listo(l, it)) continue;
                 /**
                  * Un ítem que la app no conocía: nace acá, con cantidad CERO.
                  *
@@ -979,9 +1043,11 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                     type: MovementType.CHECK_OUT,
                     quantity: it.cantidad,
                     timestamp: ts,
-                    personnelId: l.persona.id,
-                    projectId: project?.id,
-                    notes: '',
+                    personnelId: quien,
+                    projectId,
+                    // El lugar no tiene columna propia: va a la observación,
+                    // escrito, para que no se pierda.
+                    notes: l.encabezado?.lugar ? `Lugar: ${l.encabezado.lugar}` : '',
                     // La regla de préstamo vs. gasto es la de `utils/inventory`, la
                     // misma que usa el resto de la app. Acá no se escribe otra.
                     isLoan: isAsset(item),
@@ -990,6 +1056,26 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             }
         }
         return { movs, registrados, nacen };
+    };
+
+    /**
+     * Lo que la app revisa contra la BODEGA antes de registrar (ver
+     * `core/verificacion.ts`), con el faltante que da el plan de verdad.
+     */
+    const verificacionDelLote = () => {
+        const faltantes = new Map<string, number>();
+        if (lote) {
+            const { movs, nacen } = armarMovimientos(false);
+            if (movs.length > 0) {
+                const plan = planearLote(movs, [...items, ...nacen], loteCompletar ? { completarFaltante: true } : undefined);
+                for (const c of plan.completados) faltantes.set(c.item.id, (faltantes.get(c.item.id) ?? 0) + c.faltaban);
+            }
+        }
+        const v = lote ? verificarLote(lote, {
+            items, movements, personnel, nuevos: loteNuevos, obraGeneral: obraGeneral(), faltantes,
+            fecha: loteFecha, nombreDe: id => personnel.find(p => p.id === id)?.name ?? 'alguien',
+        }) : { porLinea: new Map(), porItem: new Map() };
+        return { v, faltantes };
     };
 
     /**
@@ -1012,19 +1098,39 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
 
     const registrarLote = () => {
         if (!lote) return;
-        const ts = momentoDeFecha(loteFecha);
-        const project = projects.find(p => p.id === loteProyecto);
-
-        // Cuenta también los que se van a CREAR como consumible: si no, un
-        // bloque de puros consumibles nuevos se salta la exigencia de proyecto.
-        const hayConsumible = lote.lineas.some(l => l.persona && l.items.some(i =>
-            (i.item && isConsumable(i.item)) || loteNuevos.get(i.id) === InventoryType.SINGLE_USE));
-        if (hayConsumible && !project) {
-            addBot('⚠️ Hay consumibles en el bloque y los consumibles necesitan proyecto. Elegí uno arriba.');
+        const { v } = verificacionDelLote();
+        // Sale lo que está LISTO: resuelto, decidido y —si algo no cuadraba—
+        // mirado. Lo demás se queda en pantalla, como siempre: el movimiento
+        // no se pierde por esperar a que alguien decida.
+        const listo = (l: LineaLote, it: ItemLote) => resuelto(it) && listoParaRegistrar(l, it.id, v, loteMirados);
+        const conListos = lote.lineas.filter(l => l.items.some(it => listo(l, it)));
+        if (conListos.length === 0) {
+            addBot('Todavía no hay nada listo para registrar: hay cosas por decidir o por mirar (están marcadas en naranja).');
             return;
         }
 
-        const { movs, registrados } = armarMovimientos(ts, project, true);
+        /**
+         * Lo que se decidió CREAR —personas, obras— nace ahora, y solo para lo
+         * que sale ahora. Una sola vez por nombre: dos renglones de «Juan
+         * (cuadrilla de Alex)» son un Juan, no dos.
+         */
+        const clave = (t: string) => normStr(t).trim();
+        const personas = new Map<string, Personnel>();
+        const creadas = new Map<string, Personnel>();
+        for (const l of conListos) {
+            if (!l.crear) continue;
+            const k = `${clave(l.crear.nombre)}|${l.crear.liderId ?? ''}`;
+            const p = creadas.get(k) ?? onCreatePersonnel({ name: l.crear.nombre.trim(), ...(l.crear.liderId ? { teamLeaderId: l.crear.liderId } : {}) });
+            creadas.set(k, p);
+            personas.set(l.id, p);
+        }
+        const obras = new Map<string, string>();
+        for (const l of conListos) {
+            if (!l.obraNueva || obras.has(l.obraNueva)) continue;
+            obras.set(l.obraNueva, onCreateProject({ name: l.obraNueva.trim(), status: 'active' }).id);
+        }
+
+        const { movs, registrados } = armarMovimientos(true, { listo, obras, personas });
         if (movs.length === 0) {
             addBot('Todavía no hay nada resuelto para registrar. Completá al menos un renglón.');
             return;
@@ -1034,7 +1140,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             completarFaltante: true,
             notaDeCompletado: 'No estaba registrado en el inventario; se registró al despacharlo',
         } : undefined);
-        const personas = new Set(lote.lineas.filter(l => l.persona && l.items.some(resuelto)).map(l => l.persona!.id)).size;
+        const cuantasPersonas = new Set(movs.map(m => m.personnelId)).size;
         if (r.ok > 0) {
             /**
              * Se dice lo que PASÓ, no lo que se espera que pase.
@@ -1050,10 +1156,10 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
              */
             const enElTelefono = sinSubir > 0;
             addBotYGuarda(enElTelefono
-                ? `✅ ${r.ok} salida(s) anotadas para ${personas} persona(s).`
+                ? `✅ ${r.ok} salida(s) anotadas para ${cuantasPersonas} persona(s).`
                   + ` ⏳ Todavía sin subir al servidor — se suben solas cuando vuelva la señal.`
-                : `✅ ${r.ok} salida(s) registradas para ${personas} persona(s).`);
-            onBehaviorLog?.('ACTION', `Despachó por bloque pegado: ${r.ok} salidas, ${personas} personas`);
+                : `✅ ${r.ok} salida(s) registradas para ${cuantasPersonas} persona(s).`);
+            onBehaviorLog?.('ACTION', `Despachó por bloque pegado: ${r.ok} salidas, ${cuantasPersonas} personas`);
         }
 
         // Lo rechazado por stock abre la reposición, pero el lote NO se cierra:
@@ -1063,6 +1169,19 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             if (it.item && rechazados.has(it.item.id)) registrados.delete(it.id);
         }
         quitarRegistrados(registrados);
+        // Lo que se creó ya existe: lo que siga en pantalla de esa persona o
+        // esa obra la usa, en vez de crearla otra vez.
+        if (personas.size > 0 || obras.size > 0) {
+            setLote(prev => (prev ? { ...prev, lineas: prev.lineas.map(l => {
+                const p = personas.get(l.id);
+                const o = l.obraNueva ? obras.get(l.obraNueva) : undefined;
+                return {
+                    ...l,
+                    ...(p ? { persona: p, crear: undefined, paraId: undefined, dudosa: false } : {}),
+                    ...(o ? { obraId: o, obraNueva: undefined } : {}),
+                };
+            }) } : prev));
+        }
 
         if (r.rechazos.length > 0) {
             setReponerQty(new Map(r.rechazos.map(x => [x.itemId, Math.max(1, x.pedido - x.hay)])));
@@ -1083,18 +1202,16 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
          *
          * Dos cuentas para lo mismo siempre terminan divergiendo. Acá hay una.
          */
-        const previo = (() => {
-            if (!lote) return new Map<string, number>();
-            const ts = momentoDeFecha(loteFecha);
-            // `false`: dibujar el plan NO puede crear nada. Los ítems que van a
-            // nacer vuelven como fichas en cero para que el planificador los vea.
-            const { movs, nacen } = armarMovimientos(ts, projects.find(p => p.id === loteProyecto), false);
-            if (movs.length === 0) return new Map<string, number>();
-            const plan = planearLote(movs, [...items, ...nacen], loteCompletar ? { completarFaltante: true } : undefined);
-            const porItem = new Map<string, number>();
-            for (const c of plan.completados) porItem.set(c.item.id, (porItem.get(c.item.id) ?? 0) + c.faltaban);
-            return porItem;
-        })();
+        const { v: verif, faltantes: previo } = verificacionDelLote();
+        const estado = (l: LineaLote, it: ItemLote) =>
+            resuelto(it) && listoParaRegistrar(l, it.id, verif, loteMirados) ? 'listo'
+                : [...(verif.porLinea.get(l.id) ?? []), ...(verif.porItem.get(it.id) ?? [])].some(a => a.nivel === 'decidir') ? 'decidir' : 'mirar';
+        const todos = lote ? lote.lineas.flatMap(l => l.items.map(it => estado(l, it))) : [];
+        const nListos = todos.filter(x => x === 'listo').length;
+        const nDecidir = todos.filter(x => x === 'decidir').length;
+        const nMirar = todos.filter(x => x === 'mirar').length;
+        const lideres = personnel.filter(p => p.isTeamLeader);
+        const activas = projects.filter(p => p.status === 'active');
         const sel = 'text-[11px] border border-papel-borde rounded-lg px-1.5 py-1 bg-papel text-tinta max-w-[46%]';
         return (
         <div className="flex-1 overflow-y-auto px-3 py-4 space-y-3">
@@ -1129,9 +1246,14 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                     <div className="flex gap-2">
                         <input type="date" value={loteFecha} onChange={e => setLoteFecha(e.target.value)}
                             className="flex-1 text-[11px] border border-papel-borde rounded-lg px-2 py-1.5 bg-papel text-tinta" />
+                        {/* La obra se PREGUNTA, como el paso de proyecto del chat.
+                            Vale para los renglones que no traen la suya en un
+                            encabezado `@`. «Sin proyecto» es una respuesta, no
+                            el silencio de nadie haber elegido. */}
                         <select value={loteProyecto} onChange={e => setLoteProyecto(e.target.value)}
-                            className="flex-1 text-[11px] border border-papel-borde rounded-lg px-2 py-1.5 bg-papel text-tinta">
-                            <option value="">Sin proyecto</option>
+                            className={`flex-1 text-[11px] border rounded-lg px-2 py-1.5 bg-papel text-tinta ${loteProyecto === '' ? 'border-atencion' : 'border-papel-borde'}`}>
+                            <option value="">¿Obra? (la de los renglones sin obra)</option>
+                            <option value="__sin__">Sin proyecto</option>
                             {projects.filter(p => p.status === 'active').map(p => (
                                 <option key={p.id} value={p.id}>{p.name}</option>
                             ))}
@@ -1158,22 +1280,94 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                         </p>
                     </button>
 
-                    {dudas > 0 && (
-                        <p className="text-[11px] text-atencion font-semibold">
-                            {dudas} cosa(s) por revisar. Lo que quede sin resolver no se registra y se queda acá.
-                        </p>
-                    )}
+                    {/* La verificación de la app: contra la BODEGA. La del Gem,
+                        contra los audios, ya pasó antes de pegar. Las dos hacen falta. */}
+                    <div className="rounded-xl bg-papel-hondo px-3 py-2 text-[11px] text-tinta-suave">
+                        <span className="font-black text-bien">{nListos} listo(s)</span>
+                        {nDecidir > 0 && <> · <span className="font-black text-atencion">{nDecidir} por decidir</span></>}
+                        {nMirar > 0 && <> · <span className="font-black text-atencion">{nMirar} por mirar</span></>}
+                        {(nDecidir > 0 || nMirar > 0) && (
+                            <p className="text-[10px] text-tinta-tenue mt-0.5">Lo que no esté listo no se registra y se queda acá. No se pierde.</p>
+                        )}
+                        {dudas > 0 && lote.ignoradas.length > 0 && (
+                            <p className="text-[10px] text-atencion mt-0.5">{lote.ignoradas.length} renglón(es) no se pudieron leer: abajo.</p>
+                        )}
+                    </div>
 
                     {lote.lineas.map(l => (
-                        <div key={l.id} className={`rounded-2xl p-3 space-y-2 border ${l.persona ? 'border-papel-borde bg-papel' : 'border-atencion bg-atencion-suave'}`}>
+                        <div key={l.id} className={`rounded-2xl p-3 space-y-2 border ${(verif.porLinea.get(l.id) ?? []).length ? 'border-atencion bg-atencion-suave' : 'border-papel-borde bg-papel'}`}>
+                            {/* Lo que heredó de su encabezado `@`, a la vista. */}
+                            {l.encabezado && (l.encabezado.obraTexto || l.encabezado.hora || l.encabezado.lugar || l.encabezado.sinObra) && (
+                                <p className="text-[10px] font-bold text-tinta-tenue">
+                                    📍 {[l.encabezado.sinObra ? 'Sin obra' : l.encabezado.obraTexto, l.encabezado.hora, l.encabezado.lugar].filter(Boolean).join(' · ')}
+                                </p>
+                            )}
                             <div className="flex items-center gap-2">
                                 <span className="text-[11px] font-black text-tinta flex-shrink-0">{l.personaTexto}</span>
-                                <select value={l.persona?.id ?? ''} onChange={e => fijarPersona(l.id, e.target.value)}
-                                    className={`${sel} flex-1 max-w-none ${l.persona ? '' : 'border-atencion'}`}>
+                                <select value={l.persona?.id ?? (l.crear ? '__crear__' : '')} onChange={e => {
+                                        if (e.target.value === '__crear__') {
+                                            mapearLinea(l.id, x => ({ ...x, persona: undefined, crear: { nombre: x.personaTexto, liderId: x.cuadrillaDe?.id } }));
+                                        } else fijarPersona(l.id, e.target.value);
+                                    }}
+                                    className={`${sel} flex-1 max-w-none ${l.persona || l.crear ? '' : 'border-atencion'}`}>
                                     <option value="">¿Quién es?</option>
-                                    {personnel.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                    {!l.persona && <option value="__crear__">➕ Crear «{l.personaTexto}»</option>}
+                                    {personnel.map(p => <option key={p.id} value={p.id}>{p.name}{p.isTeamLeader ? ' 👷' : ''}</option>)}
                                 </select>
                             </div>
+
+                            {/* Persona nueva: se crea al registrar, y en la cuadrilla
+                                que se ve acá. Nunca en silencio. */}
+                            {l.crear && (
+                                <div className="flex items-center gap-2 pl-1">
+                                    <span className="text-[10px] font-bold text-tinta-suave flex-shrink-0">Se crea en la cuadrilla de</span>
+                                    <select value={l.crear.liderId ?? ''} onChange={e => mapearLinea(l.id, x => ({ ...x, crear: { ...x.crear!, liderId: e.target.value || undefined } }))}
+                                        className={`${sel} flex-1 max-w-none`}>
+                                        <option value="">Ninguna</option>
+                                        {lideres.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                    </select>
+                                </div>
+                            )}
+
+                            {/* Oficial: la misma pregunta del chat — ¿para él o para
+                                alguien de su cuadrilla? */}
+                            {l.persona?.isTeamLeader && (
+                                <div className="flex items-center gap-2 pl-1">
+                                    <span className="text-[10px] font-bold text-tinta-suave flex-shrink-0">👷 Para</span>
+                                    <select value={l.paraId ?? ''} onChange={e => {
+                                            const val = e.target.value;
+                                            if (val === '__crear__') {
+                                                const nombre = window.prompt(`Nombre del trabajador nuevo de la cuadrilla de ${l.persona!.name}:`)?.trim();
+                                                if (nombre) mapearLinea(l.id, x => ({ ...x, paraId: '__crear__', crear: { nombre, liderId: x.persona!.id } }));
+                                                return;
+                                            }
+                                            mapearLinea(l.id, x => ({ ...x, paraId: val || undefined, crear: undefined }));
+                                        }}
+                                        className={`${sel} flex-1 max-w-none ${l.paraId ? '' : 'border-atencion'}`}>
+                                        <option value="">¿Para quién?</option>
+                                        <option value={l.persona.id}>{l.persona.name} (sin especificar)</option>
+                                        {personnel.filter(p => p.teamLeaderId === l.persona!.id).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                        <option value="__crear__">{l.paraId === '__crear__' && l.crear ? `➕ ${l.crear.nombre} (nuevo)` : '➕ Nuevo de su cuadrilla…'}</option>
+                                    </select>
+                                </div>
+                            )}
+
+                            {/* Obra: se pregunta siempre. La de arriba vale si no hay otra. */}
+                            <div className="flex items-center gap-2 pl-1">
+                                <span className="text-[10px] font-bold text-tinta-suave flex-shrink-0">🏗️ Obra</span>
+                                <select value={l.obraNueva ? '__nueva__' : l.obraId === null ? '__sin__' : (l.obraId ?? '')}
+                                    onChange={e => fijarObraLinea(l.id, e.target.value)}
+                                    className={`${sel} flex-1 max-w-none`}>
+                                    <option value="">{loteProyecto === '' ? '— la de arriba (sin elegir)' : `— la de arriba (${loteProyecto === '__sin__' ? 'sin proyecto' : activas.find(p => p.id === loteProyecto)?.name ?? '?'})`}</option>
+                                    <option value="__sin__">Sin proyecto</option>
+                                    {l.encabezado?.obraTexto && !l.encabezado.obra && <option value="__nueva__">➕ Crear obra «{l.encabezado.obraTexto}»</option>}
+                                    {activas.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                </select>
+                            </div>
+
+                            {(verif.porLinea.get(l.id) ?? []).map((a, i) => (
+                                <p key={i} className="text-[10px] font-semibold text-atencion pl-1">⚠ {a.texto}</p>
+                            ))}
                             {l.items.map(it => {
                                 const nace = loteNuevos.get(it.id);
                                 const hay = it.item?.quantity ?? 0;
@@ -1226,14 +1420,36 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                     )}
 
                                     {/* Que se vea ANTES de que pase. El texto lo produce un
-                                        GPT, y un GPT se equivoca interpretando. */}
-                                    {entran > 0 && (
+                                        asistente, y un asistente se equivoca interpretando. */}
+                                    {entran > 0 && nace && (
                                         <p className="text-[10px] text-atencion pl-[3.9rem]">
-                                            {nace
-                                                ? `Se va a crear y van a entrar ${entran} antes de salir.`
-                                                : `Hay ${hay}: van a entrar ${entran} antes de salir.`}
+                                            Se va a crear y van a entrar {entran} antes de salir.
                                         </p>
                                     )}
+
+                                    {/* Lo que no cuadra contra la bodega: se mira y se marca. */}
+                                    {(verif.porItem.get(it.id) ?? []).filter(a => a.nivel === 'mirar').map((a, i) => (
+                                        <div key={i} className="flex items-start gap-1.5 pl-[3.9rem]">
+                                            <p className="text-[10px] text-atencion flex-1">⚠ {a.texto}{a.tipo === 'falta_stock' && !nace ? ` (hay ${hay})` : ''}</p>
+                                            <button type="button" onClick={() => alternarMirado(it.id)}
+                                                className={`text-[10px] font-black px-2 py-0.5 rounded-full border flex-shrink-0 ${
+                                                    loteMirados.has(it.id) ? 'border-bien bg-bien text-papel' : 'border-atencion text-atencion'}`}>
+                                                {loteMirados.has(it.id) ? '✓ Verificado' : 'Verificar'}
+                                            </button>
+                                        </div>
+                                    ))}
+
+                                    {/* «Era para Juan, no para Alex»: se pasa sin borrar ni reescribir. */}
+                                    <div className="flex items-center gap-1.5 pl-[3.9rem]">
+                                        <span className={`text-[10px] font-black ${estado(l, it) === 'listo' ? 'text-bien' : 'text-atencion'}`}>
+                                            {estado(l, it) === 'listo' ? '✓ listo' : estado(l, it) === 'decidir' ? '● por decidir' : '● por mirar'}
+                                        </span>
+                                        <select value="" onChange={e => { if (e.target.value) moverA(it.id, e.target.value); }}
+                                            className="ml-auto text-[10px] border border-papel-borde rounded-lg px-1 py-0.5 bg-papel text-tinta-suave max-w-[55%]">
+                                            <option value="">Mover a…</option>
+                                            {personnel.filter(p => p.id !== l.persona?.id).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                        </select>
+                                    </div>
                                 </div>
                                 );
                             })}
@@ -1257,9 +1473,9 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                             className="flex-1 py-2.5 border border-papel-borde text-tinta rounded-xl font-bold text-xs">
                             Volver al texto
                         </button>
-                        <button onClick={registrarLote}
-                            className="flex-1 py-2.5 bg-bien text-papel rounded-xl font-bold text-xs">
-                            Registrar
+                        <button onClick={registrarLote} disabled={nListos === 0}
+                            className="flex-1 py-2.5 bg-bien text-papel rounded-xl font-bold text-xs disabled:opacity-40">
+                            {nListos > 0 ? `Registrar ${nListos} listo(s)` : 'Nada listo todavía'}
                         </button>
                     </div>
                 </>
@@ -1626,7 +1842,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             );
         }
         if (wizardStep === 'select_project') {
-            const requiresProject = wizardData.selectedTypes.includes(InventoryType.SINGLE_USE);
+            const requiresProject = wizardData.selectedTypes.some(tipoExigeObra);
             return (
                 <div className="flex-1 overflow-y-auto px-3 py-4 space-y-3">
                     <div>

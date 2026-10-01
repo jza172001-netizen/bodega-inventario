@@ -27,7 +27,10 @@ import { fileURLToPath } from 'node:url';
 // `typescript` es CommonJS: en módulo ES la forma que trae las APIs es la default.
 import ts from 'typescript';
 import { Item, InventoryType, Movement, MovementType, Personnel, Project } from '../types';
-import { planearLote } from '../core/despacho';
+import { planearLote, tipoExigeObra } from '../core/despacho';
+import { verificarLote, listoParaRegistrar, obraDe } from '../core/verificacion';
+import { momentoConHora } from '../utils/date';
+import { normStr } from '../utils/genus';
 import { leerLote } from '../utils/lote';
 import { isAsset, isConsumable } from '../utils/inventory';
 import { igual, esCierto, grupo, cerrar } from './correr';
@@ -85,25 +88,48 @@ const ficha = (id: string, name: string, quantity: number, inventoryType = Inven
     id, name, quantity, inventoryType, category: 'Prueba', subCategory: '', minStock: 0, unit: 'und',
 });
 
-const MANEJADORES = ['fichaNueva', 'resuelto', 'armarMovimientos', 'quitarRegistrados', 'registrarLote', 'quitarLinea', 'desmarcarNuevo'];
+const MANEJADORES = ['fichaNueva', 'resuelto', 'obraGeneral', 'armarMovimientos', 'verificacionDelLote', 'quitarRegistrados', 'registrarLote', 'quitarLinea', 'desmarcarNuevo'];
 
 interface Manejadores {
     registrarLote: () => void;
     quitarLinea: (id: string) => void;
     desmarcarNuevo: (id: string) => void;
-    armarMovimientos: (ts: Date, p: Project | undefined, crear: boolean) => { movs: Array<Omit<Movement, 'id'>>; registrados: Set<string>; nacen: Item[] };
+    armarMovimientos: (crear: boolean) => { movs: Array<Omit<Movement, 'id'>>; registrados: Set<string>; nacen: Item[] };
+    verificacionDelLote: () => { v: { porLinea: Map<string, Array<{ tipo: string; nivel: string }>>; porItem: Map<string, Array<{ tipo: string; nivel: string }>> } };
 }
 
 /** Monta el panel del bloque con un inventario y un texto pegado. */
-const panel = (items: Item[], texto: string, conProyecto = false, sinSubir = 0) => {
-    const visto = { cerrado: false, enviados: [] as Array<Omit<Movement, 'id'>>, creados: [] as Item[], avisos: [] as string[] };
+/**
+ * `obra`: la respuesta a la pregunta de arriba. Por defecto «Sin proyecto»
+ * DECIDIDO (`__sin__`), que es lo que antes era el silencio; `''` es que nadie
+ * contestó, y ahora el bloque pregunta, como el chat.
+ */
+const panel = (items: Item[], texto: string, conProyecto = false, sinSubir = 0,
+               extra: { personal?: Personnel[]; obras?: Project[]; obra?: string; movimientos?: Movement[] } = {}) => {
+    const visto = { cerrado: false, enviados: [] as Array<Omit<Movement, 'id'>>, creados: [] as Item[], avisos: [] as string[],
+                    personasCreadas: [] as Personnel[], obrasCreadas: [] as Project[] };
+    const personal = extra.personal ?? [ALEX];
+    const obras = extra.obras ?? (conProyecto ? [OBRA] : []);
     const c: Record<string, unknown> = {
-        lote: leerLote(texto, [ALEX], items),
+        lote: leerLote(texto, personal, items, obras),
         loteFecha: '2026-09-12',
-        loteProyecto: conProyecto ? OBRA.id : '',
+        loteProyecto: extra.obra ?? (conProyecto ? OBRA.id : '__sin__'),
+        loteMirados: new Set<string>(),
+        movements: extra.movimientos ?? [],
+        personnel: personal,
+        verificarLote, listoParaRegistrar, obraDe, normStr, tipoExigeObra,
+        momentoConHora: (iso: string, hora?: string) => new Date(`${iso}T${hora ?? '12:00'}:00-05:00`),
+        onCreatePersonnel: (p: Omit<Personnel, 'id'>) => {
+            const nuevo = { ...p, id: `persona-${visto.personasCreadas.length + 1}` } as Personnel;
+            personal.push(nuevo); visto.personasCreadas.push(nuevo); return nuevo;
+        },
+        onCreateProject: (p: Omit<Project, 'id'>) => {
+            const nueva = { ...p, id: `obra-${visto.obrasCreadas.length + 1}` } as Project;
+            visto.obrasCreadas.push(nueva); return nueva;
+        },
         loteCompletar: true,
         loteNuevos: new Map<string, InventoryType>(),
-        projects: conProyecto ? [OBRA] : [],
+        projects: obras,
         items, InventoryType, MovementType, isAsset, isConsumable, planearLote,
         // Cuántas operaciones quedaron guardadas en el teléfono sin confirmar.
         // Cambia lo que dice el mensaje: «anotadas» no es lo mismo que
@@ -206,16 +232,15 @@ grupo('DIBUJAR la vista previa no crea nada', () => {
     const lote = p.c.lote as { lineas: Array<{ items: Array<{ id: string }> }> };
     for (const it of lote.lineas[0].items) (p.c.loteNuevos as Map<string, InventoryType>).set(it.id, InventoryType.HAND_TOOL);
 
-    const momento = new Date('2026-09-12T12:00:00Z');
-    for (let i = 0; i < 5; i++) p.fn.armarMovimientos(momento, OBRA, false);
+    for (let i = 0; i < 5; i++) p.fn.armarMovimientos(false);
     igual(p.visto.creados.length, 0, 'cinco renders, cero ítems creados');
 
-    const simulado = p.fn.armarMovimientos(momento, OBRA, false);
+    const simulado = p.fn.armarMovimientos(false);
     igual(simulado.movs.length, 2, 'pero el plan sí ve los dos');
     igual(simulado.nacen.length, 2, 'con sus fichas en cero');
     igual(simulado.nacen.every(i => i.quantity === 0), true, 'todas en cero');
 
-    p.fn.armarMovimientos(momento, OBRA, true);
+    p.fn.armarMovimientos(true);
     igual(p.visto.creados.length, 2, 'y con `crear` sí nacen, una sola vez');
 });
 
@@ -228,7 +253,7 @@ grupo('la vista previa cuenta igual que el núcleo', () => {
      */
     const item = ficha(PALA, 'Pala', 1);
     const p = panel([item], 'Alex: 1 pala\nAlex: 1 pala');
-    const { movs, nacen } = p.fn.armarMovimientos(new Date('2026-09-12T12:00:00Z'), undefined, false);
+    const { movs, nacen } = p.fn.armarMovimientos(false);
     const plan = planearLote(movs, [...(p.c.items as Item[]), ...nacen], { completarFaltante: true });
     const entradas = plan.completados.reduce((s, x) => s + x.faltaban, 0);
     igual(movs.length, 2, 'dos salidas');
@@ -239,7 +264,10 @@ grupo('los consumibles no pasan sin proyecto', () => {
     const p = panel([ficha('cemento', 'Cemento', 5, InventoryType.SINGLE_USE)], 'Alex: 1 cemento');
     p.fn.registrarLote();
     igual(p.visto.enviados.length, 0, 'no se envió nada');
-    esCierto(p.visto.avisos.some(a => /proyecto/i.test(a)), 'y se avisa por qué');
+    esCierto(p.visto.avisos.some(a => /decidir/i.test(a)), 'y se avisa que falta decidir');
+    const linea = (p.c.lote as { lineas: Array<{ id: string }> }).lineas[0];
+    igual(p.fn.verificacionDelLote().v.porLinea.get(linea.id)?.map(a => a.tipo), ['obra_obligatoria'],
+        'y lo que falta es la obra: material de consumo no sale «sin proyecto»');
 });
 
 grupo('la pantalla no dice «registrado» si el servidor no lo recibió', () => {
@@ -263,6 +291,109 @@ grupo('la pantalla no dice «registrado» si el servidor no lo recibió', () => 
     const dicho2 = todoSubido.visto.avisos.join(' ');
     esCierto(/registradas/i.test(dicho2), 'con todo subido sí dice registradas');
     esCierto(!/sin subir/i.test(dicho2), 'y no asusta de más');
+});
+
+// ── La lógica del chat, en el bloque ──────────────────────────────────
+
+const JUAN: Personnel = { id: '66666666-6666-4666-8666-666666666666', name: 'Juan Puerta' };
+const CRISTO: Project = { id: '77777777-7777-4777-8777-777777777777', name: 'El Cristo', status: 'active' } as Project;
+const BONILLA: Project = { id: '88888888-8888-4888-8888-888888888888', name: 'Bonilla', status: 'active' } as Project;
+type L = { id: string; items: Array<{ id: string }>; paraId?: string; crear?: { nombre: string; liderId?: string } };
+const lineas = (c: Record<string, unknown>) => (c.lote as { lineas: L[] } | null)?.lineas ?? [];
+
+grupo('cada renglón sale con la obra, la hora y el lugar de SU encabezado', () => {
+    const p = panel([ficha(PALA, 'Pala', 5)], '@ El Cristo · 07:30 · contenedor\nAlex: 1 pala\n@ Bonilla · 09:15\nJuan: 2 palas',
+        false, 0, { personal: [{ ...ALEX }, { ...JUAN }], obras: [CRISTO, BONILLA], obra: '' });
+    p.fn.registrarLote();
+    igual(p.visto.enviados.map(m => m.projectId), [CRISTO.id, BONILLA.id], 'cada uno a su obra, sin elegir nada arriba');
+    igual(p.visto.enviados.map(m => new Date(m.timestamp).toISOString().slice(11, 16)), ['12:30', '14:15'],
+        'a la hora dictada (7:30 y 9:15 en Colombia)');
+    igual(p.visto.enviados[0].notes, 'Lugar: contenedor', 'el lugar queda escrito');
+});
+
+grupo('la obra se PREGUNTA, como el chat: sin contestar no sale; «sin proyecto» vale', () => {
+    const p = panel([ficha(PALA, 'Pala', 5)], 'Alex: 1 pala', false, 0, { obra: '' });
+    p.fn.registrarLote();
+    igual(p.visto.enviados.length, 0, 'sin decir la obra, nada');
+    igual(p.fn.verificacionDelLote().v.porLinea.get(lineas(p.c)[0].id)?.map(a => a.tipo), ['obra'], 'falta la obra (opcional)');
+    const q = panel([ficha(PALA, 'Pala', 5)], 'Alex: 1 pala', false, 0, { obra: '__sin__' });
+    q.fn.registrarLote();
+    igual(q.visto.enviados.length, 1, 'con «Sin proyecto» decidido, sale');
+    igual(q.visto.enviados[0].projectId, undefined, 'y sale sin obra');
+});
+
+grupo('OFICIAL: igual que el chat, se pregunta para quién de su cuadrilla', () => {
+    const alex = { ...ALEX, isTeamLeader: true };
+    const juan = { ...JUAN, teamLeaderId: ALEX.id };
+    const p = panel([ficha(PALA, 'Pala', 5)], 'Alex: 1 pala', false, 0, { personal: [alex, juan] });
+    p.fn.registrarLote();
+    igual(p.visto.enviados.length, 0, 'sin decir para quién, no sale');
+    lineas(p.c)[0].paraId = JUAN.id;
+    p.fn.registrarLote();
+    igual(p.visto.enviados.map(m => m.personnelId), [JUAN.id], 'sale a Juan, el de su cuadrilla');
+
+    const q = panel([ficha(PALA, 'Pala', 5)], 'Alex: 1 pala', false, 0, { personal: [{ ...alex }, { ...juan }] });
+    lineas(q.c)[0].paraId = ALEX.id;
+    q.fn.registrarLote();
+    igual(q.visto.enviados.map(m => m.personnelId), [ALEX.id], '«sin especificar» = al oficial, como en el chat');
+});
+
+grupo('persona nueva: se crea en SU cuadrilla, una sola vez, y solo si alguien lo decide', () => {
+    const alex = { ...ALEX, isTeamLeader: true };
+    const p = panel([ficha(PALA, 'Pala', 5)], 'Pedro (cuadrilla de Alex): 1 pala\nPedro (cuadrilla de Alex): 1 pala', false, 0, { personal: [alex] });
+    p.fn.registrarLote();
+    igual(p.visto.personasCreadas.length, 0, 'NADIE se crea solo (la lección de Rafael)');
+    for (const l of lineas(p.c)) l.crear = { nombre: 'Pedro', liderId: ALEX.id };
+    (p.c.loteMirados as Set<string>).add(lineas(p.c)[0].items[0].id);
+    (p.c.loteMirados as Set<string>).add(lineas(p.c)[1].items[0].id);
+    p.fn.registrarLote();
+    igual(p.visto.personasCreadas.map(x => [x.name, x.teamLeaderId]), [['Pedro', ALEX.id]], 'un Pedro, en la cuadrilla de Alex');
+    igual(p.visto.enviados.map(m => m.personnelId), ['persona-1', 'persona-1'], 'y las dos salidas son suyas');
+});
+
+grupo('«ya la tiene otro»: se mira antes de registrar', () => {
+    const PULI = '99999999-9999-4999-8999-999999999999';
+    const prestada: Movement = { id: 'p', itemId: PULI, type: MovementType.CHECK_OUT, quantity: 1, timestamp: new Date('2026-09-10T12:00:00Z'),
+        personnelId: JUAN.id, isLoan: true, isReturned: false };
+    const p = panel([ficha(PULI, 'Pulidora', 0, InventoryType.ELECTRICAL_TOOL)], 'Alex: 1 pulidora', false, 0,
+        { personal: [{ ...ALEX }, { ...JUAN }], movimientos: [prestada] });
+    const it = lineas(p.c)[0].items[0];
+    igual(p.fn.verificacionDelLote().v.porItem.get(it.id)?.map(a => a.tipo), ['ya_la_tiene'], 'avisa que la tiene Juan');
+    p.fn.registrarLote();
+    igual(p.visto.enviados.length, 0, 'sin mirarlo, no sale');
+    (p.c.loteMirados as Set<string>).add(it.id);
+    p.fn.registrarLote();
+    esCierto(p.visto.enviados.length > 0, 'mirado y verificado, sale');
+});
+
+grupo('EL MISMO PEDIDO POR EL CHAT Y POR EL BLOQUE DA LO MISMO', () => {
+    /**
+     * Las dos puertas tienen que dar los mismos movimientos: quién, qué, cuánto,
+     * obra y préstamo/gasto. Se corre el confirmar REAL del chat
+     * (`handleConfirmWizard`) contra el del bloque.
+     */
+    const alex = { ...ALEX, isTeamLeader: true };
+    const juan = { ...JUAN, teamLeaderId: ALEX.id };
+    const items = [ficha(PALA, 'Pala', 5), ficha('guante', 'Guantes', 9, InventoryType.PPE)];
+    const enviadosChat: Array<Omit<Movement, 'id'>> = [];
+    const chat = sacarDelComponente<{ handleConfirmWizard: () => void }>(['handleConfirmWizard', 'LOAN_TYPES', 'todayISO'], {
+        wizardIsAddMode: false,
+        wizardSel: new Map([[PALA, 2], ['guante', 1]]),
+        wizardData: { selectedTypes: [InventoryType.HAND_TOOL, InventoryType.PPE], worker: juan, newWorkerName: '', teamLeaderWorker: alex, project: CRISTO, newProjectName: '' },
+        wizardDate: '2026-09-12', personnel: [alex, juan], items, InventoryType, MovementType, tipoExigeObra,
+        momentoDeFecha: () => new Date('2026-09-12T12:00:00Z'),
+        onLogMovements: (b: Array<Omit<Movement, 'id'>>) => { enviadosChat.push(...b); return { ok: b.length, total: b.length, rechazos: [] }; },
+        onCreatePersonnel: () => { throw new Error('no debería crear'); }, onCreateProject: () => { throw new Error('no debería crear'); },
+        addBot: () => {}, addBotYGuarda: () => {}, cancelWizard: () => {}, setReponerQty: () => {}, setReposicion: () => {},
+    });
+    chat.handleConfirmWizard();
+
+    const b = panel(items, '@ El Cristo\nAlex: 2 palas, 1 guantes', false, 0, { personal: [alex, juan], obras: [CRISTO] });
+    lineas(b.c)[0].paraId = JUAN.id;
+    b.fn.registrarLote();
+
+    const clave = (m: Omit<Movement, 'id'>) => `${m.itemId}|${m.personnelId}|${m.quantity}|${m.projectId}|${m.isLoan}|${m.type}`;
+    igual(b.visto.enviados.map(clave).sort(), enviadosChat.map(clave).sort(), 'mismos movimientos por las dos puertas');
 });
 
 await cerrar();

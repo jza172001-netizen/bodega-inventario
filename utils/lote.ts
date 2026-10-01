@@ -23,7 +23,7 @@
  * FloatingChat.tsx ya tiene 2.300 líneas.
  */
 
-import { Item, Personnel } from '../types.js';
+import { Item, Personnel, Project } from '../types.js';
 import { rankMatches, Scored } from './search.js';
 import { normStr, raizDeFamilia } from './genus.js';
 
@@ -59,6 +59,29 @@ export interface ItemLote {
     dudoso: boolean;
 }
 
+/**
+ * Lo que dice un encabezado `@ El Cristo · 07:30 · contenedor`, y que heredan
+ * los renglones que tiene debajo hasta el siguiente encabezado.
+ *
+ * Existe porque una mañana real no es UNA obra a UNA hora: a las 7:30 sale
+ * cemento para El Cristo y a las 7:35 una pulidora para Bonilla. Con una sola
+ * obra por bloque, unificar la mañana mandaba todo a la obra que se eligiera,
+ * con la misma hora: un registro limpio y equivocado, el que nadie nota.
+ */
+export interface Encabezado {
+    /** La obra como la escribieron. Vacía: el encabezado no dijo obra. */
+    obraTexto?: string;
+    obra?: Project;
+    obraDudosa: boolean;
+    candidatosObra: Project[];
+    /** «sin obra» / «sin proyecto» dicho a propósito: es una decisión, no un olvido. */
+    sinObra: boolean;
+    /** HH:MM, ya normalizada. */
+    hora?: string;
+    /** Lo que no es obra ni hora: «contenedor», «segundo piso». */
+    lugar?: string;
+}
+
 /** Un renglón: una persona y lo que se lleva. */
 export interface LineaLote {
     /** Identidad estable del renglón, por lo mismo que la de sus ítems. */
@@ -69,6 +92,32 @@ export interface LineaLote {
     candidatosPersona: Personnel[];
     dudosa: boolean;
     items: ItemLote[];
+    /** El encabezado `@` que tenía encima, si había. */
+    encabezado?: Encabezado;
+    /** «Juan (cuadrilla de Alex)»: el nombre del oficial, tal cual. */
+    cuadrillaTexto?: string;
+    /** Ese oficial, si se reconoció. */
+    cuadrillaDe?: Personnel;
+
+    // ── Decisiones de la verificación (las toma quien mira, no el lector) ──
+    /**
+     * La obra decidida para este renglón. `undefined`: nadie decidió todavía.
+     * `null`: «sin obra», decidido. Igual que el chat, se pregunta siempre.
+     */
+    obraId?: string | null;
+    /** Obra nueva a crear al registrar, como el «+ Nuevo proyecto» del chat. */
+    obraNueva?: string;
+    /**
+     * Cuando la persona es OFICIAL: para quién de su cuadrilla es. El id del
+     * propio oficial = «sin especificar», la misma salida que ofrece el chat.
+     */
+    paraId?: string;
+    /**
+     * Persona que no existe y se va a CREAR al registrar, con su cuadrilla.
+     * Nunca en silencio: así quedó Rafael en la cuadrilla de Alex sin que nadie
+     * lo decidiera. Acá se crea solo si alguien lo confirma en pantalla.
+     */
+    crear?: { nombre: string; liderId?: string };
 }
 
 export interface LoteParseado {
@@ -233,7 +282,62 @@ const partirItems = (resto: string): string[] =>
  * —así quedó Rafael en la cuadrilla de Alex sin que nadie lo decidiera— y no se
  * repite.
  */
-export const leerLote = (texto: string, personnel: Personnel[], items: Item[]): LoteParseado => {
+/**
+ * Normaliza una hora dictada: «7:30», «07.30», «7h30», «7:30 pm», «14:05».
+ * Lo que no se entiende como hora devuelve `undefined`: se trata como lugar, no
+ * se adivina una hora.
+ */
+export const leerHora = (t: string): string | undefined => {
+    const m = normStr(t).replace(/\s+/g, ' ').match(/^(\d{1,2})(?:\s*[:.h]\s*(\d{2}))?\s*(am|pm|a\.? ?m\.?|p\.? ?m\.?)?$/);
+    if (!m || (!m[2] && !m[3])) return undefined;
+    let h = Number(m[1]);
+    const min = Number(m[2] ?? '0');
+    const pm = !!m[3] && m[3].startsWith('p');
+    const am = !!m[3] && m[3].startsWith('a');
+    if (pm && h < 12) h += 12;
+    if (am && h === 12) h = 0;
+    if (h > 23 || min > 59) return undefined;
+    return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+};
+
+/** Lee un encabezado `@ obra · hora · lugar`. Las tres partes son opcionales. */
+export const leerEncabezado = (renglon: string, projects: Project[]): Encabezado => {
+    const partes = renglon.replace(/^@\s*/, '').split(/\s*[·|]\s*|\s+[-–—]\s+/).map(limpiar).filter(Boolean);
+    const enc: Encabezado = { obraDudosa: false, candidatosObra: [], sinObra: false };
+    const lugares: string[] = [];
+    for (const p of partes) {
+        const hora = leerHora(p);
+        if (hora && !enc.hora) { enc.hora = hora; continue; }
+        if (enc.obraTexto === undefined && !enc.sinObra && lugares.length === 0) {
+            if (/^sin (obra|proyecto)$/.test(normStr(p))) { enc.sinObra = true; continue; }
+            enc.obraTexto = p;
+            continue;
+        }
+        lugares.push(p);
+    }
+    if (lugares.length) enc.lugar = lugares.join(' · ');
+    if (enc.obraTexto) {
+        const r = rankMatches(projects, enc.obraTexto, x => [x.name], 4);
+        const { elegido, dudoso } = escoger(r);
+        enc.obra = elegido;
+        enc.obraDudosa = dudoso;
+        enc.candidatosObra = r.map(x => x.value);
+    }
+    return enc;
+};
+
+/**
+ * «Juan (cuadrilla de Alex)» → persona «Juan», cuadrilla «Alex». Cualquier otro
+ * paréntesis («Alex (oficial)») se quita del nombre: es una aclaración, no
+ * parte de cómo se llama.
+ */
+export const partirPersona = (texto: string): { nombre: string; cuadrilla?: string } => {
+    const m = texto.match(/\(\s*(?:de\s+la\s+)?cuadrilla\s+(?:de\s+)?([^)]+)\)/i);
+    const nombre = limpiar(texto.replace(/\([^)]*\)/g, ' '));
+    return { nombre, cuadrilla: m ? limpiar(m[1]) : undefined };
+};
+
+export const leerLote = (texto: string, personnel: Personnel[], items: Item[], projects: Project[] = []): LoteParseado => {
     const lineas: LineaLote[] = [];
     const ignoradas: string[] = [];
     /**
@@ -243,9 +347,13 @@ export const leerLote = (texto: string, personnel: Personnel[], items: Item[]): 
     let siguiente = 0;
     const nuevoId = (): string => `L${++siguiente}`;
 
+    let encabezado: Encabezado | undefined;
     for (const cruda of texto.split(/\r?\n/)) {
         const renglon = limpiar(cruda);
         if (!renglon) continue;
+        // Un encabezado no es un renglón: cambia la obra, la hora y el lugar de
+        // los que vienen debajo, hasta el próximo encabezado.
+        if (renglon.startsWith('@')) { encabezado = leerEncabezado(renglon, projects); continue; }
 
         // Los dos puntos mandan. El guion es el respaldo, y solo si no hay dos
         // puntos, porque hay nombres con guion y partir por ahí los rompería.
@@ -258,8 +366,10 @@ export const leerLote = (texto: string, personnel: Personnel[], items: Item[]): 
         const resto = limpiar(renglon.slice(corte).replace(/^[:\s\-–—]+/, ''));
         if (!personaTexto || !resto) { ignoradas.push(renglon); continue; }
 
-        const rp = rankMatches(personnel, personaTexto, p => [p.name], 4);
+        const { nombre: nombrePersona, cuadrilla } = partirPersona(personaTexto);
+        const rp = rankMatches(personnel, nombrePersona, p => [p.name], 4);
         const { elegido: persona, dudoso: dudosa } = escoger(rp);
+        const rc = cuadrilla ? escoger(rankMatches(personnel.filter(p => p.isTeamLeader), cuadrilla, p => [p.name], 4)) : undefined;
 
         const itemsLinea: ItemLote[] = partirItems(resto).map(trozo => {
             const { cantidad, nombre } = partirCantidad(trozo);
@@ -272,11 +382,17 @@ export const leerLote = (texto: string, personnel: Personnel[], items: Item[]): 
 
         lineas.push({
             id: nuevoId(),
-            personaTexto,
+            personaTexto: nombrePersona,
             persona,
             candidatosPersona: rp.map(r => r.value),
             dudosa,
             items: itemsLinea,
+            encabezado,
+            cuadrillaTexto: cuadrilla,
+            cuadrillaDe: rc && !rc.dudoso ? rc.elegido : undefined,
+            // La obra del encabezado ya es una decisión si se reconoció sin
+            // duda, o si dijo «sin obra» a propósito. Si no, se pregunta.
+            obraId: encabezado?.sinObra ? null : (encabezado?.obra && !encabezado.obraDudosa ? encabezado.obra.id : undefined),
         });
     }
 
@@ -289,3 +405,35 @@ export const contarDudas = (lote: LoteParseado): number =>
         (n, l) => n + (l.dudosa ? 1 : 0) + l.items.filter(i => i.dudoso).length,
         0,
     ) + lote.ignoradas.length;
+
+/**
+ * Pasa UN elemento a otra persona, sin rehacer nada.
+ *
+ * «La pulidora no era para Alex, era para Juan.» Antes había que borrarla de
+ * Alex y escribirla de nuevo en Juan, y en ese ir y venir es donde se pierden
+ * cosas. Si ya hay un renglón de esa persona con la misma obra y hora, se suma
+ * ahí; si no, nace un renglón nuevo que hereda el encabezado del de origen.
+ */
+export const moverItem = (lote: LoteParseado, itemLoteId: string, persona: Personnel, nuevoId: string): LoteParseado => {
+    const origen = lote.lineas.find(l => l.items.some(it => it.id === itemLoteId));
+    if (!origen) return lote;
+    const it = origen.items.find(x => x.id === itemLoteId)!;
+    if (origen.persona?.id === persona.id) return lote;
+    const mismaObraYHora = (l: LineaLote) =>
+        l.persona?.id === persona.id && l.obraId === origen.obraId
+        && l.encabezado?.hora === origen.encabezado?.hora && l.id !== origen.id;
+    let lineas = lote.lineas
+        .map(l => (l.id === origen.id ? { ...l, items: l.items.filter(x => x.id !== itemLoteId) } : l));
+    const destino = lineas.find(mismaObraYHora);
+    if (destino) {
+        lineas = lineas.map(l => (l.id === destino.id ? { ...l, items: [...l.items, it] } : l));
+    } else {
+        const i = lineas.findIndex(l => l.id === origen.id);
+        const nueva: LineaLote = {
+            id: nuevoId, personaTexto: persona.name, persona, candidatosPersona: [], dudosa: false,
+            items: [it], encabezado: origen.encabezado, obraId: origen.obraId, obraNueva: origen.obraNueva,
+        };
+        lineas = [...lineas.slice(0, i + 1), nueva, ...lineas.slice(i + 1)];
+    }
+    return { ...lote, lineas: lineas.filter(l => l.items.length > 0) };
+};

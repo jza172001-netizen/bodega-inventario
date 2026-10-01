@@ -24,7 +24,7 @@
  *    el grupo completo, o no pasa nada del grupo.
  */
 
-import { Item, Movement, MovementType, RechazoStock } from '../types.js';
+import { InventoryType, Item, Movement, MovementType, RechazoStock } from '../types.js';
 import { esRetiro, alcanzaStock, isConsumable } from '../utils/inventory.js';
 
 /** Un movimiento listo para registrar, con la cantidad en que queda su ítem. */
@@ -90,15 +90,26 @@ export interface OpcionesPlan {
 }
 
 /**
- * ¿Este despacho necesita proyecto?
+ * ¿Este tipo de elemento OBLIGA a decir la obra?
  *
- * La pantalla lo exigía para consumibles y el endpoint no: dos reglas para lo
- * mismo, que es cómo terminan divergiendo. Vive acá por lo mismo que `esRetiro`
- * y `isAsset` viven en `utils/inventory`: una regla, un sitio.
+ * LA REGLA DEL CHAT, que es la que manda (decisión de Juli, 1-oct-2026): la
+ * obra se pregunta SIEMPRE, pero solo es obligatoria para el MATERIAL DE
+ * CONSUMO. Para lo demás —herramientas, EPP, accesorios— se puede seguir «sin
+ * proyecto».
+ *
+ * Hasta hoy había dos reglas: el chat exigía obra solo al material de consumo,
+ * y el bloque y el asistente la exigían a todo lo que se gasta (EPP incluido).
+ * La misma salida de unos guantes pasaba por una puerta y se frenaba por otra.
+ */
+export const tipoExigeObra = (tipo?: InventoryType): boolean => tipo === InventoryType.SINGLE_USE;
+
+/**
+ * ¿Este despacho necesita proyecto? Una regla, un sitio: el chat, el bloque y
+ * el endpoint preguntan acá.
  */
 export const exigeProyecto = (movimientos: Array<Omit<Movement, 'id'>>, items: Item[]): boolean => {
     const porId = new Map(items.map(i => [i.id, i]));
-    return movimientos.some(m => esRetiro(m.type) && isConsumable(porId.get(m.itemId)));
+    return movimientos.some(m => esRetiro(m.type) && tipoExigeObra(porId.get(m.itemId)?.inventoryType));
 };
 
 /**
