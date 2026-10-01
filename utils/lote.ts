@@ -206,7 +206,25 @@ const escoger = <T,>(rank: { value: T; score: number }[]): { elegido?: T; dudoso
  * qué no ("broca" nunca se junta con "brocha"). Escribir acá una segunda regla
  * de plural sería exactamente el error que el resto del código evitó.
  */
+/**
+ * Las unidades con que se DICE una cantidad: «2 pares de guantes», «3 bultos de
+ * cemento». Tapan el nombre: el buscador comparaba «pares de guantes» contra
+ * «Guantes» y no encontraba nada, y lo que más se pide en la obra quedaba sin
+ * reconocer.
+ */
+const UNIDAD_DICHA = /^(?:pares?|bultos?|metros?|galones?|kilos?|kg|libras?|cajas?|rollos?|unidades?|paquetes?|cuñetes?|bolsas?|tarros?|latas?|varillas?|tubos?)\s+de\s+/i;
+
 const buscarItem = (items: Item[], nombre: string): Scored<Item>[] => {
+    // Primero como se dijo (puede haber un ítem que se llame «Metros de
+    // manguera»); si no aparece nada bueno, sin la unidad delante.
+    const tal = buscarItemCrudo(items, nombre);
+    const sinUnidad = nombre.replace(UNIDAD_DICHA, '');
+    if ((tal[0]?.score ?? 0) >= MINIMO || sinUnidad === nombre) return tal;
+    const otra = buscarItemCrudo(items, sinUnidad);
+    return (otra[0]?.score ?? 0) > (tal[0]?.score ?? 0) ? otra : tal;
+};
+
+const buscarItemCrudo = (items: Item[], nombre: string): Scored<Item>[] => {
     const textos = (i: Item) => [i.name, i.familia ?? '', i.subCategory ?? ''];
     const directo = rankMatches(items, nombre, textos, 4);
     if (directo[0] && directo[0].score >= MINIMO) return directo;

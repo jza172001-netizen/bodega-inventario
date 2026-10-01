@@ -48,6 +48,11 @@ grupo('la hora: lo que no es hora no se inventa', () => {
     igual([leerHora('12'), leerHora('25:00'), leerHora('contenedor')], [undefined, undefined, undefined], 'un número suelto no es hora');
 });
 
+grupo('«2 pares de guantes», «3 bultos de cemento»: la unidad dicha no tapa el nombre', () => {
+    const r = leerLote('Juan: 2 pares de guantes, 3 bultos de cemento, 1 pala', P, I, O);
+    igual(r.lineas[0].items.map(x => [x.cantidad, x.item?.id]), [[2, 'guantes'], [3, 'cemento'], [1, 'pala']], 'se reconocen');
+});
+
 grupo('«Juan (cuadrilla de Alex)»', () => {
     igual(partirPersona('Juan (cuadrilla de Alex)'), { nombre: 'Juan', cuadrilla: 'Alex' }, 'nombre y cuadrilla');
     igual(partirPersona('Alex (oficial)'), { nombre: 'Alex', cuadrilla: undefined }, 'otro paréntesis se quita');
