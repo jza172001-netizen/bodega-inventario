@@ -8,6 +8,79 @@
 
 ---
 
+## 0.00 ESTADO AL 1-oct-2026 — leer esto primero (para la auditoría)
+
+**Producción:** 129 ítems vivos, 234 movimientos, 35 personas, 8 obras (leído el
+1-oct, solo lectura). El último movimiento sigue siendo del 8-sep.
+
+**PR #100 (merge 1-oct):** el bloque sigue la lógica del chat, con verificación
+contra la bodega; Gem en 4 momentos (`asistente/GEM.md`); Node 24.
+
+**PR #101 (este): géneros, familias y pulgadas editables.**
+
+| Qué | Dónde | Cómo se comprueba |
+|---|---|---|
+| `Item.ruta`, géneros a cualquier profundidad («Tubería / Accesorios») | `types.ts`, `utils/arbol.ts` (`construirRuta`), columna `items.ruta` | `tests/organizar.test.ts`. Sin ruta, el árbol es idéntico al de antes |
+| Editor «Organizar bodega» (barra lateral) | `components/OrganizarBodega.tsx`, `core/organizar.ts` | Pruebas puras; ninguna operación toca `quantity` (prueba dedicada) |
+| Medida dicha: «codos de 4», «de media», «tres cuartos» | `utils/lote.ts` (`medidaDicha`, `buscarItem`) | `tests/verificacion.test.ts` |
+| Botones de medida en el bloque | `core/verificacion.ts` (`opcionesDeMedida`), `FloatingChat.tsx` | Prueba de la alerta; la pantalla solo tiene prueba de humo |
+| Lo dudoso se decide, no se adivina | `core/verificacion.ts` | Antes: 22 de 60 elementos reales se registraban adivinados |
+| «2 Y de 2» es la Y de tubería | `utils/lote.ts` (`partirItems`) | `tests/verificacion.test.ts` |
+| `falta_stock` avisa y no frena | `core/verificacion.ts` | Prueba de volumen de 60 elementos |
+| Velocidad: `editDistance` con filas recicladas | `utils/genus.ts` | 0,4 s → 0,12 s; iguales en 200.000 pares al azar |
+
+**Migración `20261001120000_ruta_de_items.sql`: APLICADA en producción el 1-oct,
+antes del merge.** Primero se probó dentro de una transacción revertida. Se
+comprobó la columna (`text`, nula) y los permisos de `anon` y `authenticated`
+(los mismos de la tabla). Los totales no cambiaron (130 filas, stock 94).
+Ninguna ruta asignada todavía: Juli las arma desde «Organizar bodega».
+
+### Decisiones que tomé yo (auditables, reversibles)
+
+1. **`falta_stock` pasó de `mirar` a `aviso`.** No tener existencia es lo
+   normal en esta bodega, y «Lo que no haya, cargalo» ya es el consentimiento.
+   Con un toque por elemento eran 30 toques en una mañana de 60 cosas.
+   «Ya la tiene otro» SIGUE exigiendo revisión. Revertir es una línea en
+   `core/verificacion.ts`.
+2. **Lo dudoso se decide.** Es un cambio de comportamiento que Juli va a NOTAR
+   el viernes: «1 pulidora grande» ya no sale sola, pregunta cuál, porque hay
+   cuatro. Es lo correcto para la trazabilidad de herramientas. El Gem ahora
+   pide escribir color y marca cuando se dicen.
+3. **Una medida que no existe no elige la más cercana**, aunque sea el único
+   parecido. Un codo de 6" no es uno de 5".
+4. **La sugerencia de género** (`rutaSugerida`) nunca se aplica sola: aparece
+   como un botón «💡 ¿Va en Tubería › Accesorios?». No sugiere «llave» ni
+   «copa», porque también son herramientas.
+
+### Lo que la auditoría debe saber (límites honestos)
+
+- **Mutación que sobrevive:** cambiar `if (claro && !medidaDe(...))` por
+  `if (claro)` en `buscarItem` no pone nada en rojo. La guarda es defensiva:
+  el buscador actual nunca da por «claro» un nombre de otra medida (sus
+  puntajes quedan por debajo del mínimo). Se dejó porque expresa la regla.
+  Las otras 17 mutaciones de este PR se pusieron en rojo.
+- **Las pantallas nuevas no se han tocado en un navegador.** Hay prueba de humo
+  (se dibujan con los 129 ítems reales sin errores) y tipos limpios, pero
+  ningún clic. Es el mismo hueco de §2 de `VERIFICACION-ENTREGA.md`.
+- **El paso de escoger ítem del CHAT (no del bloque) no tiene botones de
+  medida.** Quedó solo en el bloque, para no tocar el flujo del chat antes del
+  viernes.
+- **Tiempo de lectura medido en este contenedor, no en un celular.** Cuesta
+  0,12 s acá; en un Huawei de gama baja, calculo de 3 a 5 veces más: NO LO HE
+  MEDIDO.
+- **«Codos 4"-2"», «Y 4-2», «Y 6"-6" 6"-6"»** son reducciones y no tienen UNA
+  medida: no salen como botón, se escogen de la lista. La forma de escribirlas
+  está pendiente de decisión de Juli (ver §7 de VERIFICACION-ENTREGA).
+
+### Siguen abiertos (de antes, sin cambios)
+
+Corte de seguridad (espera que Juli y Kate confirmen el login nuevo) ·
+recorridos en navegador R1–R12 · restaurar respaldo · inventario definitivo
+(Lista 5 + informe) · CAMILO/KATE · Supabase se pausa solo · Netlify ·
+`npm audit` · concurrencia entre dos teléfonos.
+
+---
+
 ## 0.0 ESTADO AL 28-sep-2026 — leer esto primero
 
 **Datos verificados en producción:** 129 ítems, 234 movimientos vivos (23 más en

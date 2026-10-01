@@ -70,8 +70,11 @@ Cada recorrido termina **recargando la página** y comprobando que lo hecho sigu
 | R10 | **Sin señal:** modo avión → registrar → volver a la señal | Queda en «Pendientes», sube solo y no se duplica |
 | R11 | **Dos teléfonos:** registrar en uno | Aparece en el otro sin recargar |
 | R12 | **Papelera:** borrar un movimiento y restaurarlo | El stock vuelve a cuadrar |
+| R13 | **Organizar:** armar Tubería › Accesorios con los codos, renombrar un género, ponerle medida a un ítem | La vista previa dice qué cambia; el inventario muestra los niveles; ninguna cantidad se mueve |
+| R14 | **Bloque — medida:** pegar «Juan: 3 codos» y «Pedro: 2 codos de 4» | El primero pregunta la medida con botones; el segundo va directo al de 4" |
+| R15 | **Bloque — dudoso:** pegar «Juan: 1 pulidora grande» | Pregunta cuál (hay cuatro); no registra ninguna sola |
 
-**Aprobado el bloque:** los 12 recorridos sin un error. Cada fallo se arregla, con su prueba automática, antes de seguir.
+**Aprobado el bloque:** los 15 recorridos sin un error. Cada fallo se arregla, con su prueba automática, antes de seguir.
 
 ---
 
