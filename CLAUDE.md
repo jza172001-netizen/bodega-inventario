@@ -144,6 +144,21 @@ Closing a loan after its last return uses `markMovementReturned` (a plain
 update), **not** `returnLoanAndRestoreStock` — the return's entrada already
 restored the stock, and that function would restore it a second time.
 
+**The pasted block («Despacho por bloque») follows the CHAT's logic, all of it.**
+Headers `@ obra · hora · lugar` set project, time and place for the lines below;
+`Name (cuadrilla de X)` names a crew. Project is ASKED like the chat's step (the
+top select starts unanswered; «Sin proyecto» is an answer) and is mandatory only
+for `SINGLE_USE` — one rule, `tipoExigeObra` in `core/despacho.ts`, used by the
+chat, the block and `/api/despacho`. An oficial asks «¿para quién de su
+cuadrilla?»; a new person is created only when someone picks «➕ Crear» on
+screen. `core/verificacion.ts` checks the block against the warehouse (already
+lent to someone else, duplicate, missing stock…); only READY items register, the
+rest stays on screen. `tests/pantalla.test.ts` proves the chat's real
+`handleConfirmWizard` and the block produce the same movements.
+
+**Node is 24.x** (`package.json` engines). Vercel discontinued 20.x on
+1 Oct 2026 and every build pinned to it fails before compiling.
+
 **Custody lives in `core/custodia.ts`** (shared by the app and the API, like
 `core/despacho.ts`). A transfer between people or worksites is **not** a new
 movement type: the stock functions treat anything that is not `Salida`/`Merma`

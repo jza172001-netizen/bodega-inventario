@@ -27,6 +27,22 @@ export const fechaLocalISO = (d: Date = new Date()): string => {
 export const momentoDeFecha = (iso?: string): Date =>
     !iso || iso === fechaLocalISO() ? new Date() : new Date(`${iso}T12:00:00`);
 
+/**
+ * El momento de un renglón del bloque que trae su propia hora (`@ obra · 07:30`).
+ *
+ * Sin hora se comporta igual que `momentoDeFecha`. Con hora, se respeta la que
+ * se dictó: si a las 7:30 salió el cemento y el bloque se pega a las 11, el
+ * movimiento queda a las 7:30, que es cuando pasó.
+ *
+ * `zona` solo la pasa el servidor: el navegador está en Colombia y su hora
+ * local ya es la buena, pero Vercel corre en UTC y sin la zona la salida de las
+ * 7:30 quedaría a las 2:30 de la madrugada.
+ */
+export const momentoConHora = (iso?: string, hora?: string, zona = ''): Date => {
+    if (!hora) return momentoDeFecha(iso);
+    return new Date(`${iso || fechaLocalISO()}T${hora}:00${zona}`);
+};
+
 /** Nombre del archivo del informe de bodega: "Reporte Bodega 2026-09-04.docx". */
 export const nombreArchivoReporte = (extension: string, d: Date = new Date()): string =>
     `Reporte Bodega ${fechaLocalISO(d)}.${extension}`;

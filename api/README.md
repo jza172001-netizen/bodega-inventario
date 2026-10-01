@@ -51,6 +51,32 @@ Cuerpo:
 }
 ```
 
+### Encabezados: obra, hora y lugar por grupo
+
+Un bloque puede traer encabezados. Cada renglón hereda los del encabezado que
+tiene encima, hasta el siguiente:
+
+```
+@ El Cristo · 07:30 · contenedor
+Alex: 3 palas, 1 martillo
+Juan (cuadrilla de Alex): 2 pares de guantes
+@ Bonilla · 07:35
+Pedro: 1 pulidora
+@ sin obra
+Carlos: 1 extensión
+```
+
+- Las tres partes son opcionales. La hora va como `07:30`, `7:30 pm`, `14h05`.
+- Un renglón sin encabezado usa `obra` del cuerpo, como siempre.
+- **Un bloque sin encabezados se registra exactamente igual que antes.**
+- Una obra del encabezado que no se reconoce **no se adivina**: sus renglones
+  vuelven en `pendientes`.
+- **La regla de obra es la del chat:** solo el **material de consumo** la exige.
+  Herramientas y EPP pueden salir sin obra. Un consumible sin obra vuelve en
+  `pendientes`; el resto del bloque sí entra.
+- `(cuadrilla de X)` no crea a nadie por esta ventanilla: si la persona no
+  existe, vuelve en `pendientes`. Crear lo decide alguien en la pantalla.
+
 ### `operacionId` es obligatorio, y por qué
 
 Es lo que impide el **doble registro**. Los identificadores de cada movimiento
@@ -75,7 +101,7 @@ personas alcanza: `2026-09-12-0730-alex-juan`.
 
 - **registrados** — entraron. Ya están en el Kardex.
 - **fallos** — no había existencias. **No entraron.**
-- **pendientes** — la app no adivinó quién o qué era, **y no lo inventó**. Hay
+- **pendientes** — la app no adivinó quién, qué o en qué obra, **y no lo inventó**. Hay
   que resolverlos desde la app. **Quedan escritos en Trazabilidad** (⚠ «El
   asistente no pudo registrar…»), así no dependen de que el asistente los repita.
 

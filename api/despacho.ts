@@ -39,7 +39,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { Item, Movement, MovementType, Personnel, InventoryType } from '../types.js';
-import { planearLote, exigeProyecto } from '../core/despacho.js';
+import { planearLote, tipoExigeObra } from '../core/despacho.js';
+import { momentoConHora } from '../utils/date.js';
 import { idDeterminista, firmaDe } from './identidad.js';
 import { leerLote } from '../utils/lote.js';
 import { isAsset } from '../utils/inventory.js';
@@ -116,7 +117,7 @@ export default async function handler(req: Peticion, res: Respuesta): Promise<vo
     const [itemsRes, personalRes, obrasRes] = await Promise.all([
         sb.from('items').select('*').is('deleted_at', null),
         sb.from('personnel').select('*').is('deleted_at', null),
-        sb.from('projects').select('id, name').is('deleted_at', null),
+        sb.from('projects').select('id, name, status').is('deleted_at', null),
     ]);
     if (itemsRes.error || personalRes.error || obrasRes.error) {
         res.status(502).json({ error: 'No se pudo leer la bodega' });
@@ -138,7 +139,7 @@ export default async function handler(req: Peticion, res: Respuesta): Promise<vo
      * Ahora basta con el nombre («El Cristo»). Si no se encuentra o se parece a
      * dos, se contesta con las opciones y NO se escribe nada.
      */
-    const obras = (obrasRes.data ?? []) as Array<{ id: string; name: string }>;
+    const obras = (obrasRes.data ?? []) as Array<{ id: string; name: string; status: 'active' | 'completed' }>;
     let proyectoId = cuerpo.proyectoId;
     if (!proyectoId && cuerpo.obra?.trim()) {
         const r = rankMatches(obras, cuerpo.obra, o => [o.name], 3);
@@ -195,8 +196,11 @@ export default async function handler(req: Peticion, res: Respuesta): Promise<vo
         return;
     }
 
-    const lote = leerLote(texto, personnel, items);
+    // El mismo lector de la pantalla, con los mismos encabezados `@ obra · hora · lugar`.
+    const lote = leerLote(texto, personnel, items, obras.filter(o => o.status !== 'completed'));
     const ts = cuerpo.fecha ? new Date(cuerpo.fecha) : new Date();
+    /** El día en Colombia, para pegarle la hora de un encabezado. */
+    const diaBogota = new Date(+ts - 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
     // Lo que la app NO resolvió sola no se adivina: vuelve como pendiente para
     // que un humano lo mire. Un asistente confundido no puede inventar a quién
@@ -206,9 +210,20 @@ export default async function handler(req: Peticion, res: Respuesta): Promise<vo
 
     for (const linea of lote.lineas) {
         if (!linea.persona) {
+            // Ni aunque diga «(cuadrilla de Alex)»: crear a alguien lo decide una
+            // persona en la pantalla, no un asistente por una ventanilla.
             pendientes.push({ renglon: linea.personaTexto, motivo: 'No se identificó a la persona' });
             continue;
         }
+        // Una obra que el encabezado nombró y no se reconoce NO se adivina, ni
+        // se reemplaza en silencio por la del cuerpo: el renglón queda pendiente.
+        const enc = linea.encabezado;
+        if (enc?.obraTexto && (!enc.obra || enc.obraDudosa)) {
+            for (const it of linea.items) pendientes.push({ renglon: `${linea.personaTexto}: ${it.texto}`, motivo: `No se reconoció la obra «${enc.obraTexto}»` });
+            continue;
+        }
+        const obraLinea = linea.obraId === null ? undefined : (linea.obraId ?? proyectoId);
+        const tsLinea = enc?.hora ? momentoConHora(diaBogota, enc.hora, '-05:00') : ts;
         for (const it of linea.items) {
             if (!it.item) {
                 pendientes.push({ renglon: `${linea.personaTexto}: ${it.texto}`, motivo: 'No se identificó el elemento' });
@@ -218,14 +233,20 @@ export default async function handler(req: Peticion, res: Respuesta): Promise<vo
                 pendientes.push({ renglon: `${linea.personaTexto}: ${it.texto}`, motivo: `Hay más de una opción parecida: ${it.candidatos.map(c => c.name).join(', ')}` });
                 continue;
             }
+            // La regla del chat: el material de consumo no sale sin obra. Por
+            // renglón, no por bloque: el resto del bloque sí entra.
+            if (tipoExigeObra(it.item.inventoryType) && !obraLinea) {
+                pendientes.push({ renglon: `${linea.personaTexto}: ${it.texto}`, motivo: 'Material de consumo sin obra. Mandá la obra en un encabezado «@ obra» o en `obra`' });
+                continue;
+            }
             batch.push({
                 itemId: it.item.id,
                 type: MovementType.CHECK_OUT,
                 quantity: it.cantidad,
-                timestamp: ts,
+                timestamp: tsLinea,
                 personnelId: linea.persona.id,
-                projectId: proyectoId,
-                notes: '',
+                projectId: obraLinea,
+                notes: enc?.lugar ? `Lugar: ${enc.lugar}` : '',
                 isLoan: isAsset(it.item),
                 isReturned: false,
             });
@@ -233,18 +254,6 @@ export default async function handler(req: Peticion, res: Respuesta): Promise<vo
     }
     for (const ignorada of lote.ignoradas) {
         pendientes.push({ renglon: ignorada, motivo: 'No se pudo leer el renglón' });
-    }
-
-    // La misma regla de la pantalla, desde el mismo sitio: los consumibles
-    // necesitan proyecto. El endpoint la ignoraba y aceptaba una salida de
-    // cemento sin obra, que es un gasto que después no se le puede cobrar a
-    // nadie.
-    if (exigeProyecto(batch, items) && !proyectoId) {
-        res.status(400).json({
-            error: 'Hay consumibles en el bloque y los consumibles necesitan obra. Mandá `obra` con su nombre.',
-            pendientes,
-        });
-        return;
     }
 
     // Las mismas reglas de la pantalla: accesorios pegados a su herramienta y
@@ -279,7 +288,7 @@ export default async function handler(req: Peticion, res: Respuesta): Promise<vo
         item_id: m.itemId,
         type: m.type,
         quantity: m.quantity,
-        timestamp: ts.toISOString(),
+        timestamp: new Date(m.timestamp).toISOString(),
         personnel_id: m.personnelId ?? null,
         notes: m.notes ?? null,
         project_id: m.projectId ?? null,
@@ -345,7 +354,7 @@ export default async function handler(req: Peticion, res: Respuesta): Promise<vo
                 p_item_id: movimiento.itemId,
                 p_type: movimiento.type,
                 p_quantity: movimiento.quantity,
-                p_timestamp: ts.toISOString(),
+                p_timestamp: new Date(movimiento.timestamp).toISOString(),
                 p_personnel_id: movimiento.personnelId ?? null,
                 p_notes: movimiento.notes ?? null,
                 p_project_id: movimiento.projectId ?? null,
