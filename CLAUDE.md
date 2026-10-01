@@ -177,6 +177,39 @@ remainder opens as a new row. A `posible` never becomes a loan by itself.
 Unknown fields stay empty and render as «No especificado» — note that `sello()`
 fills *now*, so it must never be used for `desde` or `cerrada_en`.
 
+**Géneros above the family: `Item.ruta`** (since 1 Oct 2026, column `items.ruta`).
+Text with levels separated by « / », general → particular: `"Tubería / Accesorios"`.
+Then `familia` (Codos), then the species = the item with its size (2"). Depth is
+free. `construirRuta` (utils/arbol.ts) builds the nested tree; **with no `ruta`
+anywhere it returns exactly `construirArbol`'s families** — tested. Editing lives
+in `core/organizar.ts` (pure, returns only the changed items) and the «Organizar»
+tab of `ReviewFamiliesView` (sidebar: «Organizar bodega»). Every operation shows
+a preview and saves through `handleEditItem`. **Reorganizing never touches
+`quantity`** — a quantity change writes an adjustment movement to the Kardex.
+`ponerMedida` only adds a size to an item WITHOUT one: turning a 2" elbow into a
+4" one would carry the 2" stock.
+
+**A dudoso match is a DECISION, not a pick.** `escoger` (utils/lote.ts) returns
+the first of two equally good candidates *with* `dudoso: true`; until 1 Oct the
+block registered that first one silently (22 of 60 items in the real-data
+volume test — «1 pulidora grande» when there are four). `verificarLote` now
+raises `elemento`/`persona` at level `decidir` for dudoso, and the selects show
+nothing preselected so picking the guessed one fires a change.
+
+**Accessory first, then the size.** `medidaDicha` reads «codos de 4», «codo de
+media», «tres cuartos», «2 pulgadas»; `buscarItem` then picks the item of THAT
+size among the family. If no item has it, nothing is chosen — never the nearest
+size, even when it is the only candidate. When the doubt is only the size, the
+`elemento` alert carries `medidas` and the block shows them as buttons.
+«2 Y de 2» is the Y fitting, not a conjunction (`partirItems`).
+
+**`falta_stock` is level `aviso`**: shown, not blocking. No stock → «entra lo que
+falta y sale» is the normal case and is consented by «Lo que no haya, cargalo»;
+one tap per item was 30 taps per morning. `ya_la_tiene` stays `mirar`.
+
+`seMideEnPulgadas` compares the first word singularized: the real families are
+PLURAL («Codos», «Bujes», «Uniones») and none of them used to match.
+
 ### Views (`App.tsx` `View` type)
 
 `dashboard` | `inventory` | `movements` | `purchaseOrders` | `personnel` | `projects` | `loans` | `copilot`

@@ -52,6 +52,7 @@ function dbToItem(row: Record<string, unknown>): Item {
         requiresReturnNote: row.requires_return_note as boolean | undefined,
         accessories: Array.isArray(row.accessories) ? (row.accessories as import('../types').Accessory[]) : [],
         familia: (row.familia as string | null) ?? undefined,
+        ruta: (row.ruta as string | null) ?? undefined,
         reparacion: row.reparacion ? deDbReparacion(row.reparacion as Record<string, unknown>) : undefined,
         updatedAt: row.updated_at ? new Date(row.updated_at as string) : undefined,
     };
@@ -85,6 +86,7 @@ function itemToDb(item: Omit<Item, 'id'>): Record<string, unknown> {
         requires_return_note: item.requiresReturnNote ?? false,
         accessories: item.accessories ?? [],
         familia: item.familia ?? null,
+        ruta: item.ruta ?? null,
         reparacion: item.reparacion ?? null,
         updated_at: sello(item.updatedAt),
     };

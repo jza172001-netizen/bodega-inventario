@@ -7,7 +7,7 @@ import { TrashIcon } from './icons/TrashIcon';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
 import { HistoryIcon } from './icons/HistoryIcon';
 import { getGenus, normStr, clusterGenera, looseMatch } from '../utils/genus';
-import { construirArbol, detalleDe } from '../utils/arbol';
+import { construirArbol, detalleDe, partirRuta, unirRuta } from '../utils/arbol';
 import { tonoDe } from '../utils/colores';
 import { getActiveLoans } from '../utils/inventory';
 
@@ -44,6 +44,13 @@ const enRamas = (species: Item[]): EntradaDeRama[] => {
         { tipo: 'rama', nombre: r.variante, cuantos: r.items.length, total: r.total } as EntradaDeRama,
         ...r.items.map(item => ({ tipo: 'item', item }) as EntradaDeRama),
     ]);
+};
+
+/** La ruta de una familia: la que más se repite entre sus ítems (casi siempre, la única). */
+const rutaDe = (species: Item[]): string => {
+    const cuenta = new Map<string, number>();
+    for (const i of species) { const r = unirRuta(partirRuta(i.ruta)); cuenta.set(r, (cuenta.get(r) ?? 0) + 1); }
+    return [...cuenta.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
 };
 
 export const InventoryView: React.FC<InventoryViewProps> = ({ items, movements = [], personnel = [], openAddItemModal, onEditItem, onDeleteItem, onItemHistory, onOpenInvoiceReader, userRole, category, onGoBack, onBehaviorLog }) => {
@@ -137,17 +144,56 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, movements =
 
         type Fila =
             | { tipo: 'grupo'; grupo: string; familias: number }
-            | { tipo: 'familia'; cluster: typeof genusList[number] };
+            | { tipo: 'genero'; nombre: string; camino: string; arriba: string[]; cuantos: number; total: number }
+            | { tipo: 'familia'; cluster: typeof genusList[number]; arriba: string[] };
         const filas: Fila[] = [];
         // Con un solo grupo el encabezado no informa nada: se omite.
         const conEncabezado = grupos.length > 1;
         for (const g of grupos) {
             const fams = porGrupo.get(g)!;
             if (conEncabezado) filas.push({ tipo: 'grupo', grupo: g, familias: fams.length });
-            for (const f of fams) filas.push({ tipo: 'familia', cluster: f });
+            /**
+             * Los géneros (Tubería → Accesorios) van como plegables encima de
+             * sus familias. Cada familia se ordena por su ruta y después por su
+             * nombre, y un encabezado de género sale la primera vez que se entra
+             * a él. Sin rutas, el orden es el de siempre.
+             */
+            const conRuta = fams.map(f => ({ f, tramos: partirRuta(rutaDe(f.species)) }));
+            const llave = (x: typeof conRuta[number]) => [...x.tramos, x.f.canonical].map(t => normStr(t));
+            conRuta.sort((x, y) => {
+                const a = llave(x), b = llave(y);
+                for (let k = 0; k < Math.min(a.length, b.length); k++) {
+                    const c = a[k].localeCompare(b[k], 'es');
+                    if (c) return c;
+                }
+                return a.length - b.length;
+            });
+            let abiertos: string[] = [];
+            for (const { f, tramos } of conRuta) {
+                let comun = 0;
+                while (comun < abiertos.length && comun < tramos.length && normStr(abiertos[comun]) === normStr(tramos[comun])) comun++;
+                for (let k = comun; k < tramos.length; k++) {
+                    const camino = unirRuta(tramos.slice(0, k + 1));
+                    const debajo = conRuta.filter(x => x.tramos.length > k && normStr(unirRuta(x.tramos.slice(0, k + 1))) === normStr(camino));
+                    const its = debajo.flatMap(x => x.f.species);
+                    filas.push({ tipo: 'genero', nombre: tramos[k], camino, arriba: tramos.slice(0, k).map((_, j) => unirRuta(tramos.slice(0, j + 1))),
+                        cuantos: debajo.length, total: its.reduce((sum, i) => sum + i.quantity, 0) });
+                }
+                abiertos = tramos;
+                filas.push({ tipo: 'familia', cluster: f, arriba: tramos.map((_, j) => unirRuta(tramos.slice(0, j + 1))) });
+            }
         }
         return filas;
     }, [genusList]);
+
+    /** Un género se ve si todos los de arriba están abiertos; al buscar, todo abre. */
+    const [generosAbiertos, setGenerosAbiertos] = useState<Set<string>>(new Set());
+    const alternarGenero = (camino: string) => setGenerosAbiertos(prev => {
+        const next = new Set(prev);
+        next.has(camino) ? next.delete(camino) : next.add(camino);
+        return next;
+    });
+    const visible = (arriba: string[]) => !!search.trim() || arriba.every(c => generosAbiertos.has(c));
 
     const getStockStatusColor = (item: Item) => {
         if (item.minStock <= 0) return 'bg-papel-borde text-tinta';
@@ -241,6 +287,22 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, movements =
                             </div>
                         );
                     }
+                    if (fila.tipo === 'genero') {
+                        if (!visible(fila.arriba)) return null;
+                        const abierto = visible([...fila.arriba, fila.camino]);
+                        return (
+                            <button key={`genero-${fila.camino}`} type="button" onClick={() => alternarGenero(fila.camino)}
+                                className="w-full flex items-center gap-2 px-3 py-2 bg-marca-suave/40 text-left active:bg-papel-hondo"
+                                style={{ paddingLeft: `${0.75 + fila.arriba.length * 0.9}rem` }}>
+                                <svg className={`w-3.5 h-3.5 text-marca-oscuro transition-transform flex-shrink-0 ${abierto ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                </svg>
+                                <span className="flex-1 min-w-0 truncate text-sm font-black text-marca-oscuro">📂 {fila.nombre}</span>
+                                <span className="text-[11px] text-tinta-tenue flex-shrink-0">{fila.cuantos} fam. · {fila.total}</span>
+                            </button>
+                        );
+                    }
+                    if (!visible(fila.arriba)) return null;
                     const { canonical, species } = fila.cluster;
                     const isExpanded = expandedGenus.has(canonical) || species.length === 1;
                     const totalQty = species.reduce((s, i) => s + i.quantity, 0);
@@ -248,7 +310,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, movements =
                     const singleItem = species.length === 1 ? species[0] : null;
 
                     return (
-                        <div key={canonical}>
+                        <div key={canonical} style={fila.arriba.length ? { marginLeft: `${fila.arriba.length * 0.9}rem` } : undefined}>
                             {/* Genus header */}
                             {/* El nombre en su PROPIO renglón. Antes iba peleando la línea
                                 con la cantidad, el estado y tres iconos: en 390 px le
@@ -392,6 +454,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, movements =
                                                     <svg className={`w-3 h-3 text-tinta-tenue transition-transform flex-shrink-0 ${isExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                                                     </svg>
+                                                    {rutaDe(species) && <span className="text-xs font-semibold text-marca-oscuro">{partirRuta(rutaDe(species)).join(' › ')} ›</span>}
                                                     {emoji} {canonical}
                                                     <span className="text-[10px] font-semibold bg-papel-borde text-tinta-suave px-1.5 py-0.5 rounded-full">{species.length} especies</span>
                                                 </div>

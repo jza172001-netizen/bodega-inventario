@@ -240,3 +240,88 @@ const masUsada = (valores: string[]): string => {
     return [...cuenta.entries()]
         .sort((a, b) => b[1] - a[1] || enMayuscula(a[0]) - enMayuscula(b[0]) || a[0].localeCompare(b[0], 'es'))[0][0];
 };
+
+// ─── Géneros por encima de la familia ─────────────────────────────────────
+
+/**
+ * Un género de la bodega, con sus subgéneros y sus familias.
+ *
+ * Juli lo dijo así: *"tubería, y me salen accesorios y tubos; me meto a
+ * accesorios y no me salen de una vez las pulgadas, me salen cuáles accesorios
+ * hay; me meto al accesorio y ya sí me salen las pulgadas — esa ya es la
+ * especie. Todo lo anterior son géneros y subgéneros"*.
+ *
+ *   Tubería                    ← género      (ruta)
+ *    ├ Accesorios              ← subgénero   (ruta)
+ *    │   ├ Codos               ← familia     (construirArbol, sin cambios)
+ *    │   │   2" · 4" · 6"      ← especie: el ítem con su medida
+ *    │   └ Y …
+ *    └ Tubos                   ← familia
+ *        Naranja → 2"
+ *
+ * La profundidad no es fija: la ruta es texto con los niveles separados por
+ * « / », y mañana puede tener uno más sin tocar nada.
+ */
+export interface Nodo {
+    nombre: string;
+    /** La ruta completa hasta acá: "Tubería / Accesorios". Vacía en la raíz. */
+    camino: string;
+    hijos: Nodo[];
+    familias: Arbol[];
+    total: number;
+    cuantos: number;
+}
+
+export const SEPARADOR_RUTA = ' / ';
+
+/** "Tubería / Accesorios" → ["Tubería", "Accesorios"]. Los tramos vacíos no cuentan. */
+export const partirRuta = (ruta?: string): string[] =>
+    (ruta ?? '').split('/').map(t => t.trim().replace(/\s+/g, ' ')).filter(Boolean);
+
+export const unirRuta = (tramos: string[]): string =>
+    tramos.map(t => t.trim()).filter(Boolean).join(SEPARADOR_RUTA);
+
+/**
+ * El árbol completo: géneros anidados y, al final de cada ruta, las familias.
+ *
+ * Si ningún ítem tiene ruta, la raíz no tiene hijos y sus familias son
+ * exactamente las de `construirArbol` — la bodega se ve igual que antes.
+ * «Tubería» y «tuberia» son un solo género, por la misma regla que junta
+ * «Extension» con «Extensiones».
+ */
+export const construirRuta = (items: Item[]): Nodo => {
+    const armar = (losDeAca: Array<{ item: Item; tramos: string[] }>, nombre: string, arriba: string[]): Nodo => {
+        const sueltos: Item[] = [];
+        const porTramo = new Map<string, Array<{ item: Item; tramos: string[] }>>();
+        for (const x of losDeAca) {
+            if (x.tramos.length === 0) { sueltos.push(x.item); continue; }
+            const clave = raizDeFamilia(x.tramos[0]);
+            if (!porTramo.has(clave)) porTramo.set(clave, []);
+            porTramo.get(clave)!.push(x);
+        }
+        const camino = unirRuta(arriba);
+        const hijos = [...porTramo.values()]
+            .map(deEste => {
+                const suNombre = masUsada(deEste.map(x => x.tramos[0]));
+                return armar(deEste.map(x => ({ item: x.item, tramos: x.tramos.slice(1) })), suNombre, [...arriba, suNombre]);
+            })
+            .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+        return {
+            nombre,
+            camino,
+            hijos,
+            familias: construirArbol(sueltos),
+            total: losDeAca.reduce((s, x) => s + x.item.quantity, 0),
+            cuantos: losDeAca.length,
+        };
+    };
+    return armar(items.map(item => ({ item, tramos: partirRuta(item.ruta) })), '', []);
+};
+
+/** Todos los caminos que existen, de cualquier nivel, para ofrecerlos como destino. */
+export const caminosDe = (raiz: Nodo): string[] => {
+    const salida: string[] = [];
+    const recorrer = (n: Nodo) => { if (n.camino) salida.push(n.camino); n.hijos.forEach(recorrer); };
+    recorrer(raiz);
+    return salida;
+};

@@ -20,7 +20,9 @@
 import { InventoryType, Item, Movement, MovementType } from '../types.js';
 import { getActiveLoans, isAsset } from '../utils/inventory.js';
 import { tipoExigeObra } from './despacho.js';
-import type { LineaLote, LoteParseado } from '../utils/lote.js';
+import { medidaDicha } from '../utils/lote.js';
+import type { ItemLote, LineaLote, LoteParseado } from '../utils/lote.js';
+import { medidaDe, sinMedida, valorDeMedida } from '../utils/medida.js';
 
 export type TipoAlerta =
     | 'persona'          // no se sabe quién es (no existe o hay dos parecidos)
@@ -41,8 +43,44 @@ export interface Alerta {
      * `mirar`: no falta nada, pero algo no cuadra; hay que tocar «✓ Verificado»
      * después de mirarlo. Mover el elemento a otra persona lo vuelve a pedir.
      */
-    nivel: 'decidir' | 'mirar';
+    /**
+     * `aviso`: se muestra y no frena. Es el «no hay existencia: entra lo que
+     * falta y sale», que es lo NORMAL en esta bodega y ya se consintió arriba
+     * con «Lo que no haya, cargalo». Pedir un toque por cada uno eran treinta
+     * toques en una mañana de sesenta cosas (medido con la prueba de volumen).
+     */
+    nivel: 'decidir' | 'mirar' | 'aviso';
+    /**
+     * Cuando la duda es SOLO de medida —«3 codos» y hay de 1/2", 2" y 4"—, las
+     * opciones como botones. Primero se sabe el accesorio, después la pulgada.
+     */
+    medidas?: OpcionMedida[];
 }
+
+export interface OpcionMedida { itemId: string; etiqueta: string; medida: string }
+
+/**
+ * Las medidas entre las que se duda: los ítems que son la MISMA cosa que los
+ * candidatos y solo cambian en la medida. Se buscan en toda la bodega, no solo
+ * entre los cuatro candidatos del buscador, para que salgan todas.
+ *
+ * Si los candidatos son de dos cosas distintas (codos y semicodos), el botón
+ * lleva el nombre completo; si son una sola, basta la medida.
+ */
+export const opcionesDeMedida = (it: ItemLote, items: Item[]): OpcionMedida[] => {
+    const llaves = new Set(it.candidatos.filter(c => medidaDe(c.name)).map(c => sinMedida(c.name)));
+    if (llaves.size === 0) return [];
+    const deEsas = items.filter(i => llaves.has(sinMedida(i.name)) && medidaDe(i.name));
+    if (deEsas.length < 2) return [];
+    const vecesMedida = new Map<string, number>();
+    for (const i of deEsas) vecesMedida.set(medidaDe(i.name)!, (vecesMedida.get(medidaDe(i.name)!) ?? 0) + 1);
+    return deEsas
+        .map(i => {
+            const medida = medidaDe(i.name)!;
+            return { itemId: i.id, medida, etiqueta: llaves.size > 1 || vecesMedida.get(medida)! > 1 ? i.name : medida };
+        })
+        .sort((a, b) => valorDeMedida(a.medida) - valorDeMedida(b.medida) || a.etiqueta.localeCompare(b.etiqueta, 'es'));
+};
 
 export interface Contexto {
     items: Item[];
@@ -88,7 +126,10 @@ export const verificarLote = (lote: LoteParseado, c: Contexto): {
 
     for (const l of lote.lineas) {
         // ── Quién ──
-        if (!l.persona && !l.crear) {
+        // Dudosa CON alguien elegido también se pregunta: el buscador escoge el
+        // primero de dos igual de parecidos («Juan» y «Juan Pablo»), y
+        // registrarlo sin preguntar es el error con cara de correcto.
+        if ((!l.persona || l.dudosa) && !l.crear) {
             anotar(porLinea, l.id, {
                 tipo: 'persona', nivel: 'decidir',
                 texto: l.candidatosPersona.length > 1 && l.dudosa
@@ -124,10 +165,19 @@ export const verificarLote = (lote: LoteParseado, c: Contexto): {
         // ── Cada elemento ──
         const quien = l.paraId ?? l.persona?.id;
         for (const it of l.items) {
-            if (!it.item && !c.nuevos.has(it.id)) {
+            // Dudoso con ítem elegido también: «1 pulidora» con una grande y una
+            // pequeña quedaba registrada como la primera, sin preguntar.
+            if ((!it.item || it.dudoso) && !c.nuevos.has(it.id)) {
+                const medidas = opcionesDeMedida(it, c.items);
+                const dicha = medidaDicha(it.nombre);
                 anotar(porItem, it.id, {
                     tipo: 'elemento', nivel: 'decidir',
-                    texto: it.candidatos.length ? `«${it.nombre}»: ¿cuál de los parecidos es?` : `«${it.nombre}» no está en el inventario. ¿Cuál es, o se crea?`,
+                    texto: medidas.length && dicha
+                        ? `No hay «${dicha.base}» de ${dicha.medida}. ¿Cuál medida es, o se crea?`
+                        : medidas.length
+                            ? `«${it.nombre}»: ¿de qué medida?`
+                            : it.candidatos.length ? `«${it.nombre}»: ¿cuál de los parecidos es?` : `«${it.nombre}» no está en el inventario. ¿Cuál es, o se crea?`,
+                    ...(medidas.length ? { medidas } : {}),
                 });
                 continue;
             }
@@ -143,7 +193,7 @@ export const verificarLote = (lote: LoteParseado, c: Contexto): {
                 });
             } else if (falta > 0) {
                 anotar(porItem, it.id, {
-                    tipo: 'falta_stock', nivel: 'mirar',
+                    tipo: 'falta_stock', nivel: 'aviso',
                     texto: `No hay ${item.name} registrada suficiente: se cargarían ${falta} como «no estaba registrado».`,
                 });
             }

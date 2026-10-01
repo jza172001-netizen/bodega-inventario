@@ -80,21 +80,26 @@ export const raizDeFamilia = (familia: string): string => {
 export const editDistance = (a: string, b: string): number => {
     if (a === b) return 0;
     if (a.length > 40 || b.length > 40) return Math.abs(a.length - b.length);
-    const dp: number[][] = Array.from({ length: a.length + 1 }, (_, i) =>
-        Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
-    );
+    // Tres filas que se reciclan, no una matriz nueva por llamada. Leer un
+    // bloque de sesenta cosas contra la bodega real hace decenas de miles de
+    // comparaciones, y armar la matriz era el 75 % del tiempo (medido el 1-oct).
+    const n = b.length;
+    let dosAtras: number[] = new Array(n + 1).fill(0);
+    let atras: number[] = Array.from({ length: n + 1 }, (_, j) => j);
+    let fila: number[] = new Array(n + 1).fill(0);
     for (let i = 1; i <= a.length; i++) {
-        for (let j = 1; j <= b.length; j++) {
-            dp[i][j] = a[i - 1] === b[j - 1]
-                ? dp[i - 1][j - 1]
-                : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+        fila[0] = i;
+        for (let j = 1; j <= n; j++) {
+            let v = a[i - 1] === b[j - 1]
+                ? atras[j - 1]
+                : 1 + Math.min(atras[j], fila[j - 1], atras[j - 1]);
             // Transposición: "ab" ↔ "ba" cuesta 1, no 2.
-            if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
-                dp[i][j] = Math.min(dp[i][j], dp[i - 2][j - 2] + 1);
-            }
+            if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) v = Math.min(v, dosAtras[j - 2] + 1);
+            fila[j] = v;
         }
+        [dosAtras, atras, fila] = [atras, fila, dosAtras];
     }
-    return dp[a.length][b.length];
+    return atras[n];
 };
 
 /**

@@ -396,4 +396,29 @@ grupo('EL MISMO PEDIDO POR EL CHAT Y POR EL BLOQUE DA LO MISMO', () => {
     igual(b.visto.enviados.map(clave).sort(), enviadosChat.map(clave).sort(), 'mismos movimientos por las dos puertas');
 });
 
+grupo('una mañana real: 10 personas, 60 cosas — ni una perdida, ni una repetida', () => {
+    /**
+     * El problema que Juli nombró para el viernes: «procesar cantidad de
+     * registros». Diez trabajadores, seis cosas cada uno, la mitad sin
+     * existencia (entra lo que falta y sale). Por los manejadores REALES.
+     */
+    const nombres = ['Pala', 'Martillo', 'Pica', 'Palustre', 'Machete', 'Almadana', 'Tenazas', 'Nivel', 'Llana', 'Balde',
+        'Carretilla', 'Escalera', 'Flexometro', 'Segueta', 'Barra', 'Cincel', 'Serrucho', 'Hombresolo', 'Alicate', 'Zapapico'];
+    const inventario = nombres.map((n, k) => ficha(`i${k}`, n, k % 2 ? 0 : 50));
+    const gente: Personnel[] = Array.from({ length: 10 }, (_, k) => ({ id: `p${k}`, name: `Trabajador${String.fromCharCode(65 + k)}` }));
+    const texto = gente.map((g, k) => `${g.name}: ` + Array.from({ length: 6 }, (_, j) => `${1 + j % 3} ${nombres[(k * 6 + j) % 20].toLowerCase()}`).join(', ')).join('\n');
+
+    const t0 = performance.now();
+    const p = panel(inventario, texto, true, 0, { personal: gente, obras: [OBRA], obra: OBRA.id });
+    p.fn.registrarLote();
+    const ms = performance.now() - t0;
+
+    const salidas = p.visto.enviados.filter(m => m.type === MovementType.CHECK_OUT);
+    igual(salidas.length, 60, 'las 60 salieron');
+    igual(new Set(salidas.map(m => `${m.personnelId}|${m.itemId}`)).size, 60, 'cada una una sola vez, a su persona');
+    igual(pendientes(p.c), [], 'nada se quedó en pantalla');
+    esCierto(salidas.every(m => m.projectId === OBRA.id), 'todas con su obra');
+    esCierto(ms < 2000, `leer, verificar y registrar en menos de 2 s (tomó ${Math.round(ms)} ms)`);
+});
+
 await cerrar();

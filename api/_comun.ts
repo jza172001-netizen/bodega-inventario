@@ -79,6 +79,7 @@ export const filaAItem = (r: Fila): Item => ({
     color: texto(r.color),
     brand: texto(r.brand),
     familia: texto(r.familia),
+    ruta: texto(r.ruta),
     accessories: (r.accessories as Item['accessories']) ?? undefined,
     reparacion: r.reparacion ? {
         ...(r.reparacion as Record<string, unknown>),

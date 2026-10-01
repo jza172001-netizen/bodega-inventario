@@ -2,6 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import { Item } from '../types';
 import { familiaDe, nombreCorregido, normStr, esParecido } from '../utils/genus';
+import { OrganizarBodega } from './OrganizarBodega';
 
 interface Props {
     items: Item[];
@@ -28,6 +29,9 @@ const formaMandante = (formas: string[]): string => {
  * rápida de que deje de leerlas.
  */
 export const ReviewFamiliesView: React.FC<Props> = ({ items, onEditItem, onGoBack, onBehaviorLog }) => {
+    // «Organizar» primero: es lo que se usa. «Por confirmar» son las
+    // sugerencias viejas del nombre, que casi siempre quedan vacías.
+    const [pestana, setPestana] = useState<'organizar' | 'confirmar'>('organizar');
     const [separando, setSeparando] = useState<string | null>(null);
     const [fuera, setFuera] = useState<Set<string>>(new Set());
     // Ítems a los que el bodeguero le dijo «no» a la corrección del nombre.
@@ -122,14 +126,25 @@ export const ReviewFamiliesView: React.FC<Props> = ({ items, onEditItem, onGoBac
             <div className="flex items-center gap-2">
                 <button onClick={onGoBack} className="text-tinta-tenue hover:text-tinta-suave text-xl leading-none">←</button>
                 <div>
-                    <h1 className="text-xl font-black text-tinta">Revisar agrupaciones</h1>
+                    <h1 className="text-xl font-black text-tinta">Organizar bodega</h1>
                     <p className="text-xs text-tinta-tenue mt-0.5">
                         La app propone; vos decidís. Lo que confirmes queda guardado.
                     </p>
                 </div>
             </div>
 
-            {pendientes.length === 0 ? (
+            <div className="flex gap-1 rounded-xl bg-papel-hondo p-1">
+                {([['organizar', 'Organizar'], ['confirmar', `Por confirmar${pendientes.length ? ` (${pendientes.length})` : ''}`]] as const).map(([k, etiqueta]) => (
+                    <button key={k} onClick={() => setPestana(k)}
+                        className={`flex-1 py-1.5 text-xs font-black rounded-lg ${pestana === k ? 'bg-papel text-tinta shadow-sm' : 'text-tinta-tenue'}`}>
+                        {etiqueta}
+                    </button>
+                ))}
+            </div>
+
+            {pestana === 'organizar' ? (
+                <OrganizarBodega items={items} onEditItem={onEditItem} onBehaviorLog={onBehaviorLog} />
+            ) : pendientes.length === 0 ? (
                 <div className="text-center py-20 text-tinta-tenue">
                     <p className="text-4xl mb-3">✅</p>
                     <p className="font-semibold text-tinta-suave">No queda nada por revisar</p>
