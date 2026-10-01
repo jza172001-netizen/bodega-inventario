@@ -8,7 +8,7 @@
  *
  * Los casos de acá salen de bugs reales documentados en el propio código.
  */
-import { familiaDe, raizDeFamilia, looseMatch, sameGenus, getGenus, normStr } from '../utils/genus';
+import { familiaDe, raizDeFamilia, looseMatch, sameGenus, getGenus, normStr, editDistance } from '../utils/genus';
 import { igual, esCierto, grupo, cerrar } from './correr';
 
 grupo('familiaDe — la primera palabra', () => {
@@ -51,6 +51,19 @@ grupo('normStr y getGenus', () => {
     igual(normStr('  Duván  '), 'duvan', 'y los espacios de sobra');
     igual(getGenus('Guantes (Negro · Nn)'), 'Guantes', 'quita el paréntesis del final');
     igual(getGenus('Pulidora grande'), 'Pulidora grande', 'sin paréntesis no toca nada');
+});
+
+grupo('editDistance: errores de dedo contados como los cuenta un dedo', () => {
+    // Se reescribió el 1-oct con filas recicladas (era el 75 % del tiempo de
+    // leer un bloque). Estos valores son los de la versión de matriz.
+    igual(editDistance('amrtillo', 'martillo'), 1, 'dos letras cambiadas de puesto: UN error');
+    igual(editDistance('ab', 'ba'), 1, 'la transposición mínima');
+    igual(editDistance('pulidora', 'peludora'), 2, 'dos letras distintas (u→e, i→u)');
+    igual(editDistance('', 'pala'), 4, 'desde vacío');
+    igual(editDistance('pala', ''), 4, 'hasta vacío');
+    igual(editDistance('palustre', 'pala'), 5, 'largo distinto');
+    igual(editDistance('ca', 'abc'), 3, 'transposición + inserción: la variante restringida (OSA)');
+    igual(editDistance('taladro', 'taladro'), 0, 'iguales');
 });
 
 await cerrar();

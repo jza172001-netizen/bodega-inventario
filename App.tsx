@@ -91,6 +91,7 @@ const ETIQUETAS_ITEM: import('./utils/cambios').Etiquetas<Item> = {
     inventoryType: 'tipo',
     category: 'categoría',
     familia: 'familia',
+    ruta: 'género',
     color: 'color',
     brand: 'marca',
 };
@@ -1158,7 +1159,7 @@ const App: React.FC = () => {
         help: 'Ayuda',
         whatsapp: 'WhatsApp',
         pickup: 'A Recoger',
-        familias: 'Agrupar ítems',
+        familias: 'Organizar bodega',
         traceability: 'Trazabilidad',
         papelera: 'Papelera',
         pedidos: 'Lista de pedidos',
@@ -2175,13 +2176,12 @@ const App: React.FC = () => {
                         {userRole !== UserRole.VISITOR && (
                             <NavItem icon={PersonnelIcon} label="Personal" onClick={() => selectView('personnel')} isActive={effectiveView === 'personnel'} />
                         )}
-                        {/* "Agrupar ítems" sale de la barra: de 77 ítems, 25 nunca
-                            tuvieron familia confirmada y la separación no se usó ni
-                            una vez — el árbol la deduce del nombre igual de bien, y
-                            para un ítem suelto está el campo Familia al editarlo.
-                            La pantalla NO se borra: la vista 'familias' y
-                            ReviewFamiliesView siguen enteros, con su autocorrección.
-                            Volver a enlazarla es poner acá el NavItem otra vez. */}
+                        {/* Vuelve a la barra como «Organizar bodega»: ya no es solo
+                            confirmar sugerencias (que casi nunca se usó), es donde Juli
+                            arma Tubería › Accesorios › Codos › 2" él mismo. */}
+                        {userRole !== UserRole.VISITOR && (
+                            <NavItem icon={OrganizarIcon} label="Organizar bodega" onClick={() => selectView('familias')} isActive={effectiveView === 'familias'} />
+                        )}
                     </nav>
                 </div>
 
@@ -2524,6 +2524,12 @@ const App: React.FC = () => {
 const QuestionMarkIcon: React.FC<{ className?: string }> = ({ className }) => (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
+    </svg>
+);
+
+const OrganizarIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
     </svg>
 );
 

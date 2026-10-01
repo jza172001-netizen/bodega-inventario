@@ -50,6 +50,12 @@ Campos, en ese orden: número · hora · persona · obra · lugar · elementos.
 - Escribí personas y cosas COMO LAS DIJERON. No corrijas ni cambies
   «pala» por «palín». No clasifiques: clavos, un bisturí, unos guantes,
   todo va igual.
+- Si dicen la MEDIDA, va pegada a la cosa: «3 codos de 2», «1 tubo de
+  media». Si no la dicen, NO la pongás: la app pregunta la medida con
+  botones.
+- Si dicen color o marca de una herramienta, escribilos: «1 pulidora
+  grande amarilla Stanley». Hay varias pulidoras grandes; sin eso, la app
+  pregunta cuál.
 - Si piden corregir: «el 3 era para Juan» → corregí el #3 y mostralo de nuevo.
 - Si no es una salida (devolución, traslado, hallazgo, daño, pedido), anotala
   aparte con letra en vez de número: «✓ D1 · 08:10 · devolución · …».
@@ -147,8 +153,9 @@ Carlos: 2 bultos de cemento
 ```
 
 y una ficha de devolución para Jhon. Pegá el bloque en la app: la
-verificación de la app tiene que preguntarte por Alex (si es oficial) y por
-cualquier persona que no exista, y nada más.
+verificación de la app tiene que preguntarte por Alex (si es oficial), por
+cualquier persona que no exista y por **cuál pulidora** (hay varias grandes y
+pequeñas: la app ya no escoge la primera por su cuenta), y nada más.
 
 **Comprobá también la hora:** en el primer mensaje, ¿el Gem puso la hora
 real o «hora ?»? Si puso una hora que no era, decile que use «hora ?» y la

@@ -111,6 +111,12 @@ export interface Item {
     reparacion?: EstadoReparacion;
     /** Familia confirmada por el usuario. Sin ella se usa la sugerencia del nombre. */
     familia?: string;
+    /**
+     * Los géneros por encima de la familia, de lo general a lo particular,
+     * separados por « / »: "Tubería / Accesorios". La familia (Codo) va
+     * debajo, y la especie es el ítem con su medida. Vacío: va en la raíz.
+     */
+    ruta?: string;
     /** Cuándo se tocó por última vez. Es lo que decide quién gana cuando dos
      *  teléfonos traen la misma fila distinta. Ver `masReciente` en App.tsx. */
     updatedAt?: Date;

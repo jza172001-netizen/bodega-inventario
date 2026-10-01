@@ -1304,15 +1304,20 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                             )}
                             <div className="flex items-center gap-2">
                                 <span className="text-[11px] font-black text-tinta flex-shrink-0">{l.personaTexto}</span>
-                                <select value={l.persona?.id ?? (l.crear ? '__crear__' : '')} onChange={e => {
+                                {/* Dudosa: NADA preseleccionado. Con el primer parecido puesto,
+                                    escoger ese mismo no disparaba el cambio y la duda no se
+                                    podía resolver confirmando. */}
+                                <select value={l.crear ? '__crear__' : l.dudosa ? '' : (l.persona?.id ?? '')} onChange={e => {
                                         if (e.target.value === '__crear__') {
                                             mapearLinea(l.id, x => ({ ...x, persona: undefined, crear: { nombre: x.personaTexto, liderId: x.cuadrillaDe?.id } }));
                                         } else fijarPersona(l.id, e.target.value);
                                     }}
                                     className={`${sel} flex-1 max-w-none ${l.persona || l.crear ? '' : 'border-atencion'}`}>
                                     <option value="">¿Quién es?</option>
-                                    {!l.persona && <option value="__crear__">➕ Crear «{l.personaTexto}»</option>}
-                                    {personnel.map(p => <option key={p.id} value={p.id}>{p.name}{p.isTeamLeader ? ' 👷' : ''}</option>)}
+                                    {(!l.persona || l.dudosa) && <option value="__crear__">➕ Crear «{l.personaTexto}»</option>}
+                                    {l.dudosa && l.candidatosPersona.map(p => <option key={`c${p.id}`} value={p.id}>¿{p.name}?</option>)}
+                                    {personnel.filter(p => !(l.dudosa && l.candidatosPersona.some(c => c.id === p.id)))
+                                        .map(p => <option key={p.id} value={p.id}>{p.name}{p.isTeamLeader ? ' 👷' : ''}</option>)}
                                 </select>
                             </div>
 
@@ -1381,12 +1386,12 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                             onChange={e => fijarCantidad(it.id, parseFloat(e.target.value) || 1)}
                                             className="w-14 text-[11px] border border-papel-borde rounded-lg px-1.5 py-1 bg-papel text-tinta text-center" />
                                         <select
-                                            value={nace ? '__nuevo__' : (it.item?.id ?? '')}
+                                            value={nace ? '__nuevo__' : it.dudoso ? '' : (it.item?.id ?? '')}
                                             onChange={e => {
                                                 if (e.target.value === '__nuevo__') marcarNuevo(it.id, it.nombre);
                                                 else { desmarcarNuevo(it.id); fijarItem(it.id, e.target.value); }
                                             }}
-                                            className={`${sel} flex-1 max-w-none ${it.item || nace ? '' : 'border-atencion'}`}>
+                                            className={`${sel} flex-1 max-w-none ${(it.item && !it.dudoso) || nace ? '' : 'border-atencion'}`}>
                                             <option value="">{it.nombre} — ¿cuál es?</option>
                                             <option value="__nuevo__">➕ Crear «{it.nombre}»</option>
                                             {it.candidatos.map(c => <option key={c.id} value={c.id}>{c.name} · {c.quantity} {c.unit}</option>)}
@@ -1427,10 +1432,34 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                         </p>
                                     )}
 
+                                    {/* Lo que falta decidir del elemento. Si la duda es solo de
+                                        medida, las medidas van como botones: primero se sabe
+                                        el accesorio, después la pulgada. */}
+                                    {!nace && (verif.porItem.get(it.id) ?? []).filter(a => a.nivel === 'decidir').map((a, i) => (
+                                        <div key={`d${i}`} className="pl-[3.9rem] space-y-1">
+                                            <p className="text-[10px] font-semibold text-atencion">⚠ {a.texto}</p>
+                                            {a.medidas && (
+                                                <div className="flex flex-wrap gap-1">
+                                                    {a.medidas.map(m => (
+                                                        <button key={m.itemId} type="button" onClick={() => fijarItem(it.id, m.itemId)}
+                                                            className="px-2.5 py-1 rounded-full text-[11px] font-black border border-marca bg-papel text-tinta hover:bg-marca transition-colors">
+                                                            {m.etiqueta}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+
+                                    {/* Lo que se avisa y no frena: no hay existencia, entra y sale. */}
+                                    {(verif.porItem.get(it.id) ?? []).filter(a => a.nivel === 'aviso').map((a, i) => (
+                                        <p key={`a${i}`} className="text-[10px] text-tinta-tenue pl-[3.9rem]">ℹ {a.texto}{!nace ? ` (hay ${hay})` : ''}</p>
+                                    ))}
+
                                     {/* Lo que no cuadra contra la bodega: se mira y se marca. */}
                                     {(verif.porItem.get(it.id) ?? []).filter(a => a.nivel === 'mirar').map((a, i) => (
                                         <div key={i} className="flex items-start gap-1.5 pl-[3.9rem]">
-                                            <p className="text-[10px] text-atencion flex-1">⚠ {a.texto}{a.tipo === 'falta_stock' && !nace ? ` (hay ${hay})` : ''}</p>
+                                            <p className="text-[10px] text-atencion flex-1">⚠ {a.texto}</p>
                                             <button type="button" onClick={() => alternarMirado(it.id)}
                                                 className={`text-[10px] font-black px-2 py-0.5 rounded-full border flex-shrink-0 ${
                                                     loteMirados.has(it.id) ? 'border-bien bg-bien text-papel' : 'border-atencion text-atencion'}`}>

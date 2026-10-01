@@ -26,6 +26,7 @@
 import { Item, Personnel, Project } from '../types.js';
 import { rankMatches, Scored } from './search.js';
 import { normStr, raizDeFamilia } from './genus.js';
+import { medidaDe, valorDeMedida } from './medida.js';
 
 /** Un ítem pedido dentro de un renglón. */
 export interface ItemLote {
@@ -214,7 +215,72 @@ const escoger = <T,>(rank: { value: T; score: number }[]): { elegido?: T; dudoso
  */
 const UNIDAD_DICHA = /^(?:pares?|bultos?|metros?|galones?|kilos?|kg|libras?|cajas?|rollos?|unidades?|paquetes?|cuñetes?|bolsas?|tarros?|latas?|varillas?|tubos?)\s+de\s+/i;
 
+/**
+ * La medida que se DIJO al pedir: «2 codos de 4», «codo de media», «tubo de
+ * tres cuartos», «unión 2 pulgadas». Devuelve la medida en la forma de la
+ * bodega (`4"`, `1/2"`) y lo que queda del nombre sin ella.
+ *
+ * Antes «codos de 4» no encontraba NADA: el buscador comparaba la frase entera
+ * contra «Codos 4"» y el «de» la dejaba por debajo del mínimo.
+ */
+const MEDIDA_EN_PALABRAS: Array<[RegExp, string]> = [
+    [/\s+(?:de\s+)?(?:una\s+)?pulgada\s+y\s+media$/i, '1 1/2"'],
+    [/\s+(?:de\s+)?una\s+y\s+media$/i, '1 1/2"'],
+    [/\s+(?:de\s+)?una\s+y\s+cuarto$/i, '1 1/4"'],
+    [/\s+(?:de\s+)?tres\s+cuartos?(?:\s+de\s+pulgada)?$/i, '3/4"'],
+    [/\s+(?:de\s+)?media(?:\s+pulgada)?$/i, '1/2"'],
+    [/\s+(?:de\s+)?(?:una|1)\s+pulgadas?$/i, '1"'],
+    [/\s+(?:de\s+)?dos\s+pulgadas$/i, '2"'],
+    [/\s+(?:de\s+)?tres\s+pulgadas$/i, '3"'],
+    [/\s+(?:de\s+)?cuatro\s+pulgadas$/i, '4"'],
+    [/\s+(?:de\s+)?seis\s+pulgadas$/i, '6"'],
+];
+const MEDIDA_EN_NUMERO = /\s+(?:de\s+)?(\d+\s+\d+\s*\/\s*\d+|\d+\s*\/\s*\d+|\d+(?:[.,]\d+)?)\s*(?:"|''|pulgadas?|pulg\.?)?$/i;
+
+export const medidaDicha = (nombre: string): { base: string; medida: string } | null => {
+    const t = limpiar(nombre);
+    for (const [re, medida] of MEDIDA_EN_PALABRAS) {
+        if (re.test(t)) return { base: limpiar(t.replace(re, '')), medida };
+    }
+    const m = t.match(MEDIDA_EN_NUMERO);
+    if (!m || m.index === 0) return null;
+    const num = m[1].replace(',', '.').replace(/\s*\/\s*/, '/').replace(/\s+/, ' ');
+    const base = limpiar(t.slice(0, m.index));
+    return base ? { base, medida: `${num}"` } : null;
+};
+
+/**
+ * Buscar con la medida: primero la familia sin la medida, después, entre lo
+ * que responde a esa familia, el que tiene ESA medida. Si hay uno, es ese, sin
+ * duda. Si no hay ninguno de esa medida, se ofrece la familia para escoger —
+ * nunca se elige otra medida por parecido: un codo de 2" no es un codo de 4".
+ */
+const buscarConMedida = (items: Item[], nombre: string): { exactos: Item[]; familia: Item[] } | null => {
+    const d = medidaDicha(nombre);
+    if (!d) return null;
+    const familia = itemsQueResponden(d.base, items);
+    const igual = (a: string | null) => !!a && valorDeMedida(a) === valorDeMedida(d.medida);
+    return { exactos: familia.filter(i => igual(medidaDe(i.name))), familia };
+};
+
 const buscarItem = (items: Item[], nombre: string): Scored<Item>[] => {
+    const tal = buscarItemSinMedida(items, nombre);
+    const m = buscarConMedida(items, nombre);
+    if (!m) return tal;
+    if (m.exactos.length > 0) return m.exactos.map(value => ({ value, score: 1000 }));
+    // Nadie tiene la medida dicha. Si el nombre completo ya era inequívoco y el
+    // ítem NO tiene medida propia —«Galón 3 en 1», donde el número no es una
+    // medida—, se respeta.
+    const [primero, segundo] = tal;
+    const claro = primero && primero.score >= MINIMO && (!segundo || primero.score - segundo.score >= MARGEN);
+    if (claro && !medidaDe(primero.value.name)) return tal;
+    // Si no, se ofrece para escoger y NADA queda elegido: un codo de 6" no es
+    // un codo de 5", así sea el único parecido que hay.
+    const opciones = m.familia.length ? m.familia.slice(0, 12) : tal.map(x => x.value);
+    return opciones.map(value => ({ value, score: MINIMO - 1 }));
+};
+
+const buscarItemSinMedida = (items: Item[], nombre: string): Scored<Item>[] => {
     // Primero como se dijo (puede haber un ítem que se llame «Metros de
     // manguera»); si no aparece nada bueno, sin la unidad delante.
     const tal = buscarItemCrudo(items, nombre);
@@ -286,11 +352,25 @@ export const itemsQueResponden = (texto: string, items: Item[], tope = 25): Item
  * ENTRE DOS DÍGITOS es decimal; cualquier otra separa. Por eso el corte pide
  * que la coma no tenga dígito antes o no tenga dígito después.
  */
-const partirItems = (resto: string): string[] =>
-    resto
-        .split(/\s*;\s*|\s*(?:(?<!\d),|,(?!\d))\s*|\s+y\s+|\s+e\s+/i)
-        .map(limpiar)
-        .filter(Boolean);
+const partirItems = (resto: string): string[] => {
+    // Con el separador guardado: hace falta saber si el corte fue por una «y».
+    const partes = resto.split(/(\s*;\s*|\s*(?:(?<!\d),|,(?!\d))\s*|\s+y\s+|\s+e\s+)/i);
+    const salida: string[] = [];
+    for (let k = 0; k < partes.length; k += 2) {
+        const trozo = limpiar(partes[k] ?? '');
+        const antes = salida[salida.length - 1];
+        // «2 Y de 2»: la Y es el ACCESORIO de tubería, no la conjunción. Si lo
+        // que quedó antes de la «y» es una cantidad sola, la «y» era el nombre.
+        if (k > 0 && /^\s+y\s+$/i.test(partes[k - 1]) && antes !== undefined && esCantidadSola(antes)) {
+            salida[salida.length - 1] = trozo ? `${antes} Y ${trozo}` : `${antes} Y`;
+            continue;
+        }
+        if (trozo) salida.push(trozo);
+    }
+    return salida;
+};
+
+const esCantidadSola = (t: string): boolean => /^\d+(?:[.,]\d+)?$/.test(t) || NUMEROS[normStr(t)] !== undefined;
 
 /**
  * Lee el bloque completo.

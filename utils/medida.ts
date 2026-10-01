@@ -104,7 +104,8 @@ export const medidaDe = (nombre: string): string | null => {
     // bodega— no trae ninguna: el "3 en 1" es cómo se llama el aceite. Antes se
     // quedaba con el primer número y el galón entraba como pieza de 3".
     // Mientras no haya campo para una segunda medida, no se inventa.
-    if (/^(a|x|×|por|en)\s*\d/.test(despues)) return null;
+    // «Codos 4"-2"» (nombre real) es una reducción escrita con guion: tampoco.
+    if (/^(a|x|×|por|en|-)\s*\d/.test(despues)) return null;
     return `${num}"`;
 };
 
@@ -127,14 +128,42 @@ export const PULGADAS_ESTANDAR = ['1/2"', '3/4"', '1"', '1 1/4"', '1 1/2"', '2"'
  * familia de palas sería ruido en la pantalla del que está despachando.
  */
 const FAMILIAS_EN_PULGADAS = [
-    'tubo', 'tuberia', 'codo', 'tee', 'te', 'union', 'reduccion', 'adaptador',
-    'buje', 'niple', 'tapon', 'yee', 'sifon', 'registro', 'llave', 'valvula',
+    // «T» e «Y» sueltas son como están escritas en la bodega real («T 2"», «Y 4-2»).
+    'tubo', 'tuberia', 'codo', 'semicodo', 'tee', 'te', 't', 'y', 'yee', 'union', 'reduccion',
+    'adaptador', 'buje', 'niple', 'tapon', 'sifon', 'registro', 'llave', 'valvula',
     'abrazadera', 'soldadura', 'manguera', 'brida', 'copa', 'racor',
 ];
 
-export const seMideEnPulgadas = (familia: string): boolean => {
-    const f = familia.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
-    return FAMILIAS_EN_PULGADAS.some(x => f === x || f.startsWith(x + ' '));
+/** Los accesorios: lo que se le enrosca o se le pega al tubo. */
+// Sin «llave» ni «copa»: también son herramientas (llave inglesa, copa de
+// taladro), y sugerirlas como accesorio de tubo sería adivinar.
+const ACCESORIOS_DE_TUBERIA = new Set(FAMILIAS_EN_PULGADAS.filter(x => !['tubo', 'tuberia', 'manguera', 'llave', 'copa'].includes(x)));
+
+/**
+ * La primera palabra, sin tildes y en singular. Las familias de la bodega están
+ * en PLURAL —«Codos», «Semicodos», «Tubos»— y comparando la palabra tal cual
+ * ninguna se reconocía: los codos de verdad nunca recibían la escalera de
+ * pulgadas. Es la misma regla angosta de `raizDeFamilia` (utils/genus.ts),
+ * repetida acá para no amarrar este archivo, que no importa nada, a otro.
+ */
+const primeraRaiz = (familia: string): string => {
+    const r = familia.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().split(/\s+/)[0] ?? '';
+    // «Bujes» y «Llaves» pierden solo la s; «Uniones» y «Tapones», la «es».
+    const formas = [r, r.length > 3 && r.endsWith('s') ? r.slice(0, -1) : r, r.length > 4 && r.endsWith('es') ? r.slice(0, -2) : r];
+    return formas.find(f => FAMILIAS_EN_PULGADAS.includes(f)) ?? r;
+};
+
+export const seMideEnPulgadas = (familia: string): boolean => FAMILIAS_EN_PULGADAS.includes(primeraRaiz(familia));
+
+/**
+ * El género que se le SUGIERE a una familia de tubería, para el editor:
+ * los tubos van en «Tubería» (la familia Tubos ya es el subgénero), y lo demás
+ * en «Tubería / Accesorios». Es una sugerencia, nunca se aplica sola.
+ */
+export const rutaSugerida = (familia: string): string | null => {
+    const r = primeraRaiz(familia);
+    if (r === 'tubo' || r === 'tuberia') return 'Tubería';
+    return ACCESORIOS_DE_TUBERIA.has(r) ? 'Tubería / Accesorios' : null;
 };
 
 /**
@@ -233,3 +262,15 @@ export const medidasPrestadas = (
  */
 export const nombreCompuesto = (familia: string, genero?: string, denominacion?: string): string =>
     [familia, genero, denominacion].map(p => (p ?? '').trim()).filter(Boolean).join(' ');
+
+/**
+ * El nombre sin la medida, normalizado: «Codos 2"» y «codos 4"» dan «codos».
+ * Sirve para saber qué ítems son la MISMA cosa en distinta medida — la especie
+ * dentro de la familia —, y así ofrecer las medidas como botones al despachar.
+ */
+export const sinMedida = (nombre: string): string =>
+    nombre.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+        .replace(/\s*\([^)]*\)\s*/g, ' ')
+        .split(/\s+/)
+        .filter(t => t && t !== 'de' && !/^[\d½¼¾⅛⅜⅝⅞]/.test(t) && !/^pulg/.test(t) && !/^["']+$/.test(t))
+        .join(' ');

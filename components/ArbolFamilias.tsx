@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { Item } from '../types';
-import { construirArbol, detalleDe } from '../utils/arbol';
+import { Arbol, Nodo, construirRuta, detalleDe } from '../utils/arbol';
 import { tonoDe } from '../utils/colores';
 
 /**
- * La bodega como árbol: familia → variante → ítem.
+ * La bodega como árbol: género → subgénero → … → familia → variante → ítem.
+ * Los géneros son opcionales (`Item.ruta`); sin ellos se ve como siempre.
  *
  * Lo pidió el bodeguero con los clavos —*"abro clavos y me salen las dos
  * familias, y me meto a una y me salen 1 pulgada, 2 pulgadas"*— y aclaró que
@@ -39,7 +40,7 @@ const Punto = ({ variante }: { variante: string }) => {
 
 export const ArbolFamilias: React.FC<Props> = ({ items, fila, escogidos, abrirTodo, className = '' }) => {
     const [abiertas, setAbiertas] = useState<Set<string>>(new Set());
-    const arbol = construirArbol(items);
+    const raiz = construirRuta(items);
 
     const alternar = (llave: string) => setAbiertas(prev => {
         const s = new Set(prev);
@@ -49,73 +50,115 @@ export const ArbolFamilias: React.FC<Props> = ({ items, fila, escogidos, abrirTo
 
     const tieneEscogido = (deLos: Item[]) => !!escogidos && deLos.some(i => escogidos.has(i.id));
 
+    const deNodo = (n: Nodo): Item[] => [...n.familias.flatMap(f => f.ramas.flatMap(r => r.items)), ...n.hijos.flatMap(deNodo)];
+
+    const familia = (a: Arbol, camino: string) => {
+        // Un ítem solo no es una familia: plegarlo sería esconder algo
+        // que ya cabía en una línea.
+        const todosLosDeLaFamilia = a.ramas.flatMap(r => r.items);
+        // Un ítem solo va con su nombre completo. Con el detalle a secas
+        // salía "Nn · 1 disp." y no había forma de saber qué era eso.
+        if (a.cuantos === 1) {
+            return <div key={`${camino}:${a.familia}`}>{fila(todosLosDeLaFamilia[0])}</div>;
+        }
+        const llaveFam = `f:${camino}:${a.familia}`;
+        const abierta = abrirTodo || abiertas.has(llaveFam) || tieneEscogido(todosLosDeLaFamilia);
+        const escogidosAca = escogidos ? todosLosDeLaFamilia.filter(i => escogidos.has(i.id)).length : 0;
+        // Con una sola rama, la rama no separa nada: se salta el nivel.
+        const unaSolaRama = a.ramas.length === 1;
+
+        return (
+            <div key={`${camino}:${a.familia}`}>
+                <button onClick={() => alternar(llaveFam)}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-papel-hondo text-left transition-colors">
+                    <Flecha abierto={abierta} />
+                    <span className="text-sm font-bold text-tinta flex-1 min-w-0 truncate">{a.familia}</span>
+                    {escogidosAca > 0 && (
+                        <span className="text-[9px] font-black text-tinta bg-marca rounded-full px-1.5 py-0.5 flex-shrink-0">{escogidosAca}</span>
+                    )}
+                    <span className="text-[10px] text-tinta-tenue flex-shrink-0">{a.cuantos} · {a.total} disp.</span>
+                </button>
+
+                {abierta && (
+                    <div className="ml-3 pl-2 border-l border-papel-borde space-y-0.5">
+                        {unaSolaRama
+                            ? a.ramas[0].items.map(i => <div key={i.id}>{fila(i, detalleDe(i, a.familia, todosLosDeLaFamilia))}</div>)
+                            : a.ramas.map(r => {
+                                const llaveRama = `r:${camino}:${a.familia}:${r.variante}`;
+                                const abiertaR = abrirTodo || abiertas.has(llaveRama) || tieneEscogido(r.items);
+                                const escogidosRama = escogidos ? r.items.filter(i => escogidos.has(i.id)).length : 0;
+                                return (
+                                    <div key={llaveRama}>
+                                        <button onClick={() => alternar(llaveRama)}
+                                            className="w-full flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-papel-hondo text-left transition-colors">
+                                            <Flecha abierto={abiertaR} />
+                                            <Punto variante={r.variante} />
+                                            <span className="text-xs font-semibold text-tinta-suave flex-1 min-w-0 truncate">
+                                                {/* Una "Concretadora" al lado de una "Concretadora Electrica":
+                                                    la rama de la sencilla se llama como la familia, que es como
+                                                    la pide el bodeguero. */}
+                                                {r.variante === '—' ? a.familia : r.variante}
+                                            </span>
+                                            {escogidosRama > 0 && (
+                                                <span className="text-[9px] font-black text-tinta bg-marca rounded-full px-1.5 py-0.5 flex-shrink-0">{escogidosRama}</span>
+                                            )}
+                                            <span className="text-[10px] text-tinta-tenue flex-shrink-0">{r.items.length} · {r.total}</span>
+                                        </button>
+                                        {abiertaR && (
+                                            <div className="ml-3 pl-2 border-l border-papel-borde space-y-0.5">
+                                                {r.items.map(i => <div key={i.id}>{fila(i, detalleDe(i, a.familia, todosLosDeLaFamilia))}</div>)}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    /**
+     * Un género: «Tubería» abre «Accesorios» y «Tubos»; «Accesorios» abre los
+     * accesorios que hay; el accesorio abre las pulgadas. Primero el accesorio,
+     * después la pulgada — en ese orden lo pidió Juli.
+     */
+    const contenido = (n: Nodo): React.ReactNode[] => {
+        const entradas: Array<{ nombre: string; nodo?: Nodo; arbol?: Arbol }> = [
+            ...n.hijos.map(h => ({ nombre: h.nombre, nodo: h })),
+            ...n.familias.map(f => ({ nombre: f.familia, arbol: f })),
+        ].sort((x, y) => x.nombre.localeCompare(y.nombre, 'es'));
+        return entradas.map(e => e.nodo ? genero(e.nodo) : familia(e.arbol!, n.camino));
+    };
+
+    const genero = (n: Nodo) => {
+        const llave = `g:${n.camino}`;
+        const losDeAca = deNodo(n);
+        const abierto = abrirTodo || abiertas.has(llave) || tieneEscogido(losDeAca);
+        const escogidosAca = escogidos ? losDeAca.filter(i => escogidos.has(i.id)).length : 0;
+        return (
+            <div key={llave}>
+                <button onClick={() => alternar(llave)}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-papel-hondo text-left transition-colors">
+                    <Flecha abierto={abierto} />
+                    <span className="text-sm font-black text-marca-oscuro flex-1 min-w-0 truncate">📂 {n.nombre}</span>
+                    {escogidosAca > 0 && (
+                        <span className="text-[9px] font-black text-tinta bg-marca rounded-full px-1.5 py-0.5 flex-shrink-0">{escogidosAca}</span>
+                    )}
+                    <span className="text-[10px] text-tinta-tenue flex-shrink-0">{n.cuantos} · {n.total} disp.</span>
+                </button>
+                {abierto && (
+                    <div className="ml-3 pl-2 border-l-2 border-marca/40 space-y-0.5">
+                        {contenido(n)}
+                    </div>
+                )}
+            </div>
+        );
+    };
+
     return (
         <div className={`space-y-0.5 ${className}`}>
-            {arbol.map(a => {
-                // Un ítem solo no es una familia: plegarlo sería esconder algo
-                // que ya cabía en una línea.
-                const todosLosDeLaFamilia = a.ramas.flatMap(r => r.items);
-                // Un ítem solo va con su nombre completo. Con el detalle a secas
-                // salía "Nn · 1 disp." y no había forma de saber qué era eso.
-                if (a.cuantos === 1) {
-                    return <div key={a.familia}>{fila(todosLosDeLaFamilia[0])}</div>;
-                }
-                const llaveFam = `f:${a.familia}`;
-                const abierta = abrirTodo || abiertas.has(llaveFam) || tieneEscogido(todosLosDeLaFamilia);
-                const escogidosAca = escogidos ? todosLosDeLaFamilia.filter(i => escogidos.has(i.id)).length : 0;
-                // Con una sola rama, la rama no separa nada: se salta el nivel.
-                const unaSolaRama = a.ramas.length === 1;
-
-                return (
-                    <div key={a.familia}>
-                        <button onClick={() => alternar(llaveFam)}
-                            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-papel-hondo text-left transition-colors">
-                            <Flecha abierto={abierta} />
-                            <span className="text-sm font-bold text-tinta flex-1 min-w-0 truncate">{a.familia}</span>
-                            {escogidosAca > 0 && (
-                                <span className="text-[9px] font-black text-tinta bg-marca rounded-full px-1.5 py-0.5 flex-shrink-0">{escogidosAca}</span>
-                            )}
-                            <span className="text-[10px] text-tinta-tenue flex-shrink-0">{a.cuantos} · {a.total} disp.</span>
-                        </button>
-
-                        {abierta && (
-                            <div className="ml-3 pl-2 border-l border-papel-borde space-y-0.5">
-                                {unaSolaRama
-                                    ? a.ramas[0].items.map(i => <div key={i.id}>{fila(i, detalleDe(i, a.familia, todosLosDeLaFamilia))}</div>)
-                                    : a.ramas.map(r => {
-                                        const llaveRama = `r:${a.familia}:${r.variante}`;
-                                        const abiertaR = abrirTodo || abiertas.has(llaveRama) || tieneEscogido(r.items);
-                                        const escogidosRama = escogidos ? r.items.filter(i => escogidos.has(i.id)).length : 0;
-                                        return (
-                                            <div key={llaveRama}>
-                                                <button onClick={() => alternar(llaveRama)}
-                                                    className="w-full flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-papel-hondo text-left transition-colors">
-                                                    <Flecha abierto={abiertaR} />
-                                                    <Punto variante={r.variante} />
-                                                    <span className="text-xs font-semibold text-tinta-suave flex-1 min-w-0 truncate">
-                                                        {/* Una "Concretadora" al lado de una "Concretadora Electrica":
-                                                            la rama de la sencilla se llama como la familia, que es como
-                                                            la pide el bodeguero. */}
-                                                        {r.variante === '—' ? a.familia : r.variante}
-                                                    </span>
-                                                    {escogidosRama > 0 && (
-                                                        <span className="text-[9px] font-black text-tinta bg-marca rounded-full px-1.5 py-0.5 flex-shrink-0">{escogidosRama}</span>
-                                                    )}
-                                                    <span className="text-[10px] text-tinta-tenue flex-shrink-0">{r.items.length} · {r.total}</span>
-                                                </button>
-                                                {abiertaR && (
-                                                    <div className="ml-3 pl-2 border-l border-papel-borde space-y-0.5">
-                                                        {r.items.map(i => <div key={i.id}>{fila(i, detalleDe(i, a.familia, todosLosDeLaFamilia))}</div>)}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
-                            </div>
-                        )}
-                    </div>
-                );
-            })}
+            {contenido(raiz)}
         </div>
     );
 };

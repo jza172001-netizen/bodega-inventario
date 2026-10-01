@@ -6,8 +6,8 @@
  * Lo que la pantalla hace con esto lo cubre `tests/pantalla.test.ts`.
  */
 import { InventoryType, Item, Movement, MovementType, Personnel, Project } from '../types';
-import { leerLote, leerHora, partirPersona, moverItem } from '../utils/lote';
-import { verificarLote, Contexto } from '../core/verificacion';
+import { leerLote, leerHora, partirPersona, moverItem, medidaDicha } from '../utils/lote';
+import { verificarLote, listoParaRegistrar, Contexto } from '../core/verificacion';
 import { igual, esCierto, grupo, cerrar } from './correr';
 
 const P: Personnel[] = [{ id: 'alex', name: 'Alex Ferreira', isTeamLeader: true }, { id: 'juan', name: 'Juan Puerta', teamLeaderId: 'alex' }];
@@ -91,13 +91,73 @@ grupo('las alertas de la app contra la BODEGA', () => {
     igual(tipos(verificarLote(r3, ctx({ obraGeneral: undefined })).porLinea, r3.lineas[0].id), ['oficial', 'obra'], 'y la obra, si nadie la contestó');
 
     const r4 = leerLote('Juan: 3 palas', P, I, O);
-    igual(tipos(verificarLote(r4, ctx({ faltantes: new Map([['pala', 2]]) })).porItem, r4.lineas[0].items[0].id), ['falta_stock'], 'falta stock');
+    const v4 = verificarLote(r4, ctx({ faltantes: new Map([['pala', 2]]) }));
+    igual(tipos(v4.porItem, r4.lineas[0].items[0].id), ['falta_stock'], 'falta stock');
+    // Lo normal en esta bodega: no hay existencia, entra y sale. Se AVISA y no
+    // frena — ya se consintió con «Lo que no haya, cargalo».
+    esCierto(listoParaRegistrar(r4.lineas[0], r4.lineas[0].items[0].id, v4, new Set()), 'falta stock no exige un toque por elemento');
     // LA REGLA DEL CHAT (decisión de Juli, 1-oct): la obra solo es obligatoria
     // para el material de consumo. Unos guantes salen «sin proyecto».
     const epp = leerLote('Juan: 1 guantes', P, I, O);
     igual(tipos(verificarLote(epp, ctx()).porLinea, epp.lineas[0].id), [], 'EPP sin proyecto: pasa, como en el chat');
     const sinNada = leerLote('Juan: 1 pala', P, I, O);
     esCierto(!verificarLote(sinNada, ctx()).porItem.has(sinNada.lineas[0].items[0].id), 'lo normal no levanta nada');
+});
+
+// ── Primero el accesorio, después la pulgada ─────────────────────────────
+// Los nombres de tubería que hay en producción (1-oct), tal cual.
+const TUB = ['Codos 2"', 'Codos 4"', 'Codos 6"', 'Codos 1/2"', 'Codos 4"-2"', 'Semicodos 6"', 'Y 2"', 'Y 4"', 'Unión 2"', 'Galón 3 en 1', 'Pulidora grande', 'Pulidora pequeña']
+    .map((n, k) => it(`t${k}`, n, 5, n.startsWith('Pulidora') ? InventoryType.ELECTRICAL_TOOL : InventoryType.SINGLE_USE));
+const elegido = (texto: string) => leerLote(`Juan: ${texto}`, P, TUB, O).lineas[0].items.map(x => [x.item?.name, x.dudoso]);
+
+grupo('la medida DICHA lleva al ítem de esa medida', () => {
+    igual(elegido('2 codos de 4'), [['Codos 4"', false]], '«codos de 4» (antes: nada)');
+    igual(elegido('1 codo de media'), [['Codos 1/2"', false]], '«de media» es 1/2"');
+    igual(elegido('1 unión 2 pulgadas'), [['Unión 2"', false]], '«2 pulgadas»');
+    igual(elegido('1 galón 3 en 1'), [['Galón 3 en 1', false]], 'un número que NO es medida no estorba');
+    igual(medidaDicha('tubo de tres cuartos'), { base: 'tubo', medida: '3/4"' }, 'tres cuartos');
+    igual(medidaDicha('3 palas'), null, 'sin medida, nada');
+    // Codos de 5" no hay: NO se elige el de 4" ni el de 6" por parecido.
+    esCierto(leerLote('Juan: 2 codos de 5', P, TUB, O).lineas[0].items[0].dudoso, 'una medida que no existe queda por decidir');
+    // El caso traicionero: UN solo ítem parecido, de otra medida. Es «claro»
+    // para el buscador, y aun así no es lo que pidieron.
+    const unaTee = [it('tee6', 'Tee 6"', 5, InventoryType.SINGLE_USE)];
+    esCierto(leerLote('Juan: 1 tee de 4', P, unaTee, O).lineas[0].items[0].dudoso, 'la única tee es de 6": pedir de 4 NO la elige');
+    // Y el revés: el número no es medida y el nombre completo es inequívoco.
+    const galones = [it('g31', 'Galón 3 en 1', 5), it('gp', 'Galón pintura', 5)];
+    igual(leerLote('Juan: 1 galón 3 en 1', P, galones, O).lineas[0].items.map(x => [x.item?.name, x.dudoso]), [['Galón 3 en 1', false]],
+        'con otro galón al lado, «3 en 1» sigue siendo ese');
+});
+
+grupo('«Y» es un accesorio, no siempre la conjunción', () => {
+    igual(elegido('2 Y de 2'), [['Y 2"', false]], '«2 Y de 2» es una pieza');
+    igual(elegido('2 codos de 2 y 1 Y de 4').map(x => x[0]), ['Codos 2"', 'Y 4"'], 'la «y» del medio sí separa');
+});
+
+grupo('lo DUDOSO se decide, no se registra con el primero que salió', () => {
+    const tub = ctx({ items: TUB, obraGeneral: 'cristo' });   // los codos son consumo: con obra
+    const r = leerLote('Juan: 3 codos', P, TUB, O);
+    const x = r.lineas[0].items[0];
+    esCierto(x.dudoso, '«3 codos» con varias medidas es dudoso');
+    const v = verificarLote(r, tub);
+    const a = v.porItem.get(x.id) ?? [];
+    igual(a.map(y => [y.tipo, y.nivel]), [['elemento', 'decidir']], 'y eso es una DECISIÓN pendiente');
+    esCierto(!listoParaRegistrar(r.lineas[0], x.id, v, new Set([x.id])), 'ni marcándolo «mirado» pasa');
+    igual(a[0].medidas?.map(m => m.etiqueta), ['1/2"', '2"', '4"', '6"'],
+        'las medidas como botones, en orden (la reducción 4"-2" no tiene UNA medida: va por la lista)');
+    // Al escoger la medida, queda listo.
+    const fijo = { ...r, lineas: [{ ...r.lineas[0], items: [{ ...x, item: TUB.find(i => i.name === 'Codos 2"'), dudoso: false }] }] };
+    esCierto(listoParaRegistrar(fijo.lineas[0], x.id, verificarLote(fijo, tub), new Set()), 'escogida la medida, listo');
+
+    const pul = leerLote('Juan: 1 pulidora', P, TUB, O);
+    const vp = verificarLote(pul, tub).porItem.get(pul.lineas[0].items[0].id) ?? [];
+    igual(vp.map(y => y.tipo), ['elemento'], 'grande o pequeña: se pregunta (antes salía la primera, callada)');
+    igual(vp[0].medidas, undefined, 'y sin botones de medida: no es una duda de medida');
+
+    const dos: Personnel[] = [...P, { id: 'juanp', name: 'Juan Pablo' }];
+    const rp = leerLote('Juan: 1 pala', dos, I, O);
+    esCierto(rp.lineas[0].dudosa && !!rp.lineas[0].persona, '«Juan» con dos Juan: escoge uno pero DUDA');
+    igual(tipos(verificarLote(rp, ctx({ personnel: dos })).porLinea, rp.lineas[0].id), ['persona'], 'y eso se pregunta, no se registra callado');
 });
 
 await cerrar();
