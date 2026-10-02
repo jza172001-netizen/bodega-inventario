@@ -9,12 +9,15 @@ interface UserManagementModalProps {
     isOpen: boolean;
     onClose: () => void;
     users: AppUser[];
-    onAddUser: (user: AppUser) => void;
+    /** Crea el acceso EN EL SERVIDOR y devuelve el código de alta, una vez. */
+    onCrearAcceso: (nombre: string, rol: UserRole) => Promise<{ codigo: string }>;
+    /** Código nuevo para un acceso que todavía no ha entrado (o lo perdió). */
+    onNuevoCodigo: (id: string) => Promise<string>;
     onDeleteUser: (id: string) => void;
-    onEditUser: (user: AppUser) => void;
+    onEditUser: (user: AppUser) => Promise<void>;
 }
 
-export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClose, users, onAddUser, onDeleteUser, onEditUser }) => {
+export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClose, users, onCrearAcceso, onNuevoCodigo, onDeleteUser, onEditUser }) => {
     /**
      * El código de alta recién creado, para mostrárselo UNA vez a quien lo creó.
      *
@@ -27,72 +30,50 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
     const [newName, setNewName] = useState('');
     const [newRole, setNewRole] = useState<UserRole>(UserRole.EMPLOYEE);
     const [editingUserId, setEditingUserId] = useState<string | null>(null);
+    const [guardando, setGuardando] = useState(false);
+    const [errorServidor, setErrorServidor] = useState('');
 
     if (!isOpen) return null;
 
-    const handleSubmit = (e: React.FormEvent) => {
+    /**
+     * Todo por el SERVIDOR. El código de alta lo genera y lo guarda cifrado la
+     * base (`crear_acceso`); antes se generaba acá y se guardaba en la columna
+     * de la contraseña, que la nube nunca devuelve: en otro teléfono el acceso
+     * quedaba sin código y no se podía dar de alta.
+     */
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        
-        if (!newName.trim()) {
-            alert("Falta el nombre de la persona.");
-            return;
-        }
-
-        if (editingUserId) {
-            // Editar NO toca la contraseña: es de la persona, no del administrador.
-            const previo = users.find(u => u.id === editingUserId);
-            const updatedUser: AppUser = {
-                ...(previo as AppUser),
-                id: editingUserId,
-                name: newName.trim(),
-                role: newRole,
-            };
-            onEditUser(updatedUser);
-            setEditingUserId(null);
-        } else {
-            if (users.some(u => u.name.trim().toLowerCase() === newName.trim().toLowerCase())) {
-                alert("Ya hay alguien con ese nombre.");
-                return;
+        if (guardando) return;
+        setErrorServidor('');
+        if (!newName.trim()) { setErrorServidor('Falta el nombre de la persona.'); return; }
+        setGuardando(true);
+        try {
+            if (editingUserId) {
+                // Editar NO toca la contraseña: es de la persona, no del administrador.
+                const previo = users.find(u => u.id === editingUserId);
+                await onEditUser({ ...(previo as AppUser), id: editingUserId, name: newName.trim(), role: newRole });
+                setEditingUserId(null);
+            } else {
+                const { codigo } = await onCrearAcceso(newName.trim(), newRole);
+                setCodigoNuevo({ nombre: newName.trim(), codigo });
             }
-            /**
-             * El acceso nace con un CÓDIGO DE ALTA, no vacío.
-             *
-             * La intención original era buena: que el administrador no sepa la
-             * contraseña de nadie. La tarjeta quedaba esperando y la persona
-             * ponía su clave la primera vez que entraba.
-             *
-             * El problema es que esa tarjeta **la podía reclamar cualquiera**.
-             * Quien abriera la dirección de la app veía la lista, elegía la
-             * tarjeta en espera, le ponía la contraseña que quisiera y entraba.
-             * Con un acceso de dueño esperando, eso era **regalarle la bodega al
-             * primero que pasara** — sin claves, sin saber nada, solo abriendo la
-             * página. Estaba así en producción.
-             *
-             * El código de alta lo cierra sin perder la intención: son seis
-             * caracteres que el administrador le pasa a la persona (por WhatsApp,
-             * de viva voz, como sea). Sin ese código no hay primer ingreso. El
-             * administrador conoce el código temporal, NO la contraseña que la
-             * persona elija después.
-             *
-             * Sin letras confundibles a propósito: se dicta por teléfono.
-             */
-            const alfabeto = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-            const codigo = Array.from(crypto.getRandomValues(new Uint32Array(6)))
-                .map(n => alfabeto[n % alfabeto.length]).join('');
-            const newUser: AppUser = {
-                id: crypto.randomUUID(),
-                username: '',
-                password: codigo,
-                name: newName.trim(),
-                role: newRole,
-                setupComplete: false,
-            };
-            onAddUser(newUser);
-            setCodigoNuevo({ nombre: newName.trim(), codigo });
+            setNewName('');
+            setNewRole(UserRole.EMPLOYEE);
+        } catch (err) {
+            setErrorServidor(err instanceof Error ? err.message : 'No se pudo guardar. Revisá la conexión.');
+        } finally {
+            setGuardando(false);
         }
+    };
 
-        setNewName('');
-        setNewRole(UserRole.EMPLOYEE);
+    const darCodigo = async (user: AppUser) => {
+        setErrorServidor('');
+        try {
+            const codigo = await onNuevoCodigo(user.id);
+            setCodigoNuevo({ nombre: user.name, codigo });
+        } catch (err) {
+            setErrorServidor(err instanceof Error ? err.message : 'No se pudo generar el código.');
+        }
     };
 
     const handleEditClick = (user: AppUser) => {
@@ -123,7 +104,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                         </p>
                         <p className="text-[11px] text-tinta-tenue">
                             Pasáselo a {codigoNuevo.nombre} — sin este código no puede entrar la primera vez.
-                            <strong> No se vuelve a mostrar.</strong> Si se pierde, borrá el acceso y creá otro.
+                            <strong> No se vuelve a mostrar.</strong> Si se pierde, tocá «🔑 Código» en su tarjeta y sale uno nuevo.
                         </p>
                         <button
                             onClick={() => setCodigoNuevo(null)}
@@ -194,10 +175,11 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                                         Cancelar
                                     </button>
                                 )}
-                                <button type="submit" className="flex-1 bg-marca text-tinta py-3 rounded-xl hover:bg-marca-fuerte font-black uppercase text-xs shadow-lg transition-all transform hover:scale-[1.02]">
-                                    {editingUserId ? 'GUARDAR CAMBIOS' : 'CREAR ACCESO'}
+                                <button type="submit" disabled={guardando} className="flex-1 bg-marca text-tinta py-3 rounded-xl hover:bg-marca-fuerte disabled:opacity-60 font-black uppercase text-xs shadow-lg transition-all transform hover:scale-[1.02]">
+                                    {guardando ? 'GUARDANDO…' : editingUserId ? 'GUARDAR CAMBIOS' : 'CREAR ACCESO'}
                                 </button>
                             </div>
+                            {errorServidor && <p className="text-xs font-bold text-alerta">{errorServidor}</p>}
                         </form>
                     </div>
 
@@ -226,7 +208,15 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                                             </span>
                                         </div>
                                     </div>
-                                    <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    {/* Visibles siempre en el celular: ahí no existe «pasar el mouse por encima». */}
+                                    <div className="flex space-x-1 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                                        {!user.setupComplete && (
+                                            <button onClick={() => darCodigo(user)}
+                                                className="px-2 py-1 text-[10px] font-black text-tinta bg-marca rounded-full"
+                                                title="Código de alta nuevo">
+                                                🔑 Código
+                                            </button>
+                                        )}
                                         <button 
                                             onClick={() => handleEditClick(user)}
                                             className="p-2 text-marca-oscuro hover:bg-marca-suave rounded-full transition-colors"
