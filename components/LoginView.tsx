@@ -65,18 +65,14 @@ export const LoginView: React.FC<LoginViewProps> = ({ users, onLoginSuccess, onF
         try {
             if (selectedUser.username) {
                 /**
-                 * Primero la identidad de servidor, después el camino de antes.
+                 * Solo la identidad de servidor (desde el 3-oct-2026). La vía
+                 * vieja, que comparaba contra una clave en texto plano, se
+                 * retiró con la llave pública: sin sesión la base no deja
+                 * escribir.
                  *
-                 * Son dos vías A PROPÓSITO, y solo durante la transición. La
-                 * nueva le pregunta al servidor quién es esta persona; la vieja
-                 * compara la contraseña contra una tabla y no le dice nada al
-                 * servidor. Mientras las dos estén vivas nadie se queda afuera,
-                 * y cuando esté comprobado que los cinco accesos entran por la
-                 * nueva, se corta la llave pública y la vieja sobra.
-                 *
-                 * Un RECHAZO de la nueva NO cae a la vieja: si el servidor
-                 * comparó y dijo que no, probar otra vez por otra puerta es
-                 * exactamente el agujero que se cerró en el PR #85.
+                 * Un RECHAZO no cae al respaldo del teléfono: si el servidor
+                 * comparó y dijo que no, probar por otra puerta es el agujero
+                 * que se cerró en el PR #85.
                  */
                 const conIdentidad = await db.entrarConIdentidad(selectedUser.username, password);
                 if (conIdentidad.estado === 'ok') {
@@ -107,33 +103,16 @@ export const LoginView: React.FC<LoginViewProps> = ({ users, onLoginSuccess, onF
                     return;
                 }
 
-                const r = await db.authenticateUser(selectedUser.username, password);
-                if (r.estado === 'ok') {
-                    // Guardar hash para que el respaldo offline funcione tras recargar
-                    onCredentialVerified?.(selectedUser.id, await sha256Hex(password));
-                    onLoginSuccess(r.usuario.role, r.usuario.name);
-                    return;
-                }
-                /**
-                 * EL SERVIDOR DIJO QUE NO. Acá se para.
-                 *
-                 * Antes esto caía al respaldo del teléfono, porque «contraseña
-                 * equivocada» y «no hay conexión» llegaban como el mismo `null`.
-                 * Con eso, cambiarle la contraseña a alguien no se la cambiaba:
-                 * seguía entrando con la vieja desde su celular.
-                 *
-                 * El respaldo del teléfono es para cuando no se puede preguntar,
-                 * no para cuando la respuesta no gustó.
-                 */
-                if (r.estado === 'rechazado') {
-                    setPassword('');
-                    triggerShake('Contraseña incorrecta');
-                    return;
-                }
+                // `sinRespuesta`: no se pudo preguntar. La entrada vieja
+                // (`authenticate_user`) ya no existe; queda el respaldo del
+                // teléfono, abajo.
             }
             // Sin respuesta del servidor: respaldo con el hash guardado en este
             // dispositivo (las contraseñas no se persisten en texto plano).
             if (await offlineMatch(selectedUser, password)) {
+                // Entró sin sesión: la base no deja escribir así. La clave queda
+                // en memoria para abrir la sesión sola cuando vuelva la señal.
+                if (selectedUser.username) db.recordarParaReconectar(selectedUser.username, password);
                 onLoginSuccess(selectedUser.role, selectedUser.name);
             } else {
                 setPassword('');
@@ -142,6 +121,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ users, onLoginSuccess, onF
         } catch {
             // Supabase no disponible — usar credencial local como respaldo
             if (await offlineMatch(selectedUser, password)) {
+                if (selectedUser.username) db.recordarParaReconectar(selectedUser.username, password);
                 onLoginSuccess(selectedUser.role, selectedUser.name);
             } else {
                 setPassword('');

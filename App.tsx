@@ -107,11 +107,26 @@ const ETIQUETAS_PERSONA: import('./utils/cambios').Etiquetas<Personnel> = {
 
 const migrateUsers = (stored: AppUser[]): AppUser[] => {
     if (stored.length === 0) return seedUsers;
-    return stored.map(u => ({ ...u, setupComplete: u.setupComplete || !!u.username }));
+    // Lo que dice el servidor manda; deducirlo del usuario es solo para fichas
+    // viejas sin el dato. Con `||`, a Kate (usuario «kate», alta pendiente) le
+    // salía la pantalla de clave en vez de la del código.
+    return stored.map(u => ({ ...u, setupComplete: u.setupComplete ?? !!u.username }));
 };
 
 const App: React.FC = () => {
     const [loggedIn, setLoggedIn] = useState(() => !!localStorage.getItem(SESSION_KEY));
+    /**
+     * ¿Hay sesión de IDENTIDAD con el servidor? No es lo mismo que `loggedIn`.
+     *
+     * Desde el 3-oct la base solo deja leer y escribir a la gente de la bodega
+     * con sesión. Se puede estar adentro sin ella (se entró sin señal, con el
+     * respaldo del teléfono): ahí se trabaja normal y lo que se haga queda en la
+     * cola, sin gastar intentos, hasta que la sesión se abra.
+     */
+    const sesionRef = React.useRef(false);
+    const [sesionAbierta, setSesionAbierta] = useState(false);
+    /** Hasta que el SDK diga si hay sesión, no se avisa nada (evita el parpadeo al abrir). */
+    const [sesionSabida, setSesionSabida] = useState(false);
     const [userRole, setUserRole] = useState<UserRole>(() => {
         try { return JSON.parse(localStorage.getItem(SESSION_KEY) || '{}').role ?? UserRole.OWNER; } catch { return UserRole.OWNER; }
     });
@@ -452,6 +467,11 @@ const App: React.FC = () => {
               });
           }).catch(e => console.error('[Supabase] users:', e));
 
+          // La lista de accesos se lee sin sesión (la pantalla de entrada la
+          // necesita); lo demás no. Sin sesión la base devuelve listas VACÍAS
+          // sin error, y la mezcla las tomaría por «la nube no tiene nada».
+          if (!sesionRef.current) { sincronizando.current = false; return; }
+
           /**
            * Un fetch que dice si CONTESTÓ, no solo qué trajo.
            *
@@ -785,9 +805,22 @@ const App: React.FC = () => {
         // volver a abrir — y nadie cierra la app en mitad de un despacho.
         sincronizarYVaciar();
 
+        // Y cada vez que se ABRE la sesión: al entrar, o al reconectar sola.
+        // Fuera del aviso con `setTimeout`: el SDK pide no llamarse a sí mismo
+        // desde adentro de este aviso.
+        const { data: avisoDeSesion } = supabase.auth.onAuthStateChange((_evento, sesion) => {
+            const habia = sesionRef.current;
+            sesionRef.current = !!sesion;
+            setSesionAbierta(!!sesion);
+            setSesionSabida(true);
+            if (sesion && !habia) setTimeout(sincronizarYVaciar, 0);
+        });
+
         const alVolver = () => { if (document.visibilityState === 'visible') sincronizarYVaciar(); };
         document.addEventListener('visibilitychange', alVolver);
-        window.addEventListener('online', sincronizarYVaciar);
+        // Volvió la señal: si se entró sin ella, primero se abre la sesión.
+        const alVolverLaSenal = () => { void db.reconectar().finally(sincronizarYVaciar); };
+        window.addEventListener('online', alVolverLaSenal);
 
         // Y en vivo: Supabase avisa cuando algo cambia y se dispara la MISMA
         // sincronización. El tiempo real es solo el aviso — quién gana lo sigue
@@ -812,7 +845,8 @@ const App: React.FC = () => {
 
         return () => {
             document.removeEventListener('visibilitychange', alVolver);
-            window.removeEventListener('online', sincronizar);
+            window.removeEventListener('online', alVolverLaSenal);
+            avisoDeSesion.subscription.unsubscribe();
             if (esperando) clearTimeout(esperando);
             supabase.removeChannel(canal);
         };
@@ -825,6 +859,7 @@ const App: React.FC = () => {
      */
     const [orderNotes, setOrderNotes] = useState<OrderNote[]>([]);
     useEffect(() => {
+        if (!sesionAbierta) return;   // sin sesión la base la devuelve vacía
         const traer = () => db.fetchOrderList().then(setOrderNotes).catch(e => console.error('[Supabase] pedidos:', e));
         traer();
         // También en vivo: si el otro teléfono anota algo para comprar, aparece acá.
@@ -833,7 +868,7 @@ const App: React.FC = () => {
             .on('postgres_changes', { event: '*', schema: 'public', table: 'order_list' }, () => { traer(); })
             .subscribe();
         return () => { supabase.removeChannel(canal); };
-    }, []);
+    }, [sesionAbierta]);
 
     const handleAddOrderNote = (texto: string, cantidad?: number, unidad?: string, familia?: string) => {
         const nota: OrderNote = { id: crypto.randomUUID(), texto, cantidad, unidad, familia, comprado: false, createdAt: new Date(), updatedAt: new Date() };
@@ -1001,7 +1036,9 @@ const App: React.FC = () => {
      * que nunca tuvo la culpa lo bloquea sin razón.
      */
     const procesarCola = async (): Promise<void> => {
-        if (procesando.current) return;
+        // Sin sesión la base rechaza todo: intentarlo solo gastaría intentos
+        // hasta bloquear operaciones que no tienen nada malo.
+        if (procesando.current || !sesionRef.current) return;
         procesando.current = true;
         try {
             for (const op of porIntentar(colaRef.current)) {
@@ -1036,6 +1073,8 @@ const App: React.FC = () => {
     const withSync = (tipo: string, args: unknown[], descripcion: string): Promise<unknown> => {
         const id = crypto.randomUUID();
         fijarCola(encolar(colaRef.current, { id, tipo, args, descripcion }));
+        // Anotada queda igual. Sin sesión no se intenta: se sube al abrirla.
+        if (!sesionRef.current) return Promise.resolve();
         setSyncStatus('syncing');
         if (syncTimer.current) clearTimeout(syncTimer.current);
         const intento = ejecutarOperacion({ id, tipo, args, descripcion, creadaEn: '', intentos: 0 });
@@ -1886,6 +1925,7 @@ const App: React.FC = () => {
      */
     const [asignaciones, setAsignaciones] = useState<Asignacion[]>([]);
     useEffect(() => {
+        if (!sesionAbierta) return;   // sin sesión la base la devuelve vacía
         const traer = () => db.fetchAsignaciones().then(setAsignaciones).catch(e => console.error('[Supabase] asignaciones:', e));
         traer();
         const canal = supabase
@@ -1893,7 +1933,7 @@ const App: React.FC = () => {
             .on('postgres_changes', { event: '*', schema: 'public', table: 'asignaciones' }, () => { traer(); })
             .subscribe();
         return () => { supabase.removeChannel(canal); };
-    }, []);
+    }, [sesionAbierta]);
 
     const guardarAsignacionLocal = (a: Asignacion, descripcion: string) => {
         setAsignaciones(prev => prev.some(x => x.id === a.id) ? prev.map(x => x.id === a.id ? a : x) : [a, ...prev]);
@@ -2300,6 +2340,17 @@ const App: React.FC = () => {
                     {/* El único aviso de la cola que pide a una persona: algo que
                         falló cinco veces y se frenó. Lo que todavía se está
                         reintentando solo no se anuncia: se sube solo. */}
+                    {/* Adentro, pero sin sesión con el servidor: se trabaja normal y
+                        nada se pierde, pero tampoco se sube. Que se vea. */}
+                    {sesionSabida && !sesionAbierta && (
+                        <div className="w-full mb-2 flex items-center gap-2 rounded-xl border border-atencion bg-atencion-suave px-3 py-2 text-xs font-bold text-atencion">
+                            <span className="flex-1">
+                                ⏳ Sin sesión con el servidor{pendientes.length > 0 ? ` — ${pendientes.length} cambio(s) guardados en este teléfono` : ''}.
+                                {' '}Se suben solos al volver la señal; si no, volvé a entrar.
+                            </span>
+                            <button onClick={handleLogout} className="flex-shrink-0 rounded-full bg-atencion px-2.5 py-1 text-[11px] font-black text-papel">Entrar de nuevo</button>
+                        </div>
+                    )}
                     {bloqueadas(pendientes).length > 0 && effectiveView !== 'pendientes' && (
                         <button onClick={() => selectView('pendientes')}
                             className="w-full mb-2 flex items-center gap-2 rounded-xl border border-alerta bg-alerta-suave px-3 py-2 text-left text-xs font-bold text-alerta">

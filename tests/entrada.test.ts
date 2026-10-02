@@ -94,13 +94,13 @@ interface Login { handlePasswordSubmit: (e: { preventDefault: () => void }) => P
 const HASH_VIEJO = 'hash-de-la-contrasena-vieja';
 
 /**
- * `identidad` es lo que contesta la vía NUEVA (el servidor sabe quién sos), y
- * `respuestaDelServidor` lo que contesta la vieja (comparar contra una tabla).
- * Durante la transición conviven, y lo que hay que fijar es EL ORDEN: la nueva
- * manda, y un rechazo suyo no cae a la vieja.
+ * `identidad` es lo que contesta el servidor de identidad: la ÚNICA vía desde el
+ * 3-oct-2026. La entrada vieja (`authenticate_user`, que comparaba contra una
+ * clave en texto plano) se retiró; el doble la cuenta para probar que nadie la
+ * vuelve a llamar.
  */
-const login = (respuestaDelServidor: Respuesta | (() => never), identidad: Respuesta = { estado: 'sinRespuesta' }) => {
-    const visto = { entro: null as string | null, sacudidas: [] as string[] };
+const login = (identidad: Respuesta | (() => never)) => {
+    const visto = { entro: null as string | null, sacudidas: [] as string[], viejas: 0, recordada: null as string | null };
     const usuario = {
         id: 'u1', username: 'kate', name: 'Kate',
         role: UserRole.EMPLOYEE, passwordHash: HASH_VIEJO,
@@ -119,11 +119,12 @@ const login = (respuestaDelServidor: Respuesta | (() => never), identidad: Respu
         sha256Hex: async () => HASH_VIEJO,
         offlineMatch: async () => true,
         db: {
-            entrarConIdentidad: async () => identidad,
-            authenticateUser: async () => {
-                if (typeof respuestaDelServidor === 'function') respuestaDelServidor();
-                return respuestaDelServidor;
+            entrarConIdentidad: async () => {
+                if (typeof identidad === 'function') identidad();
+                return identidad;
             },
+            authenticateUser: async () => { visto.viejas++; return { estado: 'ok', usuario: { id: 'u1', role: UserRole.OWNER, name: 'Vía vieja' } }; },
+            recordarParaReconectar: (u: string) => { visto.recordada = u; },
         },
     };
     return { visto, fn: sacarDeLogin<Login>(['handlePasswordSubmit'], c) };
@@ -131,10 +132,9 @@ const login = (respuestaDelServidor: Respuesta | (() => never), identidad: Respu
 
 grupo('el servidor dice que NO: no se entra', () => {
     /**
-     * El fallo: «esa contraseña no es» y «no hay conexión» llegaban como el
-     * mismo `null`, y quien llamaba leía `null` como «probá con el respaldo del
-     * teléfono» — y con el respaldo del teléfono entraba. Cambiarle la
-     * contraseña a alguien no se la cambiaba: seguía entrando con la vieja.
+     * «Esa contraseña no es» y «no hay conexión» llegaban como el mismo `null`,
+     * y con el respaldo del teléfono se entraba. Cambiarle la contraseña a
+     * alguien no se la cambiaba: seguía entrando con la vieja.
      */
     const t = login({ estado: 'rechazado' });
     return t.fn.handlePasswordSubmit({ preventDefault: () => {} }).then(() => {
@@ -143,12 +143,14 @@ grupo('el servidor dice que NO: no se entra', () => {
     });
 });
 
-grupo('sin respuesta del servidor: el respaldo del teléfono SÍ vale', () => {
-    // Lo contrario, y por eso los dos casos tienen que estar: no saber no puede
-    // dejar a la encargada afuera de la bodega a las siete de la mañana.
+grupo('sin respuesta del servidor: el respaldo del teléfono SÍ vale, y la sesión se abre después', () => {
+    // No saber no puede dejar a la encargada afuera a las siete de la mañana.
+    // Pero sin sesión la base no deja escribir: la clave queda en memoria para
+    // abrirla sola cuando vuelva la señal.
     const t = login({ estado: 'sinRespuesta' });
     return t.fn.handlePasswordSubmit({ preventDefault: () => {} }).then(() => {
         igual(t.visto.entro, 'Kate', 'entra con el hash guardado en el dispositivo');
+        igual(t.visto.recordada, 'kate', 'y queda lista para reconectar');
     });
 });
 
@@ -167,45 +169,13 @@ grupo('si la consulta revienta, el respaldo sigue siendo el respaldo', () => {
     });
 });
 
-grupo('la identidad de servidor manda sobre el camino viejo', () => {
-    /**
-     * Las dos vías conviven solo durante la transición. Si el servidor ya sabe
-     * quién es esta persona, eso gana: es la única de las dos que le dice algo
-     * al servidor sobre quién está escribiendo.
-     */
-    const t = login({ estado: 'ok', usuario: { id: 'u1', role: UserRole.EMPLOYEE, name: 'El viejo' } },
-                    { estado: 'ok', usuario: { id: 'u1', role: UserRole.OWNER, name: 'El de identidad' } });
-    return t.fn.handlePasswordSubmit({ preventDefault: () => {} }).then(() => {
-        igual(t.visto.entro, 'El de identidad', 'entra con lo que dijo la identidad');
-    });
-});
-
-grupo('si la IDENTIDAD rechaza, NO se prueba por la otra puerta', () => {
-    /**
-     * Esto es lo mismo que se cerró en el PR #85, un piso más arriba. Si el
-     * servidor comparó y dijo que no, volver a intentar por el camino viejo
-     * —que compara contra una tabla y no sabe de permisos— sería dejar entrar a
-     * quien el servidor acaba de rechazar.
-     *
-     * La vía vieja está puesta en `ok` a propósito: si el manejador cayera a
-     * ella, la persona entraría. Que no entre es el punto.
-     */
-    const t = login({ estado: 'ok', usuario: { id: 'u1', role: UserRole.OWNER, name: 'No debería' } },
-                    { estado: 'rechazado' });
-    return t.fn.handlePasswordSubmit({ preventDefault: () => {} }).then(() => {
-        igual(t.visto.entro, null, 'NO entró');
-        esCierto(t.visto.sacudidas.length > 0, 'y se le dice que la contraseña está mala');
-    });
-});
-
-grupo('si la identidad NO CONTESTA, el camino viejo sigue sirviendo', () => {
-    // Durante la transición esto es lo normal: el servidor todavía no tiene
-    // creados los usuarios. Nadie se puede quedar afuera por eso.
-    const t = login({ estado: 'ok', usuario: { id: 'u1', role: UserRole.EMPLOYEE, name: 'Kate' } },
-                    { estado: 'sinRespuesta' });
-    return t.fn.handlePasswordSubmit({ preventDefault: () => {} }).then(() => {
-        igual(t.visto.entro, 'Kate', 'entra por el camino viejo');
-    });
+grupo('la entrada vieja ya NO se consulta, pase lo que pase', async () => {
+    for (const r of [{ estado: 'sinRespuesta' }, { estado: 'rechazado' }] as Respuesta[]) {
+        const t = login(r);
+        await t.fn.handlePasswordSubmit({ preventDefault: () => {} });
+        igual(t.visto.viejas, 0, `con «${r.estado}» no se llamó a authenticate_user`);
+        esCierto(t.visto.entro !== 'Vía vieja', 'y nadie entró por ella');
+    }
 });
 
 /**
