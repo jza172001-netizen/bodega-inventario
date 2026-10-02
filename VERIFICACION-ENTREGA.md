@@ -1,5 +1,71 @@
 # Plan de verificación para entregar — Bodega Montecielo
 
+## ▶ Plan de Juli (2-oct-2026): esto es lo que vos probás, en este orden
+
+> El código está cerrado. Estos seis pasos son lo que falta, y solo vos podés
+> hacerlos. Cada uno dice **qué cuenta como aprobado** y, **si falla, qué
+> traer** al chat nuevo (foto de la pantalla y el dato). No sigás al paso
+> siguiente si uno falla: el siguiente depende de él.
+
+**Paso 1 · Entrar (2 min).** Abrí `bodega-montecielo.vercel.app` en el
+celular. Si ya estabas adentro, salí y volvé a entrar.
+- **Aprobado:** en la pantalla de entrada salen **3 tarjetas**: Administrador
+  maestro, Camilo y Kate. Ninguna dice «Julio». Entrás con tu clave.
+- **Si falla:** foto de la pantalla de entrada y el mensaje de error exacto.
+
+**Paso 2 · Camilo (5 min, con tu papá al lado).** ⚙️ → «Accesos a la app» →
+en Camilo, botón **«🔑 Código»**. Le dictás ese código. Él toca su tarjeta,
+pone el código y se inventa una clave de 6 o más.
+- **Aprobado:** Camilo queda adentro; sale, vuelve a entrar con su clave y
+  entra.
+- **Si falla:** foto del mensaje que le salió a él y a qué hora fue.
+
+**Paso 3 · Kate (5 min).** Kate entra con su clave de siempre; la app le pide
+una nueva.
+- **Aprobado:** pone la nueva, sale, vuelve a entrar con la nueva y entra.
+- **Si falla:** foto del mensaje.
+- **Cuando los pasos 1, 2 y 3 estén aprobados, avisá en el chat nuevo:** con
+  eso se hace el cierre de seguridad (L4 del HANDOFF), que hoy está frenado
+  esperando justo esto.
+
+**Paso 4 · El Gem (20 min).** Creá el Gem como dice `asistente/GEM.md` («Crear
+el Gem») y subile `asistente/CATALOGO.md` como conocimiento. Después hacé la
+«Prueba guiada» de seis audios que está en ese mismo archivo.
+- **Aprobado:** después de «unificá» marca el duplicado de la pulidora y el
+  cemento sin obra; después de «confirmado» entrega un bloque igual al del
+  ejemplo, con «CRISTO» y «HELIPUERTO» escritos así.
+- **Si falla:** copiá lo que contestó el Gem y en qué paso se desvió.
+
+**Paso 5 · El primer bloque real (15 min).** Una mañana normal: dictás al Gem,
+«confirmado», y el bloque lo pegás en el chat de la app → **📋 Bloque**.
+- **Aprobado:**
+  - la app pregunta lo dudoso (cuál Juan, para quién de la cuadrilla, cuál
+    pulidora) en vez de adivinarlo;
+  - cada trabajador termina en su tarjeta con trabajador, proyecto, hora y cada
+    cosa con «Préstamo» o «Gasto»;
+  - tocás **«✓ Pedido correcto»** en cada uno y después Registrar;
+  - si dictaste algo que no existe, la app pregunta si lo crea («Sí, crear») y
+    nace con el nombre bien escrito («Codos 4"», no «codos de 4»).
+- **Si falla:** foto de la tarjeta del trabajador y el bloque que pegaste.
+
+**Paso 6 · Que quedó bien guardado (5 min).** Cerrá la app, volvé a abrirla.
+- **Aprobado:**
+  - en **Kardex** están los movimientos de esa mañana, cada uno con su obra;
+  - en **«¿Dónde está?»** cada herramienta prestada aparece con quien la tiene;
+  - el número de cada consumible bajó lo que salió;
+  - no aparece el aviso rojo de «No se pudo subir».
+- **Si falla:** foto de lo que no cuadra y qué esperabas ver.
+
+**Si los seis pasan, la app está para usarse todos los días.** Lo que queda
+(el cierre de seguridad, cargar el inventario definitivo, que Supabase no se
+pause solo) está en `HANDOFF.md`, sección 4, y no te frena el uso diario.
+
+Los recorridos detallados R1–R19 de abajo son para cuando se quiera revisar
+pantalla por pantalla.
+
+---
+
+
 **Fecha:** 1-oct-2026 · **Estado de producción:** PR #100 desplegado (Vercel READY), Node 24.
 
 **Cómo se lee:** cada punto dice quién lo hace (🧑 Juli o la encargada en el celular · 🤖 Claude · 🧑🤖 juntos), cómo se comprueba y qué cuenta como aprobado. Nada se da por bueno sin ver el resultado.

@@ -19,6 +19,20 @@ las mismas preguntas que el chat paso a paso.
 
 ---
 
+## Conocimiento del Gem: el catálogo real
+
+Subí **`asistente/CATALOGO.md`** como archivo del Gem: Gems → editar → Conocimiento → agregar archivo. Si tu versión de Gemini no deja subir archivos (PENDIENTE DE VERIFICAR en tu cuenta), pegalo completo al final de las instrucciones.
+
+Con eso el Gem escribe los nombres como están en la app («CRISTO» y no «El Cristo»; «pulidora grande amarilla Stanley»). La app los reconoce de una y pregunta menos.
+
+**No hace falta que el Gem clasifique.** La app ya sabe si cada ítem es eléctrico, manual, EPP o consumo. Si el ítem es nuevo, lo pregunta con un toque. El catálogo está ordenado por tipo solo para que el Gem se ubique.
+
+**Sirve igual en un Proyecto de Claude o de ChatGPT:** las mismas instrucciones van en «Instrucciones del proyecto», y el catálogo, como archivo del proyecto.
+
+Cuando cambie el inventario, pedí en el chat de Claude Code: «regenerá asistente/CATALOGO.md desde producción», y volvé a subirlo.
+
+---
+
 ## Crear el Gem
 
 Gemini → **Gems** → **Nuevo Gem** → Nombre: `Bodega Montecielo` → pegar en
@@ -34,7 +48,7 @@ LA PRIORIDAD ES QUE EL MOVIMIENTO NO SE PIERDA.
 ═══ MOMENTO 1 · CAPTURA (cada mensaje o audio) ═══
 Por cada entrega que te dicten, anotá UNA línea numerada y respondé solo eso:
 
-✓ #3 · 07:42 · Alex · El Cristo · contenedor · 3 palas, 1 martillo
+✓ #3 · 07:42 · Alex · CRISTO · contenedor · 3 palas, 1 martillo
 
 Campos, en ese orden: número · hora · persona · obra · lugar · elementos.
 - HORA: si sabés la hora actual con certeza, usala. Si no, o si dudás,
@@ -46,10 +60,14 @@ Campos, en ese orden: número · hora · persona · obra · lugar · elementos.
   cantidad, preguntá en una línea DESPUÉS de anotar: «#3: ¿cuántos martillos?».
   No frenés la captura por eso.
 - Obra y lugar son opcionales. No los pidás cada vez; si alguien ya dijo
-  «todo lo de ahora es para El Cristo», aplicalo hasta que digan otra cosa.
+  «todo lo de ahora es para CRISTO», aplicalo hasta que digan otra cosa.
 - Escribí personas y cosas COMO LAS DIJERON. No corrijas ni cambies
   «pala» por «palín». No clasifiques: clavos, un bisturí, unos guantes,
   todo va igual.
+- EXCEPCIÓN, el catálogo (archivo CATALOGO): si lo dicho es CLARAMENTE una
+  cosa, persona u obra del catálogo, escribila con el nombre de ahí, sin el
+  paréntesis. Las obras SIEMPRE con el nombre exacto del catálogo («CRISTO»).
+  Si dudás, dejalo como lo dijeron: la app pregunta.
 - Si dicen la MEDIDA, va pegada a la cosa: «3 codos de 2», «1 tubo de
   media». Si no la dicen, NO la pongás: la app pregunta la medida con
   botones.
@@ -80,10 +98,10 @@ CONFIRMADO.» No pasés al momento 4 sin la palabra «confirmado».
 ═══ MOMENTO 4 · TRADUCCIÓN (solo después de «confirmado») ═══
 Entregá UN bloque de código con este formato EXACTO y nada más adentro:
 
-@ El Cristo · 07:30 · contenedor
+@ CRISTO · 07:30 · contenedor
 Alex: 3 palas, 1 martillo
 Juan (cuadrilla de Alex): 2 pares de guantes, 1 casco
-@ Bonilla · 07:35
+@ HELIPUERTO · 07:35
 Pedro: 1 pulidora
 @ sin obra · 09:10
 Carlos: 1 extensión
@@ -127,9 +145,9 @@ saludos, sin repetir lo que dijeron, sin explicaciones.
 
 Dictale estos seis mensajes, uno por uno:
 
-1. «A las 7 y 30 salieron para El Cristo, en el contenedor: a Alex tres palas y un martillo»
-2. «Para Juan de la cuadrilla de Alex, dos pares de guantes y un casco, también El Cristo»
-3. «7 y 35, para Bonilla, una pulidora a Pedro»
+1. «A las 7 y 30 salieron para CRISTO, en el contenedor: a Alex tres palas y un martillo»
+2. «Para Juan de la cuadrilla de Alex, dos pares de guantes y un casco, también CRISTO»
+3. «7 y 35, para HELIPUERTO, una pulidora a Pedro»
 4. «A Pedro una pulidora» ← duplicado a propósito
 5. «Dos bultos de cemento para Carlos» ← consumible sin obra a propósito
 6. «Jhon devolvió una de las dos pulidoras, buena»
@@ -139,22 +157,23 @@ Después decí **«unificá»**. Tiene que:
 - marcar ⚠ el #4 como posible duplicado del #3;
 - marcar ⚠ el cemento del #5 como consumible sin obra.
 
-Contestá «el 4 era repetido, borralo» y «el cemento es para El Cristo», y
+Contestá «el 4 era repetido, borralo» y «el cemento es para CRISTO», y
 después **«confirmado»**. Tiene que entregar:
 
 ```
-@ El Cristo · 07:30 · contenedor
+@ CRISTO · 07:30 · contenedor
 Alex: 3 palas, 1 martillo
 Juan (cuadrilla de Alex): 2 pares de guantes, 1 casco
-@ Bonilla · 07:35
+@ HELIPUERTO · 07:35
 Pedro: 1 pulidora
-@ El Cristo
+@ CRISTO
 Carlos: 2 bultos de cemento
 ```
 
 y una ficha de devolución para Jhon. Pegá el bloque en la app: la
-verificación de la app tiene que preguntarte por Alex (si es oficial), por
-cualquier persona que no exista y por **cuál pulidora** (hay varias grandes y
+verificación de la app tiene que preguntarte por Alex (es oficial: ¿para
+quién?), por **cuál Juan y cuál Carlos** (hay dos de cada uno en la bodega),
+por Pedro (no existe: ¿se crea?) y por **cuál pulidora** (hay varias grandes y
 pequeñas: la app ya no escoge la primera por su cuenta), y nada más. Al final,
 cada trabajador muestra su resumen —como el «Confirmar» del chat— y sale solo
 cuando tocás **«✓ Pedido correcto»**.

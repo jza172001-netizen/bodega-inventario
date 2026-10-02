@@ -1,997 +1,130 @@
-# HANDOFF — Bodega Montecielo
-
-> Traspaso de contexto. La sesión nueva lee **este archivo completo** antes de
-> tocar nada. Verificado contra producción el **11 de septiembre de 2026**.
->
-> **⚠️ LEER LA SECCIÓN 0.1 ANTES QUE NADA.** Varias cifras y afirmaciones de
-> este archivo resultaron falsas al verificarlas. Están corregidas ahí.
-
----
-
-## 0.000 ESTADO AL 2-oct-2026 — leer primero
-
-- **PR #102 (merge, READY): accesos por el servidor.** Lista en producción:
-  **Administrador maestro** (usuario `juli`), **Camilo** (administrador, espera
-  su código de alta: Juli lo genera en Configuración → Accesos → «🔑 Código»),
-  **Kate**. KATE y «Visitante» a la papelera (identidad de Visitante bloqueada).
-  Antes de esto un acceso nuevo NO podía entrar nunca (ver CLAUDE.md,
-  Authentication). Probado en producción en transacción revertida (24/24).
-- **Falta (L4), cuando Juli, Kate y Camilo entren por la vía nueva:** quitar las
-  políticas públicas insert/update/delete de `app_users`, retirar
-  `authenticate_user`, vaciar las claves en texto plano restantes. La vuelta
-  atrás es volver a crear esas políticas (están en el baseline).
-- **PR #103 (fase A del bloque):** «✓ Pedido correcto» por trabajador, crear
-  ítem con las reglas del chat, «Sin asignar», «Obra nueva…». Fase B (crear del
-  chat compartido) va después de la prueba.
-- «Pendientes» solo aparece cuando algo se frenó (la subida ya es automática).
-
-## 0.00 ESTADO AL 1-oct-2026 — leer esto primero (para la auditoría)
-
-**Producción:** 129 ítems vivos, 234 movimientos, 35 personas, 8 obras (leído el
-1-oct, solo lectura). El último movimiento sigue siendo del 8-sep.
-
-**PR #100 (merge 1-oct):** el bloque sigue la lógica del chat, con verificación
-contra la bodega; Gem en 4 momentos (`asistente/GEM.md`); Node 24.
-
-**PR #101 (este): géneros, familias y pulgadas editables.**
-
-| Qué | Dónde | Cómo se comprueba |
-|---|---|---|
-| `Item.ruta`, géneros a cualquier profundidad («Tubería / Accesorios») | `types.ts`, `utils/arbol.ts` (`construirRuta`), columna `items.ruta` | `tests/organizar.test.ts`. Sin ruta, el árbol es idéntico al de antes |
-| Editor «Organizar bodega» (barra lateral) | `components/OrganizarBodega.tsx`, `core/organizar.ts` | Pruebas puras; ninguna operación toca `quantity` (prueba dedicada) |
-| Medida dicha: «codos de 4», «de media», «tres cuartos» | `utils/lote.ts` (`medidaDicha`, `buscarItem`) | `tests/verificacion.test.ts` |
-| Botones de medida en el bloque | `core/verificacion.ts` (`opcionesDeMedida`), `FloatingChat.tsx` | Prueba de la alerta; la pantalla solo tiene prueba de humo |
-| Lo dudoso se decide, no se adivina | `core/verificacion.ts` | Antes: 22 de 60 elementos reales se registraban adivinados |
-| «2 Y de 2» es la Y de tubería | `utils/lote.ts` (`partirItems`) | `tests/verificacion.test.ts` |
-| `falta_stock` avisa y no frena | `core/verificacion.ts` | Prueba de volumen de 60 elementos |
-| Velocidad: `editDistance` con filas recicladas | `utils/genus.ts` | 0,4 s → 0,12 s; iguales en 200.000 pares al azar |
-
-**Migración `20261001120000_ruta_de_items.sql`: APLICADA en producción el 1-oct,
-antes del merge.** Primero se probó dentro de una transacción revertida. Se
-comprobó la columna (`text`, nula) y los permisos de `anon` y `authenticated`
-(los mismos de la tabla). Los totales no cambiaron (130 filas, stock 94).
-Ninguna ruta asignada todavía: Juli las arma desde «Organizar bodega».
-
-### Decisiones que tomé yo (auditables, reversibles)
-
-1. **`falta_stock` pasó de `mirar` a `aviso`.** No tener existencia es lo
-   normal en esta bodega, y «Lo que no haya, cargalo» ya es el consentimiento.
-   Con un toque por elemento eran 30 toques en una mañana de 60 cosas.
-   «Ya la tiene otro» SIGUE exigiendo revisión. Revertir es una línea en
-   `core/verificacion.ts`.
-2. **Lo dudoso se decide.** Es un cambio de comportamiento que Juli va a NOTAR
-   el viernes: «1 pulidora grande» ya no sale sola, pregunta cuál, porque hay
-   cuatro. Es lo correcto para la trazabilidad de herramientas. El Gem ahora
-   pide escribir color y marca cuando se dicen.
-3. **Una medida que no existe no elige la más cercana**, aunque sea el único
-   parecido. Un codo de 6" no es uno de 5".
-4. **La sugerencia de género** (`rutaSugerida`) nunca se aplica sola: aparece
-   como un botón «💡 ¿Va en Tubería › Accesorios?». No sugiere «llave» ni
-   «copa», porque también son herramientas.
-
-### Lo que la auditoría debe saber (límites honestos)
-
-- **Mutación que sobrevive:** cambiar `if (claro && !medidaDe(...))` por
-  `if (claro)` en `buscarItem` no pone nada en rojo. La guarda es defensiva:
-  el buscador actual nunca da por «claro» un nombre de otra medida (sus
-  puntajes quedan por debajo del mínimo). Se dejó porque expresa la regla.
-  Las otras 17 mutaciones de este PR se pusieron en rojo.
-- **Las pantallas nuevas no se han tocado en un navegador.** Hay prueba de humo
-  (se dibujan con los 129 ítems reales sin errores) y tipos limpios, pero
-  ningún clic. Es el mismo hueco de §2 de `VERIFICACION-ENTREGA.md`.
-- **El paso de escoger ítem del CHAT (no del bloque) no tiene botones de
-  medida.** Quedó solo en el bloque, para no tocar el flujo del chat antes del
-  viernes.
-- **Tiempo de lectura medido en este contenedor, no en un celular.** Cuesta
-  0,12 s acá; en un Huawei de gama baja, calculo de 3 a 5 veces más: NO LO HE
-  MEDIDO.
-- **«Codos 4"-2"», «Y 4-2», «Y 6"-6" 6"-6"»** son reducciones y no tienen UNA
-  medida: no salen como botón, se escogen de la lista. La forma de escribirlas
-  está pendiente de decisión de Juli (ver §7 de VERIFICACION-ENTREGA).
-
-### Siguen abiertos (de antes, sin cambios)
-
-Corte de seguridad (espera que Juli y Kate confirmen el login nuevo) ·
-recorridos en navegador R1–R12 · restaurar respaldo · inventario definitivo
-(Lista 5 + informe) · CAMILO/KATE · Supabase se pausa solo · Netlify ·
-`npm audit` · concurrencia entre dos teléfonos.
-
----
-
-## 0.0 ESTADO AL 28-sep-2026 — leer esto primero
-
-**Datos verificados en producción:** 129 ítems, 234 movimientos vivos (23 más en
-la papelera), 22 préstamos activos. **El último movimiento es del 8-sep**: la app
-no se ha usado desde entonces (Supabase estuvo pausado por inactividad y se
-reactivó el 28-sep).
-
-**Desplegado hoy (PR #91 a #96, todos READY en Vercel):**
-- #91 La cola y la sincronización ya no se pisan (movimiento sin efecto de stock).
-- #92 Cerrado el hueco: CAMILO (dueño) y KATE se podían reclamar sin clave. Ahora
-  un acceso nuevo exige código de alta.
-- #93 Identidad de servidor (Supabase Auth) para juli, kate y visita, con sus
-  contraseñas de siempre; las de 2 caracteres se cambian al entrar.
-- #94 Devoluciones parciales: la devolución es una Entrada enlazada (`devuelve_a`).
-- #95 Custodia: tabla `asignaciones` (Confirmado / Posible / Falta por verificar),
-  pantalla «¿Dónde está?», traslados y traspasos con responsable anterior.
-- #96 Asistente: `/api/consulta` y `/api/registro` (ver `api/README.md`).
-
-**Informe en seco del inventario definitivo:** `herramientas/INFORME-VINCULACION.md`
-(se regenera con `npx tsx herramientas/vincular-inventario.ts <foto.json>`). NO se
-ha aplicado nada. Hay una decisión de Juli pendiente: si la Lista 5 es custodia
-actual (préstamo) o histórica (posible).
-
-**Abierto, en orden:**
-1. **Corte de seguridad** (quitarle a `anon` mover inventario). Frenado hasta que
-   Juli confirme que él y Kate entraron con la contraseña nueva.
-2. **Aplicar el informe de vinculación** después de que Juli lo revise.
-3. **Verificación de navegador (Playwright) y restauración de respaldo aislada**:
-   NO se hicieron.
-4. **A08** — dos devoluciones simultáneas desde dos teléfonos: necesita dos
-   conexiones reales, PGlite no sirve.
-5. **Kate/KATE** (dos accesos) y **Netlify** conectado al repo: sin tocar.
-6. `npm audit`: 8 vulnerabilidades (2 moderadas, 6 altas), entre ellas `sharp`.
-   Sin revisar si alguna llega al navegador.
-
----
-
-## 0.1 Lo que este archivo decía mal (corregido el 11-sep-2026, de noche)
-
-Una auditoría externa del commit `ab86bd6` obligó a verificar cosas que acá se
-daban por ciertas. Estas quedaron desmentidas **sumando o abriendo el código**,
-no por opinión:
-
-| Decía | Es |
-|---|---|
-| Apéndice B.1: «96 unidades» | Las filas suman **82** |
-| Apéndice B.5: «25 unidades» pendientes | Las filas suman **24** |
-| «Faltan ~35 eléctricas» | **No se puede afirmar**: sale de restar 96, que no es el total real |
-| «Todo borrado es lápida» | El SQL versionado de `delete_movement_and_revert_stock` hace `delete from movements`, en tres puntos, incluida su definición más nueva |
-| Rama de trabajo `claude/new-session-7548vr` | Hoy es `claude/handoff-md-review-m3j9pp` |
-| `CLAUDE.md`: «build verifica TypeScript» | `build` es `vite build` a secas. El que verifica es `lint`. **Correr los dos.** |
-
-**Que las cifras no cuadren NO significa que falten 14 herramientas.** Significa
-que el documento está inconsistente. **No se carga nada hasta conciliar las
-listas contando en la bodega**, con papel. Cargar con cifras que no suman es
-meterle el error adentro al inventario.
-
-## 0.2 Lo que se hizo la noche del 11-sep-2026
-
-Seis PR mergeados y desplegados (#75 a #80):
-
-- **Botón «📋 Bloque»** en el asistente: se pega el texto de todos los
-  trabajadores de una y se registra de un toque. `utils/lote.ts` lo lee sin
-  React; la pantalla de confirmación es donde se atrapa el error del que dictó.
-- **`api/despacho.ts`** — la ventanilla para un asistente de IA. Ver
-  `api/README.md`. **NO funciona hasta crear tres variables en Vercel**
-  (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `BODEGA_API_TOKEN`) y volver a
-  desplegar.
-- **`core/despacho.ts`** — la aritmética del stock afuera de React, para que
-  pueda correr en un servidor. `App.tsx` ya no calcula: aplica.
-- **191 comprobaciones** en `tests/` (hoy son 222, ver 0.3). `npm run test`. No es Vitest a propósito:
-  ver `CLAUDE.md`. **Cubren el núcleo, no la pantalla ni el endpoint** — una
-  auditoría externa encontró ocho fallos con estas suites en verde.
-- **`components/PasosDeNombre.tsx`** — género y medida en el formulario de
-  crear, no solo en el chat.
-
-**Tres bugs silenciosos arreglados**, todos encontrados por una auditoría
-externa y verificados antes de tocarlos:
-1. El accesorio salía aunque la herramienta se rechazara por stock.
-2. El formulario no expandía accesorios y el chat sí: dos resultados para la
-   misma salida.
-3. Editar el nombre o el rol de un acceso le borraba la contraseña.
-
-### Lo que sigue abierto y NO se tocó
-
-- **Permisos de la base.** Las funciones de stock son `security definer` y
-  ninguna migración las revoca, así que quedan con el valor por defecto de
-  PostgreSQL: ejecutables por cualquiera con la clave pública, que va dentro del
-  JavaScript publicado. **No se tocó a propósito**: revocarlas sin ajustar los
-  permisos del navegador deja la app sin funcionar, y eso no se hace de noche
-  sin nadie mirando.
-- **El borrado que no es lápida** (`delete from movements` en el SQL versionado).
-  Se resuelve leyendo qué está instalado en el servidor, no el repositorio.
-- **No hay migración base**: el repo no alcanza para recrear el servidor.
-- **Conciliar las listas** (ver 0.1). Papel y conteo, no código.
-- **Kate y KATE**, y la integración de Netlify todavía conectada al repo.
-
-## 0.3 Lo que se hizo el 12-sep-2026 — los fallos que yo mismo metí
-
-Una **segunda** auditoría externa revisó los PR #75–#80 y encontró ocho fallos
-nuevos. **Los ocho eran míos**, introducidos al arreglar los anteriores. Se
-arreglaron siete; el octavo necesita una migración y queda para el bloque
-siguiente.
-
-**Todos verificados corriendo el arnés de los auditores, no leyendo el código.**
-
-| | Qué hacía | Cómo quedó |
-|---|---|---|
-| **N01** | «Alex: 1 pala, 1 zorbex»: entraba la pala y se borraba la línea entera, zorbex incluido. El panel se cerraba y el pendiente no volvía | Se quita **solo lo que entró**. Lo sin resolver se queda en pantalla |
-| **N02** | Las decisiones se guardaban por posición. Al quitar un renglón los siguientes heredaban la del vecino: lo marcado «Consumo» nacía «Eléctrica» | Cada ítem y cada renglón llevan un id que no es su posición |
-| **N03** | La vista previa contaba por su cuenta y no mostraba las entradas automáticas acumuladas. Dos personas pedían la única pala y nadie avisaba nada | La vista previa dibuja **el mismo plan** que se va a aplicar |
-| **N03b** | *(este lo encontré yo)* La vista previa llamaba a la función que **crea** ítems, y la vista previa corre en cada render: abrir el panel creaba ítems duplicados con cada tecla | `armarMovimientos` recibe `crear`; dibujar simula, registrar crea |
-| **N05** | El identificador anti-doble-registro salía del índice del plan. En un reintento los índices se corrían, chocaban, y el endpoint respondía que registró un martillo que **no estaba en la base** | Sale de lo que no cambia entre reintentos: operación, ítem, persona, tipo, cantidad. Y ante clave repetida **lee la fila** antes de cantar éxito |
-| **N06** | Si la herramienta fallaba al escribirse, su accesorio se gastaba igual. La guarda que puse estaba **después** del RPC, o sea que revisaba con el disco ya escrito | La guarda va **antes** de escribir |
-| **N07** | La pantalla exigía proyecto para consumibles y el endpoint no: dos reglas para lo mismo | `exigeProyecto` en `core/despacho.ts`, una regla, un sitio |
-| **N08** | `tsx` en `package.json` sin poder regenerar el lockfile: `npm ci` se caía | `tsx` por `npx`. `npm ci` verificado |
-
-### N04 sigue abierto, y es el que importa
-
-**El orden de las escrituras a la red no está garantizado.** El núcleo pone la
-entrada antes que la salida, pero son un RPC por movimiento: el SQL puede
-recibir la salida primero, rechazarla por falta de stock, y guardar la entrada
-después. La app ya cantó éxito y muestra saldo cero; el servidor queda con una
-entrada, ninguna salida y saldo uno.
-
-**Esto NO se arregla en la aplicación.** Pide una transacción por despacho: un
-RPC nuevo con su migración. Y **antes hay que leer qué está instalado en
-Supabase**, porque ya se sabe que el repo y el servidor difieren.
-
-### La lección de método, que es la parte cara
-
-**Las 191 comprobaciones pasaban con los ocho fallos adentro.** Cubrían el
-núcleo, y ninguno de los ocho vivía ahí: vivían en la pantalla, en el endpoint y
-en el orden de las escrituras. Puse las pruebas donde era fácil ponerlas, no
-donde estaban los huecos.
-
-Por eso ahora son **222** y dos de ellas son de otra clase:
-
-- `tests/pantalla.test.ts` **saca los manejadores de verdad** de
-  `FloatingChat.tsx` con el compilador de TypeScript y los corre. No es una
-  copia. Si alguien renombra o mueve una función, la prueba **falla nombrándola**
-  en vez de pasar callada contra código viejo.
-- `api/identidad.ts` existe para que `tests/endpoint.test.ts` pueda importar la
-  función que se despliega. La prueba anterior **copiaba la fórmula adentro** y
-  se quedó en verde mientras la desplegada reportaba registros falsos.
-
-**Y una advertencia para la sesión siguiente:** al correr el arnés de los
-auditores, cuatro pruebas devolvieron `HARNESS_FAILURE`. No era que el fallo
-estuviera arreglado: era que yo había movido las funciones y el arnés no las
-encontraba. **`HARNESS_FAILURE` no es un arreglo.** Hay que leer el motivo de
-cada una, y si hace falta, reescribir la prueba con la lógica de ellos contra el
-código nuevo. Eso es lo que hay en `tests/pantalla.test.ts`.
-
----
-
-## 0.4 El kardex — que el libro cuadre contra el stock (12-sep-2026)
-
-Cuatro fallos de la primera auditoría, todos en código, sin migraciones. Los
-cuatro descuadraban el libro de una manera distinta y **ninguno hacía ruido**:
-la app seguía andando y mostrando números con cara de correctos.
-
-| | Qué hacía | Cómo quedó |
-|---|---|---|
-| **A10** | Editar la cantidad cambiaba el stock **sin generar ningún movimiento**. De 5 a 9 sin una línea en el libro | Deja movimiento de ajuste por la DIFERENCIA, con nota de cuánto a cuánto y quién |
-| **A12** | Dos devoluciones seguidas del mismo ítem leían las dos la cantidad vieja: la segunda pisaba la primera y **se perdía una unidad** | Se lee del espejo, que sí sube movimiento a movimiento |
-| **A06** | Devolver una herramienta **dañada** mandaba el objeto viejo con su cantidad vieja y borraba la reposición: volvía dañada y el stock quedaba descontado | El objeto viaja con la cantidad ya repuesta |
-| **A09** | Restaurar de la papelera una salida de 3 habiendo 1 escribía **stock cero** y seguía como si nada: dos unidades perdidas en silencio | Si no cabe, **no se restaura**: queda en la papelera, se avisa y queda en la bitácora |
-
-**Sobre el ajuste de A10:** el enum `MovementType` no tiene «Ajuste», y agregarlo
-pide migrar un tipo de PostgreSQL en un servidor que ya se sabe que difiere del
-repositorio. Así que el ajuste va como **Entrada** o **Merma** según para dónde
-se corrigió, y se distingue por la nota (`esAjuste` en `utils/inventory.ts`). El
-informe de mermas del mes ya los excluye: una corrección no es material perdido.
-
-Pruebas: `tests/kardex.test.ts`, con la misma técnica de sacar los manejadores
-de verdad de `App.tsx`. **Comprobadas por mutación**: reintroduciendo los tres
-fallos a propósito, siete comprobaciones se ponen rojas.
-
----
-
-## 0.5 El despacho en una transacción, y lo que se leyó de Supabase (12-sep-2026)
-
-**Primero se leyó qué está instalado en el servidor de verdad**, que era la
-condición del plan. Tres cosas quedaron desmentidas o confirmadas ahí, y todas
-cambian lo que este archivo decía:
-
-| Lo que se creía | Lo que está instalado |
-|---|---|
-| «El SQL versionado borra de verdad, incluida la definición más nueva» | **Falso para producción.** La función instalada pone lápida (`deleted_at`). El que miente es **el repositorio**: le falta la migración `borrar_movimiento_con_lapida`, que sí está aplicada en el servidor. Se agregó a Git |
-| Permisos por defecto de PostgreSQL | **Confirmado y peor de lo que sonaba:** las siete funciones tienen `=X/postgres` y `anon=X`. Cualquiera con la clave pública —que va dentro del JavaScript publicado— las puede ejecutar |
-| «Producción podría tener un CHECK que impida la salida negativa» | **No tenía ninguno.** No había NI UN `check` en toda la base |
-
-Producción tiene **35 migraciones**; el repositorio tenía **15**. Eso es A15 y
-sigue abierto: el repo todavía no alcanza para reconstruir el servidor.
-
-### Lo que se hizo
-
-**`log_movements_and_update_stock`** — el lote entero como JSON, aplicado en
-orden dentro de **una sola transacción**. Si un renglón falla, no queda ninguno.
-Cierra **N04** (la entrada y su salida llegaban en cualquier orden) y **N06** (el
-accesorio se gastaba aunque su herramienta fallara) por construcción, no por
-vigilancia. La función vieja de a uno **se queda**: la app la usa para el
-movimiento suelto y como respaldo mientras esto se despliega.
-
-**Las dos invariantes, en la base:** `movements.quantity > 0` e
-`items.quantity >= 0`. Cierra **SQL03**: una salida con cantidad negativa
-invertía el signo y **sumaba** stock. Verificado contra los datos reales antes
-de ponerlas: 0 movimientos con cantidad ≤ 0, 0 ítems con cantidad < 0.
-
-**La app y el endpoint** mandan ahora el lote de una. El endpoint, cuando el
-lote falla, dice **«no entró nada»** completo en vez de reportar renglón por
-renglón sobre escrituras que quedaron a medias.
-
-Verificado corriendo el SQL de verdad en PostgreSQL embebido: entrada y salida
-en un viaje y en orden · un renglón que falla revierte todo · el reintento no
-aplica dos veces · la salida negativa se rechaza nombrándola · el accesorio no
-sobrevive a su herramienta.
-
-### Lo que sigue abierto de este frente
-
-- **A01 / SQL04 — los permisos.** Confirmado en producción. **No se toca sin
-  Juli delante:** revocar `anon` sin ajustar cómo entra la app la deja muerta.
-- **A15 — no hay migración base.** 35 contra 15.
-- **A08 — dos devoluciones simultáneas.** `return_loan_and_restore_stock` lee
-  sin bloqueo. No se probó con dos conexiones.
-
----
-
-## 0.6 La sincronización: dos arreglados, dos pendientes (12-sep-2026)
-
-### La raíz común
-
-Cada consulta a la nube era un `.catch(() => [])`. Con eso **«no hay señal» y
-«la nube está vacía» llegaban como la misma lista vacía**, y son lo contrario:
-sin señal hay que conservar lo local a toda costa; con la nube vacía, lo local
-que sobra es basura que ya se borró en otro lado. Ahora cada consulta dice si
-**contestó**, no solo qué trajo.
-
-| | Qué hacía | Cómo quedó |
-|---|---|---|
-| **A04** | Un ítem creado sin conexión **desaparecía** al reconectar. La condición que lo protegía miraba el FORMATO del identificador —buscaba los «temporales»— pero la normalización previa ya les había puesto UUID a todos: era siempre falsa. De dos quedaba uno | No hace falta mirar el identificador: las lápidas ya se aplicaron antes, así que lo que está acá y no allá **nunca subió**, no es un borrado |
-| **A14** | Borrar el último ítem lo dejaba visible **para siempre** en el otro celular: la lista fusionada quedaba vacía y una lista vacía no se aplicaba nunca | Se aplica si la nube **contestó**, aunque venga vacía |
-
-La decisión se sacó a **`core/fusion.ts`**, pura y probada, por lo mismo que
-`core/despacho.ts`: vivía adentro de un `useEffect` de 300 líneas que corre al
-arrancar con la red de por medio, y ahí no se podía ejercitar. Por eso los dos
-fallos duraron tanto.
-
-**Una nota de método que vale más que el arreglo:** la primera versión de
-`tests/fusion.test.ts` **pasaba con el fallo A04 adentro**. Los identificadores
-de prueba eran nombres como `'uuid-creado-sin-senal'`, y la condición vieja
-miraba el formato: con un id que no parece UUID daba el resultado correcto por
-accidente. Se descubrió reintroduciendo el fallo a propósito y viendo la prueba
-en verde. Con UUID de verdad, falla. **Comprobar por mutación no es opcional.**
-
-### A05 y A13 siguen abiertos, y no se parchan acá
-
-- **A05** — una salida hecha sin conexión sube por `bulkUpsertMovements`, que
-  escribe la fila **sin pasar por el RPC de stock**: el movimiento queda, la
-  cantidad no baja.
-- **A13** — editar una fila que ya existe en el servidor nunca se reintenta: la
-  lista de subida solo incluye ids que el servidor no tiene.
-
-Se puede ver el parche desde acá y **es una trampa**: enrutar esos movimientos
-por el RPC de stock arregla el caso del ítem que ya estaba en el servidor y
-**rompe** el del ítem creado sin conexión, porque ahí la cantidad ya viaja
-adentro del ítem y se contaría dos veces. Distinguirlos pide saber **qué
-operación se hizo**, no adivinarlo del estado resultante.
-
-Eso es la cola de operaciones pendientes: cada cosa que se hace se anota como
-operación con su identificador, sobrevive a cerrar la app, y se reintenta hasta
-que el servidor la confirme. Es el mismo aparato que pide la condición 1 de la
-lista de entrega («una bandeja permanente de pendientes»), y **no se empieza sin
-decidir con Juli** qué es un pendiente, quién lo descarta y con qué motivo.
-
----
-
-## 0.7 ESTADO AL CIERRE DEL 12-sep-2026 — leer esto primero
-
-Las secciones 0.1 a 0.6 son el detalle de cada bloque, en orden. **Esta es la
-foto completa.** Si algo de las anteriores contradice a esta, gana esta.
-
-### Nueve PR mergeados y desplegados (#81 a #89)
-
-| | Qué cerró |
-|---|---|
-| **#81** | Los siete fallos que metí yo en los PR #75–#80 |
-| **#82** | El kardex: ajuste con movimiento, devoluciones sin pérdida, restauración honesta |
-| **#83** | El despacho entero en **una transacción**; el repo deja de contradecir al servidor |
-| **#84** | La sincronización deja de confundir «sin señal» con «la nube está vacía» |
-| **#85** | La contraseña rechazada ya no entra; los decimales ya no se redondean |
-| **#86** | **Migración base**: el repo ya alcanza para reconstruir el servidor |
-| **#87** | Dos modales que quedaron rechazando siempre — **rotura que yo mismo desplegué** |
-| **#88** | **La cola de pendientes** con su bandeja: nada se pierde en silencio |
-| **#89** | La papelera valida antes de restaurar; el reintento del asistente deja de mentir |
-
-**322 comprobaciones.** Cada arreglo verificado **reintroduciendo el fallo a
-propósito** y viendo la prueba ponerse roja.
-
-### Las dos lecciones de método, que valen más que los arreglos
-
-**1. `npm run lint` estuvo fallando toda la sesión y yo lo leía como limpio.**
-`tsconfig.json` pide los tipos de `vite/client`; sin `vite` instalado, `tsc`
-aborta con TS2688 y **no revisa ni un archivo**. Yo filtraba la salida buscando
-los errores conocidos del entorno, no veía nada, y daba por bueno. El código de
-salida decía 2 desde el principio. Por ahí se me fue a producción el #87.
-
-> **Un chequeo se cree por su CÓDIGO DE SALIDA, no por lo que uno alcanza a leer
-> en la salida filtrada.** Si `vite` no se puede instalar (el CDN de `xlsx` está
-> bloqueado y tumba cualquier `npm install`), instalá los paquetes con tipos en
-> una carpeta aparte y copialos a `node_modules`.
-
-**2. Una prueba puede pasar con el fallo adentro.** `tests/fusion.test.ts` pasó
-con su defecto porque los identificadores de prueba no tenían forma de UUID, que
-era justo la condición que lo disparaba. Se descubrió comprobando por mutación.
-**Comprobar por mutación no es opcional.**
-
-### Lo que sigue abierto, por tamaño
-
-**Grande y necesita decisiones tuyas:**
-
-1. **El modelo de ubicación** (tu condición 3). Debe distinguir cantidad total,
-   cantidad en bodega, custodia confirmada y responsable histórico. **Tres campos
-   globales en un ítem agregado no alcanzan** si sus unidades están repartidas en
-   varias obras: hay que decidir si se identifica por unidad o por cantidades.
-2. **Las demás operaciones del asistente.** Hoy `api/despacho.ts` **solo registra
-   salidas**. Faltan consultas (quién tiene qué, dónde, desde cuándo),
-   devoluciones, traslados, hallazgos, daños y pedidos. Una URL de despacho
-   aislada no completa la conexión.
-3. **Los permisos (A01/SQL04).** Confirmado contra producción: las ocho funciones
-   tienen `anon=X`, y **las once tablas tienen RLS activo con políticas
-   `for all to public using (true)`** — activo y sin filtrar nada. **No se cierra
-   revocando**: la app entra *como* `anon` y quedaría muerta. Pide identidad de
-   servidor (Supabase Auth, o un servidor que valide sesiones y roles). Llevar
-   las escrituras a una API no basta si su token termina dentro del JavaScript
-   público. Documentarlo NO es cerrarlo.
-
-**Mediano, sin decisiones pendientes:**
-
-4. **Devoluciones parciales** (tu condición 4). `ReturnToolModal` no tiene
-   cantidad: devuelve movimientos enteros. Si se prestan tres y vuelve una, **no
-   hay forma de decirlo**. Debe conservar el préstamo original de 3 y registrar
-   cada devolución vinculada, no reemplazarlo por «prestó 2».
-5. **Recorridos de navegador** (tu condición 6). Sacar los manejadores con el
-   compilador cubre la lógica, **no** el JSX, los eventos, el cierre del modal ni
-   la recarga. Hace falta automatización de navegador de verdad.
-6. **Restaurar una copia y compararla** (tu condición 5). `RESTAURAR.md` y la
-   migración base están, y las 20 migraciones corren sobre una base en blanco;
-   falta **restaurar un respaldo con datos en un ambiente aislado y comparar**.
-7. **A08 — dos devoluciones simultáneas.** Sigue deducido. **Mi plan de probarlo
-   con PGlite estaba equivocado**: PGlite trabaja sobre una conexión exclusiva y
-   no equivale a dos sesiones de PostgreSQL. Hace falta una base de verdad con
-   dos conexiones.
-8. **Los pendientes compartidos.** La cola de `#88` vive en el teléfono. Lo que
-   el responsable tiene que saber no puede existir solo en el celular de la
-   encargada: falta persistencia compartida.
-9. **A16 — dependencias.** Sin reevaluar. A la vista:
-   `@huggingface/transformers` está en `package.json` y lo único que lo importa
-   es `initModel()`, que no llama nadie.
-
-**Fuera de código:**
-
-10. **El inventario definitivo.** ⚠️ **Corrección a lo que decía este archivo:**
-    Juli **ya construyó el inventario definitivo y ya cruzó las listas**. Esa
-    lista manda sobre las cantidades. Lo que falta **no** es volver a contar: es
-    **vincularla** con los ítems y movimientos que ya existen, conservando
-    procedencia y fecha, y dejar las diferencias puntuales como pendientes a
-    resolver. No borrar, no reiniciar, no duplicar entregas ya registradas. Y
-    ojo: el total maestro **incluye préstamos y pendientes**, así que no es stock
-    disponible para despachar.
-11. **Kate y KATE**, el acceso duplicado. **Netlify**, todavía conectado al repo.
-12. **La mañana supervisada** (tu condición 7). Diez trabajadores, sesenta
-    pedidos, con la encargada. Eso no lo reemplaza ninguna prueba automática.
-
----
-
-## 0. Cómo se usa esto
-
-Leelo entero de una. No hace falta que Juli pegue nada más. Si algo de acá
-contradice lo que él recuerde, **gana lo que diga él** — pero decíselo, no lo
-construyas sobre el recuerdo.
-
----
-
-## 1. Qué es esto
-
-App de bodega para **Grupo Montecielo** (construcción, Antioquia). Está en
-producción en `bodega-montecielo.vercel.app` y **se está entregando a una persona
-que no es Juli**: la residente/encargada de bodega.
-
-Juli **no es programador**. Se le explica **qué cambia en la pantalla**, nunca
-cómo está hecho.
-
-**Stack:** React 18 + TypeScript + Vite + Tailwind. Sin router, una sola página.
-Estado en `App.tsx` con `useState`, persistido a localStorage y sincronizado con
-Supabase. Despliegue **solo en Vercel**, proyecto `bodega-inventario`.
-
----
-
-## 2. Estado real de producción (verificado, no de memoria)
-
-| Tipo | Filas | En bodega | Prestadas |
-|---|---|---|---|
-| Herramienta Eléctrica | 55 | 47 | 14 |
-| Herramienta Manual | 13 | 12 | 9 |
-| EPP | 6 | 14 | 0 |
-| Material de Consumo | 52 | 21 | 0 |
-| Accesorio | 3 | 0 | 0 |
-
-Además: **166 movimientos, 34 personas, 5 accesos** (CAMILO, Juli, Kate, KATE,
-Visitante).
-
-**El kardex cuadra en cero descuadres.** Se logró sumando las 4 entradas de
-apertura que faltaban, **sin cambiar una sola cantidad**. No lo rompas.
-
-**Termómetro honesto:** la app funciona y se puede usar. Lo que nunca pasó es que
-**otra persona la use un día real** — en 100 días hay solo 2 actores y 9 días con
-actividad, y todo eso es testeo de Juli.
-
----
-
-## 3. Reglas duras (no se negocian)
-
-1. **«No se me pueden borrar datos ni información ni nada de eso.»** Todo borrado
-   es lápida (`deleted_at`), nunca `DELETE`. Hay una Papelera con botón Devolver.
-   **No tiene botón de vaciar y así se queda**, salvo que Juli lo pida.
-2. **Nada de subagentes.** No usar la herramienta Agent. Quemó su límite una vez.
-3. **Solo Vercel.** Nunca Netlify. Confirmar siempre que quede READY.
-4. **«Margea, si no margea no hay nada.»** Cada bloque de trabajo se commitea, se
-   hace PR, **se mergea y se despliega**, sin preguntar.
-5. **Toda operación sobre producción deja renglón en la trazabilidad.**
-6. **Su contraseña no se guarda en ningún lado.** Para probar en navegador se usa
-   una desechable (`prueba123`, sha256 `ff960cb5…`).
-7. **Token-first antes de PRODUCIR** (código, documentos, archivos): clasificar
-   dificultad, estimar tokens, plan numerado, esperar «Ejecuta». **No aplica**
-   cuando se está pensando o debatiendo — ahí se responde de frente. Si se queja
-   del gasto: **parar y proponer reducir, sin justificarse**.
-8. Rama de trabajo: `claude/handoff-md-review-m3j9pp`.
-
----
-
-## 4. La pregunta de arquitectura, contestada
-
-> *«¿La lógica de despacho, devolución y creación de ítems está en funciones de
-> servicio separadas, o dentro de los componentes de React? Si está dentro, ¿qué
-> tan grande es el trabajo de extraerla a una capa de servicios expuesta como API?»*
-
-**Está mezclada, pero no de la peor manera.** Ya existen tres capas de hecho:
-
-**Ya está afuera de React (reutilizable tal cual):**
-- `utils/inventory.ts` — la regla de **activo vs. gasto** (se presta vs. se
-  entrega), y los filtros de préstamo activo. Antes estaba duplicada en 21 sitios
-  con 4 nombres distintos; hoy es el único lugar.
-- `utils/genus.ts` — la **única** regla de parecido entre nombres (`looseMatch`,
-  `getGenus`, `familiaDe`, `raizDeFamilia`). **Nunca escribir una segunda.**
-- `utils/arbol.ts` (familia → rama → color·marca), `utils/medida.ts`,
-  `utils/cambios.ts`, `utils/nombres.ts`.
-- `services/warehouseQA.ts` — **ya responde «¿qué tiene Abel?» sin React**,
-  recibiendo un contexto plano `{items, movements, personnel, projects}`. Esto
-  cubre los puntos 16 y 18 del prompt del asistente sin escribir nada nuevo.
-
-**Ya está afuera y es transaccional:**
-- `services/supabaseService.ts` — `logMovementWithStock`,
-  `returnLoanAndRestoreStock`, `deleteMovementWithRevert`. Movimiento + stock en
-  una sola transacción del servidor. Es persistencia, no reglas.
-
-**Lo que SÍ está metido dentro de `App.tsx`** (2.010 líneas, todo el estado):
-- `handleLogMovement` (:1216) · `handleLogMovements` (:1193) ·
-  `handleReturnItem` (:1291) · `handleAddItemSync` (:1036) ·
-  `registrarApertura` (:961) · `handleDeleteMovement` (:1263) ·
-  `handleDescartarItems` (:1058).
-
-Ahí la aritmética del stock vive entrelazada con `setItems`, `setMovements`,
-`ajustarEspejo()` y un `alert()`.
-
-**Tamaño real del trabajo:** el enredo es **superficial, no estructural**. Son
-~40 líneas de aritmética pura escondidas entre llamadas de React. Sacarlas a un
-`core/` con `despachar()`, `devolver()`, `crearItem()` que reciban
-`{items, movements}` y devuelvan `{efectos, error}` —y que `App.tsx` solo aplique
-los efectos— son **2 a 3 días**, no semanas.
-
-**Y vale la pena aunque el agente de Telegram nunca se haga:** hoy la validación
-de stock está escrita **dos veces**, en `handleLogMovement` y otra vez en
-`handleLogMovements`. Eso es una divergencia esperando a pasar.
-
----
-
-## 5. Los tres huecos de MODELO DE DATOS (esto es lo que importa)
-
-El prompt del asistente (Apéndice A) pide cosas que **la app ya hace** —varios
-elementos en un mensaje, devoluciones parciales, no borrar historial, estado
-bueno/malo, «¿qué tiene Abel?»— y tres cosas que **la app no puede hacer, y no
-por falta de chatbot sino porque no existe la columna**:
-
-### Hueco 1 — No existe «pendiente de verificar ubicación»
-Hoy un ítem está **en bodega** o **prestado a alguien**. Punto. No existe el
-tercer estado que pide la Lista 4:
-
-> *1 láser Total fuera → posible asignación: Jesús → verificar actualmente.*
-
-Y son **25 unidades** en ese limbo. Esto es una columna nueva en `items` o un
-estado nuevo en `movements`, más su pantalla. **No lo arregla un chatbot.**
-
-### Hueco 2 — No hay traslado obra → obra
-`Movement` tiene `projectId`, pero el flujo es siempre **bodega → persona**. El
-punto 13 del prompt («Mandé una pulidora de Bonilla para El Cristo») no tiene
-dónde guardarse: faltan **origen y destino**.
-
-### Hueco 3 — No hay «responsable anterior»
-El punto de «La tenía Juan y se la entregué a Carlos» existe a medias:
-`handleTransferLoan` (:1382) traslada el préstamo, pero el prompt pide que quede
-escrito quién la tenía antes como dato, no solo como historial.
-
----
-
-## 6. La brecha grande: las listas y la app son dos bodegas distintas
-
-| | Listas de Juli | App hoy |
-|---|---|---|
-| Eléctricas | **96 unidades** | **61** (47 + 14) |
-| Manuales | ~20 trabajadores con decenas de herramientas (Apéndice C) | **13 filas, 21 unidades** |
-
-Faltan ~35 eléctricas y **el inventario manual prácticamente no está cargado**.
-
-**DECIDIDO (11 de septiembre de 2026, palabras de Juli): «Las listas son de
-verdad.»** Mandan las listas. Hay que cargar lo que falta en la app, no recortar
-las listas. El detalle de cómo, y las tres cosas que eso NO autoriza, están al
-final de este archivo.
-
----
-
-## 7. Pendiente (en orden)
-
-1. **Cargar el inventario que falta** — las listas mandan (punto 6, ya
-   decidido). Antes de cargar, abrir el estado «pendiente de verificar
-   ubicación», o las 25 unidades del Apéndice B.5 entran mintiendo.
-2. **Pruebas automáticas.** Acordado. El argumento se reforzó solo: varios de los
-   últimos hallazgos fueron **efectos secundarios de arreglos del mismo día**.
-3. **Los cuatro pasos (familia → género → denominación → cantidad)** ya funcionan
-   en el chatbot para consumibles y herramientas; **faltan los formularios de
-   afuera del chatbot**.
-4. ~~`medidaDe` no entiende fracciones~~ — **ARREGLADO** (#75). Entiende `1/2`,
-   `1 1/2` y el símbolo `½`. Lo que sigue sin modelarse: «Llave 12» se lee como
-   12 pulgadas y son milímetros.
-5. **Marcas mal escritas en producción:** Nn/NN, Truper/Trupper/Trupee, Dwalt.
-   Ofrecido, **no tocado sin su visto bueno**.
-6. **Duplicados probables a decidir:** Concretadora / Concretadora Eléctrica ·
-   Mezcladora / Mezcladora Eléctrica · Vibro / Vibro Compactador / Motor vibro ·
-   las dos Hidrolavadoras negras · Extension / Extensiones.
-7. **«Pistola impacto»** sin color ni marca.
-8. **Kate y KATE son dos accesos distintos.** Mandar uno a la papelera.
-9. **Fuera de alcance (decisión suya):** teléfonos de Jhon Jader y Rafael ·
-   capacitación · la conversación del chat entre celulares (solo sincronizan las
-   acciones, no la charla).
-
----
-
-## 8. Trampas del código (ya costaron tiempo, no las repitas)
-
-- **RLS en `app_users`:** hay política de insert/update/delete pero **ninguna de
-  SELECT**. Cualquier `.select()` después de un insert hace que PostgREST
-  **revierta el insert entero**. Las lecturas de esa tabla van por RPC
-  `SECURITY DEFINER`: `get_users_safe`, `get_deleted_users_safe`,
-  `authenticate_user`, `restore_user`. **Esta sola trampa causó tres bugs
-  distintos.**
-- **Comentario JSX dentro de una lista de props** → rompe el build con TS1005.
-  Pasó tres veces. El comentario va **arriba** del elemento.
-- **Componentes definidos adentro de otros componentes** se remontan en cada
-  render y pierden su estado local. Por eso `ConfirmLoteWhatsApp` es archivo
-  aparte.
-- **Un préstamo devuelto NO crea un movimiento de devolución** — voltea
-  `is_returned` y repone el stock. Cualquier fórmula de triangulación que asuma
-  lo contrario reporta descuadres falsos.
-- **Borrar un préstamo ya devuelto tiene efecto neto cero.** Revertirlo infla el
-  stock. Ya está contemplado (`netZero` en `handleDeleteMovement`).
-- **Paleta de marca** (`tailwind.config.js`): `marca #f5be09` **solo de fondo** ·
-  `papel #ffffff` · `atencion #a35a00` · `alerta #c81e1e` · `bien #0f7a34` ·
-  `bien-suave #eaf6ee` (casi blanco, **nunca** con `text-papel`).
-- **Playwright:** `executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'`,
-  hace falta un `.env.local` de mentira, y **sembrar una sola vez** (no en cada
-  recarga) o la prueba miente. Semilla con `version: '3.0'`, clave de localStorage
-  `warehouse_inventory_pro_data`, los `InventoryType` son strings en español.
-- **Después de cada squash-merge la rama remota queda atrás.** Patrón:
-  `git fetch origin main && git checkout -B <rama> origin/main`, recommit, y
-  `git push --force-with-lease` **después** de verificar que
-  `git diff --stat origin/<rama> origin/main` salga vacío.
-
----
-
-## 9. Migraciones ya aplicadas a producción
+# HANDOFF — Bodega Montecielo (al 2-oct-2026)
+
+> Traspaso para un chat nuevo. **Leé esto completo, y después `CLAUDE.md`, antes
+> de tocar nada.** El historial largo (hasta el 2-oct) está entero en
+> `historial/HANDOFF-hasta-2026-10-02.md`: se consulta, no se carga completo.
+
+## 1. Quién y cómo
+
+- **Juli** (Julián Bermúdez) es el dueño. No es programador. Escribe por
+  voz-a-texto. Español paisa, directo, sin relleno; firma «atento».
+- Debate antes de producir. Para producir: plan, estimación y esperar «Ejecuta».
+- **Todos los datos son reales**: nunca reiniciar inventario ni borrar historial.
+  Lo técnico lo decide Claude; lo de negocio se pregunta (una sola pregunta, con
+  recomendación).
+- **Cada entrega:**
+  - `npm run test` y `node verificar-lint.cjs` con código de salida 0;
+  - `npm run build` con código de salida 0;
+  - cada arreglo con prueba de mutación;
+  - PR, merge y Vercel READY;
+  - comprobar las 3 ventanillas (`/api/*` responden 405 a GET).
+- **Juli dijo el 2-oct: «estas son las últimas ediciones de código».** No
+  proponer funciones nuevas. Solo auditar, arreglar lo roto y cerrar lo pendiente.
+
+## 2. Producción, verificada el 2-oct
+
+- App: `bodega-montecielo.vercel.app` (Vercel, Node 24). Base: Supabase
+  `xmizawuhiounkiaqrwxd` (`sa-east-1`).
+- **Datos:** 129 ítems, 234 movimientos, 35 personas, 8 obras activas. El último
+  movimiento es del 8-sep: la app todavía casi no se usa. Juli estima que la
+  operación real ronda los 60 movimientos al día.
+- **Accesos:** Administrador maestro (usuario `juli`), Kate (debe cambiar su
+  clave al entrar) y Camilo (papá de Juli, administrador; espera código de
+  alta). «KATE» y «Visitante» están en la papelera.
+- **Últimos PR:**
+  - **#100:** el bloque sigue la lógica del chat, con verificación; Gem en 4 momentos.
+  - **#101:** géneros, familias y pulgadas editables; lo dudoso se decide, no se adivina.
+  - **#102:** los accesos los maneja el servidor (`dar_de_alta`, `crear_acceso`…); Camilo ya puede entrar.
+  - **#103:** el bloque cierra con «✓ Pedido correcto» por trabajador y crea ítems con las reglas del chat.
+  - **#104:** este HANDOFF, el catálogo del Gem y el plan de verificación.
+
+## 3. Cómo funciona (mapa corto; el detalle está en CLAUDE.md)
+
+- **Toda la UI y el estado viven en `App.tsx`.** Las escrituras van por la cola
+  durable `withSync` (`core/cola.ts`).
+- **Las reglas compartidas entre la app y la API están en `core/`:**
+  - `despacho.ts`: préstamo o gasto, obra obligatoria solo para consumo;
+  - `custodia.ts`: traslados y asignaciones;
+  - `verificacion.ts`: alertas del bloque, resumen y huella;
+  - `crearItem.ts`: cómo nace un ítem;
+  - `organizar.ts`: géneros y familias;
+  - `consultas.ts` y `registro.ts`: el asistente.
+- **El chat** (`components/FloatingChat.tsx`, unas 3.000 líneas) tiene 4 botones:
+  - **📋 Bloque:** se pega lo que entrega el Gem;
+  - **🚀 Despacho:** el flujo de 4 pasos, el mejor diseñado según Juli;
+  - **⚡ Rápido;**
+  - **➕ Agregar.**
+- **El flujo de Juli:** dicta al Gem durante la mañana → «unificá» → verifica
+  contra los audios → «confirmado» → el Gem entrega el bloque → se pega en 📋
+  Bloque → la app verifica contra la bodega → «✓ Pedido correcto» por trabajador
+  → Registrar.
+- **Instrucciones del Gem:** `asistente/GEM.md`. Catálogo real:
+  `asistente/CATALOGO.md`; se regenera desde producción cuando cambia el
+  inventario.
+
+## 4. Pendientes, en orden
+
+1. **L4, el cierre de seguridad.** Solo cuando Juli, Kate y Camilo hayan entrado
+   por la vía nueva (comprobable en la base: `auth.users.last_sign_in_at`):
+   - quitar las políticas públicas `allow_insert`, `allow_update` y
+     `allow_delete` de `app_users`;
+   - retirar `authenticate_user`;
+   - vaciar las claves en texto plano que quedan.
+
+   La vuelta atrás está en el baseline (las políticas originales).
+2. **La llave pública todavía mueve inventario.** Las funciones de stock son
+   `security definer` con `anon`. Cerrarlo es un proyecto (ver CLAUDE.md): las
+   escrituras pasan por la identidad del servidor.
+3. **Inventario definitivo.**
+   - **Decisión de Juli pendiente:** la Lista 5 (lo que cada uno tiene hoy o lo
+     que tuvo alguna vez).
+   - **Pendiente de su revisión:** `herramientas/INFORME-VINCULACION.md`.
+   - **Aplicar** primero en una copia y después en producción, con una entrada de
+     apertura por unidad. El Kardex tiene que cuadrar.
+4. **Supabase se pausa solo** (pasó del 12 al 28 de sep). Hace falta un aviso o un
+   plan pago.
+5. **Nunca hubo una prueba en navegador real.** Los recorridos R1–R19 están en
+   `VERIFICACION-ENTREGA.md`.
+6. **Opcional:**
+   - fase B: el «+ Crear nuevo» del chat pasa a `core/crearItem.ts`;
+   - desconectar Netlify, que falla en cada PR;
+   - `npm audit`;
+   - prueba de dos teléfonos a la vez.
+
+## 5. Prompt para abrir el chat nuevo (copiar y pegar)
 
 ```
-20260907120000_add_setup_columns_to_app_users.sql
-20260907170000_papelera.sql
-20260907173000_get_users_safe_papelera.sql
-20260907180000_origen_en_audit_logs.sql
-20260907190000_accesos_borrados_para_la_papelera.sql
-20260907200000_operacion_en_audit_logs.sql
-entrar_con_nombre_o_usuario_sin_mayusculas
+Recupera sesión. Leé HANDOFF.md y CLAUDE.md completos.
+
+Primero una AUDITORÍA FINAL, solo lectura, sin tocar nada:
+1. Estado real de producción (Supabase y Vercel): accesos (quién entró ya por
+   la identidad nueva), conteos, que las migraciones del repo coincidan con lo
+   instalado, y que la reconciliación del Kardex de supabase/RESTAURAR.md dé
+   cero filas (descontando los préstamos viejos sin entrada).
+2. Corré npm run test, node verificar-lint.cjs, npm run build y
+   node supabase/verificar-baseline.cjs, y juzgalos por su código de salida.
+3. Revisá por defectos (no por estilo) lo que cambió en los PR #100 a #103:
+   el bloque (FloatingChat renderLote/registrarLote, core/verificacion,
+   core/crearItem, utils/lote), los accesos (migración 20261002120000,
+   LoginView, UserManagementModal) y Organizar bodega.
+4. Entregá una lista de fallas reales con su evidencia (archivo:línea, consulta
+   o prueba), de la más grave a la menor, y qué propondrías. No arregles nada
+   todavía.
+
+Juli no quiere funciones nuevas: solo cerrar lo roto y lo pendiente.
 ```
 
-Proyecto Supabase: `xmizawuhiounkiaqrwxd` (`bodega-inventario`, región sa-east-1).
+## 6. Cosas que ya se aprendieron (no volver a caer)
 
----
----
-
-# APÉNDICE A — Prompt del asistente de trazabilidad
-
-> Pegado por Juli tal cual. Es la especificación funcional del agente que quiere.
-> La persona que lo va a usar es **la residente/encargada de bodega**, y la regla
-> madre es que **ella no se convierta en digitadora**: habla por voz a texto
-> mientras trabaja.
-
-**Propósito.** Mantener la trazabilidad de todo lo que se entrega, recibe,
-traslada, devuelve, daña o manda a una obra. Ella debe poder decir de corrido:
-*«Hoy le entregué a Abel una pulidora grande, una plomada de punto, unos clavos,
-un bisturí, una cuchilla, un martillo, una pala, una pica y un soldador»* — y que
-el asistente interprete el mensaje entero y genere el registro.
-
-**1. Las cinco listas de contexto.** No son cinco inventarios; cada una cumple
-una función distinta.
-- **Lista 1 — Planilla histórica.** La fuente más vieja. Las manuales que trae se
-  consideran válidas; las eléctricas sirven de **antecedente**. Una asignación
-  histórica **no** significa que la persona la tenga hoy.
-- **Lista 2 — Inventario definitivo.** **Fuente maestra** del inventario inicial:
-  qué existe y cuánto. **No sumar de nuevo** algo porque aparezca en otra lista.
-- **Lista 3 — Kardex.** Movimientos y asignaciones. Las manuales se consideran
-  correctas; las eléctricas fueron objeto de cruce, y un registro eléctrico viejo
-  es **solo una posible asignación** hasta que haya confirmación actual.
-- **Lista 4 — Cruce y control de pendientes.** Construida cruzando inventario
-  definitivo, inventario físico, kardex y planilla. Establece el estado inicial:
-  en bodega · buenas · malas · prestadas · responsables conocidos · fuera de
-  bodega · pendientes de ubicación · posibles asignaciones históricas. **No
-  considerar perdida una herramienta solo porque no esté en bodega**: usar
-  `PENDIENTE DE VERIFICAR UBICACIÓN`.
-- **Lista 5 — Manuales por trabajador.** Las manuales del Kardex con su
-  trabajador. **No limitar el sistema a eléctricas.**
-
-**2. El inventario es más amplio que las eléctricas.** Debe poder registrar
-herramienta eléctrica, manual, equipo, material, consumible, EPP, accesorio,
-repuesto, insumo, o lo que sea. **No exigirle que clasifique antes de registrar.**
-«Le di clavos» → Clavos, cantidad indicada o 1. La clasificación se hace después.
-La prioridad es **saber qué salió, quién lo recibió y cuándo**.
-
-**3. Bitácora viva.** `ESTADO INICIAL + MOVIMIENTOS NUEVOS = ESTADO ACTUAL`.
-
-**4. Los datos se autorrellenan.** Ella no escribe todos los campos.
-- *Fecha:* la de hoy, salvo que diga otra. *Hora:* la del mensaje. **No preguntar
-  la hora cada vez.**
-- *Tipo de movimiento:* inferirlo. «Le presté» → préstamo · «Le entregué» /
-  «Salió» → salida · «Entró» → entrada · «Volvió» / «Me devolvió» → devolución ·
-  «Mandamos» → traslado · «Lo encontramos» → ubicación confirmada · «Se dañó» →
-  cambio de estado. **No preguntarlo si se puede inferir.**
-- *Cantidad:* si no se especifica, 1.
-- *Marca y color:* registrar si se mencionan. **No inventarlos.**
-- *Responsable:* quién recibe. Si menciona quién la tenía antes, registrar
-  responsable anterior y nuevo.
-- *Ubicación:* si sale de bodega → origen Bodega. Si menciona obra → destino esa
-  obra. Si no da destino, **no inventarlo**.
-
-**5. Varios elementos en un solo mensaje.** Identificar cada uno. **No pedirle
-nueve mensajes.** Todos quedan atados a la misma persona, fecha, hora, operación,
-origen y destino.
-
-**6. Campos del registro:** fecha, hora, movimiento, elemento, cantidad, marca,
-color, responsable anterior, responsable nuevo, quién entrega, quién recibe,
-ubicación origen, ubicación destino, estado, observación. Lo que no se conozca
-queda como `No especificado` — **nunca inventado**.
-
-**7. Respuesta breve.** *«Registrado: entrega a Abel — pulidora grande, plomada,
-clavos, bisturí, cuchilla, martillo, pala, pica y soldador.»* Nada de
-explicaciones largas mientras ella trabaja.
-
-**8. Confirmación.** Si el mensaje es claro, registrar directo. Solo preguntar lo
-indispensable ante una ambigüedad que produzca un registro incorrecto
-(*«¿Pulidora grande o pequeña?»*). **Nunca** preguntar fecha, hora, tipo o
-cantidad inferibles.
-
-**9. Devoluciones.** *«Abel devolvió la pulidora»* → registrar devolución.
-**NO borrar el préstamo original.** Se conserva `Préstamo → devolución`.
-
-**10. Devolución parcial.** Si prestó pulidora, pala y martillo y devuelve dos, se
-registran dos devoluciones y **la pala sigue asignada**. No se cierra ni elimina
-la operación original.
-
-**11. Estado.** «Volvió buena» → buena. «Volvió mala» → mala. Si vuelve sin
-información, **no inventar**.
-
-**12. Dañadas.** Registrar el cambio de estado. **NO eliminarla del inventario.**
-
-**13. Traslados entre obras.** *«Mandé una pulidora de Bonilla para El Cristo»* →
-origen Bonilla, destino El Cristo. Si queda un responsable, registrarlo.
-
-**14. Encontradas.** *«Encontré el láser Total en Salvador Bahía»* → actualizar
-ubicación, estado «ubicación confirmada», sacarla de pendientes. **No borrar su
-historial.**
-
-**15. Pendientes de ubicación.** Se mantienen hasta que haya confirmación actual.
-Una asignación histórica **no** resuelve el pendiente: *«Nivel láser Total →
-pendiente de verificar → posible responsable histórico: Jesús»*. Solo cuando ella
-diga *«el láser Total lo tiene Jesús»* pasa a confirmado.
-
-**16. Control de responsables.** Debe responder *«¿qué tiene Abel?»* (solo lo que
-está bajo su responsabilidad **ahora**) y *«¿qué tenía Abel?»* (historial).
-Distinguir siempre **actual / histórico / devuelto**.
-
-**17. NO borrar historial.** *Regla fundamental.* Todo cambio agrega un
-movimiento nuevo. El historial debe permitir reconstruir: quién → recibió →
-cuándo → qué → dónde fue → cuándo devolvió → en qué estado.
-
-**18. Consultas** que debe soportar: ¿qué tiene Abel? · ¿qué está prestado? ·
-¿qué salió hoy? · ¿qué entró hoy? · ¿qué volvió hoy? · ¿qué devolvió Abel? ·
-¿qué está malo? · ¿qué falta por ubicar? · ¿qué hay en El Cristo? · ¿qué salió
-para Bonilla? · ¿quién tiene las pulidoras? · ¿qué tiene cada trabajador?
-
-**19. Resumen para el responsable principal.** Formato compacto: *Salidas /
-préstamos* · *Devoluciones* · *Pendientes*, cada renglón con hora, persona,
-elemento, cantidad y origen → destino.
-
-**20. Pedidos.** *«Necesitamos 20 pares de guantes naranjas, 10 palas y dos
-extensiones»* → registrar elementos y cantidades, sin exigir clasificación.
-
-**21. Regla de trazabilidad.** Toda salida: **QUÉ + CUÁNTO + QUIÉN + CUÁNDO**, y
-cuando aplique **DE DÓNDE + PARA DÓNDE + EN QUÉ ESTADO**. Toda devolución debe
-poder relacionarse con su salida.
-
-**22. Mínima fricción.** Ella está trabajando. Sin formularios, sin comandos, sin
-memorizar categorías, sin repetir lo que ya está claro por contexto.
-
-**23. Objetivo final.** El responsable principal trabaja hasta el mediodía y
-después no está en la obra. Los movimientos de su ausencia deben quedar
-registrados **en el momento**, por voz o texto. *La prioridad no es que el
-registro sea perfecto en la primera captura; la prioridad es* **«QUE EL
-MOVIMIENTO NO SE PIERDA»** *— después se completa, corrige o clasifica.*
-
-**24. Regla final.** `LA RESIDENTE HABLA → EL ASISTENTE ENTIENDE → EL ASISTENTE
-ESTRUCTURA → EL MOVIMIENTO QUEDA REGISTRADO → EL HISTORIAL SE CONSERVA.` Bitácora
-inteligente, **no** un formulario que la obligue a parar de trabajar.
-
----
-
-# APÉNDICE B — Inventario de herramientas eléctricas (listas 2, 3 y 4 de Juli)
-
-> **Ojo:** esta lista dice **96 unidades**; producción tiene **61**. Ver punto 6.
-
-## B.1 — Inventario total
-
-| Herramienta | Total |
-|---|---|
-| Niveles láser | 5 |
-| Plomada de punto láser | 1 |
-| Hidrolavadoras | 2 |
-| Vibros | 2 |
-| Taladros demoledores | 2 |
-| Tronzadoras | 2 |
-| Radiales | 9 |
-| Pulidoras grandes | 9 |
-| Pulidoras pequeñas | 9 |
-| Taladros percutores | 6 |
-| Taladros inalámbricos | 7 |
-| Taladros alámbricos | 3 |
-| Soldadores pequeños Gamma | 2 |
-| Mezcladoras eléctricas | 2 |
-| Lijadoras | 7 |
-| Compresores | 2 |
-| Canguro | 1 |
-| Nivel de precisión | 1 |
-| Colichadora | 1 |
-| Pistolas de impacto | 5 |
-| Soldador grande Neo | 1 |
-| Soldador pequeño Furious | 1 |
-| Gramera eléctrica | 1 |
-| Pesa eléctrica | 1 |
-
-## B.2 — En bodega, buenas
-
-Niveles láser 3 · Plomada de punto láser 1 · Hidrolavadoras 2 · Vibros 2 ·
-Taladro demoledor DeWalt amarillo 1 · Radiales 6 · Pulidora grande Stanley 1 ·
-Taladro inalámbrico Bauker 1 · Taladro alámbrico DeWalt 1 · Lijadoras 5 ·
-Mezcladora eléctrica 1 · Soldador pequeño Gamma 1 · Soldador grande Neo 1 ·
-Pistolas de impacto 5 · Compresor rojo 1 · Nivel de precisión 1 · Canguro 1 ·
-Tronzadora 1
-
-## B.3 — En bodega, malas (siguen siendo parte del inventario)
-
-Compresor amarillo 1 · Taladros percutores Bosch 2 · Taladro percutor Truper de
-maletín 1 · Pulidora grande Makita azul 1 · Taladro alámbrico Bosch 1 · Taladro
-demoledor rojo 1 · Soldador Furious naranja 1 · Gramera eléctrica 1 ·
-Colichadora 1
-
-## B.4 — Prestadas, responsable CONFIRMADO
-
-| Herramienta | Cant. | Responsable |
-|---|---|---|
-| Pulidora grande Makita azul | 1 | Duván |
-| Pulidora grande | 1 | Anderson |
-| Pulidora grande | 1 | John Jader |
-| Radial | 1 | John Jader |
-| Taladro inalámbrico | 1 | Jesús Vázquez |
-| Taladro inalámbrico | 1 | John Jader |
-| Taladro inalámbrico | 1 | Andrés |
-| Taladro alámbrico DeWalt | 1 | Carlos Torrealba |
-| Lijadoras | 2 | Diego |
-| Soldador pequeño Gamma | 1 | Brian |
-| Mezcladora eléctrica | 1 | Dani |
-
-## B.5 — FALTA POR VERIFICAR + posibles asignaciones (**25 unidades**)
-
-Los tres niveles que hay que distinguir, en palabras de Juli:
-**Confirmado** (sabemos quién la tiene hoy) · **Posible asignación** (aparece
-relacionado en Kardex/planilla, pero no sabemos si todavía la tiene) ·
-**Falta por verificar** (la unidad existe, sin ubicación ni responsable actual).
-
-| Herramienta | Cant. | Posibles asignaciones / personas relacionadas |
-|---|---|---|
-| Nivel láser DeWalt | 1 | Dani / William, históricos con láseres. Verificar quién lo tiene hoy. |
-| Nivel láser Total | 1 | Jesús Vázquez aparece en planilla con «Láser Total». Verificar. |
-| Taladro demoledor amarillo DeWalt | 1 | John Jader, histórico, registro decía «por confirmar». |
-| Tronzadora | 1 | Revisar kardex/planilla, trabajadores con herramientas de corte. Sin asignación. |
-| Radiales | 2 | John Jader tiene 1 confirmada; hay 2 más sin ubicar. |
-| Pulidoras grandes | 4 | Andrés, Héctor Quiceno, Sebastián y otros históricos. Cruzar quién conserva alguna. |
-| Pulidoras pequeñas | 7 | John Jader, Héctor Quiceno, Adrián Echeverri, Sebastián, Ricardo, Giovanni. |
-| Taladros percutores | 3 | Ferney Giraldo → Truper gris · John Jader → Da Vinci · Abel/Abel Oficial → Da Vinci. Verificar también a Álex el oficial. |
-| Taladros inalámbricos | 3 | Brian Sánchez (kardex) · Jorman (planilla) · Andrés confirmado. Revisar Brian/Jorman. |
-| Taladro alámbrico Truper gris | 1 | Sin asignación actual confirmada. |
-
-> Regla que Juli deja explícita: *no decir «lo tiene Jesús»; decir «1 láser Total
-> fuera → posible asignación: Jesús → verificar»*. Eso evita que un registro viejo
-> se vuelva una asignación actual por accidente. Cuando él diga «Ferney tiene el
-> Truper gris», sale de pendientes y pasa a prestado confirmado, **sin alterar las
-> demás listas**.
-
----
-
-# APÉNDICE C — Lista 5: herramientas manuales por trabajador
-
-> **Ojo:** la app tiene **13 filas / 21 unidades** de herramienta manual. Esta
-> lista es mucho más grande. Prácticamente **no está cargada**.
-
-| Trabajador | Herramientas manuales registradas |
-|---|---|
-| Dani | Escalera pequeña, cortadora de enchape |
-| John Jader | Rodilleras |
-| Jorman | CRC, pala, escuadra, tijera de lámina |
-| Juan Puerta | Almádana, cincel |
-| Adrián Echeverri | Trapera, marcador |
-| Anderson | Serrucho, escuadras, alicates, pala, escuadra grande, tijera de lámina, palustre, segueta, espátulas pequeñas |
-| Albeiro | Pala coca, barra, machetes, llaves 12 y 14, pala, almádana, gambia |
-| Álex | Manguera de nivel, machete, barra, palas, cizalla, almádana, picas, entre otras |
-| Carlos Torrealba | Escuadra, broca cónica, almádana, cinta, nivel de mano, martillo, prensas, destornilladores, espátulas, entre otras |
-| Carlos García | Herramientas manuales varias |
-| Duván | Chuela, llana |
-| Jorge Giraldo | Palas, barra |
-| William | Machete, paleta, pisón, pica, pala, espátula |
-| Alex Ferreira | Espátula pequeña, cepillo de alambre |
-| Ricardo | Herramientas manuales varias |
-| Juan Echeverry | Herramientas manuales varias |
-| Abel / Abel Oficial | Palustre, polea/diferencial |
-| Héctor Quiceno | Almádana, bichiroqui, chipote, martillo, codal, cortatubo, plomada, palustres, alicate, cincel, nivel de mano, pala, palín |
-| Brian Sánchez | Arnés, eslinga, pala, tijera de lámina |
-| Jesús Vásquez | Herramientas manuales registradas en kardex histórico |
-| Sebastián | Herramientas manuales registradas |
-| Ferney Giraldo | Herramientas manuales registradas |
-
----
-
-## Lo primero que hay que hacer en la sesión nueva
-
-**La decisión ya está tomada.** Juli lo dijo textual el 11 de septiembre de 2026:
-
-> **«Las listas son de verdad.»**
-
-O sea: **mandan las listas**, no producción. Hay que subir la app al nivel de las
-listas, no al revés. Eso significa, en este orden:
-
-1. **Cargar las ~35 herramientas eléctricas que faltan** (Apéndice B contra el
-   inventario actual).
-2. **Cargar el inventario manual completo** del Apéndice C, con su trabajador
-   responsable. Hoy hay 13 filas; la lista tiene decenas.
-3. **Abrir el tercer estado** («pendiente de verificar ubicación», con posible
-   responsable) — sin él, las 25 unidades del Apéndice B.5 no tienen dónde vivir
-   y se cargarían mintiendo, como si estuvieran en bodega.
-
-**Tres cosas que NO se deducen de «las listas mandan» y hay que respetar igual:**
-
-- **Nada se borra.** Si producción tiene algo que la lista no trae, **no se
-  elimina**: se deja y se marca para revisar. La regla del punto 3 manda sobre
-  esto.
-- **El kardex tiene que seguir cuadrando en cero.** Cada unidad que entre va con
-  su **entrada de apertura**, igual que se hizo con las 4 que faltaban. Cargar
-  cantidades a pelo descuadra el kardex.
-- **Una asignación histórica no es una asignación actual.** Lo prestado
-  confirmado (B.4) entra como préstamo; lo de B.5 entra como pendiente, **nunca**
-  como préstamo a la persona que aparece de «posible».
-
-**Orden sugerido:** primero el punto 3 (el estado nuevo), después la carga. Al
-revés toca volver a tocar lo cargado.
+- **«Julio» en la pantalla de entrada era el traductor de Chrome.** La página
+  decía `lang="en"`. Ya está en español y sin traducción.
+- **Lo dudoso se decide, no se adivina.** El bloque registraba el primer
+  parecido: 22 de 60 elementos en la prueba con datos reales.
+- **Las familias reales están en plural** («Codos»). Las obras se escriben como
+  en el catálogo («CRISTO»): «El Cristo» no la reconoce.
+- **Un `CHECK` o un `NOT NULL` de la base puede tumbar una función nueva.**
+  `app_users.password` es NOT NULL: por eso se usa `''`, y `authenticate_user`
+  rechaza las claves vacías.
+- **Antes de aplicar una migración en producción**, se prueba dentro de una
+  transacción que termina en `raise exception` con los resultados: así se
+  revierte sola.
