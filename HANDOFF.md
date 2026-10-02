@@ -96,7 +96,16 @@
 ```
 Recupera sesión. Leé HANDOFF.md y CLAUDE.md completos.
 
-Primero una AUDITORÍA FINAL, solo lectura, sin tocar nada:
+Paso 0, antes de todo: traeme al chat y transcribime COMPLETOS, sin resumir ni
+recortar, uno por uno, estos cuatro archivos del repo, para leerlos y
+verificarlos acá:
+  1. HANDOFF.md
+  2. VERIFICACION-ENTREGA.md (mínimo la sección «Plan de Juli» del principio)
+  3. asistente/GEM.md (las instrucciones del Gem, listas para copiar)
+  4. asistente/CATALOGO.md (el catálogo que se le sube al Gem)
+Mandámelos también como archivo. Después de transcribirlos, seguí.
+
+Luego una AUDITORÍA FINAL, solo lectura, sin tocar nada:
 1. Estado real de producción (Supabase y Vercel): accesos (quién entró ya por
    la identidad nueva), conteos, que las migraciones del repo coincidan con lo
    instalado, y que la reconciliación del Kardex de supabase/RESTAURAR.md dé
