@@ -56,6 +56,14 @@ let pgcrypto;
   for (const f of archivos) {
     try {
       await pg.exec(fs.readFileSync(path.join(dir, f), 'utf8'));
+      // Supabase le da TODO a `anon` y `authenticated` sobre las tablas de
+      // `public`; un PostgreSQL pelado no. Sin imitarlo, «la llave pública no
+      // lee» pasaría aunque ninguna migración la cerrara.
+      if (f.startsWith('00000000000000')) {
+        await pg.exec(`grant usage on schema public to anon, authenticated, service_role;
+                       grant all on all tables in schema public to anon, authenticated, service_role;
+                       alter default privileges in schema public grant all on tables to anon, authenticated, service_role;`);
+      }
       resultados.push({ archivo: f, estado: 'ok' });
     } catch (e) {
       resultados.push({ archivo: f, estado: 'FALLÓ', error: String(e.message).split('\n')[0] });
@@ -156,15 +164,16 @@ async function accesos(pg) {
     create table if not exists auth.identities (
       provider_id text, user_id uuid, identity_data jsonb, provider text,
       last_sign_in_at timestamptz, created_at timestamptz, updated_at timestamptz);
-    grant usage on schema auth to anon, authenticated;
-    grant select, insert, update, delete on app_users to anon, authenticated;`);
+    grant usage on schema auth to anon, authenticated;`);
   const JULI = 'aaaaaaaa-0000-4000-8000-000000000001';
   const KATE = 'aaaaaaaa-0000-4000-8000-000000000002';
   await pg.query(`insert into app_users (id, name, role, setup_complete, password, auth_uid)
                   values ($1, 'Juli', 'owner', true, '', $1), ($2, 'Kate', 'employee', true, '', $2)`, [JULI, KATE]);
   const como = async (rol, uid, sql, params = []) => {
-    await pg.exec(`set request.jwt.claim.sub = '${uid ?? ''}'; set role ${rol};`);
-    try { return await pg.query(sql, params); } finally { await pg.exec('reset role; reset request.jwt.claim.sub;'); }
+    // El rol va también en el pedido, como lo manda Supabase: `es_de_la_bodega()` lo lee de ahí.
+    await pg.exec(`set request.jwt.claim.sub = '${uid ?? ''}'; set request.jwt.claim.role = '${rol}'; set role ${rol};`);
+    try { return await pg.query(sql, params); }
+    finally { await pg.exec('reset role; reset request.jwt.claim.sub; reset request.jwt.claim.role;'); }
   };
   const falla = async (f) => { try { await f(); return false; } catch { return true; } };
   const filas = [];
@@ -198,6 +207,41 @@ async function accesos(pg) {
   await como('authenticated', JULI, 'select restore_user($1)', [KATE]);
   const viva = (await pg.query('select deleted_at is null v from app_users where id = $1', [KATE])).rows[0].v;
   filas.push(['el administrador sí lo revive', viva === true]);
+
+  // 5. Solo la gente de la bodega toca la bodega (20261003130000).
+  const FORASTERO = 'aaaaaaaa-0000-4000-8000-0000000000ff';
+  const lote = (id) => JSON.stringify([{ id, item_id: '11111111-1111-4111-8111-111111111111',
+    type: 'Entrada', quantity: 1, timestamp: '2026-10-03T12:00:00Z' }]);
+  const cuantos = async (rol, uid) => {
+    try { return (await como(rol, uid, 'select count(*)::int n from items')).rows[0].n; } catch { return 0; }
+  };
+  filas.push(['la llave pública no lee el inventario', (await cuantos('anon', null)) === 0]);
+  filas.push(['una identidad ajena a la bodega no lo lee', (await cuantos('authenticated', FORASTERO)) === 0]);
+  filas.push(['la gente de la bodega sí lo lee', (await cuantos('authenticated', JULI)) > 0]);
+  filas.push(['la llave pública no mueve stock', await falla(() => como('anon', null,
+    'select log_movements_and_update_stock($1::jsonb)', [lote('99999999-9999-4999-8999-0000000000a1')]))]);
+  filas.push(['una identidad ajena no mueve stock', await falla(() => como('authenticated', FORASTERO,
+    'select log_movements_and_update_stock($1::jsonb)', [lote('99999999-9999-4999-8999-0000000000a2')]))]);
+  const stock = async () => Number((await pg.query('select quantity q from items')).rows[0].q);
+  const antes = await stock();
+  await como('authenticated', JULI, 'select log_movements_and_update_stock($1::jsonb)', [lote('99999999-9999-4999-8999-0000000000a3')]);
+  filas.push(['la gente de la bodega sí mueve stock', (await stock()) === antes + 1]);
+  filas.push(['la entrada vieja (authenticate_user) ya no existe',
+    (await pg.query(`select to_regprocedure('authenticate_user(text,text)') is null r`)).rows[0].r === true]);
+
+  // 6. Kate como la primera vez: se corre el bloque de la migración sobre una
+  // Kate como la de producción (clave de dos letras, identidad sin estrenar).
+  const KATE2 = 'aaaaaaaa-0000-4000-8000-000000000022';
+  await pg.query(`update app_users set username = 'kate_prueba' where id = $1`, [KATE]);
+  await pg.query(`insert into auth.users (id, email, encrypted_password) values ($1, 'kate@x', crypt('ab', gen_salt('bf')))`, [KATE2]);
+  await pg.query(`insert into app_users (id, name, username, role, setup_complete, password, auth_uid, debe_cambiar_clave)
+                  values ($1, 'Kate', 'kate', 'employee', true, 'ab', $1, true)`, [KATE2]);
+  const migracion = fs.readFileSync(path.join(repo, 'supabase/migrations/20261003130000_solo_la_bodega.sql'), 'utf8');
+  const bloque = migracion.match(/do \$kate\$[\s\S]*?end \$kate\$;/);
+  if (bloque) await pg.exec(bloque[0]);
+  const k = (await pg.query(`select u.setup_complete s, au.encrypted_password = crypt('ab', au.encrypted_password) vieja
+                             from app_users u join auth.users au on au.id = u.auth_uid where u.id = $1`, [KATE2])).rows[0];
+  filas.push(['Kate queda esperando código y su clave vieja ya no sirve', !!bloque && k.s === false && k.vieja === false]);
 
   let bien = true;
   console.log('\nAccesos:');
