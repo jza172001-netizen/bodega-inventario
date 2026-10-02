@@ -7,7 +7,7 @@
  */
 import { InventoryType, Item, Movement, MovementType, Personnel, Project } from '../types';
 import { leerLote, leerHora, partirPersona, moverItem, medidaDicha } from '../utils/lote';
-import { verificarLote, listoParaRegistrar, Contexto } from '../core/verificacion';
+import { verificarLote, listoParaRegistrar, resumenDeLinea, Contexto } from '../core/verificacion';
 import { igual, esCierto, grupo, cerrar } from './correr';
 
 const P: Personnel[] = [{ id: 'alex', name: 'Alex Ferreira', isTeamLeader: true }, { id: 'juan', name: 'Juan Puerta', teamLeaderId: 'alex' }];
@@ -158,6 +158,19 @@ grupo('lo DUDOSO se decide, no se registra con el primero que salió', () => {
     const rp = leerLote('Juan: 1 pala', dos, I, O);
     esCierto(rp.lineas[0].dudosa && !!rp.lineas[0].persona, '«Juan» con dos Juan: escoge uno pero DUDA');
     igual(tipos(verificarLote(rp, ctx({ personnel: dos })).porLinea, rp.lineas[0].id), ['persona'], 'y eso se pregunta, no se registra callado');
+});
+
+grupo('el resumen del trabajador dice lo mismo que el «Confirmar» del chat', () => {
+    const r = leerLote('Juan Puerta: 3 palas, 2 cemento, 1 zorbex', P, I, O);
+    const l = r.lineas[0];
+    const v = verificarLote(r, ctx({ obraGeneral: 'cristo' }));
+    const res = resumenDeLinea(l, v, new Map(), it => !!it.item);
+    igual(res.sale.map(x => [x.nombre, x.cantidad, x.unidad, x.prestamo]), [['Pala', 3, 'und', true], ['Cemento', 2, 'und', false]],
+        'cantidad, unidad, y Préstamo (herramienta) o Gasto (consumo)');
+    igual(res.seQueda.map(x => x.nombre), ['zorbex'], 'lo que no se sabe qué es se queda, nombrado');
+    const sinObra = resumenDeLinea(l, verificarLote(r, ctx({ obraGeneral: null })), new Map(), it => !!it.item);
+    igual(sinObra.sale.map(x => x.nombre), [], 'con consumo y sin obra, el renglón entero espera la decisión');
+    esCierto(sinObra.seQueda.every(x => x.porque.length > 0), 'y cada uno dice por qué');
 });
 
 await cerrar();

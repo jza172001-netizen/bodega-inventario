@@ -203,6 +203,20 @@ size, even when it is the only candidate. When the doubt is only the size, the
 `elemento` alert carries `medidas` and the block shows them as buttons.
 «2 Y de 2» is the Y fitting, not a conjunction (`partirItems`).
 
+**The block ends like the chat's «Confirmar», per worker** (since 2 Oct 2026).
+`components/ResumenTrabajador.tsx` shows worker (crew), project, time, and each
+item with quantity, unit and Préstamo/Gasto (`resumenDeLinea`). Only lines with
+«✓ Pedido correcto» register. The confirmation is stored with the line's
+`huellaDeLinea` and is valid only while the fingerprint matches — moving an
+item, changing a quantity, the item or who it is for unconfirms it without any
+handler having to remember. It REPLACES the per-item «Verificar» (the summary
+shows the `mirar` warnings); `decidir` still blocks. A new item is born through
+`core/crearItem.ts` (`fichaDelBloque`: canonical family, corrected name, family +
+género + medida, the sibling's `ruta`) and never as a twin (`identicoDe`).
+«Sin asignar trabajador» (`l.sinPersona`) and «➕ Obra nueva…» mirror chat steps
+2 and 3. Phase B (after Friday): the chat's «+ Crear nuevo» moves onto
+`core/crearItem.ts` too.
+
 **`falta_stock` is level `aviso`**: shown, not blocking. No stock → «entra lo que
 falta y sale» is the normal case and is consented by «Lo que no haya, cargalo»;
 one tap per item was 30 taps per morning. `ya_la_tiene` stays `mirar`.

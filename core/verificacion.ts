@@ -129,7 +129,9 @@ export const verificarLote = (lote: LoteParseado, c: Contexto): {
         // Dudosa CON alguien elegido también se pregunta: el buscador escoge el
         // primero de dos igual de parecidos («Juan» y «Juan Pablo»), y
         // registrarlo sin preguntar es el error con cara de correcto.
-        if ((!l.persona || l.dudosa) && !l.crear) {
+        if (l.sinPersona) {
+            // «Sin asignar trabajador»: decidido a propósito, no se pregunta.
+        } else if ((!l.persona || l.dudosa) && !l.crear) {
             anotar(porLinea, l.id, {
                 tipo: 'persona', nivel: 'decidir',
                 texto: l.candidatosPersona.length > 1 && l.dudosa
@@ -163,7 +165,7 @@ export const verificarLote = (lote: LoteParseado, c: Contexto): {
         }
 
         // ── Cada elemento ──
-        const quien = l.paraId ?? l.persona?.id;
+        const quien = l.sinPersona ? undefined : (l.paraId ?? l.persona?.id);
         for (const it of l.items) {
             // Dudoso con ítem elegido también: «1 pulidora» con una grande y una
             // pequeña quedaba registrada como la primera, sin preguntar.
@@ -228,4 +230,70 @@ export const listoParaRegistrar = (
     const delItem = v.porItem.get(itemLoteId) ?? [];
     if ([...deLinea, ...delItem].some(a => a.nivel === 'decidir')) return false;
     return delItem.every(a => a.nivel !== 'mirar') || mirados.has(itemLoteId);
+};
+
+// ─── El paso final por trabajador: «¿este es el pedido correcto?» ─────────
+
+/**
+ * La huella de un renglón: todo lo que, si cambia, hace que lo confirmado deje
+ * de valer. Quién, para quién, qué obra, qué ítems y cuántos.
+ *
+ * La confirmación se guarda junto con esta huella y vale solo mientras la
+ * huella siga igual. Así no hay que acordarse de desconfirmar en cada función
+ * que toca un renglón —mover un elemento, cambiar una cantidad, escoger otro
+ * ítem—: si algo cambió, la huella ya no es la misma y hay que volver a mirar.
+ */
+export const huellaDeLinea = (l: LineaLote, obraGeneral: string | null | undefined, nuevos: Map<string, InventoryType>): string =>
+    JSON.stringify([
+        l.sinPersona ? 'sin-asignar' : l.persona?.id ?? (l.crear ? `crear:${l.crear.nombre}:${l.crear.liderId ?? ''}` : ''),
+        l.paraId ?? '',
+        obraDe(l, obraGeneral) ?? '?',
+        l.items.map(it => [it.id, it.item?.id ?? (nuevos.has(it.id) ? `nuevo:${nuevos.get(it.id)}:${it.nombre}` : ''), it.cantidad, it.dudoso]),
+    ]);
+
+/** Lo que muestra el resumen del trabajador, igual que el «Confirmar» del chat. */
+export interface ResumenLinea {
+    sale: Array<{ itemLoteId: string; nombre: string; cantidad: number; unidad: string; prestamo: boolean; nuevo: boolean; accesorios: string[]; avisos: string[] }>;
+    seQueda: Array<{ itemLoteId: string; nombre: string; porque: string }>;
+}
+
+const ES_PRESTAMO = new Set<InventoryType>([InventoryType.HAND_TOOL, InventoryType.ELECTRICAL_TOOL]);
+
+/**
+ * Qué sale y qué se queda de un renglón, dicho como lo dice el chat al final:
+ * cantidad con su unidad, y Préstamo o Gasto. Lo que todavía hay que decidir
+ * (cuál ítem, qué obra…) se nombra aparte: al confirmar, eso NO sale.
+ *
+ * `resuelto` es el de la pantalla: el ítem existe, o se decidió crearlo.
+ */
+export const resumenDeLinea = (
+    l: LineaLote,
+    v: ReturnType<typeof verificarLote>,
+    nuevos: Map<string, InventoryType>,
+    resuelto: (it: ItemLote) => boolean,
+): ResumenLinea => {
+    const todos = new Set(l.items.map(it => it.id));
+    const deLinea = (v.porLinea.get(l.id) ?? []).filter(a => a.nivel === 'decidir');
+    const r: ResumenLinea = { sale: [], seQueda: [] };
+    for (const it of l.items) {
+        const listo = resuelto(it) && listoParaRegistrar(l, it.id, v, todos);
+        if (!listo) {
+            const porque = [...deLinea, ...(v.porItem.get(it.id) ?? []).filter(a => a.nivel === 'decidir')][0]?.texto
+                ?? 'falta escoger qué ítem es';
+            r.seQueda.push({ itemLoteId: it.id, nombre: it.nombre, porque });
+            continue;
+        }
+        const tipo = it.item?.inventoryType ?? nuevos.get(it.id);
+        r.sale.push({
+            itemLoteId: it.id,
+            nombre: it.item?.name ?? it.nombre,
+            cantidad: it.cantidad,
+            unidad: it.item?.unit ?? 'unidades',
+            prestamo: it.item ? isAsset(it.item) : !!tipo && ES_PRESTAMO.has(tipo),
+            nuevo: !it.item,
+            accesorios: (it.item?.accessories ?? []).map(a => a.cantidad && a.cantidad > 1 ? `${a.cantidad} ${a.nombre}` : a.nombre),
+            avisos: (v.porItem.get(it.id) ?? []).filter(a => a.nivel !== 'decidir').map(a => a.texto),
+        });
+    }
+    return r;
 };

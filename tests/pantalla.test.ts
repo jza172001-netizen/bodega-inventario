@@ -28,7 +28,8 @@ import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { Item, InventoryType, Movement, MovementType, Personnel, Project } from '../types';
 import { planearLote, tipoExigeObra } from '../core/despacho';
-import { verificarLote, listoParaRegistrar, obraDe } from '../core/verificacion';
+import { verificarLote, listoParaRegistrar, obraDe, huellaDeLinea } from '../core/verificacion';
+import { fichaDelBloque, identicoDe } from '../core/crearItem';
 import { momentoConHora } from '../utils/date';
 import { normStr } from '../utils/genus';
 import { leerLote } from '../utils/lote';
@@ -88,10 +89,12 @@ const ficha = (id: string, name: string, quantity: number, inventoryType = Inven
     id, name, quantity, inventoryType, category: 'Prueba', subCategory: '', minStock: 0, unit: 'und',
 });
 
-const MANEJADORES = ['fichaNueva', 'resuelto', 'obraGeneral', 'armarMovimientos', 'verificacionDelLote', 'quitarRegistrados', 'registrarLote', 'quitarLinea', 'desmarcarNuevo'];
+const MANEJADORES = ['fichaNueva', 'resuelto', 'obraGeneral', 'armarMovimientos', 'verificacionDelLote', 'quitarRegistrados', 'registrarLote', 'quitarLinea', 'desmarcarNuevo', 'confirmado', 'confirmarLinea'];
 
 interface Manejadores {
     registrarLote: () => void;
+    confirmarLinea: (id: string) => void;
+    confirmado: (l: unknown) => boolean;
     quitarLinea: (id: string) => void;
     desmarcarNuevo: (id: string) => void;
     armarMovimientos: (crear: boolean) => { movs: Array<Omit<Movement, 'id'>>; registrados: Set<string>; nacen: Item[] };
@@ -114,7 +117,15 @@ const panel = (items: Item[], texto: string, conProyecto = false, sinSubir = 0,
         lote: leerLote(texto, personal, items, obras),
         loteFecha: '2026-09-12',
         loteProyecto: extra.obra ?? (conProyecto ? OBRA.id : '__sin__'),
-        loteMirados: new Set<string>(),
+        // «✓ Pedido correcto» por trabajador, con la huella del renglón.
+        // Se muta en el MISMO Map: los manejadores extraídos ya lo tienen.
+        loteConfirmados: new Map<string, string>(),
+        setLoteConfirmados: (f: (m: Map<string, string>) => Map<string, string>) => {
+            const m = c.loteConfirmados as Map<string, string>;
+            const n = f(m); m.clear(); n.forEach((v, k) => m.set(k, v));
+        },
+        loteNombres: new Map(),
+        huellaDeLinea, fichaDelBloque, identicoDe,
         movements: extra.movimientos ?? [],
         personnel: personal,
         verificarLote, listoParaRegistrar, obraDe, normStr, tipoExigeObra,
@@ -158,6 +169,17 @@ const panel = (items: Item[], texto: string, conProyecto = false, sinSubir = 0,
     return { visto, c, fn: sacarDelComponente<Manejadores>(MANEJADORES, c) };
 };
 
+/**
+ * Registrar como lo hace una persona: «✓ Pedido correcto» en cada trabajador y
+ * después «Registrar». Confirmar NO salta lo que hay que decidir: eso sigue
+ * frenando, y las pruebas de abajo lo comprueban.
+ */
+function registrar(p: { c: Record<string, unknown>; fn: Manejadores }) {
+    const ls = (p.c.lote as { lineas: Array<{ id: string }> } | null)?.lineas ?? [];
+    for (const l of ls) p.fn.confirmarLinea(l.id);
+    p.fn.registrarLote();
+}
+
 /** Qué quedó todavía en pantalla, por nombre pedido. */
 const pendientes = (c: Record<string, unknown>): string[] => {
     const lote = c.lote as { lineas: Array<{ items: Array<{ nombre: string }> }> } | null;
@@ -172,7 +194,7 @@ grupo('lo que NO se resolvió se queda en pantalla', () => {
      * el movimiento no se pierde.
      */
     const p = panel([ficha(PALA, 'Pala', 3)], 'Alex: 1 pala, 1 zorbex');
-    p.fn.registrarLote();
+    registrar(p);
     igual(p.visto.enviados.length, 1, 'se registra la pala');
     igual(p.visto.cerrado, false, 'el panel NO se cierra');
     igual(pendientes(p.c), ['zorbex'], 'y queda el zorbex esperando');
@@ -180,7 +202,7 @@ grupo('lo que NO se resolvió se queda en pantalla', () => {
 
 grupo('cuando todo se resuelve, el panel sí se cierra', () => {
     const p = panel([ficha(PALA, 'Pala', 3)], 'Alex: 1 pala');
-    p.fn.registrarLote();
+    registrar(p);
     igual(p.visto.enviados.length, 1, 'entró');
     igual(p.visto.cerrado, true, 'y no queda nada que mostrar');
 });
@@ -200,12 +222,12 @@ grupo('quitar un renglón NO le corre el tipo a los demás', () => {
 
     p.fn.desmarcarNuevo(alfa.id);
     p.fn.quitarLinea(alfa.id);
-    p.fn.registrarLote();
+    registrar(p);
 
     const porNombre = new Map(p.visto.creados.map(i => [i.name, i.inventoryType]));
     igual(p.visto.creados.length, 2, 'nacen beta y gamma');
-    igual(porNombre.get('beta'), InventoryType.ELECTRICAL_TOOL, 'beta conserva Eléctrica');
-    igual(porNombre.get('gamma'), InventoryType.SINGLE_USE, 'gamma conserva Consumo');
+    igual(porNombre.get('Beta'), InventoryType.ELECTRICAL_TOOL, 'beta conserva Eléctrica (nace con mayúscula, como en el chat)');
+    igual(porNombre.get('Gamma'), InventoryType.SINGLE_USE, 'gamma conserva Consumo');
 });
 
 grupo('los ítems nuevos nacen en CERO', () => {
@@ -215,7 +237,7 @@ grupo('los ítems nuevos nacen en CERO', () => {
     const p = panel([], 'Alex: 3 palines', true);
     const lote = p.c.lote as { lineas: Array<{ items: Array<{ id: string }> }> };
     (p.c.loteNuevos as Map<string, InventoryType>).set(lote.lineas[0].items[0].id, InventoryType.HAND_TOOL);
-    p.fn.registrarLote();
+    registrar(p);
     igual(p.visto.creados.length, 1, 'nació uno');
     igual(p.visto.creados[0].quantity, 0, 'y nació en cero');
     igual(p.visto.enviados[0].quantity, 3, 'la salida sí pide tres');
@@ -262,7 +284,7 @@ grupo('la vista previa cuenta igual que el núcleo', () => {
 
 grupo('los consumibles no pasan sin proyecto', () => {
     const p = panel([ficha('cemento', 'Cemento', 5, InventoryType.SINGLE_USE)], 'Alex: 1 cemento');
-    p.fn.registrarLote();
+    registrar(p);
     igual(p.visto.enviados.length, 0, 'no se envió nada');
     esCierto(p.visto.avisos.some(a => /decidir/i.test(a)), 'y se avisa que falta decidir');
     const linea = (p.c.lote as { lineas: Array<{ id: string }> }).lineas[0];
@@ -281,13 +303,13 @@ grupo('la pantalla no dice «registrado» si el servidor no lo recibió', () => 
      * una sola bodega.
      */
     const conPendientes = panel([ficha(PALA, 'Pala', 3)], 'Alex: 1 pala', false, 2);
-    conPendientes.fn.registrarLote();
+    registrar(conPendientes);
     const dicho = conPendientes.visto.avisos.join(' ');
     esCierto(/sin subir/i.test(dicho), 'avisa que todavía no subió');
     esCierto(/anotadas/i.test(dicho), 'y no dice «registradas»');
 
     const todoSubido = panel([ficha(PALA, 'Pala', 3)], 'Alex: 1 pala', false, 0);
-    todoSubido.fn.registrarLote();
+    registrar(todoSubido);
     const dicho2 = todoSubido.visto.avisos.join(' ');
     esCierto(/registradas/i.test(dicho2), 'con todo subido sí dice registradas');
     esCierto(!/sin subir/i.test(dicho2), 'y no asusta de más');
@@ -304,7 +326,7 @@ const lineas = (c: Record<string, unknown>) => (c.lote as { lineas: L[] } | null
 grupo('cada renglón sale con la obra, la hora y el lugar de SU encabezado', () => {
     const p = panel([ficha(PALA, 'Pala', 5)], '@ El Cristo · 07:30 · contenedor\nAlex: 1 pala\n@ Bonilla · 09:15\nJuan: 2 palas',
         false, 0, { personal: [{ ...ALEX }, { ...JUAN }], obras: [CRISTO, BONILLA], obra: '' });
-    p.fn.registrarLote();
+    registrar(p);
     igual(p.visto.enviados.map(m => m.projectId), [CRISTO.id, BONILLA.id], 'cada uno a su obra, sin elegir nada arriba');
     igual(p.visto.enviados.map(m => new Date(m.timestamp).toISOString().slice(11, 16)), ['12:30', '14:15'],
         'a la hora dictada (7:30 y 9:15 en Colombia)');
@@ -313,11 +335,11 @@ grupo('cada renglón sale con la obra, la hora y el lugar de SU encabezado', () 
 
 grupo('la obra se PREGUNTA, como el chat: sin contestar no sale; «sin proyecto» vale', () => {
     const p = panel([ficha(PALA, 'Pala', 5)], 'Alex: 1 pala', false, 0, { obra: '' });
-    p.fn.registrarLote();
+    registrar(p);
     igual(p.visto.enviados.length, 0, 'sin decir la obra, nada');
     igual(p.fn.verificacionDelLote().v.porLinea.get(lineas(p.c)[0].id)?.map(a => a.tipo), ['obra'], 'falta la obra (opcional)');
     const q = panel([ficha(PALA, 'Pala', 5)], 'Alex: 1 pala', false, 0, { obra: '__sin__' });
-    q.fn.registrarLote();
+    registrar(q);
     igual(q.visto.enviados.length, 1, 'con «Sin proyecto» decidido, sale');
     igual(q.visto.enviados[0].projectId, undefined, 'y sale sin obra');
 });
@@ -326,32 +348,30 @@ grupo('OFICIAL: igual que el chat, se pregunta para quién de su cuadrilla', () 
     const alex = { ...ALEX, isTeamLeader: true };
     const juan = { ...JUAN, teamLeaderId: ALEX.id };
     const p = panel([ficha(PALA, 'Pala', 5)], 'Alex: 1 pala', false, 0, { personal: [alex, juan] });
-    p.fn.registrarLote();
+    registrar(p);
     igual(p.visto.enviados.length, 0, 'sin decir para quién, no sale');
     lineas(p.c)[0].paraId = JUAN.id;
-    p.fn.registrarLote();
+    registrar(p);
     igual(p.visto.enviados.map(m => m.personnelId), [JUAN.id], 'sale a Juan, el de su cuadrilla');
 
     const q = panel([ficha(PALA, 'Pala', 5)], 'Alex: 1 pala', false, 0, { personal: [{ ...alex }, { ...juan }] });
     lineas(q.c)[0].paraId = ALEX.id;
-    q.fn.registrarLote();
+    registrar(q);
     igual(q.visto.enviados.map(m => m.personnelId), [ALEX.id], '«sin especificar» = al oficial, como en el chat');
 });
 
 grupo('persona nueva: se crea en SU cuadrilla, una sola vez, y solo si alguien lo decide', () => {
     const alex = { ...ALEX, isTeamLeader: true };
     const p = panel([ficha(PALA, 'Pala', 5)], 'Pedro (cuadrilla de Alex): 1 pala\nPedro (cuadrilla de Alex): 1 pala', false, 0, { personal: [alex] });
-    p.fn.registrarLote();
+    registrar(p);
     igual(p.visto.personasCreadas.length, 0, 'NADIE se crea solo (la lección de Rafael)');
     for (const l of lineas(p.c)) l.crear = { nombre: 'Pedro', liderId: ALEX.id };
-    (p.c.loteMirados as Set<string>).add(lineas(p.c)[0].items[0].id);
-    (p.c.loteMirados as Set<string>).add(lineas(p.c)[1].items[0].id);
-    p.fn.registrarLote();
+    registrar(p);
     igual(p.visto.personasCreadas.map(x => [x.name, x.teamLeaderId]), [['Pedro', ALEX.id]], 'un Pedro, en la cuadrilla de Alex');
     igual(p.visto.enviados.map(m => m.personnelId), ['persona-1', 'persona-1'], 'y las dos salidas son suyas');
 });
 
-grupo('«ya la tiene otro»: se mira antes de registrar', () => {
+grupo('«ya la tiene otro»: no sale sin el «✓ Pedido correcto» del trabajador', () => {
     const PULI = '99999999-9999-4999-8999-999999999999';
     const prestada: Movement = { id: 'p', itemId: PULI, type: MovementType.CHECK_OUT, quantity: 1, timestamp: new Date('2026-09-10T12:00:00Z'),
         personnelId: JUAN.id, isLoan: true, isReturned: false };
@@ -360,10 +380,9 @@ grupo('«ya la tiene otro»: se mira antes de registrar', () => {
     const it = lineas(p.c)[0].items[0];
     igual(p.fn.verificacionDelLote().v.porItem.get(it.id)?.map(a => a.tipo), ['ya_la_tiene'], 'avisa que la tiene Juan');
     p.fn.registrarLote();
-    igual(p.visto.enviados.length, 0, 'sin mirarlo, no sale');
-    (p.c.loteMirados as Set<string>).add(it.id);
-    p.fn.registrarLote();
-    esCierto(p.visto.enviados.length > 0, 'mirado y verificado, sale');
+    igual(p.visto.enviados.length, 0, 'sin confirmar el pedido de Alex, no sale');
+    registrar(p);
+    esCierto(p.visto.enviados.length > 0, 'con el aviso a la vista y el pedido confirmado, sale');
 });
 
 grupo('EL MISMO PEDIDO POR EL CHAT Y POR EL BLOQUE DA LO MISMO', () => {
@@ -390,7 +409,7 @@ grupo('EL MISMO PEDIDO POR EL CHAT Y POR EL BLOQUE DA LO MISMO', () => {
 
     const b = panel(items, '@ El Cristo\nAlex: 2 palas, 1 guantes', false, 0, { personal: [alex, juan], obras: [CRISTO] });
     lineas(b.c)[0].paraId = JUAN.id;
-    b.fn.registrarLote();
+    registrar(b);
 
     const clave = (m: Omit<Movement, 'id'>) => `${m.itemId}|${m.personnelId}|${m.quantity}|${m.projectId}|${m.isLoan}|${m.type}`;
     igual(b.visto.enviados.map(clave).sort(), enviadosChat.map(clave).sort(), 'mismos movimientos por las dos puertas');
@@ -410,7 +429,7 @@ grupo('una mañana real: 10 personas, 60 cosas — ni una perdida, ni una repeti
 
     const t0 = performance.now();
     const p = panel(inventario, texto, true, 0, { personal: gente, obras: [OBRA], obra: OBRA.id });
-    p.fn.registrarLote();
+    registrar(p);
     const ms = performance.now() - t0;
 
     const salidas = p.visto.enviados.filter(m => m.type === MovementType.CHECK_OUT);
@@ -419,6 +438,73 @@ grupo('una mañana real: 10 personas, 60 cosas — ni una perdida, ni una repeti
     igual(pendientes(p.c), [], 'nada se quedó en pantalla');
     esCierto(salidas.every(m => m.projectId === OBRA.id), 'todas con su obra');
     esCierto(ms < 2000, `leer, verificar y registrar en menos de 2 s (tomó ${Math.round(ms)} ms)`);
+});
+
+// ── «✓ Pedido correcto» por trabajador (fase A, 2-oct) ───────────────────
+
+grupo('SIN «✓ Pedido correcto» no se registra NADA', () => {
+    const p = panel([ficha(PALA, 'Pala', 5)], 'Alex: 1 pala');
+    p.fn.registrarLote();
+    igual(p.visto.enviados.length, 0, 'todo resuelto, pero nadie confirmó');
+    p.fn.confirmarLinea(lineas(p.c)[0].id);
+    p.fn.registrarLote();
+    igual(p.visto.enviados.length, 1, 'confirmado, sale');
+});
+
+grupo('se confirma por trabajador: el que no se confirmó se queda', () => {
+    const p = panel([ficha(PALA, 'Pala', 5)], 'Alex: 1 pala\nJuan Puerta: 2 palas', false, 0, { personal: [{ ...ALEX }, { ...JUAN }] });
+    p.fn.confirmarLinea(lineas(p.c)[0].id);
+    p.fn.registrarLote();
+    igual(p.visto.enviados.map(m => m.personnelId), [ALEX.id], 'solo el de Alex');
+});
+
+grupo('cambiar algo DESPUÉS de confirmar lo desconfirma solo', () => {
+    const p = panel([ficha(PALA, 'Pala', 5)], 'Alex: 1 pala', false, 0, { personal: [{ ...ALEX }, { ...JUAN }] });
+    const l = lineas(p.c)[0] as L & { items: Array<{ id: string; cantidad: number }> };
+    p.fn.confirmarLinea(l.id);
+    esCierto(p.fn.confirmado(l), 'confirmado');
+    l.items[0].cantidad = 4;   // la cantidad cambió
+    esCierto(!p.fn.confirmado(l), 'cambiar la cantidad lo desconfirma');
+    p.fn.registrarLote();
+    igual(p.visto.enviados.length, 0, 'y no sale con la cantidad que nadie confirmó');
+    l.paraId = JUAN.id;
+    p.fn.confirmarLinea(l.id);
+    l.paraId = undefined;      // para quién cambió
+    esCierto(!p.fn.confirmado(l), 'cambiar para quién también');
+});
+
+grupo('confirmar NO salta lo que hay que decidir', () => {
+    const p = panel([ficha(PALA, 'Pala', 5)], 'Alex: 1 pala, 1 zorbex');
+    registrar(p);
+    igual(p.visto.enviados.length, 1, 'sale la pala');
+    igual(pendientes(p.c), ['zorbex'], 'el zorbex (sin decidir) se queda aunque el trabajador esté confirmado');
+});
+
+grupo('un ítem nuevo nace con las reglas del chat, y nunca gemelo', () => {
+    const codo2 = { ...ficha('c2', 'Codos 2"', 4, InventoryType.SINGLE_USE), familia: 'Codos', ruta: 'Tubería / Accesorios' };
+    const p = panel([codo2], 'Alex: 3 codos de 5', true);
+    const it = lineas(p.c)[0].items[0];
+    (p.c.loteNuevos as Map<string, InventoryType>).set(it.id, InventoryType.SINGLE_USE);
+    registrar(p);
+    igual(p.visto.creados.map(i => [i.name, i.familia, i.ruta]), [['Codos 5"', 'Codos', 'Tubería / Accesorios']],
+        '«codos de 5» nace «Codos 5"», en la familia y el género de sus hermanos');
+    // Si YA existe igualito, se usa ese.
+    const q = panel([codo2, { ...ficha('c5', 'Codos 5"', 0, InventoryType.SINGLE_USE), familia: 'Codos' }], 'Alex: 3 codos de 5x', true);
+    const it2 = lineas(q.c)[0].items[0] as unknown as { id: string; nombre: string };
+    it2.nombre = 'codos de 5';
+    (q.c.loteNuevos as Map<string, InventoryType>).set(it2.id, InventoryType.SINGLE_USE);
+    registrar(q);
+    igual(q.visto.creados.length, 0, 'no se crea un gemelo');
+    igual(q.visto.enviados.map(m => m.itemId), ['c5'], 'sale el que ya estaba');
+});
+
+grupo('«Sin asignar trabajador», como el paso 2 del chat', () => {
+    const p = panel([ficha(PALA, 'Pala', 5)], 'Nadie conocido: 1 pala');
+    registrar(p);
+    igual(p.visto.enviados.length, 0, 'sin decidir quién, no sale');
+    (lineas(p.c)[0] as unknown as { sinPersona: boolean }).sinPersona = true;
+    registrar(p);
+    igual(p.visto.enviados.map(m => m.personnelId), [undefined], 'decidido «sin asignar», sale sin persona');
 });
 
 await cerrar();

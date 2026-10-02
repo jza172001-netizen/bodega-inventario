@@ -15,7 +15,10 @@ import { tonoDe, raizDeColor, coloresUnificados, PALETA } from '../utils/colores
 import { generosDe, denominacionesDe, nombreCompuesto } from '../utils/medida';
 import { medidaDe } from '../utils/medida';
 import { leerLote, contarDudas, LoteParseado, ItemLote, LineaLote, moverItem } from '../utils/lote';
-import { verificarLote, listoParaRegistrar, obraDe } from '../core/verificacion';
+import { verificarLote, listoParaRegistrar, obraDe, huellaDeLinea, resumenDeLinea } from '../core/verificacion';
+import { ResumenTrabajador } from './ResumenTrabajador';
+import { PasosDeNombre } from './PasosDeNombre';
+import { fichaDelBloque, identicoDe, baseDelDicho, nombreDelDicho, Piezas } from '../core/crearItem';
 import { planearLote, tipoExigeObra } from '../core/despacho';
 import { isAsset, isConsumable, adivinarTipo } from '../utils/inventory';
 
@@ -262,10 +265,17 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     /** Los renglones que se van a crear, con el tipo que eligió quien mira. */
     const [loteNuevos, setLoteNuevos] = useState<Map<string, InventoryType>>(new Map());
     /**
-     * Los elementos con algo que NO cuadra y que alguien ya miró (✓ Verificado).
-     * Mover un elemento a otra persona lo saca de acá: nadie mueve sin mirar.
+     * Los trabajadores con «✓ Pedido correcto», cada uno con la HUELLA de su
+     * renglón en el momento de confirmar (`huellaDeLinea`). Vale solo mientras
+     * la huella siga igual: mover un elemento, cambiar una cantidad o un ítem
+     * lo desconfirma solo. Reemplaza el «Verificar» por elemento: el resumen
+     * muestra todos los avisos del trabajador, y se aprueba una vez.
      */
-    const [loteMirados, setLoteMirados] = useState<Set<string>>(new Set());
+    const [loteConfirmados, setLoteConfirmados] = useState<Map<string, string>>(new Map());
+    /** Género y medida elegidos para un ítem que va a nacer, como en el chat. */
+    const [loteNombres, setLoteNombres] = useState<Map<string, Piezas>>(new Map());
+    /** El elemento al que se le está escogiendo «es otro…» en el árbol. */
+    const [loteEscogiendo, setLoteEscogiendo] = useState<string | null>(null);
     const [reponerQty, setReponerQty] = useState<Map<string, number>>(new Map());
     const [parecidoPendiente, setParecidoPendiente] = useState<Item[] | null>(null);
     const [createSpecies, setCreateSpecies] = useState<Array<{brand: string; color: string}>>([{ brand: '', color: '' }]);
@@ -827,7 +837,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     };
 
     // ── El bloque pegado ──────────────────────────────────────────────────
-    const cerrarLote = () => { setLoteAbierto(false); setLote(null); setLoteTexto(''); setLoteProyecto(''); setLoteFecha(todayISO()); setLoteNuevos(new Map()); setLoteMirados(new Set()); };
+    const cerrarLote = () => { setLoteAbierto(false); setLote(null); setLoteTexto(''); setLoteProyecto(''); setLoteFecha(todayISO()); setLoteNuevos(new Map()); setLoteConfirmados(new Map()); setLoteNombres(new Map()); setLoteEscogiendo(null); };
 
     const leerElBloque = () => {
         const r = leerLote(loteTexto, personnel, items, projects.filter(p => p.status === 'active'));
@@ -836,7 +846,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             return;
         }
         setLote(r);
-        setLoteMirados(new Set());
+        setLoteConfirmados(new Map());
     };
 
     /**
@@ -853,25 +863,43 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         return { ...prev, lineas: prev.lineas.map(l => (l.id === lineaId ? cambio(l) : l)) };
     });
 
-    const fijarObraLinea = (lineaId: string, valor: string) => mapearLinea(lineaId, l => ({
-        ...l,
-        obraId: valor === '' ? undefined : valor === '__sin__' ? null : valor === '__nueva__' ? undefined : valor,
-        obraNueva: valor === '__nueva__' ? (l.encabezado?.obraTexto ?? l.obraNueva) : undefined,
-    }));
+    const fijarObraLinea = (lineaId: string, valor: string) => {
+        // «+ Obra nueva…» con cualquier nombre, como «+ Nuevo proyecto» del chat.
+        // Nace una sola vez al registrar, aunque esté en varios renglones.
+        if (valor === '__otra__') {
+            const nombre = window.prompt('Nombre de la obra nueva:')?.trim();
+            if (!nombre) return;
+            const ya = projects.find(p => p.status === 'active' && normStr(p.name) === normStr(nombre));
+            mapearLinea(lineaId, l => ya ? { ...l, obraId: ya.id, obraNueva: undefined } : { ...l, obraId: undefined, obraNueva: nombre });
+            return;
+        }
+        mapearLinea(lineaId, l => ({
+            ...l,
+            obraId: valor === '' ? undefined : valor === '__sin__' ? null : valor === '__nueva__' ? undefined : valor,
+            obraNueva: valor === '__nueva__' ? (l.encabezado?.obraTexto ?? l.obraNueva) : undefined,
+        }));
+    };
 
     /** Pasa un elemento a otra persona. Su verificación vuelve a cero. */
     const moverA = (itemLoteId: string, personaId: string) => {
         const persona = personnel.find(p => p.id === personaId);
         if (!persona) return;
         setLote(prev => (prev ? moverItem(prev, itemLoteId, persona, `M-${crypto.randomUUID()}`) : prev));
-        setLoteMirados(prev => { const n = new Set(prev); n.delete(itemLoteId); return n; });
     };
 
-    const alternarMirado = (itemLoteId: string) => setLoteMirados(prev => {
-        const n = new Set(prev);
-        if (n.has(itemLoteId)) n.delete(itemLoteId); else n.add(itemLoteId);
+    /** «✓ Pedido correcto»: se guarda la huella de AHORA. */
+    const confirmarLinea = (lineaId: string) => {
+        const l = lote?.lineas.find(x => x.id === lineaId);
+        if (!l) return;
+        setLoteConfirmados(prev => new Map(prev).set(lineaId, huellaDeLinea(l, obraGeneral(), loteNuevos)));
+    };
+    const desconfirmarLinea = (lineaId: string) => setLoteConfirmados(prev => {
+        const n = new Map(prev);
+        n.delete(lineaId);
         return n;
     });
+    /** Confirmado = la huella guardada es la de ahora. */
+    const confirmado = (l: LineaLote) => loteConfirmados.get(l.id) === huellaDeLinea(l, obraGeneral(), loteNuevos);
 
     /** Cambia la persona de un renglón, o el ítem de una línea, sin rearmar el lote. */
     /**
@@ -888,7 +916,11 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         const persona = personnel.find(p => p.id === personaId);
         // Elegir otra persona deshace lo que se había decidido para la anterior:
         // para quién de su cuadrilla, o crearla.
-        return { ...prev, lineas: prev.lineas.map(l => (l.id === lineaId ? { ...l, persona, dudosa: !persona, paraId: undefined, crear: undefined } : l)) };
+        // «Sin asignar trabajador», como el paso 2 del chat.
+        if (personaId === '__nadie__') {
+            return { ...prev, lineas: prev.lineas.map(l => (l.id === lineaId ? { ...l, persona: undefined, dudosa: false, paraId: undefined, crear: undefined, sinPersona: true } : l)) };
+        }
+        return { ...prev, lineas: prev.lineas.map(l => (l.id === lineaId ? { ...l, persona, dudosa: !persona, paraId: undefined, crear: undefined, sinPersona: false } : l)) };
     });
 
     const mapearItem = (itemLoteId: string, cambio: (it: ItemLote) => ItemLote) => setLote(prev => {
@@ -963,16 +995,12 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
      */
     const resuelto = (it: ItemLote) => !!it.item || loteNuevos.has(it.id);
 
-    /** La ficha con la que nace un ítem que la app no conocía. */
-    const fichaNueva = (nombre: string, tipo: InventoryType) => ({
-        name: nombre.trim(),
-        category: tipo === InventoryType.SINGLE_USE ? 'Materiales' : 'Herramientas',
-        subCategory: '',
-        inventoryType: tipo,
-        quantity: 0,
-        minStock: 0,
-        unit: 'unidades',
-    });
+    /**
+     * La ficha con la que nace un ítem que la app no conocía: con las reglas
+     * del chat (familia como ya está en la bodega, nombre corregido, género y
+     * medida, la `ruta` del hermano). Ver `core/crearItem.ts`.
+     */
+    const fichaNueva = (nombre: string, tipo: InventoryType, piezas?: Piezas) => fichaDelBloque(nombre, tipo, items, piezas);
 
     /**
      * Arma los movimientos del lote.
@@ -1008,9 +1036,9 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
              * si se eligió al oficial mismo, «sin especificar», es del oficial.
              * Si la persona se va a crear, es la recién creada.
              */
-            const quien = op.personas?.get(l.id)?.id
+            const quien = l.sinPersona ? undefined : op.personas?.get(l.id)?.id
                 ?? (l.paraId && l.paraId !== '__crear__' ? l.paraId : l.persona?.id);
-            if (!quien) continue;
+            if (!quien && !l.sinPersona) continue;
             // La obra y la hora de SU encabezado, no una para todo el bloque.
             const obra = obraDe(l, general);
             const projectId = obra && obra.startsWith('nueva:') ? op.obras?.get(obra.slice(6)) : (obra ?? undefined);
@@ -1029,8 +1057,11 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                 const tipoNuevo = loteNuevos.get(it.id);
                 let item = it.item;
                 if (!item && tipoNuevo) {
-                    const ficha = fichaNueva(it.nombre, tipoNuevo);
-                    if (crear) item = onCreateItem(ficha);
+                    const ficha = fichaNueva(it.nombre, tipoNuevo, loteNombres.get(it.id));
+                    // Si YA existe igualito, se usa ese: nunca un gemelo.
+                    const yaEsta = identicoDe(ficha, items);
+                    if (yaEsta) item = yaEsta;
+                    else if (crear) item = onCreateItem(ficha);
                     else {
                         item = { ...ficha, id: `nuevo:${it.id}` } as Item;
                         nacen.push(item);
@@ -1102,10 +1133,13 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         // Sale lo que está LISTO: resuelto, decidido y —si algo no cuadraba—
         // mirado. Lo demás se queda en pantalla, como siempre: el movimiento
         // no se pierde por esperar a que alguien decida.
-        const listo = (l: LineaLote, it: ItemLote) => resuelto(it) && listoParaRegistrar(l, it.id, v, loteMirados);
+        // La confirmación del trabajador cubre lo que había que mirar; lo que
+        // hay que DECIDIR sigue frenando aunque esté confirmado.
+        const listo = (l: LineaLote, it: ItemLote) =>
+            resuelto(it) && confirmado(l) && listoParaRegistrar(l, it.id, v, new Set(l.items.map(x => x.id)));
         const conListos = lote.lineas.filter(l => l.items.some(it => listo(l, it)));
         if (conListos.length === 0) {
-            addBot('Todavía no hay nada listo para registrar: hay cosas por decidir o por mirar (están marcadas en naranja).');
+            addBot('Todavía no hay nada listo: falta decidir lo marcado en naranja o tocar «✓ Pedido correcto» en cada trabajador.');
             return;
         }
 
@@ -1204,15 +1238,37 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
          */
         const { v: verif, faltantes: previo } = verificacionDelLote();
         const estado = (l: LineaLote, it: ItemLote) =>
-            resuelto(it) && listoParaRegistrar(l, it.id, verif, loteMirados) ? 'listo'
-                : [...(verif.porLinea.get(l.id) ?? []), ...(verif.porItem.get(it.id) ?? [])].some(a => a.nivel === 'decidir') ? 'decidir' : 'mirar';
+            resuelto(it) && confirmado(l) && listoParaRegistrar(l, it.id, verif, new Set(l.items.map(x => x.id))) ? 'listo'
+                : !resuelto(it) || [...(verif.porLinea.get(l.id) ?? []), ...(verif.porItem.get(it.id) ?? [])].some(a => a.nivel === 'decidir') ? 'decidir' : 'confirmar';
         const todos = lote ? lote.lineas.flatMap(l => l.items.map(it => estado(l, it))) : [];
         const nListos = todos.filter(x => x === 'listo').length;
         const nDecidir = todos.filter(x => x === 'decidir').length;
-        const nMirar = todos.filter(x => x === 'mirar').length;
+        const nConfirmar = todos.filter(x => x === 'confirmar').length;
         const lideres = personnel.filter(p => p.isTeamLeader);
         const activas = projects.filter(p => p.status === 'active');
         const sel = 'text-[11px] border border-papel-borde rounded-lg px-1.5 py-1 bg-papel text-tinta max-w-[46%]';
+        /** El «Confirmar» del chat, por trabajador. */
+        const resumenDe = (l: LineaLote, estaConfirmado: boolean) => {
+            const para = l.paraId && l.paraId !== '__crear__' ? personnel.find(p => p.id === l.paraId) : undefined;
+            const trabajador = l.sinPersona ? 'Sin asignar'
+                : l.paraId === '__crear__' && l.crear ? `${l.crear.nombre} (nuevo)`
+                : para && para.id !== l.persona?.id ? para.name
+                : l.crear ? `${l.crear.nombre} (nuevo)` : (l.persona?.name ?? l.personaTexto);
+            const detalle = para && para.id !== l.persona?.id ? `cuadrilla de ${l.persona?.name}`
+                : l.persona?.isTeamLeader && l.paraId === l.persona.id ? 'sin especificar' : undefined;
+            const o = obraDe(l, obraGeneral());
+            const obra = o === null ? 'Sin proyecto' : o === undefined ? '— sin decidir' : o.startsWith('nueva:') ? `${o.slice(6)} (nueva)` : (projects.find(p => p.id === o)?.name ?? '?');
+            return (
+                <ResumenTrabajador
+                    trabajador={trabajador} detalle={detalle} obra={obra}
+                    cuando={[l.encabezado?.hora, l.encabezado?.lugar].filter(Boolean).join(' · ') || undefined}
+                    resumen={resumenDeLinea(l, verif, loteNuevos, resuelto)}
+                    confirmado={estaConfirmado}
+                    onConfirmar={() => confirmarLinea(l.id)}
+                    onEditar={() => desconfirmarLinea(l.id)}
+                />
+            );
+        };
         return (
         <div className="flex-1 overflow-y-auto px-3 py-4 space-y-3">
             <div className="flex items-start justify-between gap-2">
@@ -1285,8 +1341,8 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                     <div className="rounded-xl bg-papel-hondo px-3 py-2 text-[11px] text-tinta-suave">
                         <span className="font-black text-bien">{nListos} listo(s)</span>
                         {nDecidir > 0 && <> · <span className="font-black text-atencion">{nDecidir} por decidir</span></>}
-                        {nMirar > 0 && <> · <span className="font-black text-atencion">{nMirar} por mirar</span></>}
-                        {(nDecidir > 0 || nMirar > 0) && (
+                        {nConfirmar > 0 && <> · <span className="font-black text-atencion">{nConfirmar} por confirmar</span></>}
+                        {(nDecidir > 0 || nConfirmar > 0) && (
                             <p className="text-[10px] text-tinta-tenue mt-0.5">Lo que no esté listo no se registra y se queda acá. No se pierde.</p>
                         )}
                         {dudas > 0 && lote.ignoradas.length > 0 && (
@@ -1294,7 +1350,9 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                         )}
                     </div>
 
-                    {lote.lineas.map(l => (
+                    {lote.lineas.map(l => confirmado(l) ? (
+                        <div key={l.id}>{resumenDe(l, true)}</div>
+                    ) : (
                         <div key={l.id} className={`rounded-2xl p-3 space-y-2 border ${(verif.porLinea.get(l.id) ?? []).length ? 'border-atencion bg-atencion-suave' : 'border-papel-borde bg-papel'}`}>
                             {/* Lo que heredó de su encabezado `@`, a la vista. */}
                             {l.encabezado && (l.encabezado.obraTexto || l.encabezado.hora || l.encabezado.lugar || l.encabezado.sinObra) && (
@@ -1307,14 +1365,15 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                 {/* Dudosa: NADA preseleccionado. Con el primer parecido puesto,
                                     escoger ese mismo no disparaba el cambio y la duda no se
                                     podía resolver confirmando. */}
-                                <select value={l.crear ? '__crear__' : l.dudosa ? '' : (l.persona?.id ?? '')} onChange={e => {
+                                <select value={l.sinPersona ? '__nadie__' : l.crear ? '__crear__' : l.dudosa ? '' : (l.persona?.id ?? '')} onChange={e => {
                                         if (e.target.value === '__crear__') {
                                             mapearLinea(l.id, x => ({ ...x, persona: undefined, crear: { nombre: x.personaTexto, liderId: x.cuadrillaDe?.id } }));
                                         } else fijarPersona(l.id, e.target.value);
                                     }}
-                                    className={`${sel} flex-1 max-w-none ${l.persona || l.crear ? '' : 'border-atencion'}`}>
+                                    className={`${sel} flex-1 max-w-none ${l.persona || l.crear || l.sinPersona ? '' : 'border-atencion'}`}>
                                     <option value="">¿Quién es?</option>
                                     {(!l.persona || l.dudosa) && <option value="__crear__">➕ Crear «{l.personaTexto}»</option>}
+                                    <option value="__nadie__">Sin asignar trabajador</option>
                                     {l.dudosa && l.candidatosPersona.map(p => <option key={`c${p.id}`} value={p.id}>¿{p.name}?</option>)}
                                     {personnel.filter(p => !(l.dudosa && l.candidatosPersona.some(c => c.id === p.id)))
                                         .map(p => <option key={p.id} value={p.id}>{p.name}{p.isTeamLeader ? ' 👷' : ''}</option>)}
@@ -1366,6 +1425,8 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                     <option value="">{loteProyecto === '' ? '— la de arriba (sin elegir)' : `— la de arriba (${loteProyecto === '__sin__' ? 'sin proyecto' : activas.find(p => p.id === loteProyecto)?.name ?? '?'})`}</option>
                                     <option value="__sin__">Sin proyecto</option>
                                     {l.encabezado?.obraTexto && !l.encabezado.obra && <option value="__nueva__">➕ Crear obra «{l.encabezado.obraTexto}»</option>}
+                                    {l.obraNueva && l.obraNueva !== l.encabezado?.obraTexto && <option value="__nueva__">➕ {l.obraNueva} (nueva)</option>}
+                                    <option value="__otra__">➕ Obra nueva…</option>
                                     {activas.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                                 </select>
                             </div>
@@ -1424,6 +1485,35 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                         </div>
                                     )}
 
+                                    {/* Los mismos pasos del chat al crear: género y medida, con la
+                                        medida dicha ya puesta, y cómo va a quedar ANTES de crearlo. */}
+                                    {nace && (() => {
+                                        const piezas = loteNombres.get(it.id) ?? {};
+                                        const ficha = fichaNueva(it.nombre, nace, piezas);
+                                        const gemelo = identicoDe(ficha, items);
+                                        const poner = (cambio: Piezas) => setLoteNombres(prev => new Map(prev).set(it.id, { ...piezas, ...cambio }));
+                                        return (
+                                            <div className="pl-[3.9rem] space-y-1">
+                                                {(nace === InventoryType.SINGLE_USE || nace === InventoryType.PPE) && (
+                                                    <PasosDeNombre nombre={baseDelDicho(it.nombre)} items={items}
+                                                        filtrarPorTipo={i => i.inventoryType === nace}
+                                                        genero={piezas.genero ?? ''}
+                                                        denominacion={piezas.denominacion ?? (nombreDelDicho(it.nombre) !== baseDelDicho(it.nombre) ? nombreDelDicho(it.nombre).slice(baseDelDicho(it.nombre).length).trim() : '')}
+                                                        onGenero={g => poner({ genero: g })}
+                                                        onDenominacion={d => poner({ denominacion: d })} />
+                                                )}
+                                                <p className="text-[10px] font-bold text-marca-oscuro">Va a quedar: «{ficha.name}»{ficha.ruta ? ` · en ${ficha.ruta.replace(/\s*\/\s*/g, ' › ')}` : ''}</p>
+                                                {gemelo && (
+                                                    <div className="flex items-center gap-2 rounded-lg border border-atencion bg-atencion-suave px-2 py-1">
+                                                        <p className="text-[10px] text-atencion flex-1">Esto ya está en la bodega, igualito: «{gemelo.name}». No se crea otro.</p>
+                                                        <button type="button" onClick={() => { desmarcarNuevo(it.id); fijarItem(it.id, gemelo.id); }}
+                                                            className="text-[10px] font-black px-2 py-0.5 rounded-full bg-atencion text-papel flex-shrink-0">Es ese</button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })()}
+
                                     {/* Que se vea ANTES de que pase. El texto lo produce un
                                         asistente, y un asistente se equivoca interpretando. */}
                                     {entran > 0 && nace && (
@@ -1438,6 +1528,32 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                     {!nace && (verif.porItem.get(it.id) ?? []).filter(a => a.nivel === 'decidir').map((a, i) => (
                                         <div key={`d${i}`} className="pl-[3.9rem] space-y-1">
                                             <p className="text-[10px] font-semibold text-atencion">⚠ {a.texto}</p>
+                                            {/* «El ítem no existe, ¿deseas crearlo?», como pregunta directa. */}
+                                            {a.tipo === 'elemento' && !a.medidas && (
+                                                <div className="flex flex-wrap gap-1">
+                                                    {it.candidatos.length === 0 && (
+                                                        <button type="button" onClick={() => marcarNuevo(it.id, it.nombre)}
+                                                            className="px-2.5 py-1 rounded-full text-[11px] font-black bg-marca text-tinta">
+                                                            Sí, crear «{baseDelDicho(it.nombre)}»
+                                                        </button>
+                                                    )}
+                                                    <button type="button" onClick={() => setLoteEscogiendo(loteEscogiendo === it.id ? null : it.id)}
+                                                        className="px-2.5 py-1 rounded-full text-[11px] font-bold border border-papel-borde bg-papel text-tinta-suave">
+                                                        {loteEscogiendo === it.id ? 'Cerrar' : 'Es otro… escoger'}
+                                                    </button>
+                                                </div>
+                                            )}
+                                            {/* El mismo árbol del chat para escoger, no un desplegable de cien. */}
+                                            {a.tipo === 'elemento' && loteEscogiendo === it.id && (
+                                                <div className="max-h-52 overflow-y-auto border border-papel-borde rounded-xl p-1 bg-papel">
+                                                    <ArbolFamilias items={items} fila={(x, detalle) => (
+                                                        <button type="button" onClick={() => { fijarItem(it.id, x.id); setLoteEscogiendo(null); }}
+                                                            className="w-full text-left text-[11px] px-2 py-1 rounded-lg hover:bg-marca-suave">
+                                                            {detalle || x.name} <span className="text-tinta-tenue">· {x.quantity} {x.unit}</span>
+                                                        </button>
+                                                    )} />
+                                                </div>
+                                            )}
                                             {a.medidas && (
                                                 <div className="flex flex-wrap gap-1">
                                                     {a.medidas.map(m => (
@@ -1456,22 +1572,16 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                         <p key={`a${i}`} className="text-[10px] text-tinta-tenue pl-[3.9rem]">ℹ {a.texto}{!nace ? ` (hay ${hay})` : ''}</p>
                                     ))}
 
-                                    {/* Lo que no cuadra contra la bodega: se mira y se marca. */}
+                                    {/* Lo que no cuadra contra la bodega: a la vista. Se aprueba
+                                        con el «✓ Pedido correcto» del trabajador, no uno por uno. */}
                                     {(verif.porItem.get(it.id) ?? []).filter(a => a.nivel === 'mirar').map((a, i) => (
-                                        <div key={i} className="flex items-start gap-1.5 pl-[3.9rem]">
-                                            <p className="text-[10px] text-atencion flex-1">⚠ {a.texto}</p>
-                                            <button type="button" onClick={() => alternarMirado(it.id)}
-                                                className={`text-[10px] font-black px-2 py-0.5 rounded-full border flex-shrink-0 ${
-                                                    loteMirados.has(it.id) ? 'border-bien bg-bien text-papel' : 'border-atencion text-atencion'}`}>
-                                                {loteMirados.has(it.id) ? '✓ Verificado' : 'Verificar'}
-                                            </button>
-                                        </div>
+                                        <p key={i} className="text-[10px] font-semibold text-atencion pl-[3.9rem]">⚠ {a.texto}</p>
                                     ))}
 
                                     {/* «Era para Juan, no para Alex»: se pasa sin borrar ni reescribir. */}
                                     <div className="flex items-center gap-1.5 pl-[3.9rem]">
                                         <span className={`text-[10px] font-black ${estado(l, it) === 'listo' ? 'text-bien' : 'text-atencion'}`}>
-                                            {estado(l, it) === 'listo' ? '✓ listo' : estado(l, it) === 'decidir' ? '● por decidir' : '● por mirar'}
+                                            {estado(l, it) === 'listo' ? '✓ listo' : estado(l, it) === 'decidir' ? '● por decidir' : '● por confirmar'}
                                         </span>
                                         <select value="" onChange={e => { if (e.target.value) moverA(it.id, e.target.value); }}
                                             className="ml-auto text-[10px] border border-papel-borde rounded-lg px-1 py-0.5 bg-papel text-tinta-suave max-w-[55%]">
@@ -1482,6 +1592,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                 </div>
                                 );
                             })}
+                            {resumenDe(l, false)}
                         </div>
                     ))}
 
