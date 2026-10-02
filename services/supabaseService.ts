@@ -778,7 +778,9 @@ export async function darDeAlta(id: string, codigo: string, clave: string): Prom
     const { data, error } = await supabase.rpc('dar_de_alta', { p_id: id, p_codigo: codigo, p_clave: clave });
     if (error) throw new Error(mensajeDe(error, 'No se pudo completar el alta.'));
     const fila = (data ?? [])[0] as { user_username?: string } | undefined;
-    if (!fila?.user_username) throw new Error('El servidor no confirmó el alta.');
+    // Vacío = código incorrecto. El servidor no lanza error ahí a propósito:
+    // un error revertiría el intento que cuenta para el tope de diez.
+    if (!fila?.user_username) throw new Error('Código de alta incorrecto.');
     return { username: fila.user_username };
 }
 
@@ -806,6 +808,15 @@ export async function editarAcceso(id: string, nombre: string, rol: string): Pro
 export async function borrarAcceso(id: string, quien?: string): Promise<void> {
     const { error } = await supabase.rpc('borrar_acceso', { p_id: id, p_quien: quien ?? null });
     if (error) throw new Error(mensajeDe(error, 'No se pudo borrar el acceso.'));
+}
+
+/**
+ * Cierra la identidad del servidor en ESTE teléfono (`scope: 'local'`: los
+ * otros teléfonos de la misma persona siguen adentro). Sin señal también la
+ * borra del teléfono: el SDK la quita aunque el servidor no conteste.
+ */
+export async function cerrarIdentidad(): Promise<void> {
+    try { await supabase.auth.signOut({ scope: 'local' }); } catch { /* ya no hay sesión que cerrar */ }
 }
 
 export async function entrarConIdentidad(

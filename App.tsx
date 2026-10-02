@@ -352,6 +352,10 @@ const App: React.FC = () => {
             detail: `Cerró sesión`,
         }, ...prev]);
         localStorage.removeItem(SESSION_KEY);
+        // La identidad del servidor también se cierra. Antes quedaba viva en el
+        // teléfono: «Cerrar sesión» de Juli dejaba su sesión de ADMINISTRADOR
+        // guardada para el siguiente que lo usara. `local`: solo este teléfono.
+        db.cerrarIdentidad();
         setLoggedIn(false);
     };
 
