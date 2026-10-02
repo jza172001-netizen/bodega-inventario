@@ -142,6 +142,7 @@ let pgcrypto;
       + `asignación sin datos inventados ${a.desde === null && a.condicion === 'no_especificado' ? 'sí' : 'NO'} ${ok ? '✓' : '✗'}`);
     if (!ok) process.exitCode = 1;
     if (!(await accesos(pg))) process.exitCode = 1;
+    if (!(await kardex(pg))) process.exitCode = 1;
   } else {
     process.exitCode = 1;
   }
@@ -245,6 +246,43 @@ async function accesos(pg) {
 
   let bien = true;
   console.log('\nAccesos:');
+  for (const [que, ok] of filas) { console.log(`  ${ok ? '✓' : '✗'} ${que}`); bien = bien && ok; }
+  return bien;
+}
+
+/**
+ * El Kardex en cero (20261003140000): una devolución de antes del 28-sep, que
+ * repuso el stock sin dejar entrada, recibe su entrada enlazada — y el stock
+ * NO se mueve. Correrla dos veces no duplica nada.
+ */
+async function kardex(pg) {
+  const K = 'cccccccc-0000-4000-8000-000000000001';
+  const P = 'cccccccc-0000-4000-8000-000000000002';
+  await pg.query(`insert into items (id, name, category, inventory_type, quantity, unit)
+                  values ($1, 'Pulidora vieja', 'Herramientas', 'Herramienta Eléctrica', 4, 'und')`, [K]);
+  await pg.query(`insert into movements (id, item_id, type, quantity, timestamp) values (gen_random_uuid(), $1, 'Entrada', 4, '2026-09-01')`, [K]);
+  await pg.query(`insert into movements (id, item_id, type, quantity, timestamp, is_loan, is_returned, returned_at)
+                  values ($2, $1, 'Salida', 1, '2026-09-07', true, true, '2026-09-08')`, [K, P]);
+  const cuadre = async () => (await pg.query(`
+      select i.quantity - coalesce(sum(case when m.type in ('Entrada','Compra') then m.quantity
+                                            when m.type in ('Salida','Merma') then -m.quantity end), 0) d
+      from items i left join movements m on m.item_id = i.id and m.deleted_at is null
+      where i.id = $1 group by i.id, i.quantity`, [K])).rows[0].d;
+  const antes = Number(await cuadre());
+  const sql = fs.readFileSync(path.join(repo, 'supabase/migrations/20261003140000_kardex_en_cero.sql'), 'utf8');
+  await pg.exec(sql);
+  await pg.exec(sql);
+  const despues = Number(await cuadre());
+  const stock = Number((await pg.query('select quantity q from items where id = $1', [K])).rows[0].q);
+  const entradas = (await pg.query('select count(*)::int n from movements where devuelve_a = $1', [P])).rows[0].n;
+  const filas = [
+    [`descuadraba antes (${antes})`, antes === 1],
+    ['cuadra después', despues === 0],
+    ['el stock no se movió', stock === 4],
+    ['una sola entrada aunque corra dos veces', entradas === 1],
+  ];
+  let bien = true;
+  console.log('\nKardex:');
   for (const [que, ok] of filas) { console.log(`  ${ok ? '✓' : '✗'} ${que}`); bien = bien && ok; }
   return bien;
 }
