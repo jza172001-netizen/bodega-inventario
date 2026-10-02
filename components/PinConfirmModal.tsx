@@ -45,18 +45,20 @@ export const PinConfirmModal: React.FC<PinConfirmModalProps> = ({
      * no, y ahí no se cae al respaldo del teléfono.
      */
     const verifyOwner = async (username: string, password: string): Promise<boolean> => {
+        // Se escribe el usuario o el nombre: la identidad se pregunta por el usuario.
+        const candidate = users.find(u =>
+            u.role === UserRole.OWNER &&
+            ((u.username ?? '').toLowerCase() === username.toLowerCase() || u.name.toLowerCase() === username.toLowerCase())
+        );
+        if (!candidate?.username) return false;
         try {
-            const r = await db.authenticateUser(username, password);
-            if (r.estado === 'ok') return r.usuario.role === UserRole.OWNER;
+            const r = await db.verificarClave(candidate.username, password);
+            if (r.estado === 'ok') return r.usuario.role === UserRole.OWNER && r.usuario.id === candidate.id;
             if (r.estado === 'rechazado') return false;
         } catch {
             // Sin conexión — usar respaldo local por hash
         }
-        const candidate = users.find(u =>
-            u.role === UserRole.OWNER &&
-            (u.username.toLowerCase() === username.toLowerCase() || u.name.toLowerCase() === username.toLowerCase())
-        );
-        if (!candidate?.passwordHash) return false;
+        if (!candidate.passwordHash) return false;
         return (await sha256Hex(password)) === candidate.passwordHash;
     };
 

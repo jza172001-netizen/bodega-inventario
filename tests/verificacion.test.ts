@@ -7,7 +7,7 @@
  */
 import { InventoryType, Item, Movement, MovementType, Personnel, Project } from '../types';
 import { leerLote, leerHora, partirPersona, moverItem, medidaDicha } from '../utils/lote';
-import { verificarLote, listoParaRegistrar, resumenDeLinea, Contexto } from '../core/verificacion';
+import { verificarLote, listoParaRegistrar, resumenDeLinea, huellaDeLinea, Contexto } from '../core/verificacion';
 import { igual, esCierto, grupo, cerrar } from './correr';
 
 const P: Personnel[] = [{ id: 'alex', name: 'Alex Ferreira', isTeamLeader: true }, { id: 'juan', name: 'Juan Puerta', teamLeaderId: 'alex' }];
@@ -171,6 +171,29 @@ grupo('el resumen del trabajador dice lo mismo que el «Confirmar» del chat', (
     const sinObra = resumenDeLinea(l, verificarLote(r, ctx({ obraGeneral: null })), new Map(), it => !!it.item);
     igual(sinObra.sale.map(x => x.nombre), [], 'con consumo y sin obra, el renglón entero espera la decisión');
     esCierto(sinObra.seQueda.every(x => x.porque.length > 0), 'y cada uno dice por qué');
+});
+
+grupo('la huella cambia con lo que se confirma: fecha, hora, trabajador nuevo y nombre del ítem que nace', () => {
+    const r = leerLote('@ Cristo · 7:30\nAlex: 1 zorbex', P, I, O);
+    const l = r.lineas[0];
+    const nuevos = new Map([[l.items[0].id, InventoryType.HAND_TOOL]]);
+    const base = huellaDeLinea(l, null, nuevos, { fecha: '2026-10-03' });
+    esCierto(huellaDeLinea(l, null, nuevos, { fecha: '2026-10-04' }) !== base, 'otra fecha: hay que volver a confirmar');
+    esCierto(huellaDeLinea({ ...l, encabezado: { ...l.encabezado!, hora: '08:00' } }, null, nuevos, { fecha: '2026-10-03' }) !== base, 'otra hora, también');
+    const conCrear = { ...l, paraId: '__crear__', crear: { nombre: 'Rafa', liderId: 'alex' } };
+    esCierto(huellaDeLinea({ ...conCrear, crear: { nombre: 'Rafael', liderId: 'alex' } }, null, nuevos) !== huellaDeLinea(conCrear, null, nuevos),
+        'cambiar el nombre del trabajador nuevo de la cuadrilla desconfirma');
+    esCierto(huellaDeLinea(l, null, nuevos, { nombreNuevo: () => 'Zorbex 2"' }) !== huellaDeLinea(l, null, nuevos, { nombreNuevo: () => 'Zorbex' }),
+        'y el nombre con que nace el ítem');
+});
+
+grupo('el resumen nombra al ítem nuevo como VA A QUEDAR', () => {
+    const r = leerLote('Juan Puerta: 3 codos de 5', P, I, O);
+    const l = r.lineas[0];
+    const nuevos = new Map([[l.items[0].id, InventoryType.SINGLE_USE]]);
+    const v = verificarLote(r, ctx({ obraGeneral: 'cristo', nuevos }));
+    const res = resumenDeLinea(l, v, nuevos, () => true, () => ({ name: 'Codos 5"', unit: 'und' }));
+    igual(res.sale.map(x => [x.nombre, x.unidad]), [['Codos 5"', 'und']], 'el nombre de la ficha, no lo dictado');
 });
 
 await cerrar();

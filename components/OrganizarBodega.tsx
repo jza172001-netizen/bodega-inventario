@@ -6,6 +6,7 @@ import { denominacionesDe, medidaDe, rutaSugerida, seMideEnPulgadas } from '../u
 import {
     describir, familiaEfectiva, moverGenero, ponerFamilia, ponerMedida, ponerRuta,
     quitarGenero, renombrarFamilia, renombrarGenero,
+    gemelosQueNacerian,
 } from '../core/organizar';
 
 /**
@@ -75,6 +76,11 @@ export const OrganizarBodega: React.FC<Props> = ({ items, onEditItem, onBehavior
     /** Si no cambia nada, se dice y no se abre una vista previa vacía. */
     const proponer = (titulo: string, cambios: Item[]) => {
         if (cambios.length === 0) { window.alert('No hay nada que cambiar: ya está así.'); return; }
+        const gemelos = gemelosQueNacerian(cambios, items);
+        if (gemelos.length) {
+            window.alert(`Así quedarían dos ítems iguales: ${gemelos.map(n => `«${n}»`).join(', ')}.\nNo se cambia nada. Probá sin corregir el nombre, o juntá primero esos ítems.`);
+            return;
+        }
         setPropuesta({ titulo, cambios });
     };
 
@@ -134,6 +140,10 @@ export const OrganizarBodega: React.FC<Props> = ({ items, onEditItem, onBehavior
     const medida = (i: Item, m: string) => {
         const cambiado = ponerMedida(i, m);
         if (!cambiado) return;
+        if (gemelosQueNacerian([cambiado], items).length) {
+            window.alert(`Ya existe «${cambiado.name}». No se cambia: quedarían dos fichas de la misma cosa.`);
+            return;
+        }
         onEditItem(cambiado);
         onBehaviorLog?.('ACTION', `Organizar: medida ${m} a «${i.name}»`);
     };

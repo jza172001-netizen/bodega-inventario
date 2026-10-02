@@ -5,7 +5,7 @@
  * prueba acá no es «que funcione» sino las dos cosas que si se rompen duelen:
  * que NO invente (personas, ítems, cantidades) y que NO pierda renglones.
  */
-import { leerLote, partirCantidad, contarDudas } from '../utils/lote';
+import { leerLote, partirCantidad, contarDudas, personaClara } from '../utils/lote';
 import { InventoryType, Personnel, Item } from '../types';
 import { igual, esCierto, grupo, cerrar } from './correr';
 
@@ -123,6 +123,18 @@ grupo('cada ítem y cada renglón llevan su propio id', () => {
     const antes = lote.lineas[0].items.map(i => i.id);
     const despues = lote.lineas[0].items.filter(i => i.id !== pala.id).map(i => i.id);
     igual(despues, antes.slice(1), 'el martillo conserva su id después de quitar la pala');
+});
+
+grupo('persona clara: la API no registra a la que adivinó', () => {
+    // «Juan» con dos Juanes trae a uno ELEGIDO y dudoso. La pantalla pregunta;
+    // la API no tiene a quién preguntarle, así que no lo registra.
+    const juanes = [{ id: 'a', name: 'Juan Pérez' }, { id: 'b', name: 'Juan Gómez' }] as Personnel[];
+    const pala = [{ id: 'p', name: 'Pala', quantity: 5, inventoryType: InventoryType.HAND_TOOL, category: '', subCategory: '', minStock: 0, unit: 'und' }] as Item[];
+    const dudoso = leerLote('Juan: 1 pala', juanes, pala).lineas[0];
+    igual(!!dudoso.persona, true, 'el lector sí elige a alguien…');
+    igual(personaClara(dudoso), false, '…pero no es clara');
+    igual(personaClara(leerLote('Juan P: 1 pala', juanes, pala).lineas[0]), true, 'con el apellido sí');
+    igual(personaClara(leerLote('Pedro: 1 pala', juanes, pala).lineas[0]), false, 'sin nadie, tampoco');
 });
 
 await cerrar();

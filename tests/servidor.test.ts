@@ -25,7 +25,7 @@ import { igual, esCierto, grupo, cerrar } from './correr';
 const RAIZ = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 // Dentro del repo, para que `@supabase/supabase-js` se resuelva desde node_modules.
 const SALIDA = path.join(RAIZ, 'node_modules', '.prueba-servidor');
-const VENTANILLAS = ['api/despacho.ts', 'api/consulta.ts', 'api/registro.ts'];
+const VENTANILLAS = ['api/despacho.ts', 'api/consulta.ts', 'api/registro.ts', 'api/latido.ts'];
 
 /** Transpila un archivo y los que importa, siguiendo SOLO los imports relativos. */
 const transpilarGrafo = (): string[] => {

@@ -33,8 +33,11 @@ copilot answers through `warehouseQA.ts`, which is plain TypeScript.
 `tests/` holds plain `tsx` scripts with a thirty-line runner (`tests/correr.ts`),
 not Vitest or Jest. `tsx` is invoked through `npx`, **not** declared as a
 devDependency: adding it to `package.json` without regenerating the lockfile
-broke `npm ci` entirely, and the sandbox that writes this code cannot regenerate
-the lockfile because `xlsx` is fetched from a blocked CDN.
+broke `npm ci` entirely. `npm install` cannot run here (`xlsx` comes from a
+blocked CDN), **but the lockfile CAN be regenerated without installing**:
+`npm install --package-lock-only` / `npm audit fix --package-lock-only` reuse
+the `xlsx` entry already in the lock. That is how the 3-oct-2026 lock was made;
+validate by installing from it in a scratch copy before committing.
 
 Add a `tests/*.test.ts` file and `npm run test` picks it up.
 
@@ -253,10 +256,18 @@ identity with the SAME e-mail formula as `core/identidad.ts` (tested in
 account could never log in: the code was compared on the phone against a column
 the cloud never sends, and no server identity was created. `borrar_acceso` bans
 the identity; `restore_user` unbans it. `authenticate_user` (old path) rejects
-empty passwords — `authenticate_user('CAMILO','')` used to return the owner row.
-Still open (L4, after Juli, Kate and Camilo log in by the new path): drop the
-public insert/update/delete policies on `app_users`, retire `authenticate_user`,
-blank the remaining plain-text passwords.
+**L4 is closed (3-oct-2026, `20261003120000` + `20261003130000`):**
+`app_users` has no public write policies, `authenticate_user` is DROPPED, every
+`app_users.password` is `''`, `restore_user` and `get_deleted_users_safe` are
+admin-only, and a wrong `dar_de_alta` code returns EMPTY instead of raising (a
+raise rolled back the attempt counter: the 10-attempt cap never counted). Juli's
+decision: only Juli has a password; Kate went back to «first time» (her old
+two-letter password no longer works; `dar_de_alta` reuses her identity) and,
+like Camilo, enters with a code from «🔑 Código». `migrateUsers` uses `??`, not
+`||`: deducing «set up» from having a username showed Kate the password screen.
+PIN and two-person confirmations verify with `verificarClave` (a separate,
+non-persisting client), never with the session in use. «Cerrar sesión» calls
+`cerrarIdentidad()` (`signOut` scope `local`).
 
 `index.html` is `lang="es" translate="no"`: it said `en`, the login screen had no
 `translate="no"`, and Chrome showed «Juli» as «Julio».
@@ -277,9 +288,13 @@ constraints, indexes, triggers, policies and functions, copied from what is
 installed rather than written from memory. The repo **can** rebuild the server
 now; it could not before, and that meant a disaster had no way back.
 
-Verified, not assumed: `node supabase/verificar-baseline.cjs` applies all 18
-migrations to an empty PostgreSQL in order and then registers a dispatch to
-prove the result is usable. **Run it whenever you add a migration** — one that
+Verified, not assumed: `node supabase/verificar-baseline.cjs` applies every
+migration to an empty PostgreSQL in order and then registers a dispatch to
+prove the result is usable. It loads `pgcrypto`, imitates Supabase's default
+grants to `anon`/`authenticated` (without that, «the public key cannot read»
+passes even with no migration closing it), and EXECUTES the access functions
+and the Kardex migration — 20 checks with the role and `sub` set as Supabase
+sends them. Install with `npm i --no-save @electric-sql/pglite`. **Run it whenever you add a migration** — one that
 only works against the existing database breaks the rebuild silently, and nobody
 finds out until the day it matters. `supabase/RESTAURAR.md` is the recovery
 procedure, including the kardex reconciliation query that must return zero rows.
@@ -321,18 +336,35 @@ gated by `BODEGA_API_TOKEN`, both of which live only in Vercel's environment
 variables. See `api/README.md`. This file used to say no backend existed; it did
 by the time anyone read that sentence.
 
-The browser still talks to Supabase directly with `VITE_SUPABASE_ANON_KEY`,
-which is public by design. The stock functions are `security definer` and carry
-`anon=X` (verified against production, not inferred): **anyone holding the public
-key can move inventory.**
+**The public key no longer moves inventory (since 3-oct-2026,
+`20261003130000_solo_la_bodega.sql`).** Every data table has ONE policy,
+`solo_la_bodega`, for `authenticated` with `es_de_la_bodega()`: a session whose
+`auth.uid()` is a LIVE `app_users` row (an identity alone — a public sign-up, a
+deleted account — is not enough). The five stock functions carry the same guard
+and no `anon` EXECUTE. `anon` keeps only `get_users_safe` (the login list) and
+`dar_de_alta` (first login, protected by the code). The API uses the service
+role and is unaffected.
 
-**This cannot be fixed by revoking.** The app *is* `anon`. The eight functions
-`anon` can execute are exactly the eight the browser calls — login, log movement,
-log batch, delete movement, return loan, read users, read deleted, restore user.
-Revoking leaves the app dead, not safer. Closing it requires server-side identity
-that does not exist: either moving writes behind `api/despacho.ts` with its
-token, or Supabase Auth. Both change how everyone logs in. It is the largest open
-risk and it is a project, not a migration.
+**The app therefore needs an identity SESSION to read or write.** `App.tsx`
+keeps `sesionRef`/`sesionAbierta` from `onAuthStateChange`. Without a session:
+`sincronizar` only reads the user list (RLS returns EMPTY lists without error,
+and the merge would take them for «the cloud has nothing»), `procesarCola` and
+`withSync` do not attempt (nothing burns attempts), and a banner says «Sin
+sesión con el servidor». Logging in with the phone fallback (no signal) keeps
+the password IN MEMORY ONLY (`recordarParaReconectar`) and `reconectar()` opens
+the session when `online` fires. `tests/sesion.test.ts` runs the real
+`withSync`/`procesarCola`.
+
+**Reorganizing never sends quantity.** «Organizar bodega» and «Revisar familias»
+go through `handleReorganizar` → `reclasificarItem` (name, familia, ruta only),
+applied over the mirror (`itemActual`). `updateItem` sends the whole row, and a
+stale preview or a lagging phone wrote an old quantity into the cloud.
+`gemelosQueNacerian` (core/organizar.ts) blocks renames that would leave two
+identical items.
+
+**Kardex is zero** after `20261003140000_kardex_en_cero.sql` (entries added,
+stock untouched). `api/latido.ts` + `vercel.json` cron reads one row a day so the
+free plan does not pause the project again.
 
 `storage.ts`'s `AppData` interface is still the canonical shape of persisted
 data.

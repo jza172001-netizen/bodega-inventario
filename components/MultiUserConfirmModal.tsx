@@ -40,7 +40,7 @@ export const MultiUserConfirmModal: React.FC<Props> = ({ title, message, users, 
      */
     const verifyPassword = async (user: AppUser, password: string): Promise<boolean> => {
         try {
-            const r = await db.authenticateUser(user.username, password);
+            const r = await db.verificarClave(user.username, password);
             if (r.estado === 'ok') return r.usuario.id === user.id;
             if (r.estado === 'rechazado') return false;
         } catch {

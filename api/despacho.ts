@@ -42,7 +42,7 @@ import { Item, Movement, MovementType, Personnel, InventoryType } from '../types
 import { planearLote, tipoExigeObra } from '../core/despacho.js';
 import { momentoConHora } from '../utils/date.js';
 import { idDeterminista, firmaDe } from './identidad.js';
-import { leerLote } from '../utils/lote.js';
+import { leerLote, personaClara } from '../utils/lote.js';
 import { isAsset } from '../utils/inventory.js';
 import { rankMatches } from '../utils/search.js';
 import { uuidDe } from './identidad.js';
@@ -209,10 +209,12 @@ export default async function handler(req: Peticion, res: Respuesta): Promise<vo
     const batch: Array<Omit<Movement, 'id'>> = [];
 
     for (const linea of lote.lineas) {
-        if (!linea.persona) {
+        if (!linea.persona || !personaClara(linea)) {
             // Ni aunque diga «(cuadrilla de Alex)»: crear a alguien lo decide una
             // persona en la pantalla, no un asistente por una ventanilla.
-            pendientes.push({ renglon: linea.personaTexto, motivo: 'No se identificó a la persona' });
+            pendientes.push({ renglon: linea.personaTexto, motivo: linea.persona
+                ? `«${linea.personaTexto}» puede ser ${linea.candidatosPersona.slice(0, 3).map(p => p.name).join(' o ')}. Mandá el nombre completo.`
+                : 'No se identificó a la persona' });
             continue;
         }
         // Una obra que el encabezado nombró y no se reconoce NO se adivina, ni

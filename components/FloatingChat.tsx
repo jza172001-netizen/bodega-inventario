@@ -891,7 +891,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
     const confirmarLinea = (lineaId: string) => {
         const l = lote?.lineas.find(x => x.id === lineaId);
         if (!l) return;
-        setLoteConfirmados(prev => new Map(prev).set(lineaId, huellaDeLinea(l, obraGeneral(), loteNuevos)));
+        setLoteConfirmados(prev => new Map(prev).set(lineaId, huellaDeLinea(l, obraGeneral(), loteNuevos, extraDeHuella())));
     };
     const desconfirmarLinea = (lineaId: string) => setLoteConfirmados(prev => {
         const n = new Map(prev);
@@ -899,7 +899,12 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         return n;
     });
     /** Confirmado = la huella guardada es la de ahora. */
-    const confirmado = (l: LineaLote) => loteConfirmados.get(l.id) === huellaDeLinea(l, obraGeneral(), loteNuevos);
+    const confirmado = (l: LineaLote) => loteConfirmados.get(l.id) === huellaDeLinea(l, obraGeneral(), loteNuevos, extraDeHuella());
+    /** Fecha del bloque y nombre con que nacería cada nuevo: si cambian, se vuelve a confirmar. */
+    const extraDeHuella = () => ({
+        fecha: loteFecha,
+        nombreNuevo: (it: ItemLote) => fichaDelBloque(it.nombre, loteNuevos.get(it.id) ?? InventoryType.HAND_TOOL, items, loteNombres.get(it.id)).name,
+    });
 
     /** Cambia la persona de un renglón, o el ítem de una línea, sin rearmar el lote. */
     /**
@@ -1028,6 +1033,12 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         const movs: Array<Omit<Movement, 'id'>> = [];
         const registrados = new Set<string>();
         const nacen: Item[] = [];
+        /**
+         * Lo que nace EN ESTE registro. `items` es la foto del render y no lo
+         * tiene todavía: sin esto, «Alex: 1 zorbex / Beto: 2 zorbex» creaba dos
+         * «Zorbex» gemelos.
+         */
+        const nacidos: Item[] = [];
         const general = obraGeneral();
         for (const l of lote?.lineas ?? []) {
             /**
@@ -1059,9 +1070,9 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                 if (!item && tipoNuevo) {
                     const ficha = fichaNueva(it.nombre, tipoNuevo, loteNombres.get(it.id));
                     // Si YA existe igualito, se usa ese: nunca un gemelo.
-                    const yaEsta = identicoDe(ficha, items);
+                    const yaEsta = identicoDe(ficha, [...items, ...nacidos, ...nacen]);
                     if (yaEsta) item = yaEsta;
-                    else if (crear) item = onCreateItem(ficha);
+                    else if (crear) { item = onCreateItem(ficha); nacidos.push(item); }
                     else {
                         item = { ...ficha, id: `nuevo:${it.id}` } as Item;
                         nacen.push(item);
@@ -1262,7 +1273,8 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                 <ResumenTrabajador
                     trabajador={trabajador} detalle={detalle} obra={obra}
                     cuando={[l.encabezado?.hora, l.encabezado?.lugar].filter(Boolean).join(' · ') || undefined}
-                    resumen={resumenDeLinea(l, verif, loteNuevos, resuelto)}
+                    resumen={resumenDeLinea(l, verif, loteNuevos, resuelto,
+                        it => (loteNuevos.has(it.id) ? fichaNueva(it.nombre, loteNuevos.get(it.id)!, loteNombres.get(it.id)) : undefined))}
                     confirmado={estaConfirmado}
                     onConfirmar={() => confirmarLinea(l.id)}
                     onEditar={() => desconfirmarLinea(l.id)}
@@ -1367,7 +1379,10 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                     podía resolver confirmando. */}
                                 <select value={l.sinPersona ? '__nadie__' : l.crear ? '__crear__' : l.dudosa ? '' : (l.persona?.id ?? '')} onChange={e => {
                                         if (e.target.value === '__crear__') {
-                                            mapearLinea(l.id, x => ({ ...x, persona: undefined, crear: { nombre: x.personaTexto, liderId: x.cuadrillaDe?.id } }));
+                                            // Limpia lo que se había decidido antes: con «Sin asignar»
+                                            // puesto, la persona se creaba y la salida salía sin nadie.
+                                            mapearLinea(l.id, x => ({ ...x, persona: undefined, dudosa: false, paraId: undefined, sinPersona: false,
+                                                crear: { nombre: x.personaTexto, liderId: x.cuadrillaDe?.id } }));
                                         } else fijarPersona(l.id, e.target.value);
                                     }}
                                     className={`${sel} flex-1 max-w-none ${l.persona || l.crear || l.sinPersona ? '' : 'border-atencion'}`}>
@@ -1442,9 +1457,12 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                 return (
                                 <div key={it.id} className="space-y-1">
                                     <div className="flex items-center gap-1.5">
-                                        <input type="number" min={0.1} step="any" value={it.cantidad}
+                                        {/* Texto y no número, y sin forzar mientras se escribe: con
+                                            `parseFloat(...) || 1`, teclear el «0» de «0,5» saltaba a 1. */}
+                                        <input type="text" inputMode="decimal" defaultValue={String(it.cantidad).replace('.', ',')}
                                             onFocus={e => e.target.select()}
-                                            onChange={e => fijarCantidad(it.id, parseFloat(e.target.value) || 1)}
+                                            onChange={e => { const n = cantidadDeTexto(e.target.value, 0); if (n > 0) fijarCantidad(it.id, n); }}
+                                            onBlur={e => { const n = cantidadDeTexto(e.target.value, 0.1); fijarCantidad(it.id, n); e.target.value = String(n).replace('.', ','); }}
                                             className="w-14 text-[11px] border border-papel-borde rounded-lg px-1.5 py-1 bg-papel text-tinta text-center" />
                                         <select
                                             value={nace ? '__nuevo__' : it.dudoso ? '' : (it.item?.id ?? '')}

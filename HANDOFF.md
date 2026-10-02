@@ -1,4 +1,4 @@
-# HANDOFF — Bodega Montecielo (al 2-oct-2026)
+# HANDOFF — Bodega Montecielo (al 3-oct-2026)
 
 > Traspaso para un chat nuevo. **Leé esto completo, y después `CLAUDE.md`, antes
 > de tocar nada.** El historial largo (hasta el 2-oct) está entero en
@@ -21,22 +21,29 @@
 - **Juli dijo el 2-oct: «estas son las últimas ediciones de código».** No
   proponer funciones nuevas. Solo auditar, arreglar lo roto y cerrar lo pendiente.
 
-## 2. Producción, verificada el 2-oct
+## 2. Producción y cierre del 3-oct
 
 - App: `bodega-montecielo.vercel.app` (Vercel, Node 24). Base: Supabase
   `xmizawuhiounkiaqrwxd` (`sa-east-1`).
-- **Datos:** 129 ítems, 234 movimientos, 35 personas, 8 obras activas. El último
-  movimiento es del 8-sep: la app todavía casi no se usa. Juli estima que la
-  operación real ronda los 60 movimientos al día.
-- **Accesos:** Administrador maestro (usuario `juli`), Kate (debe cambiar su
-  clave al entrar) y Camilo (papá de Juli, administrador; espera código de
-  alta). «KATE» y «Visitante» están en la papelera.
-- **Últimos PR:**
-  - **#100:** el bloque sigue la lógica del chat, con verificación; Gem en 4 momentos.
-  - **#101:** géneros, familias y pulgadas editables; lo dudoso se decide, no se adivina.
-  - **#102:** los accesos los maneja el servidor (`dar_de_alta`, `crear_acceso`…); Camilo ya puede entrar.
-  - **#103:** el bloque cierra con «✓ Pedido correcto» por trabajador y crea ítems con las reglas del chat.
-  - **#104:** este HANDOFF, el catálogo del Gem y el plan de verificación.
+- **Datos (2-oct):** 129 ítems, 234 movimientos, 35 personas, 8 obras activas.
+  El último movimiento es del 8-sep.
+- **Cierre del 3-oct (rama `claude/final-audit-defects-89pl3v`):** todos los
+  huecos de la auditoría del 2-oct.
+  - Nadie se vuelve administrador editando la tabla de accesos.
+  - La llave pública ya no lee ni mueve inventario: hace falta la sesión de
+    alguien de la bodega.
+  - La entrada vieja (`authenticate_user`) y las claves en texto plano se
+    retiraron.
+  - El tope de intentos del código de alta cuenta de verdad.
+  - El bloque no crea gemelos; la API no adivina personas; Organizar no toca
+    cantidades.
+  - El Kardex queda en cero, sin mover stock.
+  - Un latido diario evita que Supabase se pause.
+- **Accesos:** solo Juli tiene clave. Kate y Camilo entran como primera vez,
+  con el código que Juli genera en Accesos → «🔑 Código».
+- **Orden de despliegue:** primero el código (PR, merge, Vercel), después las 3
+  migraciones `20261003*`. El código nuevo funciona con la base vieja; al revés,
+  no.
 
 ## 3. Cómo funciona (mapa corto; el detalle está en CLAUDE.md)
 
@@ -64,32 +71,24 @@
 
 ## 4. Pendientes, en orden
 
-1. **L4, el cierre de seguridad.** Solo cuando Juli, Kate y Camilo hayan entrado
-   por la vía nueva (comprobable en la base: `auth.users.last_sign_in_at`):
-   - quitar las políticas públicas `allow_insert`, `allow_update` y
-     `allow_delete` de `app_users`;
-   - retirar `authenticate_user`;
-   - vaciar las claves en texto plano que quedan.
-
-   La vuelta atrás está en el baseline (las políticas originales).
-2. **La llave pública todavía mueve inventario.** Las funciones de stock son
-   `security definer` con `anon`. Cerrarlo es un proyecto (ver CLAUDE.md): las
-   escrituras pasan por la identidad del servidor.
+1. **Si las migraciones `20261003*` no están aplicadas** (comprobar: en
+   `pg_policies` las tablas tienen `solo_la_bodega`), ensayarlas con `raise` y
+   aplicarlas, en orden.
+2. **Juli:** generar el código de Kate y el de Camilo, y que entren.
 3. **Inventario definitivo.**
-   - **Decisión de Juli pendiente:** la Lista 5 (lo que cada uno tiene hoy o lo
-     que tuvo alguna vez).
+   - **Decisión de Juli:** la Lista 5 (lo que cada uno tiene hoy o lo que tuvo
+     alguna vez).
    - **Pendiente de su revisión:** `herramientas/INFORME-VINCULACION.md`.
-   - **Aplicar** primero en una copia y después en producción, con una entrada de
-     apertura por unidad. El Kardex tiene que cuadrar.
-4. **Supabase se pausa solo** (pasó del 12 al 28 de sep). Hace falta un aviso o un
-   plan pago.
-5. **Nunca hubo una prueba en navegador real.** Los recorridos R1–R19 están en
-   `VERIFICACION-ENTREGA.md`.
+   - Se aplica con una entrada de apertura por unidad; la consulta 4 de
+     `supabase/RESTAURAR.md` tiene que seguir en cero.
+4. **Recorridos R1–R19 en el teléfono** (`VERIFICACION-ENTREGA.md`); nunca hubo
+   prueba en navegador real. Incluye la prueba de dos teléfonos a la vez.
+5. **pdfjs-dist:** la única vulnerabilidad que queda; su arreglo es la versión 6
+   (cambio mayor). Probarla en navegador antes de subirla.
 6. **Opcional:**
-   - fase B: el «+ Crear nuevo» del chat pasa a `core/crearItem.ts`;
+   - `CRON_SECRET` en Vercel, para que solo Vercel llame el latido;
    - desconectar Netlify, que falla en cada PR;
-   - `npm audit`;
-   - prueba de dos teléfonos a la vez.
+   - fase B: el «+ Crear nuevo» del chat pasa a `core/crearItem.ts`.
 
 ## 5. Prompt para abrir el chat nuevo (copiar y pegar)
 

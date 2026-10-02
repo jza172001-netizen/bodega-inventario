@@ -4,7 +4,7 @@
  * Convierte snake_case (DB) ↔ camelCase (TypeScript).
  */
 
-import { supabase } from '../lib/supabase';
+import { supabase, crearClienteAparte } from '../lib/supabase';
 import { correoInterno } from '../core/identidad';
 import {
     Item, Movement, Personnel, Project, PurchaseOrder,
@@ -240,6 +240,26 @@ export async function updateItem(item: Item): Promise<void> {
 export async function deleteItem(id: string, quien?: string): Promise<void> {
     const { error } = await supabase.from('items')
         .update({ deleted_at: new Date().toISOString(), deleted_by: quien ?? null }).eq('id', id);
+    if (error) throw error;
+}
+
+/**
+ * Reorganizar un ítem: SOLO nombre, familia y género (`ruta`).
+ *
+ * `updateItem` manda la fila completa, cantidad incluida. Desde «Organizar
+ * bodega» eso era peligroso: con dos teléfonos, el que estuviera atrasado
+ * escribía en la nube la cantidad vieja y el Kardex dejaba de cuadrar sin un
+ * solo movimiento que lo explicara. Reorganizar no es mover inventario.
+ */
+export async function reclasificarItem(
+    id: string,
+    campos: { name: string; familia?: string; ruta?: string },
+    updatedAt?: Date,
+): Promise<void> {
+    const { error } = await supabase
+        .from('items')
+        .update({ name: campos.name, familia: campos.familia ?? null, ruta: campos.ruta ?? null, updated_at: sello(updatedAt) })
+        .eq('id', id);
     if (error) throw error;
 }
 
@@ -778,7 +798,9 @@ export async function darDeAlta(id: string, codigo: string, clave: string): Prom
     const { data, error } = await supabase.rpc('dar_de_alta', { p_id: id, p_codigo: codigo, p_clave: clave });
     if (error) throw new Error(mensajeDe(error, 'No se pudo completar el alta.'));
     const fila = (data ?? [])[0] as { user_username?: string } | undefined;
-    if (!fila?.user_username) throw new Error('El servidor no confirmó el alta.');
+    // Vacío = código incorrecto. El servidor no lanza error ahí a propósito:
+    // un error revertiría el intento que cuenta para el tope de diez.
+    if (!fila?.user_username) throw new Error('Código de alta incorrecto.');
     return { username: fila.user_username };
 }
 
@@ -806,6 +828,16 @@ export async function editarAcceso(id: string, nombre: string, rol: string): Pro
 export async function borrarAcceso(id: string, quien?: string): Promise<void> {
     const { error } = await supabase.rpc('borrar_acceso', { p_id: id, p_quien: quien ?? null });
     if (error) throw new Error(mensajeDe(error, 'No se pudo borrar el acceso.'));
+}
+
+/**
+ * Cierra la identidad del servidor en ESTE teléfono (`scope: 'local'`: los
+ * otros teléfonos de la misma persona siguen adentro). Sin señal también la
+ * borra del teléfono: el SDK la quita aunque el servidor no conteste.
+ */
+export async function cerrarIdentidad(): Promise<void> {
+    paraReconectar = null;
+    try { await supabase.auth.signOut({ scope: 'local' }); } catch { /* ya no hay sesión que cerrar */ }
 }
 
 export async function entrarConIdentidad(
@@ -843,118 +875,68 @@ export async function entrarConIdentidad(
     if (errorFila || !fila) return { estado: 'sinRespuesta' };
 
     const f = fila as { id: string; name: string; role: UserRole; debe_cambiar_clave: boolean };
+    paraReconectar = null;
     return {
         estado: 'ok',
         usuario: { id: f.id, role: f.role, name: f.name, debeCambiarClave: !!f.debe_cambiar_clave },
     };
 }
 
-export async function authenticateUser(
-    username: string,
-    password: string
-): Promise<ResultadoLogin> {
-    const { data, error } = await supabase.rpc('authenticate_user', {
-        p_username: username,
-        p_password: password,
-    });
-    // Con error no se puede afirmar nada: puede ser la red, puede ser la base.
-    if (error) return { estado: 'sinRespuesta' };
-    // SIN error y sin filas, el servidor SÍ contestó: comparó y dijo que no.
-    if (!data || data.length === 0) return { estado: 'rechazado' };
-    const row = data[0] as Record<string, unknown>;
-    return {
-        estado: 'ok',
-        usuario: {
-            id: row.user_id as string,
-            role: row.user_role as UserRole,
-            name: row.user_name as string,
-        },
-    };
+/**
+ * ¿Esta clave es de esta persona? Sin tocar la sesión abierta.
+ *
+ * Para el PIN y la confirmación de dos personas: el que autoriza no es el que
+ * tiene la sesión. Se pregunta con un cliente aparte que no guarda nada, y se
+ * cierra enseguida. Antes esto iba por `authenticate_user`, que comparaba
+ * contra la clave en texto plano de la tabla; esa entrada ya no existe.
+ */
+export async function verificarClave(username: string, password: string): Promise<ResultadoLogin> {
+    if (!username || !password) return { estado: 'rechazado' };
+    const aparte = crearClienteAparte();
+    const { data, error } = await aparte.auth.signInWithPassword({ email: correoInterno(username), password });
+    if (error) {
+        const rechazo = error.status === 400 || /invalid login credentials|banned/i.test(error.message ?? '');
+        return rechazo ? { estado: 'rechazado' } : { estado: 'sinRespuesta' };
+    }
+    try {
+        const { data: fila, error: errorFila } = await aparte
+            .from('app_users')
+            .select('id, name, role')
+            .eq('auth_uid', data.user?.id ?? '')
+            .is('deleted_at', null)
+            .maybeSingle();
+        if (errorFila) return { estado: 'sinRespuesta' };
+        if (!fila) return { estado: 'rechazado' };
+        const f = fila as { id: string; name: string; role: UserRole };
+        return { estado: 'ok', usuario: { id: f.id, role: f.role, name: f.name } };
+    } finally {
+        await aparte.auth.signOut({ scope: 'local' }).catch(() => {});
+    }
+}
+
+/** ¿Hay sesión de identidad en este teléfono? Sin ella, la base no deja escribir. */
+export async function haySesion(): Promise<boolean> {
+    const { data } = await supabase.auth.getSession();
+    return !!data.session;
 }
 
 /**
- * Crear un acceso. Sin pedir la fila de vuelta, y ahí está todo el asunto.
- *
- * Esto NUNCA funcionó contra la base. Juli creó Santiago, Camilo, CAMILO y KATE
- * —cinco veces, algunas dos veces seguidas porque "no quedaban"— y en
- * `app_users` no llegó ni uno: los cinco quedaron solo en la memoria de su
- * teléfono. La bitácora los registraba, la nube no.
- *
- * La causa no era el INSERT: era el `.select()` que venía detrás. `app_users`
- * tiene seguridad de fila con permiso de insertar, editar y borrar, pero
- * NINGUNO de leer —por eso los usuarios se leen con `get_users_safe`, que se
- * salta esa restricción—. Al pedir la fila recién creada de vuelta, PostgREST
- * choca contra esa falta de permiso y **revierte el insert entero**.
- *
- * Comprobado contra producción con la llave real de la app:
- *   con `Prefer: return=representation` → 401, no queda nada
- *   sin él                              → 201, la fila queda
- *
- * Así que no se pide de vuelta. El objeto que se devuelve es el mismo que
- * entró, que es exactamente lo que la fila contiene: acá no hay valores que
- * ponga la base por su cuenta.
+ * Entrar SIN señal deja a la persona trabajando con el respaldo del teléfono,
+ * pero sin sesión: lo que haga queda en la cola. La clave se guarda acá, SOLO
+ * en memoria (nunca en el teléfono), para abrir la sesión sola cuando vuelva
+ * la señal. Si la app se cierra antes, se pierde y hay que volver a entrar.
  */
-export async function addUser(u: AppUser): Promise<AppUser> {
-    const { error } = await supabase
-        .from('app_users')
-        .insert({ id: u.id, ...userToDb(u) });
-    if (error) throw error;
-    return u;
-}
+let paraReconectar: { usuario: string; clave: string } | null = null;
+export const recordarParaReconectar = (usuario: string, clave: string) => { paraReconectar = { usuario, clave }; };
+export const olvidarReconexion = () => { paraReconectar = null; };
 
-/**
- * Cambiarle el nombre o el rol a alguien NO le toca la contraseña.
- *
- * Antes sí se la tocaba, y la borraba. `fetchUsers()` devuelve `password: ''`
- * a propósito —la contraseña nunca viaja al cliente— y la pantalla de accesos
- * edita ESE objeto. Al guardar, `userToDb()` metía `password: ''` en el UPDATE
- * y la contraseña guardada se reemplazaba por una cadena vacía.
- *
- * El daño no se veía de inmediato: en el teléfono donde se hizo el cambio
- * seguía funcionando el respaldo por hash local, mientras la persona dejaba de
- * poder entrar desde cualquier otro. Un error que se esconde a quien lo comete
- * es peor que uno que truena.
- *
- * Por eso van dos funciones y no una con banderas: la lista de campos es
- * explícita, y no hay forma de que un objeto de más arrastre una credencial.
- */
-export async function updateUserProfile(u: AppUser): Promise<void> {
-    const { error } = await supabase
-        .from('app_users')
-        .update({
-            username: u.username?.trim() || null,   // vacío va como NULL: la tabla tiene UNIQUE (username)
-            role: u.role,
-            name: u.name,
-        })
-        .eq('id', u.id);
-    if (error) throw error;
-}
-
-/** El ÚNICO camino que escribe credenciales. */
-export async function setUserCredentials(u: AppUser): Promise<void> {
-    const { error } = await supabase
-        .from('app_users')
-        .update({
-            username: u.username?.trim() || null,
-            password: u.password ?? '',
-            password_hash: u.passwordHash ?? null,
-            setup_complete: u.setupComplete ?? false,
-        })
-        .eq('id', u.id);
-    if (error) throw error;
-}
-
-/**
- * Un acceso borrado también es lápida, no borrado.
- *
- * Era la única tabla junto con `order_list` donde se quitaba la fila de verdad:
- * si alguien borraba un acceso por equivocación, no había cómo devolverlo. Y
- * `fetchUsers` ya filtra por lápida, así que desaparece igual de la pantalla.
- */
-export async function deleteUser(id: string, quien?: string): Promise<void> {
-    const { error } = await supabase.from('app_users')
-        .update({ deleted_at: new Date().toISOString(), deleted_by: quien ?? null }).eq('id', id);
-    if (error) throw error;
+/** Intenta abrir la sesión con lo recordado. `true` si quedó abierta. */
+export async function reconectar(): Promise<boolean> {
+    if (!paraReconectar) return false;
+    const r = await entrarConIdentidad(paraReconectar.usuario, paraReconectar.clave);
+    if (r.estado === 'ok') { paraReconectar = null; return true; }
+    if (r.estado === 'rechazado') paraReconectar = null;
+    return false;
 }
 
 // ─── BULK UPSERT (migración localStorage → Supabase) ─────────────────────────

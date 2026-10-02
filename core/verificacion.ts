@@ -243,12 +243,21 @@ export const listoParaRegistrar = (
  * que toca un renglón —mover un elemento, cambiar una cantidad, escoger otro
  * ítem—: si algo cambió, la huella ya no es la misma y hay que volver a mirar.
  */
-export const huellaDeLinea = (l: LineaLote, obraGeneral: string | null | undefined, nuevos: Map<string, InventoryType>): string =>
+export const huellaDeLinea = (
+    l: LineaLote, obraGeneral: string | null | undefined, nuevos: Map<string, InventoryType>,
+    /** La fecha del bloque y el nombre con que nacería cada ítem nuevo: también se confirman. */
+    extra: { fecha?: string; nombreNuevo?: (it: ItemLote) => string } = {},
+): string =>
     JSON.stringify([
-        l.sinPersona ? 'sin-asignar' : l.persona?.id ?? (l.crear ? `crear:${l.crear.nombre}:${l.crear.liderId ?? ''}` : ''),
+        l.sinPersona ? 'sin-asignar' : l.persona?.id ?? '',
+        // El trabajador nuevo cuenta SIEMPRE, también el de la cuadrilla de un
+        // oficial: cambiarle el nombre después de confirmar lo desconfirma.
+        l.crear ? `crear:${l.crear.nombre}:${l.crear.liderId ?? ''}` : '',
         l.paraId ?? '',
         obraDe(l, obraGeneral) ?? '?',
-        l.items.map(it => [it.id, it.item?.id ?? (nuevos.has(it.id) ? `nuevo:${nuevos.get(it.id)}:${it.nombre}` : ''), it.cantidad, it.dudoso]),
+        extra.fecha ?? '', l.encabezado?.hora ?? '',
+        l.items.map(it => [it.id, it.item?.id ?? (nuevos.has(it.id)
+            ? `nuevo:${nuevos.get(it.id)}:${extra.nombreNuevo ? extra.nombreNuevo(it) : it.nombre}` : ''), it.cantidad, it.dudoso]),
     ]);
 
 /** Lo que muestra el resumen del trabajador, igual que el «Confirmar» del chat. */
@@ -271,6 +280,8 @@ export const resumenDeLinea = (
     v: ReturnType<typeof verificarLote>,
     nuevos: Map<string, InventoryType>,
     resuelto: (it: ItemLote) => boolean,
+    /** Cómo nacería un ítem nuevo (nombre y unidad), para decirlo como va a quedar. */
+    fichaDe?: (it: ItemLote) => { name: string; unit: string } | undefined,
 ): ResumenLinea => {
     const todos = new Set(l.items.map(it => it.id));
     const deLinea = (v.porLinea.get(l.id) ?? []).filter(a => a.nivel === 'decidir');
@@ -284,11 +295,12 @@ export const resumenDeLinea = (
             continue;
         }
         const tipo = it.item?.inventoryType ?? nuevos.get(it.id);
+        const ficha = it.item ? undefined : fichaDe?.(it);
         r.sale.push({
             itemLoteId: it.id,
-            nombre: it.item?.name ?? it.nombre,
+            nombre: it.item?.name ?? ficha?.name ?? it.nombre,
             cantidad: it.cantidad,
-            unidad: it.item?.unit ?? 'unidades',
+            unidad: it.item?.unit ?? ficha?.unit ?? 'unidades',
             prestamo: it.item ? isAsset(it.item) : !!tipo && ES_PRESTAMO.has(tipo),
             nuevo: !it.item,
             accesorios: (it.item?.accessories ?? []).map(a => a.cantidad && a.cantidad > 1 ? `${a.cantidad} ${a.nombre}` : a.nombre),
