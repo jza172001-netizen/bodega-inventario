@@ -12,6 +12,7 @@ import { construirArbol, construirRuta, caminosDe, partirRuta } from '../utils/a
 import {
     estaDebajo, moverGenero, ponerFamilia, ponerMedida, ponerRuta, quitarGenero,
     renombrarFamilia, renombrarGenero,
+    gemelosQueNacerian,
 } from '../core/organizar';
 import { rutaSugerida, seMideEnPulgadas, medidaDe } from '../utils/medida';
 import { igual, esCierto, grupo, cerrar } from './correr';
@@ -130,6 +131,19 @@ grupo('pulgadas: las familias de la bodega están en PLURAL', () => {
     igual(rutaSugerida('Tubos'), 'Tubería', 'los tubos YA son el subgénero');
     igual(rutaSugerida('Llaves'), null, 'una llave también es herramienta: no se adivina');
     igual(medidaDe('Codos 4"-2"'), null, 'la reducción con guion no es de 4"');
+});
+
+grupo('reorganizar NO fabrica gemelos', () => {
+    const items = [it('a', 'Codo 2"', 'Codo'), it('b', 'Codos 2"', 'Codos'), it('c', 'Codos 4"', 'Codos')];
+    // Corregir «Codo 2"» a «Codos» lo deja igual al «Codos 2"» que ya existe.
+    const cambios = ponerFamilia(items, ['a'], 'Codos', { corregirNombre: true });
+    igual(gemelosQueNacerian(cambios, items), ['Codos 2"'], 'se detecta el choque');
+    igual(gemelosQueNacerian(ponerFamilia(items, ['a'], 'Codos'), items), [], 'sin corregir el nombre, no hay choque');
+    const conMedida = ponerMedida(it('d', 'Codos', 'Codos'), '4');
+    igual(gemelosQueNacerian(conMedida ? [conMedida] : [], [...items, it('d', 'Codos', 'Codos')]), ['Codos 4"'], 'ponerle 4" a «Codos» choca con el que ya existe');
+    // Los gemelos que YA estaban no se le achacan a este cambio.
+    const viejos = [it('x', 'Pala'), it('y', 'Pala'), it('z', 'Pica')];
+    igual(gemelosQueNacerian([{ ...viejos[2], ruta: 'Herramientas' }], viejos), [], 'un cambio ajeno no carga con gemelos viejos');
 });
 
 await cerrar();

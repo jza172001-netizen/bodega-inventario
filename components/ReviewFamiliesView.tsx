@@ -1,6 +1,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { Item } from '../types';
+import { gemelosQueNacerian } from '../core/organizar';
 import { familiaDe, nombreCorregido, normStr, esParecido } from '../utils/genus';
 import { OrganizarBodega } from './OrganizarBodega';
 
@@ -88,7 +89,13 @@ export const ReviewFamiliesView: React.FC<Props> = ({ items, onEditItem, onGoBac
     const confirmar = (familia: string, grupo: Item[]) => {
         const arreglos = porCorregir(familia, grupo).filter(c => !sinCorregir.has(c.item.id));
         const nuevoNombre = new Map(arreglos.map(c => [c.item.id, c.nuevo]));
-        grupo.forEach(i => onEditItem({ ...i, familia, name: nuevoNombre.get(i.id) ?? i.name }));
+        const cambios = grupo.map(i => ({ ...i, familia, name: nuevoNombre.get(i.id) ?? i.name }));
+        const gemelos = gemelosQueNacerian(cambios, items);
+        if (gemelos.length) {
+            window.alert(`Corregir los nombres dejaría dos ítems iguales: ${gemelos.map(n => `«${n}»`).join(', ')}.\nDesmarcá la corrección de esos y volvé a confirmar.`);
+            return;
+        }
+        cambios.forEach(onEditItem);
         onBehaviorLog?.('ACTION', `Confirmó familia "${familia}" (${grupo.length} ítems)`);
         if (arreglos.length) {
             onBehaviorLog?.('ACTION',

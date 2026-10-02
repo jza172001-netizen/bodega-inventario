@@ -503,6 +503,13 @@ export const leerLote = (texto: string, personnel: Personnel[], items: Item[], p
 };
 
 /** Cuántas cosas hay que revisar antes de poder registrar sin miedo. */
+/**
+ * ¿Se sabe sin duda quién es? Para registrar SIN que nadie mire (la API):
+ * «Juan» con Juan Pérez y Juan Gómez trae a Juan Pérez elegido Y dudoso, y el
+ * endpoint lo registraba a él. Persona elegida no basta: tiene que ser clara.
+ */
+export const personaClara = (l: Pick<LineaLote, 'persona' | 'dudosa'>): boolean => !!l.persona && !l.dudosa;
+
 export const contarDudas = (lote: LoteParseado): number =>
     lote.lineas.reduce(
         (n, l) => n + (l.dudosa ? 1 : 0) + l.items.filter(i => i.dudoso).length,

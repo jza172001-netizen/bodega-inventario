@@ -243,6 +243,26 @@ export async function deleteItem(id: string, quien?: string): Promise<void> {
     if (error) throw error;
 }
 
+/**
+ * Reorganizar un ítem: SOLO nombre, familia y género (`ruta`).
+ *
+ * `updateItem` manda la fila completa, cantidad incluida. Desde «Organizar
+ * bodega» eso era peligroso: con dos teléfonos, el que estuviera atrasado
+ * escribía en la nube la cantidad vieja y el Kardex dejaba de cuadrar sin un
+ * solo movimiento que lo explicara. Reorganizar no es mover inventario.
+ */
+export async function reclasificarItem(
+    id: string,
+    campos: { name: string; familia?: string; ruta?: string },
+    updatedAt?: Date,
+): Promise<void> {
+    const { error } = await supabase
+        .from('items')
+        .update({ name: campos.name, familia: campos.familia ?? null, ruta: campos.ruta ?? null, updated_at: sello(updatedAt) })
+        .eq('id', id);
+    if (error) throw error;
+}
+
 export async function updateItemQuantity(id: string, quantity: number): Promise<void> {
     const { error } = await supabase
         .from('items')

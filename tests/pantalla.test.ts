@@ -89,7 +89,7 @@ const ficha = (id: string, name: string, quantity: number, inventoryType = Inven
     id, name, quantity, inventoryType, category: 'Prueba', subCategory: '', minStock: 0, unit: 'und',
 });
 
-const MANEJADORES = ['fichaNueva', 'resuelto', 'obraGeneral', 'armarMovimientos', 'verificacionDelLote', 'quitarRegistrados', 'registrarLote', 'quitarLinea', 'desmarcarNuevo', 'confirmado', 'confirmarLinea'];
+const MANEJADORES = ['fichaNueva', 'resuelto', 'obraGeneral', 'armarMovimientos', 'verificacionDelLote', 'quitarRegistrados', 'registrarLote', 'quitarLinea', 'desmarcarNuevo', 'confirmado', 'confirmarLinea', 'extraDeHuella'];
 
 interface Manejadores {
     registrarLote: () => void;
@@ -151,13 +151,17 @@ const panel = (items: Item[], texto: string, conProyecto = false, sinSubir = 0,
         setLote: (v: unknown) => { c.lote = typeof v === 'function' ? (v as (x: unknown) => unknown)(c.lote) : v; },
         setLoteNuevos: (v: unknown) => { c.loteNuevos = typeof v === 'function' ? (v as (x: unknown) => unknown)(c.loteNuevos) : v; },
         cerrarLote: () => { visto.cerrado = true; c.lote = null; },
+        // Como React: crear un ítem NO lo mete en `items` de este render (llega
+        // en el siguiente). Lo ve el ESPEJO de App, que es contra lo que se
+        // registra. Antes este doble lo metía en `items` al instante, y así
+        // tapaba que dos renglones del mismo ítem nuevo crearan dos gemelos.
         onCreateItem: (v: Omit<Item, 'id'>) => {
             const nuevo = { ...v, id: `creado-${visto.creados.length + 1}` } as Item;
-            items.push(nuevo); visto.creados.push(nuevo); return nuevo;
+            visto.creados.push(nuevo); return nuevo;
         },
         onLogMovements: (batch: Array<Omit<Movement, 'id'>>, opciones?: Record<string, unknown>) => {
             visto.enviados.push(...batch);
-            const plan = planearLote(batch, items, opciones);
+            const plan = planearLote(batch, [...items, ...visto.creados], opciones);
             return { ok: plan.aplicar.length, total: plan.aplicar.length + plan.rechazos.length, rechazos: plan.rechazos };
         },
         addBot: (x: string) => visto.avisos.push(x),
@@ -496,6 +500,18 @@ grupo('un ítem nuevo nace con las reglas del chat, y nunca gemelo', () => {
     registrar(q);
     igual(q.visto.creados.length, 0, 'no se crea un gemelo');
     igual(q.visto.enviados.map(m => m.itemId), ['c5'], 'sale el que ya estaba');
+});
+
+grupo('el MISMO ítem nuevo en dos renglones nace UNA vez', () => {
+    // Antes nacían dos «Zorbex»: `identicoDe` buscaba en `items` del render, que
+    // todavía no tenía el que se acababa de crear.
+    const BETO: Personnel = { id: '66666666-6666-4666-8666-666666666666', name: 'Beto' };
+    const p = panel([], 'Alex: 1 zorbex\nBeto: 2 zorbex', true, 0, { personal: [ALEX, BETO] });
+    for (const l of lineas(p.c)) (p.c.loteNuevos as Map<string, InventoryType>).set(l.items[0].id, InventoryType.HAND_TOOL);
+    registrar(p);
+    igual(p.visto.creados.map(i => i.name), ['Zorbex'], 'nace uno solo');
+    igual(p.visto.enviados.filter(m => m.type === MovementType.CHECK_OUT).map(m => m.itemId), ['creado-1', 'creado-1'],
+        'y las dos salidas son de ese');
 });
 
 grupo('«Sin asignar trabajador», como el paso 2 del chat', () => {

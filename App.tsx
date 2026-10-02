@@ -1451,6 +1451,34 @@ const App: React.FC = () => {
         }
     };
 
+    /**
+     * Reorganizar (familias, géneros, medida en el nombre): solo nombre, familia
+     * y ruta, aplicados sobre el ítem VIGENTE del espejo.
+     *
+     * Antes «Organizar bodega» guardaba la copia que tenía en la vista previa,
+     * cantidad incluida: si entre la vista previa y «Guardar» salía un despacho,
+     * se volvía a escribir la cantidad vieja y además nacía un ajuste falso en
+     * el Kardex. Y en la nube iba la fila completa, pisando el stock del
+     * servidor desde el teléfono atrasado.
+     */
+    const handleReorganizar = (entrante: Item) => {
+        const prev = itemActual(entrante.id);
+        if (!prev) return;
+        const campos = { name: entrante.name, familia: entrante.familia, ruta: entrante.ruta };
+        const updatedAt = new Date();
+        const updated: Item = { ...prev, ...campos, updatedAt };
+        setItems(p => p.map(i => (i.id === updated.id ? { ...i, ...campos, updatedAt } : i)));
+        itemsRef.current = itemsRef.current.map(i => (i.id === updated.id ? { ...i, ...campos, updatedAt } : i));
+        withSync('reclasificarItem', [updated.id, campos, updatedAt], `Reorganizar "${updated.name}"`);
+        if (prev.name !== updated.name) {
+            const resto = describirCambios(prev, updated, { ...ETIQUETAS_ITEM, name: undefined });
+            addAuditLog('ITEM_RENAMED', `Se renombró "${prev.name}" → "${updated.name}"${resto ? ` · ${resto}` : ''}`);
+        } else {
+            const queCambio = describirCambios(prev, updated, ETIQUETAS_ITEM);
+            if (queCambio) addAuditLog('ITEM_EDITED', `Se reorganizó "${updated.name}": ${queCambio}`);
+        }
+    };
+
     const handleDeleteItem = (id: string) => {
         const item = items.find(i => i.id === id);
         const hasMovements = movements.some(m => m.itemId === id);
@@ -2445,7 +2473,7 @@ const App: React.FC = () => {
                         {effectiveView === 'familias' && (
                             <ReviewFamiliesView
                                 items={items}
-                                onEditItem={handleEditItem}
+                                onEditItem={handleReorganizar}
                                 onGoBack={() => selectView('kardex')}
                                 onBehaviorLog={addBehaviorLog}
                             />

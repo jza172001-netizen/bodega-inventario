@@ -15,7 +15,7 @@
  */
 
 import { Item } from '../types.js';
-import { familiaDe, nombreCorregido, raizDeFamilia } from '../utils/genus.js';
+import { familiaDe, nombreCorregido, normStr, raizDeFamilia } from '../utils/genus.js';
 import { medidaDe } from '../utils/medida.js';
 import { partirRuta, unirRuta } from '../utils/arbol.js';
 
@@ -139,6 +139,26 @@ export const ponerMedida = (item: Item, medida: string): Item | null => {
     if (!m || medidaDe(item.name)) return null;
     const conComillas = /["']$/.test(m) ? m : `${m}"`;
     return { ...item, name: `${item.name.trim()} ${conComillas}` };
+};
+
+/**
+ * Los nombres que quedarían REPETIDOS (mismo tipo, mismo nombre) si se aplican
+ * estos cambios. Reorganizar no puede fabricar gemelos: «Codo 2"» pasado a
+ * «Codos» con el nombre corregido choca con el «Codos 2"» que ya existe, y dos
+ * fichas de la misma cosa parten el stock en dos. Solo cuenta un choque donde
+ * participa un ítem cambiado: los gemelos que ya existían no son de esta vez.
+ */
+export const gemelosQueNacerian = (cambios: Item[], items: Item[]): string[] => {
+    const cambiados = new Map(cambios.map(c => [c.id, c]));
+    const vistos = new Map<string, string>();
+    const choques = new Set<string>();
+    for (const i of items.map(x => cambiados.get(x.id) ?? x)) {
+        const k = `${i.inventoryType}|${normStr(i.name)}`;
+        const otro = vistos.get(k);
+        if (otro !== undefined && (cambiados.has(i.id) || cambiados.has(otro))) choques.add(i.name);
+        else if (otro === undefined) vistos.set(k, i.id);
+    }
+    return [...choques];
 };
 
 /** Qué cambia, en una línea por ítem, para la vista previa y la bitácora. */
