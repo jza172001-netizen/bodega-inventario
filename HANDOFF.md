@@ -8,6 +8,23 @@
 
 ---
 
+## 0.000 ESTADO AL 2-oct-2026 — leer primero
+
+- **PR #102 (merge, READY): accesos por el servidor.** Lista en producción:
+  **Administrador maestro** (usuario `juli`), **Camilo** (administrador, espera
+  su código de alta: Juli lo genera en Configuración → Accesos → «🔑 Código»),
+  **Kate**. KATE y «Visitante» a la papelera (identidad de Visitante bloqueada).
+  Antes de esto un acceso nuevo NO podía entrar nunca (ver CLAUDE.md,
+  Authentication). Probado en producción en transacción revertida (24/24).
+- **Falta (L4), cuando Juli, Kate y Camilo entren por la vía nueva:** quitar las
+  políticas públicas insert/update/delete de `app_users`, retirar
+  `authenticate_user`, vaciar las claves en texto plano restantes. La vuelta
+  atrás es volver a crear esas políticas (están en el baseline).
+- **PR #103 (fase A del bloque):** «✓ Pedido correcto» por trabajador, crear
+  ítem con las reglas del chat, «Sin asignar», «Obra nueva…». Fase B (crear del
+  chat compartido) va después de la prueba.
+- «Pendientes» solo aparece cuando algo se frenó (la subida ya es automática).
+
 ## 0.00 ESTADO AL 1-oct-2026 — leer esto primero (para la auditoría)
 
 **Producción:** 129 ítems vivos, 234 movimientos, 35 personas, 8 obras (leído el

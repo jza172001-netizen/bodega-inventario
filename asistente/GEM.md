@@ -155,7 +155,9 @@ Carlos: 2 bultos de cemento
 y una ficha de devolución para Jhon. Pegá el bloque en la app: la
 verificación de la app tiene que preguntarte por Alex (si es oficial), por
 cualquier persona que no exista y por **cuál pulidora** (hay varias grandes y
-pequeñas: la app ya no escoge la primera por su cuenta), y nada más.
+pequeñas: la app ya no escoge la primera por su cuenta), y nada más. Al final,
+cada trabajador muestra su resumen —como el «Confirmar» del chat— y sale solo
+cuando tocás **«✓ Pedido correcto»**.
 
 **Comprobá también la hora:** en el primer mensaje, ¿el Gem puso la hora
 real o «hora ?»? Si puso una hora que no era, decile que use «hora ?» y la

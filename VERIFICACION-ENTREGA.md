@@ -73,8 +73,12 @@ Cada recorrido termina **recargando la página** y comprobando que lo hecho sigu
 | R13 | **Organizar:** armar Tubería › Accesorios con los codos, renombrar un género, ponerle medida a un ítem | La vista previa dice qué cambia; el inventario muestra los niveles; ninguna cantidad se mueve |
 | R14 | **Bloque — medida:** pegar «Juan: 3 codos» y «Pedro: 2 codos de 4» | El primero pregunta la medida con botones; el segundo va directo al de 4" |
 | R15 | **Bloque — dudoso:** pegar «Juan: 1 pulidora grande» | Pregunta cuál (hay cuatro); no registra ninguna sola |
+| R16 | **Login:** salir y volver a entrar | Tres tarjetas: Administrador maestro, Camilo, Kate. Entra con la clave nueva |
+| R17 | **Camilo:** Configuración → Accesos → «🔑 Código» en Camilo; él entra con ese código y pone su clave | Entra, y al salir y volver entra con su clave |
+| R18 | **Bloque — confirmar:** pegar un bloque de 3 trabajadores, confirmar 2 | Salen los 2 confirmados; el tercero se queda. Cambiar una cantidad desconfirma |
+| R19 | **Bloque — crear:** pedir algo que no existe («2 codos de 5») | Pregunta «¿Crearlo?»; nace «Codos 5"» en su familia; si ya existía igualito, usa ese |
 
-**Aprobado el bloque:** los 15 recorridos sin un error. Cada fallo se arregla, con su prueba automática, antes de seguir.
+**Aprobado el bloque:** los 19 recorridos sin un error. Cada fallo se arregla, con su prueba automática, antes de seguir.
 
 ---
 

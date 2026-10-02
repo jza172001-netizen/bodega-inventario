@@ -92,6 +92,11 @@ export interface LineaLote {
     persona?: Personnel;
     candidatosPersona: Personnel[];
     dudosa: boolean;
+    /**
+     * «Sin asignar trabajador», como en el paso 2 del chat: la salida queda sin
+     * persona. Es una DECISIÓN, no un olvido: solo la pone quien mira la pantalla.
+     */
+    sinPersona?: boolean;
     items: ItemLote[];
     /** El encabezado `@` que tenía encima, si había. */
     encabezado?: Encabezado;
