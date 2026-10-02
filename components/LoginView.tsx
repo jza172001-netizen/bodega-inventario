@@ -3,7 +3,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import { AppUser, UserRole } from '../types';
 import * as db from '../services/supabaseService';
 import { sha256Hex } from '../utils/hash';
-import { normStr } from '../utils/genus';
 
 interface LoginViewProps {
     users: AppUser[];
@@ -189,53 +188,44 @@ export const LoginView: React.FC<LoginViewProps> = ({ users, onLoginSuccess, onF
         }
     };
 
-    const handleSetupSubmit = (e: React.FormEvent) => {
+    /**
+     * EL PRIMER INGRESO, por el servidor.
+     *
+     * Antes esto comparaba el código acá, contra `selectedUser.password`: una
+     * columna que la nube nunca manda. En cualquier teléfono que no fuera el que
+     * creó el acceso salía «no tiene código de alta» — le pasaba a Camilo. Y
+     * aunque pasara, la clave quedaba solo en la tabla vieja, sin identidad de
+     * servidor, y la entrada siguiente decía «contraseña incorrecta» con la
+     * contraseña bien puesta.
+     *
+     * Ahora `dar_de_alta` compara el código EN EL SERVIDOR (con tope de
+     * intentos), crea la identidad y no guarda la clave en ninguna tabla. Acá
+     * solo se valida lo que se puede validar sin preguntar, y después se entra
+     * con la identidad recién creada, igual que cualquier otro día.
+     */
+    const handleSetupSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!selectedUser) return;
-
-        /**
-         * EL CÓDIGO DE ALTA. Sin esto, esta pantalla regalaba la bodega.
-         *
-         * Una tarjeta en espera la veía cualquiera que abriera la dirección de
-         * la app, y se la podía quedar: elegirla, ponerle la contraseña que
-         * quisiera y entrar. Con un acceso de DUEÑO esperando —que era el caso
-         * en producción— eso le daba permiso de borrar todo al primero que
-         * pasara. Sin claves, sin saber nada, solo abriendo la página.
-         *
-         * El código lo crea el administrador al abrir el acceso y se lo pasa a
-         * la persona. Él conoce el código temporal, NO la contraseña que la
-         * persona elija después, que era la intención original y sigue en pie.
-         *
-         * SIN CÓDIGO GUARDADO NO HAY ALTA, y esa es la parte que importa: los
-         * accesos que ya estaban esperando con la contraseña vacía dejan de ser
-         * reclamables por nadie. No se borran —eso lo decide su dueño— pero la
-         * puerta queda cerrada.
-         */
-        const codigoEsperado = (selectedUser.password ?? '').trim();
-        if (!codigoEsperado) {
-            triggerShake('Este acceso no tiene código de alta. Pedile al administrador que lo cree de nuevo.');
-            return;
-        }
-        if (setupCodigo.trim().toUpperCase() !== codigoEsperado.toUpperCase()) {
-            triggerShake('Código de alta incorrecto');
-            return;
-        }
-
-        if (setupPassword.length < 3) { triggerShake('La contraseña debe tener al menos 3 caracteres'); return; }
+        if (!selectedUser || isLoading) return;
+        if (!setupCodigo.trim()) { triggerShake('Escribí el código de alta que te dio el administrador'); return; }
+        if (setupPassword.length < 6) { triggerShake('La contraseña debe tener al menos 6 caracteres'); return; }
         if (setupPassword !== setupConfirm) { triggerShake('Las contraseñas no coinciden'); return; }
-        /**
-         * El nombre de usuario se deriva del nombre de la persona, no se pide.
-         *
-         * Y se guarda normalizado —sin tildes, en minúscula— porque al entrar se
-         * compara con la misma regla del buscador maestro: escribirlo en
-         * mayúscula o con tilde tiene que servir igual. La CONTRASEÑA no lleva
-         * esa regla: esa va exacta como la escribió su dueño.
-         */
-        const usuario = normStr(selectedUser.name).replace(/\s+/g, '_');
-        if (users.some(u => u.username && normStr(u.username) === normStr(usuario) && u.id !== selectedUser.id)) {
-            triggerShake('Ya hay alguien registrado con ese nombre'); return;
+        setIsLoading(true);
+        try {
+            const { username } = await db.darDeAlta(selectedUser.id, setupCodigo.trim(), setupPassword);
+            const r = await db.entrarConIdentidad(username, setupPassword);
+            if (r.estado !== 'ok') {
+                triggerShake('Quedó creada, pero no pude entrar todavía. Volvé a intentar con tu clave nueva.');
+                return;
+            }
+            onCredentialVerified?.(selectedUser.id, await sha256Hex(setupPassword));
+            onFirstSetup(selectedUser.id, username, setupPassword);
+        } catch (err) {
+            // El servidor dice por qué en palabras: código incorrecto, demasiados
+            // intentos, ya configurado. Eso es lo que la persona tiene que leer.
+            triggerShake(err instanceof Error && err.message ? err.message : 'No se pudo completar el alta. Revisá la conexión.');
+        } finally {
+            setIsLoading(false);
         }
-        onFirstSetup(selectedUser.id, usuario, setupPassword);
     };
 
     const goBack = () => {
@@ -487,10 +477,11 @@ export const LoginView: React.FC<LoginViewProps> = ({ users, onLoginSuccess, onF
                                     />
                                 </div>
                                 {error && <p className="text-sm text-alerta font-semibold text-center">{error}</p>}
-                                <button type="submit"
-                                    className="w-full bg-marca hover:bg-marca-fuerte text-tinta font-black py-3 rounded-xl transition-all text-sm">
-                                    Crear cuenta y entrar →
+                                <button type="submit" disabled={isLoading}
+                                    className="w-full bg-marca hover:bg-marca-fuerte disabled:opacity-60 text-tinta font-black py-3 rounded-xl transition-all text-sm">
+                                    {isLoading ? 'Creando…' : 'Crear cuenta y entrar →'}
                                 </button>
+                                <p className="text-[10px] text-tinta-tenue text-center">Mínimo 6 caracteres.</p>
                             </form>
                         </div>
                     </div>

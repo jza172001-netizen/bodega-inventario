@@ -23,7 +23,7 @@ import { armarTraspaso, crearAsignacion, resolverAsignacion, ESTADOS, DatosAsign
 import { fusionarItems, masReciente, hayQueAplicar } from './core/fusion';
 import {
     Operacion, leerCola, guardarCola, encolar, confirmar, marcarFallo,
-    descartar, reintentar, porIntentar, idsTocados, CLAVE_MIGRACION,
+    descartar, reintentar, porIntentar, idsTocados, bloqueadas, CLAVE_MIGRACION,
 } from './core/cola';
 import { PapeleraView } from './components/PapeleraView';
 import { PendientesView } from './components/PendientesView';
@@ -315,16 +315,21 @@ const App: React.FC = () => {
         }, ...prev]);
     };
 
+    /**
+     * El alta YA la hizo el servidor (`dar_de_alta`): acá solo se refleja en el
+     * teléfono y se entra. Antes esto escribía la clave en la tabla vieja con
+     * `setUserCredentials`, sin identidad de servidor, y el acceso nuevo no
+     * podía volver a entrar.
+     */
     const handleFirstSetup = (userId: string, username: string, password: string) => {
         const user = users.find(u => u.id === userId);
         if (!user) return;
-        const updated = { ...user, username, password, setupComplete: true };
+        const updated = { ...user, username, password: '', setupComplete: true };
         setUsers(prev => prev.map(u => u.id === userId ? updated : u));
         // Hash para login offline (localStorage nunca guarda la contraseña en claro)
         sha256Hex(password).then(hash =>
             setUsers(prev => prev.map(u => u.id === userId ? { ...u, passwordHash: hash } : u))
         );
-        db.setUserCredentials(updated).catch(e => { console.error('[Supabase] user:', e); setSyncStatus('error'); });
         addAuditLog('USER_SETUP', `Configuró sus credenciales por primera vez: "${username}"`, user.name);
         handleLoginSuccess(user.role, user.name);
     };
@@ -1151,7 +1156,7 @@ const App: React.FC = () => {
      */
 
     const NAV_LABELS: Record<View, string> = {
-        pendientes: 'Pendientes de subir',
+        pendientes: 'No se pudo subir',
         dashboard: 'Resumen',
         kardex: 'Kardex',
         personnel: 'Personal',
@@ -2057,39 +2062,52 @@ const App: React.FC = () => {
         addAuditLog('PO_DELETED', `Eliminó orden de compra de "${orden?.supplier ?? id}"`);
     };
 
-    const handleAddUser = (u: AppUser) => {
-        setUsers(prev => [...prev, u]);
-        withSync('addUser', [u], `Crear el acceso de ${u.name}`);
-        // Por el nombre, no por el usuario: ahora el acceso nace sin usuario —lo
-        // elige la propia persona al entrar— y la bitácora decía `""`.
-        addAuditLog('USER_CREATED', `Se creó acceso para "${u.name}" (${u.role}) — pendiente de que ponga su contraseña`);
+    /**
+     * Los accesos se manejan EN EL SERVIDOR, con la sesión del administrador.
+     *
+     * Antes iban a la tabla directo con la llave pública —cualquiera con esa
+     * llave podía crear, editar o borrar accesos— y el código de alta se
+     * guardaba donde la nube nunca lo devuelve. Ahora `crear_acceso`,
+     * `editar_acceso`, `borrar_acceso` y `nuevo_codigo_de_alta` comprueban que
+     * quien llama es un administrador. Necesitan señal: un acceso no se puede
+     * crear «para después».
+     */
+    const handleCrearAcceso = async (nombre: string, rol: UserRole): Promise<{ codigo: string }> => {
+        const r = await db.crearAcceso(nombre, rol);
+        setUsers(prev => [...prev, { id: r.id, username: '', password: '', name: nombre, role: rol, setupComplete: false }]);
+        addAuditLog('USER_CREATED', `Se creó acceso para "${nombre}" (${rol}) — pendiente de que ponga su contraseña`);
+        return { codigo: r.codigo };
     };
 
-    const handleEditUser = (u: AppUser) => {
+    const handleNuevoCodigo = async (id: string): Promise<string> => {
+        const codigo = await db.nuevoCodigoDeAlta(id);
+        addAuditLog('USER_CODE', `Se dio un código de alta nuevo a "${users.find(u => u.id === id)?.name ?? id}"`);
+        return codigo;
+    };
+
+    const handleEditUser = async (u: AppUser): Promise<void> => {
         // Se toma el anterior ANTES de reemplazarlo: después de `setUsers` ya no
         // hay contra qué comparar.
         const previo = users.find(x => x.id === u.id);
-        const seed = seedUsers.find(s => s.id === u.id);
-        const normalized = seed ? { ...u, name: seed.name } : u;
-        setUsers(prev => prev.map(user => user.id === u.id ? normalized : user));
-        // Perfil, no credenciales: editar el nombre o el rol no puede borrarle
-        // la contraseña a nadie.
-        withSync('updateUserProfile', [normalized], `Actualizar el acceso de ${normalized.name}`);
-        // Se compara contra lo que de verdad se guardó, no contra lo que entró.
-        const queCambio = describirCambios(previo, normalized, { name: 'nombre', role: 'rol', username: 'usuario' });
+        await db.editarAcceso(u.id, u.name, u.role);
+        setUsers(prev => prev.map(user => user.id === u.id ? u : user));
+        const queCambio = describirCambios(previo, u, { name: 'nombre', role: 'rol', username: 'usuario' });
         addAuditLog('PERSONNEL_EDITED',
-            queCambio ? `Se editó el acceso de "${normalized.name}": ${queCambio}` : `Se guardó el acceso de "${normalized.name}" sin cambios`);
+            queCambio ? `Se editó el acceso de "${u.name}": ${queCambio}` : `Se guardó el acceso de "${u.name}" sin cambios`);
     };
 
     const handleDeleteUser = (id: string) => {
         const user = users.find(u => u.id === id);
         requirePin(
             () => {
-                setUsers(prev => prev.filter(u => u.id !== id));
-                db.deleteUser(id, quienBorra()).catch(() => setSyncStatus('error'));
-                addAuditLog('USER_DELETED', `Se eliminó usuario: "${user?.username ?? id}"`);
+                db.borrarAcceso(id, quienBorra())
+                    .then(() => {
+                        setUsers(prev => prev.filter(u => u.id !== id));
+                        addAuditLog('USER_DELETED', `Se mandó a la papelera el acceso de "${user?.name ?? id}"`);
+                    })
+                    .catch(e => window.alert(e instanceof Error ? e.message : 'No se pudo borrar el acceso.'));
             },
-            `Eliminar usuario "${user?.username ?? 'usuario'}"`,
+            `Eliminar el acceso de "${user?.name ?? 'usuario'}"`,
         );
     };
 
@@ -2204,28 +2222,27 @@ const App: React.FC = () => {
                         </svg>
                         Trazabilidad
                     </button>
-                    {/* Pendientes va ARRIBA de la papelera y muestra el número.
-                        Un pendiente que hay que ir a buscar es un pendiente que
-                        nadie mira, y el punto entero de la cola es que se vean. */}
-                    <button
-                        onClick={() => selectView('pendientes')}
-                        className={`w-full flex items-center text-left px-4 py-2.5 text-xs font-semibold rounded-xl transition-all ${
-                            effectiveView === 'pendientes'
-                                ? 'bg-marca text-tinta'
-                                : pendientes.length > 0
-                                    ? 'text-alerta hover:bg-papel-hondo'
-                                    : 'text-tinta-tenue hover:bg-papel-hondo hover:text-tinta-suave'}`}
-                    >
-                        <svg className="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.9} viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        Pendientes
-                        {pendientes.length > 0 && (
+                    {/* «Pendientes» solo aparece cuando algo se FRENÓ.
+                        La subida ya es automática: todo entra a la cola y se
+                        reintenta solo cuando vuelve la señal. Lo que necesita a
+                        una persona es lo que falló cinco veces seguidas; eso
+                        sale acá en rojo y como aviso arriba. Sin nada frenado,
+                        el renglón no estorba en la barra (pedido de Juli, 2-oct). */}
+                    {bloqueadas(pendientes).length > 0 && (
+                        <button
+                            onClick={() => selectView('pendientes')}
+                            className={`w-full flex items-center text-left px-4 py-2.5 text-xs font-semibold rounded-xl transition-all ${
+                                effectiveView === 'pendientes' ? 'bg-marca text-tinta' : 'text-alerta hover:bg-papel-hondo'}`}
+                        >
+                            <svg className="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.9} viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            No se pudo subir
                             <span className="ml-auto text-[10px] font-black bg-alerta text-white rounded-full px-2 py-0.5">
-                                {pendientes.length}
+                                {bloqueadas(pendientes).length}
                             </span>
-                        )}
-                    </button>
+                        </button>
+                    )}
                     {/* La papelera va al pie, con Trazabilidad: las dos son para ir a
                         mirar qué pasó, no para el trabajo del día. */}
                     <button
@@ -2276,6 +2293,15 @@ const App: React.FC = () => {
                 {/* En el celular, 16px de margen por lado son 32px que no se ven
                     y un renglón menos de contenido. */}
                 <main className="flex-1 p-2 md:p-6 overflow-y-auto bg-papel-hondo">
+                    {/* El único aviso de la cola que pide a una persona: algo que
+                        falló cinco veces y se frenó. Lo que todavía se está
+                        reintentando solo no se anuncia: se sube solo. */}
+                    {bloqueadas(pendientes).length > 0 && effectiveView !== 'pendientes' && (
+                        <button onClick={() => selectView('pendientes')}
+                            className="w-full mb-2 flex items-center gap-2 rounded-xl border border-alerta bg-alerta-suave px-3 py-2 text-left text-xs font-bold text-alerta">
+                            ⚠ {bloqueadas(pendientes).length} cambio(s) no se pudieron subir después de varios intentos — tocá para revisar
+                        </button>
+                    )}
                     <div className="max-w-7xl mx-auto">
                         {effectiveView === 'dashboard' && (
                             <Dashboard
@@ -2448,7 +2474,7 @@ const App: React.FC = () => {
             <LogMovementModal isOpen={isLogMovementModalOpen} onClose={() => setLogMovementModalOpen(false)} onLogMovement={handleLogMovement} items={items} movements={movements} personnel={personnel} projects={projects} userRole={userRole} onCreateItem={handleAddItemSync} />
             <AddPersonnelModal isOpen={isAddPersonnelModalOpen} onClose={() => setAddPersonnelModalOpen(false)} onAddPersonnel={handleAddPersonnel} />
             <ItemHistoryModal isOpen={isHistoryModalOpen} onClose={() => setHistoryModalOpen(false)} item={itemForHistory} movements={movements} personnel={personnel} projects={projects} onReturnItem={handleReturnItem} onTransferLoan={handleTransferLoan} onAssignProject={handleAssignProjectToLoan} onMarkPendingPickup={handleMarkPendingPickup} userRole={userRole} />
-            <UserManagementModal isOpen={isUserManagementOpen} onClose={() => setUserManagementOpen(false)} users={users} onAddUser={handleAddUser} onDeleteUser={handleDeleteUser} onEditUser={handleEditUser} />
+            <UserManagementModal isOpen={isUserManagementOpen} onClose={() => setUserManagementOpen(false)} users={users} onCrearAcceso={handleCrearAcceso} onNuevoCodigo={handleNuevoCodigo} onDeleteUser={handleDeleteUser} onEditUser={handleEditUser} />
             <InvoiceReaderModal isOpen={isInvoiceReaderOpen} onClose={() => setInvoiceReaderOpen(false)} onImport={(rows, invType) => handleImportItems(rows, invType)} />
             {isSettingsOpen && (
                 <SettingsModal

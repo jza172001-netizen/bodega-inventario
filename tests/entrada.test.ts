@@ -218,58 +218,88 @@ grupo('si la identidad NO CONTESTA, el camino viejo sigue sirviendo', () => {
  * todo al primero que pasara: sin claves, sin saber nada, solo abriendo la
  * página.
  */
-interface Alta { handleSetupSubmit: (e: { preventDefault: () => void }) => void }
+interface Alta { handleSetupSubmit: (e: { preventDefault: () => void }) => Promise<void> }
 
-const alta = (codigoGuardado: string | null, codigoEscrito: string, clave = 'nueva123') => {
-    const visto = { creado: null as string | null, sacudidas: [] as string[] };
+/**
+ * El alta, desde el 2-oct, la hace el SERVIDOR (`dar_de_alta`). La pantalla ya
+ * no compara el código: antes lo comparaba contra una columna que la nube
+ * nunca manda, y a Camilo le salía «no tiene código de alta» en cualquier
+ * teléfono. Acá se prueba que la pantalla le pase al servidor lo que se
+ * escribió, que muestre lo que el servidor contesta, y que entre por la
+ * identidad recién creada.
+ */
+const alta = (codigoEscrito: string, clave = 'nueva123',
+              servidor: 'ok' | 'codigo_malo' | 'sin_red' = 'ok', entra: 'ok' | 'rechazado' = 'ok') => {
+    const visto = { creado: null as string | null, sacudidas: [] as string[], alServidor: [] as unknown[], entroCon: null as string | null };
     const c: Record<string, unknown> = {
-        selectedUser: { id: 'u9', name: 'Camilo', password: codigoGuardado, role: UserRole.OWNER } as unknown as AppUser,
+        selectedUser: { id: 'u9', name: 'Camilo', password: '', role: UserRole.OWNER } as unknown as AppUser,
         setupCodigo: codigoEscrito,
         setupPassword: clave,
         setupConfirm: clave,
-        users: [],
-        normStr: (x: string) => x.toLowerCase(),
+        isLoading: false,
+        setIsLoading: () => {},
+        sha256Hex: async () => 'hash',
+        onCredentialVerified: () => {},
         triggerShake: (m: string) => visto.sacudidas.push(m),
         onFirstSetup: (_id: string, usuario: string) => { visto.creado = usuario; },
+        db: {
+            darDeAlta: async (id: string, codigo: string, k: string) => {
+                visto.alServidor.push([id, codigo, k]);
+                if (servidor === 'codigo_malo') throw new Error('Código de alta incorrecto.');
+                if (servidor === 'sin_red') throw new Error('');
+                return { username: 'camilo' };
+            },
+            entrarConIdentidad: async (u: string) => {
+                visto.entroCon = u;
+                return entra === 'ok' ? { estado: 'ok', usuario: { id: 'u9', role: UserRole.OWNER, name: 'Camilo' } } : { estado: 'rechazado' };
+            },
+        },
     };
     return { visto, fn: sacarDeLogin<Alta>(['handleSetupSubmit'], c) };
 };
+const enviar = (t: ReturnType<typeof alta>) => t.fn.handleSetupSubmit({ preventDefault: () => {} });
 
-grupo('sin código de alta NO se puede reclamar un acceso', () => {
-    // El caso exacto de producción: CAMILO, dueño, con la contraseña vacía.
-    const t = alta('', 'LOQUESEA');
-    t.fn.handleSetupSubmit({ preventDefault: () => {} });
-    igual(t.visto.creado, null, 'NO se creó la cuenta');
-    esCierto(t.visto.sacudidas.some(m => /código de alta/i.test(m)), 'y se dice por qué');
+grupo('el alta la decide el SERVIDOR, con lo que se escribió', async () => {
+    const t = alta(' ab3kp9 ');
+    await enviar(t);
+    igual(t.visto.alServidor, [['u9', 'ab3kp9', 'nueva123']], 'le pasa al servidor el código (sin espacios) y la clave');
+    igual(t.visto.entroCon, 'camilo', 'y entra por la identidad recién creada');
+    igual(t.visto.creado, 'camilo', 'el acceso queda listo');
 });
 
-grupo('con el código equivocado tampoco', () => {
-    const t = alta('AB3KP9', 'XXXXXX');
-    t.fn.handleSetupSubmit({ preventDefault: () => {} });
+grupo('si el servidor dice que el código no es, NO entra y se dice por qué', async () => {
+    const t = alta('XXXXXX', 'nueva123', 'codigo_malo');
+    await enviar(t);
     igual(t.visto.creado, null, 'no entra');
-    esCierto(t.visto.sacudidas.some(m => /incorrecto/i.test(m)), 'se le dice que el código no es');
+    esCierto(t.visto.sacudidas.some(m => /incorrecto/i.test(m)), 'con el mensaje del servidor');
 });
 
-grupo('con el código correcto SÍ', () => {
-    const t = alta('AB3KP9', 'AB3KP9');
-    t.fn.handleSetupSubmit({ preventDefault: () => {} });
-    igual(t.visto.creado, 'camilo', 'la persona a la que le dieron el código sí entra');
+grupo('sin código escrito no se le pregunta al servidor', async () => {
+    const t = alta('   ');
+    await enviar(t);
+    igual(t.visto.alServidor.length, 0, 'ni lo intenta');
+    esCierto(t.visto.sacudidas.some(m => /código de alta/i.test(m)), 'y pide el código');
 });
 
-grupo('el código no distingue mayúsculas ni espacios', () => {
-    // Se dicta por teléfono y se escribe en un celular. Exigir la mayúscula
-    // exacta sería hacer fallar a quien tiene el código correcto.
-    for (const escrito of ['ab3kp9', ' AB3KP9 ', 'Ab3Kp9']) {
-        const t = alta('AB3KP9', escrito);
-        t.fn.handleSetupSubmit({ preventDefault: () => {} });
-        igual(t.visto.creado, 'camilo', `"${escrito}" sirve`);
-    }
+grupo('una contraseña de menos de 6 no pasa', async () => {
+    const t = alta('AB3KP9', 'ab12');
+    await enviar(t);
+    igual(t.visto.alServidor.length, 0, 'no llega al servidor');
+    esCierto(t.visto.sacudidas.some(m => /6 caracteres/i.test(m)), 'y se dice el mínimo');
 });
 
-grupo('una contraseña muy corta sigue sin pasar', () => {
-    const t = alta('AB3KP9', 'AB3KP9', 'ab');
-    t.fn.handleSetupSubmit({ preventDefault: () => {} });
-    igual(t.visto.creado, null, 'la regla vieja sigue');
+grupo('sin red: no entra, y se dice que revise la conexión', async () => {
+    const t = alta('AB3KP9', 'nueva123', 'sin_red');
+    await enviar(t);
+    igual(t.visto.creado, null, 'no se finge el alta');
+    esCierto(t.visto.sacudidas.some(m => /conexión/i.test(m)), 'se nombra la causa');
+});
+
+grupo('si la identidad no deja entrar justo después, no se finge que entró', async () => {
+    const t = alta('AB3KP9', 'nueva123', 'ok', 'rechazado');
+    await enviar(t);
+    igual(t.visto.creado, null, 'no entra');
+    esCierto(t.visto.sacudidas.length > 0, 'y se avisa');
 });
 
 /**

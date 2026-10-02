@@ -228,6 +228,25 @@ Inventory view additionally uses `selectedInventoryType` to filter by category f
 
 ### Authentication
 
+**Accounts are managed BY THE SERVER since 2 Oct 2026** (migration
+`20261002120000_accesos_por_el_servidor.sql`). `crear_acceso`,
+`nuevo_codigo_de_alta`, `editar_acceso` and `borrar_acceso` require an
+authenticated administrator (`es_administrador()` → `auth.uid()`); the public key
+cannot execute them. `dar_de_alta(id, código, clave)` is the first login: the
+server checks the one-time code (bcrypt, 10 attempts), creates the `auth.users`
+identity with the SAME e-mail formula as `core/identidad.ts` (tested in
+`tests/accesos.test.ts`), and stores the password in NO table. Before this, a new
+account could never log in: the code was compared on the phone against a column
+the cloud never sends, and no server identity was created. `borrar_acceso` bans
+the identity; `restore_user` unbans it. `authenticate_user` (old path) rejects
+empty passwords — `authenticate_user('CAMILO','')` used to return the owner row.
+Still open (L4, after Juli, Kate and Camilo log in by the new path): drop the
+public insert/update/delete policies on `app_users`, retire `authenticate_user`,
+blank the remaining plain-text passwords.
+
+`index.html` is `lang="es" translate="no"`: it said `en`, the login screen had no
+`translate="no"`, and Chrome showed «Juli» as «Julio».
+
 Login is handled entirely in the frontend. `LoginView` receives the `users` array and validates credentials client-side. Passwords are stored in plain text in localStorage. The logged-in role (`owner` | `employee`) gates certain UI actions (delete, add items, etc.) checked via `userRole` prop throughout components.
 
 ### Supabase is live, not a future migration

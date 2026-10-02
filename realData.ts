@@ -8,10 +8,12 @@ const mid = () => `rm-${String(_mid++).padStart(4, '0')}`;
 
 // ── USERS ────────────────────────────────────────────────────────────────────
 export const realUsers: AppUser[] = [
-    // La contraseña vive solo en Supabase (RPC authenticate_user) — nunca en el código fuente
-    { id: 'user-juli',    username: 'july',     password: '', role: UserRole.OWNER,    name: 'Juli',  setupComplete: true  },
-    { id: 'user-esteban', username: '',          password: '',     role: UserRole.EMPLOYEE, name: 'Camilo', setupComplete: false },
-    { id: 'user-kate',    username: '',          password: '',     role: UserRole.EMPLOYEE, name: 'Kate',  setupComplete: false },
+    // Solo se usa en un teléfono nuevo SIN señal: en cuanto contesta la nube, su
+    // lista manda. Mismos ids y nombres que la nube (2-oct), para que no aparezca
+    // una tarjeta que no existe. La contraseña vive solo en el servidor.
+    { id: '7123b1b4-baad-4344-9c0f-4f3bed7e54ee', username: 'juli', password: '', role: UserRole.OWNER,    name: 'Administrador maestro', setupComplete: true  },
+    { id: '09a8fd97-c393-461c-b888-8688b38d22af', username: '',     password: '', role: UserRole.OWNER,    name: 'Camilo',                setupComplete: false },
+    { id: '68521d87-46f4-0688-92bd-8bcc833454bb', username: 'kate', password: '', role: UserRole.EMPLOYEE, name: 'Kate',                  setupComplete: true  },
 ];
 
 const TEST_PHONE = '3113866341';

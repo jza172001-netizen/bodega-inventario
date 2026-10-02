@@ -752,15 +752,60 @@ export type ResultadoLogin =
  * conserva la contraseña que ya tenía — quedarse sin poder entrar es peor que
  * quedarse con una contraseña corta un día más.
  */
-export async function cambiarClave(userId: string, nueva: string): Promise<void> {
+export async function cambiarClave(_userId: string, nueva: string): Promise<void> {
     const { error: errorAuth } = await supabase.auth.updateUser({ password: nueva });
     if (errorAuth) throw errorAuth;
-
-    const { error } = await supabase
-        .from('app_users')
-        .update({ password: nueva, debe_cambiar_clave: false })
-        .eq('id', userId);
+    // La clave nueva vive SOLO en la identidad. Antes se escribía también en
+    // texto plano en `app_users.password`; ahora esta función baja la bandera
+    // y borra la vieja de la tabla.
+    const { error } = await supabase.rpc('ya_cambie_mi_clave');
     if (error) throw error;
+}
+
+/** El mensaje del servidor, para mostrárselo a la persona tal cual. */
+const mensajeDe = (error: { message?: string } | null, porDefecto: string): string =>
+    (error?.message ?? '').replace(/^.*?ERROR:\s*/, '').trim() || porDefecto;
+
+/**
+ * El primer ingreso, hecho por el SERVIDOR.
+ *
+ * Antes el código se comparaba en el teléfono contra una columna que la nube
+ * nunca manda, y la clave se guardaba solo en la tabla vieja, sin identidad de
+ * servidor: el acceso nuevo no podía entrar NUNCA. `dar_de_alta` compara el
+ * código, crea la identidad y no guarda la clave en ninguna tabla.
+ */
+export async function darDeAlta(id: string, codigo: string, clave: string): Promise<{ username: string }> {
+    const { data, error } = await supabase.rpc('dar_de_alta', { p_id: id, p_codigo: codigo, p_clave: clave });
+    if (error) throw new Error(mensajeDe(error, 'No se pudo completar el alta.'));
+    const fila = (data ?? [])[0] as { user_username?: string } | undefined;
+    if (!fila?.user_username) throw new Error('El servidor no confirmó el alta.');
+    return { username: fila.user_username };
+}
+
+/** Crear un acceso. Solo un administrador con sesión; devuelve el código UNA vez. */
+export async function crearAcceso(nombre: string, rol: string): Promise<{ id: string; codigo: string }> {
+    const { data, error } = await supabase.rpc('crear_acceso', { p_nombre: nombre, p_rol: rol });
+    if (error) throw new Error(mensajeDe(error, 'No se pudo crear el acceso.'));
+    const fila = (data ?? [])[0] as { acceso_id: string; codigo: string } | undefined;
+    if (!fila) throw new Error('El servidor no devolvió el código.');
+    return { id: fila.acceso_id, codigo: fila.codigo };
+}
+
+/** Código de alta nuevo para un acceso que todavía no ha entrado. */
+export async function nuevoCodigoDeAlta(id: string): Promise<string> {
+    const { data, error } = await supabase.rpc('nuevo_codigo_de_alta', { p_id: id });
+    if (error) throw new Error(mensajeDe(error, 'No se pudo generar el código.'));
+    return data as string;
+}
+
+export async function editarAcceso(id: string, nombre: string, rol: string): Promise<void> {
+    const { error } = await supabase.rpc('editar_acceso', { p_id: id, p_nombre: nombre, p_rol: rol });
+    if (error) throw new Error(mensajeDe(error, 'No se pudo guardar el acceso.'));
+}
+
+export async function borrarAcceso(id: string, quien?: string): Promise<void> {
+    const { error } = await supabase.rpc('borrar_acceso', { p_id: id, p_quien: quien ?? null });
+    if (error) throw new Error(mensajeDe(error, 'No se pudo borrar el acceso.'));
 }
 
 export async function entrarConIdentidad(
