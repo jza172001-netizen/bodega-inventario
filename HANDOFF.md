@@ -65,9 +65,13 @@
   contra los audios → «confirmado» → el Gem entrega el bloque → se pega en 📋
   Bloque → la app verifica contra la bodega → «✓ Pedido correcto» por trabajador
   → Registrar.
-- **Instrucciones del Gem:** `asistente/GEM.md`. Catálogo real:
-  `asistente/CATALOGO.md`; se regenera desde producción cuando cambia el
-  inventario.
+- **El asistente (Gem / Proyecto, desde el 5-oct):** `asistente/INSTRUCCIONES.md`
+  es el system prompt; `asistente/BODEGA-MONTECIELO.md` es el conocimiento único
+  (reglas, sinónimos, ejemplo del 3-oct y catálogo de producción, que se regenera
+  cuando cambia el inventario). Entrega el bloque nuevo `=== ENTREGA ===`, uno
+  por trabajador y agrupado por categoría; la app lee también el formato viejo.
+  `tests/documentos.test.ts` lee los bloques escritos en los documentos con el
+  lector de la app.
 
 ## 4. Pendientes, en orden
 

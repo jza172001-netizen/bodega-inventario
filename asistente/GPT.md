@@ -10,8 +10,10 @@ El GPT **registra y consulta directo en la app** por las tres ventanillas.
 > Enterprise y Edu**. Un GPT creado ANTES del cambio se puede seguir editando, y
 > a ese sí se le puede agregar esta acción.
 >
-> Sin plan de empresa, la vía que no depende de OpenAI es la del Gem
-> (`asistente/GEM.md`): arma el bloque y se pega en la app.
+> Sin plan de empresa, la vía que no depende de OpenAI es la del asistente que
+> arma el bloque y se pega en la app: `asistente/INSTRUCCIONES.md` +
+> `asistente/BODEGA-MONTECIELO.md`. La ventanilla `/api/despacho` lee el mismo
+> bloque nuevo (`=== ENTREGA ===`) y el viejo.
 
 ---
 

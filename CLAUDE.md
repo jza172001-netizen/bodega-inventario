@@ -159,6 +159,26 @@ lent to someone else, duplicate, missing stock…); only READY items register, t
 rest stays on screen. `tests/pantalla.test.ts` proves the chat's real
 `handleConfirmWizard` and the block produce the same movements.
 
+**The block has a second, official format since 5 Oct 2026: `=== ENTREGA ===`,
+one per worker** (`TRABAJADOR:`, `PROYECTO:`, optional `HORA:`/`LUGAR:`, then
+`[CONSUMIBLES]`/`[HERRAMIENTAS MANUALES]`/`[HERRAMIENTAS ELÉCTRICAS]`/`[EPP]`
+and `- qty name` lines). `leerLote` reads both formats and turns each entrega
+into the SAME `LineaLote` the old one produces — verification, summary,
+register and `/api/despacho` are untouched; `tests/pantalla.test.ts` proves both
+formats register identical movements. `ItemLote.categoria` only decides how a
+NEW item is born (`marcarNuevo`); for an existing item the warehouse type wins
+(loan vs expense) and a mismatch raises `categoria` at level `mirar` (Accesorio
+vs Consumible is not a mismatch). The assistant's prompt and knowledge are
+`asistente/INSTRUCCIONES.md` + `asistente/BODEGA-MONTECIELO.md`;
+`tests/documentos.test.ts` parses the blocks written in them with the real
+reader, so the docs and the app cannot drift. «Zona general» is the project
+`ZONA GENERAL` (created 5 Oct): consumables need a project and that one counts.
+
+A bare trailing number is inches only for pipe families (`seMideEnPulgadas`) or
+when `"`/«pulgadas» was said: «lija 180» is grit (medida `180`, no quote — still
+never swapped for «Lija 240»). Unit abbreviations without «de» (`10 kg lechada`)
+are stripped for search and for the new item's name (`sinUnidadDicha`).
+
 **Node is 24.x** (`package.json` engines). Vercel discontinued 20.x on
 1 Oct 2026 and every build pinned to it fails before compiling.
 

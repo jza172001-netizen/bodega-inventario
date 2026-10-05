@@ -32,7 +32,8 @@ export type TipoAlerta =
     | 'elemento'         // no se sabe qué ítem es
     | 'ya_la_tiene'      // la herramienta ya la tiene otro y no alcanza la bodega
     | 'duplicado'        // lo mismo a la misma persona, dos veces
-    | 'falta_stock';     // no hay lo que se pide: se cargaría la diferencia
+    | 'falta_stock'      // no hay lo que se pide: se cargaría la diferencia
+    | 'categoria';       // el bloque dice una categoría y la bodega tiene otra
 
 export interface Alerta {
     tipo: TipoAlerta;
@@ -186,6 +187,20 @@ export const verificarLote = (lote: LoteParseado, c: Contexto): {
             const item = it.item;
             if (!item) continue;
 
+            // La bodega manda: de su tipo sale préstamo o gasto. Si el bloque
+            // trajo otra categoría, se dice —el asistente pudo equivocarse, o el
+            // ítem está mal cargado— y no se frena.
+            // Un disco (Accesorio) dicho como consumible es lo mismo: los dos son
+            // gasto y el asistente no conoce la quinta categoría.
+            const mismaCosa = it.categoria === item.inventoryType
+                || (it.categoria === InventoryType.SINGLE_USE && item.inventoryType === InventoryType.ACCESSORY);
+            if (it.categoria && !mismaCosa) {
+                anotar(porItem, it.id, {
+                    tipo: 'categoria', nivel: 'mirar',
+                    texto: `El bloque dice ${nombreDeCategoria(it.categoria)}; en la bodega ${item.name} es ${nombreDeCategoria(item.inventoryType)}: sale como ${isAsset(item) ? 'Préstamo' : 'Gasto'}.`,
+                });
+            }
+
             const falta = c.faltantes.get(item.id) ?? 0;
             const otros = activos.filter(m => m.itemId === item.id && m.personnelId && m.personnelId !== quien);
             if (isAsset(item) && falta > 0 && otros.length > 0) {
@@ -262,11 +277,25 @@ export const huellaDeLinea = (
 
 /** Lo que muestra el resumen del trabajador, igual que el «Confirmar» del chat. */
 export interface ResumenLinea {
-    sale: Array<{ itemLoteId: string; nombre: string; cantidad: number; unidad: string; prestamo: boolean; nuevo: boolean; accesorios: string[]; avisos: string[] }>;
+    sale: Array<{ itemLoteId: string; nombre: string; cantidad: number; unidad: string; prestamo: boolean; nuevo: boolean; accesorios: string[]; avisos: string[]; tipo?: InventoryType }>;
     seQueda: Array<{ itemLoteId: string; nombre: string; porque: string }>;
 }
 
 const ES_PRESTAMO = new Set<InventoryType>([InventoryType.HAND_TOOL, InventoryType.ELECTRICAL_TOOL]);
+
+/**
+ * Los títulos del bloque nuevo, en el orden en que se muestran: la tarjeta del
+ * trabajador agrupa con los MISMOS nombres que Juli pegó.
+ */
+export const CATEGORIAS: Array<[InventoryType, string]> = [
+    [InventoryType.SINGLE_USE, 'Consumibles'],
+    [InventoryType.HAND_TOOL, 'Herramientas manuales'],
+    [InventoryType.ELECTRICAL_TOOL, 'Herramientas eléctricas'],
+    [InventoryType.PPE, 'EPP'],
+];
+
+export const nombreDeCategoria = (tipo: InventoryType): string =>
+    CATEGORIAS.find(([t]) => t === tipo)?.[1] ?? String(tipo);
 
 /**
  * Qué sale y qué se queda de un renglón, dicho como lo dice el chat al final:
@@ -303,6 +332,7 @@ export const resumenDeLinea = (
             unidad: it.item?.unit ?? ficha?.unit ?? 'unidades',
             prestamo: it.item ? isAsset(it.item) : !!tipo && ES_PRESTAMO.has(tipo),
             nuevo: !it.item,
+            ...(tipo ? { tipo } : {}),
             accesorios: (it.item?.accessories ?? []).map(a => a.cantidad && a.cantidad > 1 ? `${a.cantidad} ${a.nombre}` : a.nombre),
             avisos: (v.porItem.get(it.id) ?? []).filter(a => a.nivel !== 'decidir').map(a => a.texto),
         });
