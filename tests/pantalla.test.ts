@@ -33,7 +33,7 @@ import { fichaDelBloque, identicoDe } from '../core/crearItem';
 import { momentoConHora } from '../utils/date';
 import { normStr } from '../utils/genus';
 import { leerLote } from '../utils/lote';
-import { isAsset, isConsumable } from '../utils/inventory';
+import { adivinarTipo, isAsset, isConsumable } from '../utils/inventory';
 import { igual, esCierto, grupo, cerrar } from './correr';
 
 // `tsx` corre esto como módulo ES: no hay `__dirname`.
@@ -89,7 +89,7 @@ const ficha = (id: string, name: string, quantity: number, inventoryType = Inven
     id, name, quantity, inventoryType, category: 'Prueba', subCategory: '', minStock: 0, unit: 'und',
 });
 
-const MANEJADORES = ['fichaNueva', 'resuelto', 'obraGeneral', 'armarMovimientos', 'verificacionDelLote', 'quitarRegistrados', 'registrarLote', 'quitarLinea', 'desmarcarNuevo', 'confirmado', 'confirmarLinea', 'extraDeHuella'];
+const MANEJADORES = ['fichaNueva', 'resuelto', 'obraGeneral', 'armarMovimientos', 'verificacionDelLote', 'quitarRegistrados', 'registrarLote', 'quitarLinea', 'desmarcarNuevo', 'confirmado', 'confirmarLinea', 'extraDeHuella', 'marcarNuevo', 'fijarItem', 'mapearItem'];
 
 interface Manejadores {
     registrarLote: () => void;
@@ -97,6 +97,7 @@ interface Manejadores {
     confirmado: (l: unknown) => boolean;
     quitarLinea: (id: string) => void;
     desmarcarNuevo: (id: string) => void;
+    marcarNuevo: (it: { id: string; nombre: string; categoria?: InventoryType }) => void;
     armarMovimientos: (crear: boolean) => { movs: Array<Omit<Movement, 'id'>>; registrados: Set<string>; nacen: Item[] };
     verificacionDelLote: () => { v: { porLinea: Map<string, Array<{ tipo: string; nivel: string }>>; porItem: Map<string, Array<{ tipo: string; nivel: string }>> } };
 }
@@ -141,7 +142,7 @@ const panel = (items: Item[], texto: string, conProyecto = false, sinSubir = 0,
         loteCompletar: true,
         loteNuevos: new Map<string, InventoryType>(),
         projects: obras,
-        items, InventoryType, MovementType, isAsset, isConsumable, planearLote,
+        items, InventoryType, MovementType, isAsset, isConsumable, planearLote, adivinarTipo,
         // Cuántas operaciones quedaron guardadas en el teléfono sin confirmar.
         // Cambia lo que dice el mensaje: «anotadas» no es lo mismo que
         // «registradas», y la pantalla llegó a decir lo segundo sin que el
@@ -521,6 +522,44 @@ grupo('«Sin asignar trabajador», como el paso 2 del chat', () => {
     (lineas(p.c)[0] as unknown as { sinPersona: boolean }).sinPersona = true;
     registrar(p);
     igual(p.visto.enviados.map(m => m.personnelId), [undefined], 'decidido «sin asignar», sale sin persona');
+});
+
+grupo('EL BLOQUE NUEVO REGISTRA LO MISMO QUE EL VIEJO', () => {
+    /**
+     * El formato `=== ENTREGA ===` (5-oct) tiene que dar los mismos movimientos
+     * —quién, qué, cuánto, obra, hora, lugar, préstamo o gasto— que el viejo,
+     * por los manejadores REALES del bloque.
+     */
+    const items = () => [ficha(PALA, 'Pala', 5), ficha('cemento', 'Cemento', 9, InventoryType.SINGLE_USE), ficha('guante', 'Guantes', 9, InventoryType.PPE)];
+    const gente = () => [{ ...ALEX }, { ...JUAN }];
+    const viejo = '@ El Cristo · 07:30 · contenedor\nAlex: 2 palas, 3 cemento\n@ Bonilla · 09:15\nJuan: 1 guantes';
+    const nuevo = [
+        '=== ENTREGA ===', 'TRABAJADOR: Alex', 'PROYECTO: El Cristo', 'HORA: 07:30', 'LUGAR: contenedor',
+        '[HERRAMIENTAS MANUALES]', '- 2 Pala', '[CONSUMIBLES]', '- 3 Cemento', '=== FIN ===',
+        '=== ENTREGA ===', 'TRABAJADOR: Juan', 'PROYECTO: Bonilla', 'HORA: 09:15', '[EPP]', '- 1 Guantes', '=== FIN ===',
+    ].join('\n');
+    const a = panel(items(), viejo, false, 0, { personal: gente(), obras: [CRISTO, BONILLA], obra: '' });
+    const b = panel(items(), nuevo, false, 0, { personal: gente(), obras: [CRISTO, BONILLA], obra: '' });
+    registrar(a); registrar(b);
+    const clave = (m: Omit<Movement, 'id'>) =>
+        `${m.itemId}|${m.personnelId}|${m.quantity}|${m.projectId}|${m.isLoan}|${m.type}|${new Date(m.timestamp).toISOString()}|${m.notes ?? ''}`;
+    igual(a.visto.enviados.length, 3, 'el viejo registra los tres');
+    igual(b.visto.enviados.map(clave), a.visto.enviados.map(clave), 'el nuevo, exactamente los mismos movimientos');
+    igual([a.visto.cerrado, b.visto.cerrado], [true, true], 'y los dos cierran el panel');
+});
+
+grupo('el ítem nuevo nace con la CATEGORÍA del bloque, no con la adivinanza', () => {
+    // «Soudal» no está en la bodega y por el nombre no se adivina nada: antes
+    // nacía Herramienta manual (préstamo). El bloque dice CONSUMIBLES.
+    const p = panel([], '=== ENTREGA ===\nTRABAJADOR: Alex\nPROYECTO: SIN PROYECTO\n[CONSUMIBLES]\n- 2 Soudal\n[HERRAMIENTAS MANUALES]\n- 1 Cincel\n=== FIN ===',
+        true, 0, { obra: OBRA.id });
+    for (const it of lineas(p.c)[0].items) p.fn.marcarNuevo(it as { id: string; nombre: string; categoria?: InventoryType });
+    const tipos = [...(p.c.loteNuevos as Map<string, InventoryType>).values()];
+    igual(tipos, [InventoryType.SINGLE_USE, InventoryType.HAND_TOOL], 'Soudal nace consumible; el cincel, manual');
+    const q = panel([], 'Alex: 2 soudal', true);
+    q.fn.marcarNuevo(lineas(q.c)[0].items[0] as { id: string; nombre: string });
+    igual([...(q.c.loteNuevos as Map<string, InventoryType>).values()], [adivinarTipo('soudal') ?? InventoryType.HAND_TOOL],
+        'sin categoría en el bloque, la adivinanza de siempre');
 });
 
 await cerrar();

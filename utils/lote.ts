@@ -23,10 +23,10 @@
  * FloatingChat.tsx ya tiene 2.300 líneas.
  */
 
-import { Item, Personnel, Project } from '../types.js';
+import { InventoryType, Item, Personnel, Project } from '../types.js';
 import { rankMatches, Scored } from './search.js';
 import { normStr, raizDeFamilia } from './genus.js';
-import { medidaDe, valorDeMedida } from './medida.js';
+import { medidaDe, seMideEnPulgadas, valorDeMedida } from './medida.js';
 
 /** Un ítem pedido dentro de un renglón. */
 export interface ItemLote {
@@ -58,6 +58,13 @@ export interface ItemLote {
      * marca para que el humano decida en la confirmación.
      */
     dudoso: boolean;
+    /**
+     * La categoría con que vino en el bloque nuevo (`[CONSUMIBLES]`…). La de la
+     * bodega MANDA para un ítem que existe —de ahí sale préstamo o gasto, y el
+     * asistente se puede equivocar—; esta solo decide cómo nace uno nuevo, y si
+     * no coincide con la de la bodega, la verificación lo avisa.
+     */
+    categoria?: InventoryType;
 }
 
 /**
@@ -218,7 +225,14 @@ const escoger = <T,>(rank: { value: T; score: number }[]): { elegido?: T; dudoso
  * «Guantes» y no encontraba nada, y lo que más se pide en la obra quedaba sin
  * reconocer.
  */
-const UNIDAD_DICHA = /^(?:pares?|bultos?|metros?|galones?|kilos?|kg|libras?|cajas?|rollos?|unidades?|paquetes?|cuñetes?|bolsas?|tarros?|latas?|varillas?|tubos?)\s+de\s+/i;
+const UNIDAD_DICHA = /^(?:(?:pares?|bultos?|metros?|galones?|kilos?|kg|libras?|cajas?|rollos?|unidades?|paquetes?|cuñetes?|bolsas?|tarros?|latas?|varillas?|tubos?)\s+de\s+|(?:kgs?|kilos?|mts?|gls?|lbs?|und|unds)\.?\s+(?:de\s+)?)/i;
+
+/**
+ * El nombre sin la unidad con que se dijo. Las abreviaturas van sin «de»: el
+ * 3-oct llegó «10 kg lechada veige», y con el «kg» pegado no aparecía
+ * «Lechada veige [Kg]» y el ítem nuevo iba a nacer llamado «Kg lechada veige».
+ */
+export const sinUnidadDicha = (nombre: string): string => limpiar(nombre.replace(UNIDAD_DICHA, ''));
 
 /**
  * La medida que se DIJO al pedir: «2 codos de 4», «codo de media», «tubo de
@@ -251,7 +265,13 @@ export const medidaDicha = (nombre: string): { base: string; medida: string } | 
     if (!m || m.index === 0) return null;
     const num = m[1].replace(',', '.').replace(/\s*\/\s*/, '/').replace(/\s+/, ' ');
     const base = limpiar(t.slice(0, m.index));
-    return base ? { base, medida: `${num}"` } : null;
+    if (!base) return null;
+    // Un número suelto es pulgada solo si se DIJO («2"», «2 pulgadas») o si la
+    // familia es de tubería. «Lija 180» es el grano: el 3-oct iba a nacer
+    // «Lija 180"», una lija de ciento ochenta pulgadas. El número se queda como
+    // medida —para no escoger «Lija 240» por parecido— pero sin comillas.
+    const dichaEnPulgadas = /(?:"|''|pulg\.?|pulgadas?)$/i.test(m[0].trim());
+    return { base, medida: dichaEnPulgadas || seMideEnPulgadas(base) ? `${num}"` : num };
 };
 
 /**
@@ -289,7 +309,7 @@ const buscarItemSinMedida = (items: Item[], nombre: string): Scored<Item>[] => {
     // Primero como se dijo (puede haber un ítem que se llame «Metros de
     // manguera»); si no aparece nada bueno, sin la unidad delante.
     const tal = buscarItemCrudo(items, nombre);
-    const sinUnidad = nombre.replace(UNIDAD_DICHA, '');
+    const sinUnidad = sinUnidadDicha(nombre);
     if ((tal[0]?.score ?? 0) >= MINIMO || sinUnidad === nombre) return tal;
     const otra = buscarItemCrudo(items, sinUnidad);
     return (otra[0]?.score ?? 0) > (tal[0]?.score ?? 0) ? otra : tal;
@@ -419,6 +439,11 @@ export const leerEncabezado = (renglon: string, projects: Project[]): Encabezado
         lugares.push(p);
     }
     if (lugares.length) enc.lugar = lugares.join(' · ');
+    return resolverObra(enc, projects);
+};
+
+/** Busca la obra escrita entre las del sistema. Lo comparten los dos formatos. */
+const resolverObra = (enc: Encabezado, projects: Project[]): Encabezado => {
     if (enc.obraTexto) {
         const r = rankMatches(projects, enc.obraTexto, x => [x.name], 4);
         const { elegido, dudoso } = escoger(r);
@@ -440,6 +465,61 @@ export const partirPersona = (texto: string): { nombre: string; cuadrilla?: stri
     return { nombre, cuadrilla: m ? limpiar(m[1]) : undefined };
 };
 
+/**
+ * El formato nuevo, uno por trabajador (desde el 5-oct):
+ *
+ *     === ENTREGA ===
+ *     TRABAJADOR: Adrián Echeverry
+ *     PROYECTO: CRISTO
+ *     HORA: 08:04
+ *     LUGAR: contenedor
+ *     [CONSUMIBLES]
+ *     - 2 Soudal
+ *     [HERRAMIENTAS MANUALES]
+ *     - 1 Cincel
+ *     === FIN ===
+ *
+ * Juli lo pidió para que el bloque lo lean igual él, el asistente y la app. El
+ * formato viejo (`@ obra · hora` + `Persona: cosas`) sigue sirviendo: lo usan
+ * la API y lo que ya se haya pegado. Cada entrega se vuelve EL MISMO renglón
+ * que el formato viejo, así la verificación, el resumen y el registro no
+ * cambian. Sin este lector, `PROYECTO: CRISTO` era un trabajador llamado
+ * «PROYECTO» que se llevaba «CRISTO».
+ */
+const INICIO_ENTREGA = /^=+\s*entrega\b.*$/i;
+const FIN_ENTREGA = /^=+\s*fin\b.*$/i;
+const CAMPO = /^(trabajador|persona|proyecto|obra|hora|lugar)\s*:\s*(.*)$/i;
+
+/** Sin emoji, corchetes ni signos alrededor: lo que queda para comparar. */
+const desnudo = (t: string): string =>
+    normStr(t).replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
+
+/**
+ * `[CONSUMIBLES]`, `🟢 CONSUMIBLE`, `HERRAMIENTAS MANUALES`, `EPP`… → el tipo.
+ * Singular o plural, con o sin corchetes o emoji. Lo que no es una de las
+ * cuatro devuelve `undefined` y el renglón se lee como elemento.
+ */
+export const leerCategoria = (renglon: string): InventoryType | undefined => {
+    const t = desnudo(renglon).replace(/^categoria\s+/, '').replace(/_/g, ' ');
+    if (/^(?:material(?:es)? de )?consumos?$|^consumibles?$/.test(t)) return InventoryType.SINGLE_USE;
+    if (/^(?:herramientas? )?manual(?:es)?$/.test(t)) return InventoryType.HAND_TOOL;
+    if (/^(?:herramientas? )?electricas?$/.test(t)) return InventoryType.ELECTRICAL_TOOL;
+    if (/^epp$|^(?:elementos? de )?proteccion(?: personal)?$|^equipos? de proteccion personal$/.test(t)) return InventoryType.PPE;
+    return undefined;
+};
+
+/** «- 2 Soudal», «• 2 Soudal», «2 | Soudal» → «2 Soudal». */
+const renglonDeElemento = (renglon: string): string =>
+    limpiar(renglon.replace(/^[-–—•*·]\s*/, '').replace(/^(\d+(?:[.,]\d+)?)\s*\|\s*/, '$1 '));
+
+interface Entrega {
+    obra?: string;
+    hora?: string;
+    lugar?: string;
+    trabajadores: Array<{ texto: string; elementos: Array<{ texto: string; categoria?: InventoryType }> }>;
+    crudo: string[];
+}
+
 export const leerLote = (texto: string, personnel: Personnel[], items: Item[], projects: Project[] = []): LoteParseado => {
     const lineas: LineaLote[] = [];
     const ignoradas: string[] = [];
@@ -450,10 +530,97 @@ export const leerLote = (texto: string, personnel: Personnel[], items: Item[], p
     let siguiente = 0;
     const nuevoId = (): string => `L${++siguiente}`;
 
+    const leerElemento = (trozo: string, categoria?: InventoryType): ItemLote => {
+        const { cantidad, nombre } = partirCantidad(trozo);
+        const ri = buscarItem(items, nombre);
+        const { elegido: item, dudoso } = escoger(ri);
+        return { id: nuevoId(), texto: trozo, cantidad, nombre, item, candidatos: ri.map(r => r.value), dudoso, ...(categoria ? { categoria } : {}) };
+    };
+
+    const armarLinea = (personaTexto: string, itemsLinea: ItemLote[], encabezado?: Encabezado): LineaLote => {
+        const { nombre: nombrePersona, cuadrilla } = partirPersona(personaTexto);
+        const rp = rankMatches(personnel, nombrePersona, p => [p.name], 4);
+        const { elegido: persona, dudoso: dudosa } = escoger(rp);
+        const rc = cuadrilla ? escoger(rankMatches(personnel.filter(p => p.isTeamLeader), cuadrilla, p => [p.name], 4)) : undefined;
+        return {
+            id: nuevoId(),
+            personaTexto: nombrePersona,
+            persona,
+            candidatosPersona: rp.map(r => r.value),
+            dudosa,
+            items: itemsLinea,
+            encabezado,
+            cuadrillaTexto: cuadrilla,
+            cuadrillaDe: rc && !rc.dudoso ? rc.elegido : undefined,
+            // La obra del encabezado ya es una decisión si se reconoció sin
+            // duda, o si dijo «sin obra» a propósito. Si no, se pregunta.
+            obraId: encabezado?.sinObra ? null : (encabezado?.obra && !encabezado.obraDudosa ? encabezado.obra.id : undefined),
+        };
+    };
+
+    const cerrarEntrega = (e: Entrega) => {
+        const conAlgo = e.trabajadores.filter(t => t.texto && t.elementos.length > 0);
+        if (conAlgo.length === 0) { ignoradas.push(e.crudo.join(' / ')); return; }
+        let enc: Encabezado | undefined;
+        if (e.obra !== undefined || e.hora || e.lugar) {
+            const obra = limpiar(e.obra ?? '');
+            const sinObra = /^sin (obra|proyecto)$/.test(normStr(obra));
+            enc = resolverObra({
+                obraDudosa: false, candidatosObra: [], sinObra,
+                ...(obra && !sinObra ? { obraTexto: obra } : {}),
+                ...(e.hora ? { hora: leerHora(e.hora) } : {}),
+                ...(e.lugar ? { lugar: limpiar(e.lugar) } : {}),
+            }, projects);
+        }
+        for (const t of e.trabajadores) {
+            if (!t.texto || t.elementos.length === 0) {
+                ignoradas.push(t.texto ? `${t.texto}: sin elementos` : t.elementos.map(x => x.texto).join(', '));
+                continue;
+            }
+            lineas.push(armarLinea(t.texto, t.elementos.map(x => leerElemento(x.texto, x.categoria)), enc));
+        }
+    };
+
     let encabezado: Encabezado | undefined;
+    let entrega: Entrega | null = null;
+    let categoria: InventoryType | undefined;
+    const elementosSueltos = (): Entrega['trabajadores'][number] => {
+        if (entrega!.trabajadores.length === 0) entrega!.trabajadores.push({ texto: '', elementos: [] });
+        return entrega!.trabajadores[entrega!.trabajadores.length - 1];
+    };
+
     for (const cruda of texto.split(/\r?\n/)) {
         const renglon = limpiar(cruda);
         if (!renglon) continue;
+
+        if (INICIO_ENTREGA.test(renglon)) {
+            if (entrega) cerrarEntrega(entrega);
+            entrega = { trabajadores: [], crudo: [renglon] };
+            categoria = undefined;
+            continue;
+        }
+        if (entrega) {
+            if (FIN_ENTREGA.test(renglon)) { cerrarEntrega(entrega); entrega = null; continue; }
+            entrega.crudo.push(renglon);
+            // Sin el emoji de adelante: «👷 TRABAJADOR: Adrián» también es un campo.
+            const campo = renglon.replace(/^[^\p{L}]+/u, '').match(CAMPO);
+            if (campo) {
+                const [, nombre, valor] = campo;
+                const clave = normStr(nombre);
+                if (clave === 'trabajador' || clave === 'persona') { entrega.trabajadores.push({ texto: limpiar(valor), elementos: [] }); categoria = undefined; }
+                else if (clave === 'proyecto' || clave === 'obra') entrega.obra = valor;
+                else if (clave === 'hora') entrega.hora = valor;
+                else entrega.lugar = valor;
+                continue;
+            }
+            const cat = leerCategoria(renglon);
+            if (cat) { categoria = cat; continue; }
+            const trozo = renglonDeElemento(renglon);
+            if (trozo) elementosSueltos().elementos.push({ texto: trozo, ...(categoria ? { categoria } : {}) });
+            continue;
+        }
+
+        // ── El formato de siempre ──
         // Un encabezado no es un renglón: cambia la obra, la hora y el lugar de
         // los que vienen debajo, hasta el próximo encabezado.
         if (renglon.startsWith('@')) { encabezado = leerEncabezado(renglon, projects); continue; }
@@ -469,35 +636,12 @@ export const leerLote = (texto: string, personnel: Personnel[], items: Item[], p
         const resto = limpiar(renglon.slice(corte).replace(/^[:\s\-–—]+/, ''));
         if (!personaTexto || !resto) { ignoradas.push(renglon); continue; }
 
-        const { nombre: nombrePersona, cuadrilla } = partirPersona(personaTexto);
-        const rp = rankMatches(personnel, nombrePersona, p => [p.name], 4);
-        const { elegido: persona, dudoso: dudosa } = escoger(rp);
-        const rc = cuadrilla ? escoger(rankMatches(personnel.filter(p => p.isTeamLeader), cuadrilla, p => [p.name], 4)) : undefined;
-
-        const itemsLinea: ItemLote[] = partirItems(resto).map(trozo => {
-            const { cantidad, nombre } = partirCantidad(trozo);
-            const ri = buscarItem(items, nombre);
-            const { elegido: item, dudoso } = escoger(ri);
-            return { id: nuevoId(), texto: trozo, cantidad, nombre, item, candidatos: ri.map(r => r.value), dudoso };
-        });
-
+        const itemsLinea = partirItems(resto).map(trozo => leerElemento(trozo));
         if (itemsLinea.length === 0) { ignoradas.push(renglon); continue; }
-
-        lineas.push({
-            id: nuevoId(),
-            personaTexto: nombrePersona,
-            persona,
-            candidatosPersona: rp.map(r => r.value),
-            dudosa,
-            items: itemsLinea,
-            encabezado,
-            cuadrillaTexto: cuadrilla,
-            cuadrillaDe: rc && !rc.dudoso ? rc.elegido : undefined,
-            // La obra del encabezado ya es una decisión si se reconoció sin
-            // duda, o si dijo «sin obra» a propósito. Si no, se pregunta.
-            obraId: encabezado?.sinObra ? null : (encabezado?.obra && !encabezado.obraDudosa ? encabezado.obra.id : undefined),
-        });
+        lineas.push(armarLinea(personaTexto, itemsLinea, encabezado));
     }
+    // Una entrega sin «=== FIN ===» al final del texto también cuenta.
+    if (entrega) cerrarEntrega(entrega);
 
     return { lineas, ignoradas };
 };

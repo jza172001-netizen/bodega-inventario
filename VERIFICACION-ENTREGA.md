@@ -28,13 +28,16 @@ una nueva.
   eso se hace el cierre de seguridad (L4 del HANDOFF), que hoy está frenado
   esperando justo esto.
 
-**Paso 4 · El Gem (20 min).** Creá el Gem como dice `asistente/GEM.md` («Crear
-el Gem») y subile `asistente/CATALOGO.md` como conocimiento. Después hacé la
-«Prueba guiada» de seis audios que está en ese mismo archivo.
-- **Aprobado:** después de «unificá» marca el duplicado de la pulidora y el
-  cemento sin obra; después de «confirmado» entrega un bloque igual al del
-  ejemplo, con «CRISTO» y «HELIPUERTO» escritos así.
-- **Si falla:** copiá lo que contestó el Gem y en qué paso se desvió.
+**Paso 4 · El asistente (20 min).** En un Gem, un Proyecto de ChatGPT o uno de
+Claude: pegá el bloque de `asistente/INSTRUCCIONES.md` en **Instrucciones** y
+subí `asistente/BODEGA-MONTECIELO.md` como **conocimiento**. Después pasale la
+mañana del 3-oct (sección 8 de ese archivo) y revisá la tabla de la sección 13
+(A1–A7).
+- **Aprobado:**
+  - pregunta por «silicomas», la medida de las brochas y el proyecto de cada uno;
+  - Soudal sale como consumible sin preguntar;
+  - después de «confirmado», entrega un `=== ENTREGA ===` por trabajador.
+- **Si falla:** copiá lo que contestó y en qué paso se desvió.
 
 **Paso 5 · El primer bloque real (15 min).** Una mañana normal: dictás al Gem,
 «confirmado», y el bloque lo pegás en el chat de la app → **📋 Bloque**.
@@ -60,7 +63,7 @@ el Gem») y subile `asistente/CATALOGO.md` como conocimiento. Después hacé la
 (el cierre de seguridad, cargar el inventario definitivo, que Supabase no se
 pause solo) está en `HANDOFF.md`, sección 4, y no te frena el uso diario.
 
-Los recorridos detallados R1–R19 de abajo son para cuando se quiera revisar
+Los recorridos detallados R1–R23 de abajo son para cuando se quiera revisar
 pantalla por pantalla.
 
 ---
@@ -143,6 +146,10 @@ Cada recorrido termina **recargando la página** y comprobando que lo hecho sigu
 | R17 | **Camilo:** Configuración → Accesos → «🔑 Código» en Camilo; él entra con ese código y pone su clave | Entra, y al salir y volver entra con su clave |
 | R18 | **Bloque — confirmar:** pegar un bloque de 3 trabajadores, confirmar 2 | Salen los 2 confirmados; el tercero se queda. Cambiar una cantidad desconfirma |
 | R19 | **Bloque — crear:** pedir algo que no existe («2 codos de 5») | Pregunta «¿Crearlo?»; nace «Codos 5"» en su familia; si ya existía igualito, usa ese |
+| R20 | **Bloque nuevo — categorías:** pegar una `=== ENTREGA ===` con un consumible, una manual, una eléctrica y un EPP | La tarjeta del trabajador los muestra agrupados con los mismos títulos; nada en «no leídos» |
+| R21 | **Bloque nuevo — proyecto:** `PROYECTO: ZONA GENERAL` con consumibles, y otra con `PROYECTO: SIN PROYECTO` y consumibles | La primera sale a ZONA GENERAL; la segunda NO deja registrar el consumible |
+| R22 | **Bloque nuevo — lo que no existe:** «- 2 Soudal» en `[CONSUMIBLES]`, «- 5 Lija 180» | Pregunta si los crea; nacen como Consumible, «Soudal» y «Lija 180» (sin comillas); la 180 no se cambia por la 240 |
+| R23 | **Bloque nuevo vs. viejo:** pegar la misma mañana en los dos formatos (dos días distintos o borrando el primero) | Las mismas tarjetas y los mismos movimientos en el Kardex |
 
 **Aprobado el bloque:** los 19 recorridos sin un error. Cada fallo se arregla, con su prueba automática, antes de seguir.
 
@@ -169,8 +176,8 @@ Cada recorrido termina **recargando la página** y comprobando que lo hecho sigu
 ## 4. El asistente
 
 ### 4.1 🧑 Gem
-- Crearlo con `asistente/GEM.md` y correr la prueba de 6 audios que trae al final.
-- Ver si pone la hora real o «hora ?».
+- Crearlo con `asistente/INSTRUCCIONES.md` (instrucciones) y `asistente/BODEGA-MONTECIELO.md` (conocimiento), y correr la prueba A1–A7 de la sección 13 de ese archivo.
+- Ver que tome la hora del mensaje de WhatsApp y no la invente.
 
 **Aprobado:** el bloque que entrega se pega y la app lo lee sin renglones ignorados.
 

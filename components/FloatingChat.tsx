@@ -957,10 +957,13 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
      *    nadie. Ante la duda, se falla del lado que se nota.
      *
      * Los cuatro botones quedan a la vista, así que corregirlo es un toque.
+     *
+     * Si el bloque trajo la categoría (`[CONSUMIBLES]`…), esa va primero: la
+     * decidió quien dictó, que sabe más que la adivinanza por el nombre.
      */
-    const marcarNuevo = (itemLoteId: string, nombre: string) => {
-        setLoteNuevos(prev => new Map(prev).set(itemLoteId, adivinarTipo(nombre) ?? InventoryType.HAND_TOOL));
-        fijarItem(itemLoteId, '');
+    const marcarNuevo = (it: ItemLote) => {
+        setLoteNuevos(prev => new Map(prev).set(it.id, it.categoria ?? adivinarTipo(it.nombre) ?? InventoryType.HAND_TOOL));
+        fijarItem(it.id, '');
     };
 
     const desmarcarNuevo = (itemLoteId: string) => setLoteNuevos(prev => {
@@ -1298,8 +1301,8 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                     <textarea
                         value={loteTexto}
                         onChange={e => setLoteTexto(e.target.value)}
-                        rows={8}
-                        placeholder={'Alex: 3 palas, 1 martillo y una pica\nJuan: 2 palas, 1 palín\nPedro: 1 escalera, 2 rodilleras'}
+                        rows={12}
+                        placeholder={'=== ENTREGA ===\nTRABAJADOR: Alex\nPROYECTO: CRISTO\nHORA: 07:30\n\n[HERRAMIENTAS MANUALES]\n- 3 Palas\n- 1 Martillo\n\n[CONSUMIBLES]\n- 2 Bultos de cemento\n=== FIN ==='}
                         className="w-full text-[12px] border border-papel-borde rounded-2xl p-3 bg-papel text-tinta placeholder:text-tinta-tenue resize-none leading-relaxed"
                     />
                     <button
@@ -1467,7 +1470,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                         <select
                                             value={nace ? '__nuevo__' : it.dudoso ? '' : (it.item?.id ?? '')}
                                             onChange={e => {
-                                                if (e.target.value === '__nuevo__') marcarNuevo(it.id, it.nombre);
+                                                if (e.target.value === '__nuevo__') marcarNuevo(it);
                                                 else { desmarcarNuevo(it.id); fijarItem(it.id, e.target.value); }
                                             }}
                                             className={`${sel} flex-1 max-w-none ${(it.item && !it.dudoso) || nace ? '' : 'border-atencion'}`}>
@@ -1550,7 +1553,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                             {a.tipo === 'elemento' && !a.medidas && (
                                                 <div className="flex flex-wrap gap-1">
                                                     {it.candidatos.length === 0 && (
-                                                        <button type="button" onClick={() => marcarNuevo(it.id, it.nombre)}
+                                                        <button type="button" onClick={() => marcarNuevo(it)}
                                                             className="px-2.5 py-1 rounded-full text-[11px] font-black bg-marca text-tinta">
                                                             Sí, crear «{baseDelDicho(it.nombre)}»
                                                         </button>

@@ -6,7 +6,8 @@
  * Lo que la pantalla hace con esto lo cubre `tests/pantalla.test.ts`.
  */
 import { InventoryType, Item, Movement, MovementType, Personnel, Project } from '../types';
-import { leerLote, leerHora, partirPersona, moverItem, medidaDicha } from '../utils/lote';
+import { leerLote, leerHora, partirPersona, moverItem, medidaDicha, leerCategoria } from '../utils/lote';
+import { nombreDelDicho } from '../core/crearItem';
 import { verificarLote, listoParaRegistrar, resumenDeLinea, huellaDeLinea, Contexto } from '../core/verificacion';
 import { igual, esCierto, grupo, cerrar } from './correr';
 
@@ -102,6 +103,92 @@ grupo('las alertas de la app contra la BODEGA', () => {
     igual(tipos(verificarLote(epp, ctx()).porLinea, epp.lineas[0].id), [], 'EPP sin proyecto: pasa, como en el chat');
     const sinNada = leerLote('Juan: 1 pala', P, I, O);
     esCierto(!verificarLote(sinNada, ctx()).porItem.has(sinNada.lineas[0].items[0].id), 'lo normal no levanta nada');
+});
+
+// ── El bloque nuevo (5-oct): `=== ENTREGA ===`, uno por trabajador ────────
+// Juli lo pidió para que lo lean igual él, el asistente y la app. Tiene que
+// dar EXACTAMENTE lo que da el formato viejo: el resto de la app no cambia.
+const resumenDe = (r: ReturnType<typeof leerLote>) => r.lineas.map(l => ({
+    persona: l.persona?.id, cuadrilla: l.cuadrillaDe?.id, obra: l.obraId,
+    hora: l.encabezado?.hora, lugar: l.encabezado?.lugar,
+    items: l.items.map(x => [x.cantidad, x.item?.id ?? x.nombre]),
+}));
+
+grupo('el bloque NUEVO se lee igual que el viejo', () => {
+    const viejo = '@ El Cristo · 07:30 · contenedor\nAlex: 3 palas, 2 cemento\nJuan (cuadrilla de Alex): 2 pares de guantes\n@ sin obra\nJuan: 1 pala';
+    const nuevo = [
+        '=== ENTREGA ===', 'TRABAJADOR: Alex', 'PROYECTO: El Cristo', 'HORA: 07:30', 'LUGAR: contenedor', '',
+        '[HERRAMIENTAS MANUALES]', '- 3 palas', '[CONSUMIBLES]', '- 2 cemento', '=== FIN ===', '',
+        '=== ENTREGA ===', 'TRABAJADOR: Juan (cuadrilla de Alex)', 'PROYECTO: El Cristo', 'HORA: 07:30', 'LUGAR: contenedor',
+        '[EPP]', '- 2 pares de guantes', '=== FIN ===',
+        '=== ENTREGA ===', 'TRABAJADOR: Juan', 'PROYECTO: SIN PROYECTO', '[HERRAMIENTAS MANUALES]', '- 1 pala', '=== FIN ===',
+    ].join('\n');
+    const a = leerLote(viejo, P, I, O), b = leerLote(nuevo, P, I, O);
+    igual(resumenDe(b), resumenDe(a), 'persona, cuadrilla, obra, hora, lugar, cantidades e ítems: lo mismo');
+    igual([a.ignoradas, b.ignoradas], [[], []], 'y nada se queda sin leer');
+});
+
+grupo('«PROYECTO: CRISTO» NUNCA es un trabajador', () => {
+    // Con el lector viejo, cada campo era «persona: cosas»: un trabajador
+    // llamado «PROYECTO» que se llevaba «CRISTO».
+    const r = leerLote('=== ENTREGA ===\nPROYECTO: El Cristo\nHORA: 08:00\nLUGAR: patio\nTRABAJADOR: Juan\n- 1 pala\n=== FIN ===', P, I, O);
+    igual(r.lineas.map(l => l.personaTexto), ['Juan'], 'una sola línea, la de Juan (los campos van en cualquier orden)');
+    igual([r.lineas[0].obraId, r.lineas[0].encabezado?.hora, r.lineas[0].encabezado?.lugar], ['cristo', '08:00', 'patio'], 'con su obra, hora y lugar');
+    const sinFin = leerLote('=== ENTREGA ===\nTRABAJADOR: Juan\n- 1 pala', P, I, O);
+    igual(sinFin.lineas.length, 1, 'sin «=== FIN ===» al final, también cuenta');
+    const pegadas = leerLote('=== ENTREGA ===\nTRABAJADOR: Juan\n- 1 pala\n=== ENTREGA ===\nTRABAJADOR: Alex\n- 2 cemento', P, I, O);
+    igual(pegadas.lineas.map(l => [l.persona?.id, l.items.length]), [['juan', 1], ['alex', 1]], 'dos entregas sin «FIN» entre ellas: las dos');
+    const sin = leerLote('=== ENTREGA ===\nTRABAJADOR: Juan\nPROYECTO: SIN PROYECTO\n- 1 pala\n=== ENTREGA ===\nTRABAJADOR: Juan\n- 1 pala', P, I, O);
+    igual(sin.lineas.map(l => l.obraId), [null, undefined], '«SIN PROYECTO» es una decisión (null); sin el campo, se pregunta');
+});
+
+grupo('las categorías: singular, plural, corchetes, emoji, barras', () => {
+    igual(['[CONSUMIBLES]', '🟢 CONSUMIBLE', 'Material de consumo', 'CATEGORIA: CONSUMIBLE'].map(leerCategoria),
+        Array(4).fill(InventoryType.SINGLE_USE), 'consumible');
+    igual(['[HERRAMIENTAS MANUALES]', '🔧 Herramienta manual', 'MANUALES', '[CATEGORIA: HERRAMIENTA_MANUAL]'].map(leerCategoria),
+        Array(4).fill(InventoryType.HAND_TOOL), 'manual');
+    igual(['[HERRAMIENTAS ELÉCTRICAS]', '⚡ Herramienta eléctrica', 'ELECTRICAS'].map(leerCategoria), Array(3).fill(InventoryType.ELECTRICAL_TOOL), 'eléctrica');
+    igual(['[EPP]', '🦺 EPP', 'Elementos de protección personal'].map(leerCategoria), Array(3).fill(InventoryType.PPE), 'EPP');
+    igual(['- 2 Soudal', 'Pala', '[OTROS]'].map(leerCategoria), [undefined, undefined, undefined], 'un elemento no es categoría');
+    const r = leerLote('=== ENTREGA ===\n👷 TRABAJADOR: Juan\n[EPP]\n2 | guantes\n• 1 casco\n🔧 HERRAMIENTAS MANUALES\n* 1 pala\n=== FIN ===', P, I, O);
+    igual(r.lineas[0].items.map(x => [x.cantidad, x.nombre, x.categoria]),
+        [[2, 'guantes', InventoryType.PPE], [1, 'casco', InventoryType.PPE], [1, 'pala', InventoryType.HAND_TOOL]],
+        'cada elemento con la categoría de arriba; «2 | guantes» y viñetas sirven');
+});
+
+grupo('lo que no se entiende en una entrega NO se bota', () => {
+    const r = leerLote('=== ENTREGA ===\nPROYECTO: El Cristo\n- 1 pala\n=== FIN ===\n=== ENTREGA ===\nTRABAJADOR: Juan\n=== FIN ===', P, I, O);
+    igual(r.lineas.length, 0, 'sin trabajador o sin elementos no hay línea');
+    igual(r.ignoradas.length, 2, 'pero las dos quedan a la vista como no leídas');
+});
+
+grupo('la mañana del 3-oct: «lija 180» no es pulgadas, «10 kg lechada» se encuentra', () => {
+    igual(medidaDicha('lija 180'), { base: 'lija', medida: '180' }, 'el grano no es pulgada');
+    igual([medidaDicha('codos de 4')?.medida, medidaDicha('Brocha 2"')?.medida, medidaDicha('broca 3 pulgadas')?.medida], ['4"', '2"', '3"'],
+        'la tubería y lo que se DIJO en pulgadas, sí');
+    const L = [it('l240', 'Lija 240', 5, InventoryType.SINGLE_USE), it('l150', 'Lijas 150', 5, InventoryType.SINGLE_USE),
+        it('lech', 'Lechada veige [Kg]', 20, InventoryType.SINGLE_USE)];
+    const r = leerLote('Juan: 5 lija 180, 10 kg lechada veige', P, L, O);
+    igual(r.lineas[0].items.map(x => [x.cantidad, x.item?.id]), [[5, undefined], [10, 'lech']],
+        'la 180 no se cambia por la 240; la lechada aparece con el «kg» delante');
+    igual([nombreDelDicho('lija 180'), nombreDelDicho('kg lechada gris'), nombreDelDicho('codos de 5')], ['Lija 180', 'Lechada gris', 'Codos 5"'],
+        'y lo que nace se llama bien');
+});
+
+grupo('la categoría del bloque contra la de la BODEGA: la bodega manda y se avisa', () => {
+    const r = leerLote('=== ENTREGA ===\nTRABAJADOR: Juan\nPROYECTO: El Cristo\n[CONSUMIBLES]\n- 1 pala\n- 2 cemento\n=== FIN ===', P, I, O);
+    const v = verificarLote(r, ctx());
+    const [pala, cemento] = r.lineas[0].items;
+    igual(v.porItem.get(pala.id)?.map(a => [a.tipo, a.nivel]), [['categoria', 'mirar']], 'la pala es herramienta: se avisa, no se frena');
+    esCierto(/sale como Préstamo/.test(v.porItem.get(pala.id)?.[0].texto ?? ''), 'y se dice cómo sale');
+    igual(v.porItem.get(cemento.id), undefined, 'si coincide, nada');
+    const disco = leerLote('=== ENTREGA ===\nTRABAJADOR: Juan\nPROYECTO: El Cristo\n[CONSUMIBLES]\n- 1 disco diamante\n=== FIN ===', P,
+        [it('disco', 'Disco diamante', 4, InventoryType.ACCESSORY)], O);
+    igual(verificarLote(disco, ctx({ items: [it('disco', 'Disco diamante', 4, InventoryType.ACCESSORY)] })).porItem.get(disco.lineas[0].items[0].id), undefined,
+        'un disco (Accesorio) dicho como consumible no es una contradicción');
+    const res = resumenDeLinea(r.lineas[0], v, new Map(), x => !!x.item);
+    igual(res.sale.map(x => [x.nombre, x.prestamo, x.tipo]), [['Pala', true, InventoryType.HAND_TOOL], ['Cemento', false, InventoryType.SINGLE_USE]],
+        'en el resumen sale con el tipo de la bodega');
 });
 
 // ── Primero el accesorio, después la pulgada ─────────────────────────────

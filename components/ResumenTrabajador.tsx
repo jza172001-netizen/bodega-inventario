@@ -1,5 +1,5 @@
 import React from 'react';
-import type { ResumenLinea } from '../core/verificacion';
+import { CATEGORIAS, type ResumenLinea } from '../core/verificacion';
 
 /**
  * El paso final del bloque, por trabajador: «¿este es el pedido correcto?».
@@ -23,6 +23,16 @@ interface Props {
     onEditar: () => void;
 }
 
+type Fila = ResumenLinea['sale'][number];
+
+/** Consumibles, manuales, eléctricas, EPP —en ese orden— y lo demás al final. */
+const gruposDe = (sale: Fila[]): Array<[string, Fila[]]> => {
+    const conocidos = new Set(CATEGORIAS.map(([t]) => t));
+    const grupos: Array<[string, Fila[]]> = CATEGORIAS.map(([t, titulo]) => [titulo, sale.filter(s => s.tipo === t)]);
+    grupos.push(['Otros', sale.filter(s => !s.tipo || !conocidos.has(s.tipo))]);
+    return grupos.filter(([, filas]) => filas.length > 0);
+};
+
 export const ResumenTrabajador: React.FC<Props> = ({ trabajador, detalle, obra, cuando, resumen, confirmado, onConfirmar, onEditar }) => (
     <div className={`rounded-xl border p-2.5 space-y-1.5 ${confirmado ? 'border-bien bg-bien-suave' : 'border-papel-borde bg-papel-hondo'}`}>
         <div className="space-y-0.5 text-[11px]">
@@ -31,9 +41,11 @@ export const ResumenTrabajador: React.FC<Props> = ({ trabajador, detalle, obra, 
             {cuando && <div className="flex gap-2"><span className="text-tinta-tenue w-16 flex-shrink-0">Hora</span><span className="font-bold text-tinta">{cuando}</span></div>}
         </div>
 
-        {resumen.sale.length > 0 && (
-            <div className="space-y-1">
-                {resumen.sale.map(s => (
+        {/* Agrupado como el bloque: solo las categorías que traen algo. */}
+        {gruposDe(resumen.sale).map(([titulo, filas]) => (
+            <div key={titulo} className="space-y-1">
+                <p className="text-[10px] font-black uppercase tracking-wide text-tinta-tenue">{titulo}</p>
+                {filas.map(s => (
                     <div key={s.itemLoteId} className="text-[11px] px-2 py-1 rounded-lg bg-papel border border-papel-borde">
                         <div className="flex items-center gap-2">
                             <span className="font-bold text-tinta-suave flex-shrink-0">{s.cantidad} {s.unidad}</span>
@@ -47,7 +59,7 @@ export const ResumenTrabajador: React.FC<Props> = ({ trabajador, detalle, obra, 
                     </div>
                 ))}
             </div>
-        )}
+        ))}
 
         {resumen.seQueda.length > 0 && (
             <div className="text-[10px] text-atencion space-y-0.5">
