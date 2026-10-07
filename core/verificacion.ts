@@ -20,7 +20,7 @@
 import { InventoryType, Item, Movement, MovementType } from '../types.js';
 import { getActiveLoans, isAsset } from '../utils/inventory.js';
 import { tipoExigeObra } from './despacho.js';
-import { medidaDicha, problemaDeFecha } from '../utils/lote.js';
+import { medidaDicha, problemaDeFecha, problemaDeHora } from '../utils/lote.js';
 import type { ItemLote, LineaLote, LoteParseado } from '../utils/lote.js';
 import { medidaDe, sinMedida, valorDeMedida } from '../utils/medida.js';
 
@@ -159,6 +159,8 @@ export const verificarLote = (lote: LoteParseado, c: Contexto): {
         // ── Fecha: mala o futura NO se registra, ni con la de hoy en su lugar ──
         const malaFecha = problemaDeFecha(l.encabezado, c.hoy ?? diaBogota(new Date()));
         if (malaFecha) anotar(porLinea, l.id, { tipo: 'fecha', nivel: 'decidir', texto: malaFecha });
+        const malaHora = problemaDeHora(l.encabezado);
+        if (malaHora) anotar(porLinea, l.id, { tipo: 'fecha', nivel: 'decidir', texto: malaHora });
 
         // ── Obra: se pregunta siempre, como el chat ──
         const obra = obraDe(l, c.obraGeneral);
@@ -203,11 +205,10 @@ export const verificarLote = (lote: LoteParseado, c: Contexto): {
             // La bodega manda: de su tipo sale préstamo o gasto. Si el bloque
             // trajo otra categoría, se dice —el asistente pudo equivocarse, o el
             // ítem está mal cargado— y no se frena.
-            // Un disco (Accesorio) dicho como consumible es lo mismo: los dos son
-            // gasto y el asistente no conoce la quinta categoría.
-            const mismaCosa = it.categoria === item.inventoryType
-                || (it.categoria === InventoryType.SINGLE_USE && item.inventoryType === InventoryType.ACCESSORY);
-            if (it.categoria && !mismaCosa) {
+            // Lo que importa es si VUELVE o se GASTA: unos guantes (EPP) dichos
+            // como consumible, o un disco (Accesorio), salen igual. Solo se
+            // avisa cuando el bloque y la bodega no coinciden en eso.
+            if (it.categoria && ES_PRESTAMO.has(it.categoria) !== isAsset(item)) {
                 anotar(porItem, it.id, {
                     tipo: 'categoria', nivel: 'mirar',
                     texto: `El bloque dice ${nombreDeCategoria(it.categoria)}; en la bodega ${item.name} es ${nombreDeCategoria(item.inventoryType)}: sale como ${isAsset(item) ? 'Préstamo' : 'Gasto'}.`,

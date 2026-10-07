@@ -6,8 +6,8 @@
  * Lo que la pantalla hace con esto lo cubre `tests/pantalla.test.ts`.
  */
 import { InventoryType, Item, Movement, MovementType, Personnel, Project } from '../types';
-import { leerLote, leerHora, partirPersona, moverItem, medidaDicha, leerCategoria, leerFecha, problemaDeFecha } from '../utils/lote';
-import { nombreDelDicho } from '../core/crearItem';
+import { leerLote, leerHora, partirPersona, moverItem, medidaDicha, leerCategoria, leerFecha, problemaDeFecha, problemaDeHora } from '../utils/lote';
+import { nombreDelDicho, baseDelDicho } from '../core/crearItem';
 import { verificarLote, listoParaRegistrar, resumenDeLinea, huellaDeLinea, fechaDe, Contexto } from '../core/verificacion';
 import { igual, esCierto, grupo, cerrar } from './correr';
 
@@ -239,6 +239,47 @@ grupo('FECHA: «ya le salió» se mira en el día de la entrega, no en hoy', () 
     const a = huellaDeLinea(conFecha('03/10/2026').lineas[0], null, new Map(), { fecha: '2026-10-06' });
     const b = huellaDeLinea(conFecha('04/10/2026').lineas[0], null, new Map(), { fecha: '2026-10-06' });
     esCierto(a !== b, 'cambiar la FECHA desconfirma al trabajador');
+});
+
+// ── Auditoría del 7-oct: lo que la revisión encontró en el bloque nuevo ────
+grupo('«tubos de 4» nace «Tubos 4"», no «4»: tubos es la cosa, no la unidad', () => {
+    igual([nombreDelDicho('tubos de 4'), nombreDelDicho('tubo de media'), nombreDelDicho('varillas de 3/8'), nombreDelDicho('caja de herramientas')],
+        ['Tubos 4"', 'Tubo 1/2"', 'Varillas 3/8"', 'Caja de herramientas'], 'el nombre conserva la cosa');
+    igual([baseDelDicho('tubos de 4'), baseDelDicho('bultos de cemento'), baseDelDicho('kg lechada gris')], ['Tubos', 'Cemento', 'Lechada gris'],
+        'la unidad pura sí se quita');
+    igual([nombreDelDicho('rollos de 2'), nombreDelDicho('metros de media')], ['Rollos 2', 'Metros 1/2"'],
+        'si quitar la unidad deja solo la medida, la unidad era el nombre');
+});
+
+grupo('lo que se pide en pulgadas sin decirlo lleva su "; la lija y el LED no', () => {
+    igual(['brocha de 2', 'disco de 7', 'clavos de 3', 'varilla de 3/8', 'lija 3/8'].map(x => medidaDicha(x)?.medida), ['2"', '7"', '3"', '3/8"', '3/8"'],
+        'brocha, disco, clavos, varilla, y cualquier fracción');
+    igual(['lija 180', 'led 24'].map(x => medidaDicha(x)?.medida), ['180', '24'], 'grano y vatios, sin comillas');
+});
+
+grupo('dentro de una entrega, lo que no es campo ni elemento NO se vuelve elemento', () => {
+    const r = leerLote('=== ENTREGA ===\nTRABAJADOR: Juan\nPROYECTO: El Cristo\nOBSERVACIONES: urgente\n[HERRAMIENTAS MANUALES]\n- 1 pala\n[ACCESORIOS]\n- 2 cemento\nAlex: 3 palas\n=== FIN ===', P, I, O);
+    igual(r.lineas[0].items.map(x => [x.nombre, x.categoria]), [['pala', InventoryType.HAND_TOOL], ['cemento', undefined]],
+        'solo los dos elementos; el de abajo de [ACCESORIOS] no hereda «manual»');
+    igual(r.ignoradas, ['OBSERVACIONES: urgente', 'Categoría no reconocida: [ACCESORIOS]', 'Alex: 3 palas'],
+        'lo demás queda a la vista como no leído, sin ir a nombre de Juan');
+});
+
+grupo('una HORA que no es hora frena, no se registra con la de ahora', () => {
+    const r = leerLote('=== ENTREGA ===\nTRABAJADOR: Juan\nPROYECTO: El Cristo\nHORA: mañana\n[HERRAMIENTAS MANUALES]\n- 1 pala\n=== FIN ===', P, I, O);
+    igual([r.lineas[0].encabezado?.hora, r.lineas[0].encabezado?.horaDicha], [undefined, 'mañana'], 'se guarda como la dijeron');
+    const v = verificarLote(r, ctx());
+    igual(v.porLinea.get(r.lineas[0].id)?.map(a => [a.tipo, a.nivel]), [['fecha', 'decidir']], 'frena');
+    esCierto((problemaDeHora(r.lineas[0].encabezado) ?? '').includes('«mañana»'), 'y dice cuál');
+    igual(problemaDeHora(conFecha('03/10/2026').lineas[0].encabezado), undefined, 'una hora buena no molesta');
+});
+
+grupo('el aviso de categoría solo cuando cambia Préstamo/Gasto', () => {
+    const r = leerLote('=== ENTREGA ===\nTRABAJADOR: Juan\nPROYECTO: El Cristo\n[CONSUMIBLES]\n- 1 guantes\n- 1 pala\n=== FIN ===', P, I, O);
+    const v = verificarLote(r, ctx());
+    const [guantes, pala] = r.lineas[0].items;
+    igual(v.porItem.get(guantes.id), undefined, 'guantes (EPP) como consumible: los dos son gasto, nada que avisar');
+    igual(v.porItem.get(pala.id)?.map(a => a.tipo), ['categoria'], 'la pala sí: es préstamo');
 });
 
 // ── Primero el accesorio, después la pulgada ─────────────────────────────

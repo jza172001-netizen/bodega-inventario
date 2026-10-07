@@ -40,6 +40,8 @@ const montar = (conSesion: boolean) => {
         sesionRef: { current: conSesion },
         colaRef: { current: [] as Operacion[] },
         procesando: { current: false },
+        otraVuelta: { current: false },
+        esperando: { current: new Map() },
         syncTimer: { current: null },
         encolar, confirmar, marcarFallo, porIntentar,
         setSyncStatus: () => {},
@@ -72,6 +74,30 @@ grupo('al abrir la sesión, sube', async () => {
     (m.c.sesionRef as { current: boolean }).current = true;
     await m.fn.procesarCola();
     igual(m.cola().length, 0, 'la cola quedó vacía');
+});
+
+grupo('con sesión: dos escrituras seguidas suben EN ORDEN y UNA vez cada una', async () => {
+    // Lo vio el recorrido en navegador (7-oct): «crear Lija 180» y «registrar el
+    // despacho» corrían en paralelo, y al terminar una la fila volvía a mandar
+    // las que seguían en vuelo. Todo subía dos veces y el despacho podía llegar
+    // antes que su ítem.
+    const m = montar(true);
+    const pasos: string[] = [];
+    m.c.ejecutarOperacion = async (op: Operacion) => {
+        pasos.push(`empieza ${op.descripcion}`);
+        await new Promise(r => setTimeout(r, op.descripcion === 'crear el ítem' ? 30 : 5));
+        pasos.push(`termina ${op.descripcion}`);
+        return `hecho: ${op.descripcion}`;
+    };
+    const fn = sacar<{ withSync: (t: string, a: unknown[], d: string) => Promise<unknown>; procesarCola: () => Promise<void> }>(['withSync', 'procesarCola'], m.c);
+    m.c.procesarCola = fn.procesarCola;
+    const a = fn.withSync('addItem', [], 'crear el ítem');
+    const b = fn.withSync('logMovementsWithStock', [], 'registrar el despacho');
+    const [ra, rb] = await Promise.all([a, b]);
+    igual(pasos, ['empieza crear el ítem', 'termina crear el ítem', 'empieza registrar el despacho', 'termina registrar el despacho'],
+        'el despacho espera a que el ítem exista, y nada se manda dos veces');
+    igual([ra, rb], ['hecho: crear el ítem', 'hecho: registrar el despacho'], 'cada quien recibe el resultado de SU operación');
+    igual(m.cola().length, 0, 'la cola queda vacía');
 });
 
 await cerrar();

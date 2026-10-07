@@ -42,7 +42,7 @@ import { Item, Movement, MovementType, Personnel, InventoryType } from '../types
 import { planearLote, tipoExigeObra } from '../core/despacho.js';
 import { momentoConHora } from '../utils/date.js';
 import { idDeterminista, firmaDe } from './identidad.js';
-import { leerLote, personaClara, problemaDeFecha } from '../utils/lote.js';
+import { leerLote, personaClara, problemaDeFecha, problemaDeHora } from '../utils/lote.js';
 import { isAsset } from '../utils/inventory.js';
 import { rankMatches } from '../utils/search.js';
 import { uuidDe } from './identidad.js';
@@ -226,7 +226,7 @@ export default async function handler(req: Peticion, res: Respuesta): Promise<vo
         }
         // La FECHA de la entrega, la misma regla que la pantalla: mala o futura
         // queda pendiente, nunca se registra con la de hoy en su lugar.
-        const malaFecha = problemaDeFecha(enc, new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString().slice(0, 10));
+        const malaFecha = problemaDeFecha(enc, new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString().slice(0, 10)) ?? problemaDeHora(enc);
         if (malaFecha) {
             for (const it of linea.items) pendientes.push({ renglon: `${linea.personaTexto}: ${it.texto}`, motivo: malaFecha });
             continue;

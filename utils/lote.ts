@@ -93,6 +93,8 @@ export interface Encabezado {
     fecha?: string;
     /** `FECHA:` tal cual vino, para decirla en el aviso si no sirve. */
     fechaDicha?: string;
+    /** `HORA:` tal cual vino. Si no se entiende como hora, NO se registra con la de ahora. */
+    horaDicha?: string;
     /** Lo que no es obra ni hora: «contenedor», «segundo piso». */
     lugar?: string;
 }
@@ -242,6 +244,19 @@ const UNIDAD_DICHA = /^(?:(?:pares?|bultos?|metros?|galones?|kilos?|kg|libras?|c
 export const sinUnidadDicha = (nombre: string): string => limpiar(nombre.replace(UNIDAD_DICHA, ''));
 
 /**
+ * Para NOMBRAR un ítem nuevo, solo se quita lo que es unidad y nada más:
+ * «2 bultos de cemento» → «cemento», «10 kg lechada» → «lechada». «Tubos»,
+ * «varillas», «cajas» y «bolsas» NO: también son la cosa. Con la lista de buscar,
+ * «tubos de 4» nacía llamado «4» (auditoría del 7-oct). Y si lo que queda no
+ * tiene letras, era el nombre entero.
+ */
+const UNIDAD_PURA = /^(?:(?:pares?|bultos?|metros?|galones?|kilos?|kg|libras?|rollos?|unidades?|paquetes?|cuñetes?|tarros?|latas?)\s+de\s+|(?:kgs?|kilos?|mts?|gls?|lbs?|und|unds)\.?\s+(?:de\s+)?)/i;
+export const sinUnidadPura = (nombre: string): string => {
+    const sin = limpiar(nombre.replace(UNIDAD_PURA, ''));
+    return /\p{L}{2,}/u.test(sin.replace(/\b(?:de|media|cuartos?|pulgadas?)\b/gi, '')) ? sin : limpiar(nombre);
+};
+
+/**
  * La medida que se DIJO al pedir: «2 codos de 4», «codo de media», «tubo de
  * tres cuartos», «unión 2 pulgadas». Devuelve la medida en la forma de la
  * bodega (`4"`, `1/2"`) y lo que queda del nombre sin ella.
@@ -261,6 +276,14 @@ const MEDIDA_EN_PALABRAS: Array<[RegExp, string]> = [
     [/\s+(?:de\s+)?cuatro\s+pulgadas$/i, '4"'],
     [/\s+(?:de\s+)?seis\s+pulgadas$/i, '6"'],
 ];
+/**
+ * Lo que en la obra se pide en pulgadas sin decir «pulgadas», fuera de la
+ * tubería: «brocha de 2», «disco de 7», «clavos de 3», «varilla de media».
+ * Solo para escribir la medida con su `"`; no ofrece la escalera de pulgadas.
+ * La lija (grano) y el LED (vatios) a propósito NO están.
+ */
+const SE_PIDEN_EN_PULGADAS = new Set(['brocha', 'disco', 'clavo', 'puntilla', 'tornillo', 'broca', 'varilla', 'chazo', 'perno']);
+
 const MEDIDA_EN_NUMERO = /\s+(?:de\s+)?(\d+\s+\d+\s*\/\s*\d+|\d+\s*\/\s*\d+|\d+(?:[.,]\d+)?)\s*(?:"|''|pulgadas?|pulg\.?)?$/i;
 
 export const medidaDicha = (nombre: string): { base: string; medida: string } | null => {
@@ -278,7 +301,9 @@ export const medidaDicha = (nombre: string): { base: string; medida: string } | 
     // «Lija 180"», una lija de ciento ochenta pulgadas. El número se queda como
     // medida —para no escoger «Lija 240» por parecido— pero sin comillas.
     const dichaEnPulgadas = /(?:"|''|pulg\.?|pulgadas?)$/i.test(m[0].trim());
-    return { base, medida: dichaEnPulgadas || seMideEnPulgadas(base) ? `${num}"` : num };
+    // Una fracción (3/8, 1 1/2) siempre es pulgada; nadie dice «lija 3/8» por el grano.
+    const esFraccion = num.includes('/');
+    return { base, medida: dichaEnPulgadas || esFraccion || seMideEnPulgadas(base) || SE_PIDEN_EN_PULGADAS.has(raizDeFamilia(base.split(' ')[0] ?? '')) ? `${num}"` : num };
 };
 
 /**
@@ -456,6 +481,14 @@ export const problemaDeFecha = (enc: Encabezado | undefined, hoy: string): strin
     return undefined;
 };
 
+/**
+ * La `HORA:` que vino y no es hora («mañana», «8 y media»). Antes se perdía en
+ * silencio y la entrega salía con la hora de AHORA (auditoría del 7-oct). Ahora
+ * frena, como una FECHA mala.
+ */
+export const problemaDeHora = (enc: Encabezado | undefined): string | undefined =>
+    enc?.horaDicha && !enc.hora ? `La HORA «${enc.horaDicha}» no es una hora (HH:MM, por ejemplo 08:30). Corregila en el bloque.` : undefined;
+
 /** Lee un encabezado `@ obra · hora · lugar`. Las tres partes son opcionales. */
 export const leerEncabezado = (renglon: string, projects: Project[]): Encabezado => {
     const partes = renglon.replace(/^@\s*/, '').split(/\s*[·|]\s*|\s+[-–—]\s+/).map(limpiar).filter(Boolean);
@@ -598,7 +631,7 @@ export const leerLote = (texto: string, personnel: Personnel[], items: Item[], p
         if (conAlgo.length === 0) { ignoradas.push(e.crudo.join(' / ')); return; }
         let enc: Encabezado | undefined;
         const fechaDicha = limpiar(e.fecha ?? '');
-        if (e.obra !== undefined || e.hora || e.lugar || fechaDicha) {
+        if (e.obra !== undefined || limpiar(e.hora ?? '') || e.lugar || fechaDicha) {
             const obra = limpiar(e.obra ?? '');
             const sinObra = /^sin (obra|proyecto)$/.test(normStr(obra));
             const fecha = fechaDicha ? leerFecha(fechaDicha) : undefined;
@@ -606,7 +639,7 @@ export const leerLote = (texto: string, personnel: Personnel[], items: Item[], p
                 obraDudosa: false, candidatosObra: [], sinObra,
                 ...(obra && !sinObra ? { obraTexto: obra } : {}),
                 ...(fechaDicha ? { fechaDicha, ...(fecha ? { fecha } : {}) } : {}),
-                ...(e.hora ? { hora: leerHora(e.hora) } : {}),
+                ...(limpiar(e.hora ?? '') ? { horaDicha: limpiar(e.hora!), ...(leerHora(e.hora!) ? { hora: leerHora(e.hora!) } : {}) } : {}),
                 ...(e.lugar ? { lugar: limpiar(e.lugar) } : {}),
             }, projects);
         }
@@ -622,9 +655,10 @@ export const leerLote = (texto: string, personnel: Personnel[], items: Item[], p
     let encabezado: Encabezado | undefined;
     let entrega: Entrega | null = null;
     let categoria: InventoryType | undefined;
-    const elementosSueltos = (): Entrega['trabajadores'][number] => {
-        if (entrega!.trabajadores.length === 0) entrega!.trabajadores.push({ texto: '', elementos: [] });
-        return entrega!.trabajadores[entrega!.trabajadores.length - 1];
+    /** El trabajador al que van los elementos que siguen (uno sin nombre si todavía no hay). */
+    const trabajadorActual = (e: Entrega): Entrega['trabajadores'][number] => {
+        if (e.trabajadores.length === 0) e.trabajadores.push({ texto: '', elementos: [] });
+        return e.trabajadores[e.trabajadores.length - 1];
     };
 
     for (const cruda of texto.split(/\r?\n/)) {
@@ -654,8 +688,19 @@ export const leerLote = (texto: string, personnel: Personnel[], items: Item[], p
             }
             const cat = leerCategoria(renglon);
             if (cat) { categoria = cat; continue; }
+            // Un título entre corchetes que no es de las cuatro («[ACCESORIOS]»):
+            // no es un elemento, y lo de abajo ya no hereda la categoría de arriba.
+            if (/^\[.*\]$/.test(renglon.replace(/^[^\p{L}\[]+/u, ''))) {
+                categoria = undefined;
+                ignoradas.push(`Categoría no reconocida: ${renglon}`);
+                continue;
+            }
+            // Un renglón con «:» que no es campo («OBSERVACIONES: urgente», o
+            // «Juan: 2 palas» del formato viejo) NO es un elemento: antes nacía
+            // como cosa del trabajador de esta entrega. Se muestra sin leer.
+            if (renglon.includes(':')) { ignoradas.push(renglon); continue; }
             const trozo = renglonDeElemento(renglon);
-            if (trozo) elementosSueltos().elementos.push({ texto: trozo, ...(categoria ? { categoria } : {}) });
+            if (trozo) trabajadorActual(entrega).elementos.push({ texto: trozo, ...(categoria ? { categoria } : {}) });
             continue;
         }
 

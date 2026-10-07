@@ -47,6 +47,10 @@ let pgcrypto;
     }
 }
 
+const COMO_SUPABASE = `grant usage on schema public to anon, authenticated, service_role;
+  grant all on all tables in schema public to anon, authenticated, service_role;
+  alter default privileges in schema public grant all on tables to anon, authenticated, service_role;`;
+
 (async () => {
   const dir = path.join(repo, 'supabase/migrations');
   const archivos = fs.readdirSync(dir).filter(f => f.endsWith('.sql')).sort();
@@ -60,9 +64,7 @@ let pgcrypto;
       // `public`; un PostgreSQL pelado no. Sin imitarlo, «la llave pública no
       // lee» pasaría aunque ninguna migración la cerrara.
       if (f.startsWith('00000000000000')) {
-        await pg.exec(`grant usage on schema public to anon, authenticated, service_role;
-                       grant all on all tables in schema public to anon, authenticated, service_role;
-                       alter default privileges in schema public grant all on tables to anon, authenticated, service_role;`);
+        await pg.exec(COMO_SUPABASE);
       }
       resultados.push({ archivo: f, estado: 'ok' });
     } catch (e) {
@@ -143,6 +145,7 @@ let pgcrypto;
     if (!ok) process.exitCode = 1;
     if (!(await accesos(pg))) process.exitCode = 1;
     if (!(await kardex(pg))) process.exitCode = 1;
+    if (!(await aplicarDeUnaVez(dir, archivos))) process.exitCode = 1;
   } else {
     process.exitCode = 1;
   }
@@ -154,8 +157,7 @@ let pgcrypto;
  * pública ni una identidad cualquiera puedan volverse administrador ni revivir
  * un acceso borrado. `auth.users` lo trae Supabase; acá se arma lo mínimo.
  */
-async function accesos(pg) {
-  await pg.exec(`
+const authMinimo = (pg) => pg.exec(`
     create table if not exists auth.users (
       instance_id uuid, id uuid primary key, aud text, role text, email text,
       encrypted_password text, email_confirmed_at timestamptz, raw_app_meta_data jsonb,
@@ -166,6 +168,9 @@ async function accesos(pg) {
       provider_id text, user_id uuid, identity_data jsonb, provider text,
       last_sign_in_at timestamptz, created_at timestamptz, updated_at timestamptz);
     grant usage on schema auth to anon, authenticated;`);
+
+async function accesos(pg) {
+  await authMinimo(pg);
   const JULI = 'aaaaaaaa-0000-4000-8000-000000000001';
   const KATE = 'aaaaaaaa-0000-4000-8000-000000000002';
   await pg.query(`insert into app_users (id, name, role, setup_complete, password, auth_uid)
@@ -283,6 +288,80 @@ async function kardex(pg) {
   ];
   let bien = true;
   console.log('\nKardex:');
+  for (const [que, ok] of filas) { console.log(`  ${ok ? '✓' : '✗'} ${que}`); bien = bien && ok; }
+  return bien;
+}
+
+/**
+ * `supabase/APLICAR-3-OCT.sql`, el archivo que se pega en el editor SQL de
+ * producción: trae las tres migraciones del 3-oct LETRA POR LETRA y, sobre una
+ * base como la de producción antes del 3-oct, o queda todo o no queda nada.
+ */
+async function aplicarDeUnaVez(dir, archivos) {
+  const archivo = fs.readFileSync(path.join(repo, 'supabase/APLICAR-3-OCT.sql'), 'utf8');
+  const del3 = archivos.filter(f => f.startsWith('20261003'));
+  const filas = [[`trae las ${del3.length} migraciones del 3-oct letra por letra`,
+    del3.length === 3 && del3.every(f => archivo.includes(fs.readFileSync(path.join(dir, f), 'utf8')))]];
+
+  const pg = new PGlite({ extensions: { pgcrypto } });
+  await pg.exec('create extension if not exists pgcrypto');
+  for (const f of archivos.filter(f => f < '20261003')) {
+    await pg.exec(fs.readFileSync(path.join(dir, f), 'utf8'));
+    if (f.startsWith('00000000000000')) await pg.exec(COMO_SUPABASE);
+  }
+  await authMinimo(pg);
+  await pg.exec(`create schema supabase_migrations;
+    create table supabase_migrations.schema_migrations (version text primary key, statements text[], name text, created_by text);`);
+
+  // Como producción el 7-oct: claves en texto plano, Kate sin estrenar y una devolución vieja sin su entrada.
+  const JULI = 'dddddddd-0000-4000-8000-000000000001';
+  const KATE = 'dddddddd-0000-4000-8000-000000000002';
+  const K = 'dddddddd-0000-4000-8000-000000000003';
+  const ROTO = 'dddddddd-0000-4000-8000-000000000004';
+  await pg.query(`insert into auth.users (id, email, encrypted_password, last_sign_in_at)
+                  values ($1, 'juli@x', crypt('x', gen_salt('bf')), now()), ($2, 'kate@x', crypt('ab', gen_salt('bf')), null)`, [JULI, KATE]);
+  await pg.query(`insert into app_users (id, name, username, role, setup_complete, password, auth_uid)
+                  values ($1, 'Juli', 'juli', 'owner', true, 'clave', $1), ($2, 'Kate', 'kate', 'employee', true, 'ab', $2)`, [JULI, KATE]);
+  await pg.query(`insert into items (id, name, category, inventory_type, quantity, unit) values
+                  ($1, 'Pulidora vieja', 'Herramientas', 'Herramienta Eléctrica', 4, 'und'),
+                  ($2, 'Roto', 'Materiales', 'Material de Consumo', 5, 'und')`, [K, ROTO]);
+  await pg.query(`insert into movements (id, item_id, type, quantity, timestamp) values (gen_random_uuid(), $1, 'Entrada', 4, '2026-09-01')`, [K]);
+  await pg.query(`insert into movements (id, item_id, type, quantity, timestamp, is_loan, is_returned, returned_at)
+                  values (gen_random_uuid(), $1, 'Salida', 1, '2026-09-07', true, true, '2026-09-08')`, [K]);
+
+  const estado = async () => (await pg.query(`select to_regprocedure('authenticate_user(text,text)') is not null vieja,
+      (select count(*)::int from app_users where password <> '') claves,
+      (select count(*)::int from supabase_migrations.schema_migrations) historial,
+      (select count(*)::int from movements) movs,
+      (select count(*)::int from pg_policies where policyname = 'solo_la_bodega') politicas,
+      (select setup_complete from app_users where id = '${KATE}') kate`)).rows[0];
+
+  // 1. Un descuadre que ninguna migración explica: aborta y NO QUEDA NADA.
+  const antes = await estado();
+  let msg = '';
+  try { await pg.exec(archivo); } catch (e) { msg = String(e.message); await pg.exec('rollback').catch(() => {}); }
+  const tras = await estado();
+  filas.push(['con el Kardex descuadrado aborta y dice dónde', msg.includes('NO SE APLICÓ NADA') && msg.includes('Roto')]);
+  filas.push(['…y no queda nada aplicado', JSON.stringify(tras) === JSON.stringify(antes) && tras.vieja && tras.claves === 2]);
+
+  // 2. Explicado el descuadre, aplica todo y lo dice.
+  await pg.query(`insert into movements (id, item_id, type, quantity, timestamp) values (gen_random_uuid(), $1, 'Entrada', 5, '2026-09-01')`, [ROTO]);
+  const res = await pg.exec(archivo);
+  const fin = res[res.length - 1]?.rows?.[0];
+  const e = await estado();
+  filas.push(['aplica y termina en «LISTO»', String(fin?.resultado ?? '').startsWith('LISTO')]);
+  filas.push(['entrada vieja fuera, cero claves, 11 políticas, Kate esperando código',
+    !e.vieja && e.claves === 0 && e.politicas === 11 && e.kate === false]);
+  filas.push(['deja las 3 en el historial', e.historial === 3]);
+
+  // 3. Pegarlo otra vez no duplica nada.
+  await pg.exec(archivo);
+  const otra = await estado();
+  filas.push(['correrlo dos veces no duplica nada', otra.movs === e.movs && otra.historial === 3]);
+  await pg.close();
+
+  let bien = true;
+  console.log('\nAPLICAR-3-OCT.sql:');
   for (const [que, ok] of filas) { console.log(`  ${ok ? '✓' : '✗'} ${que}`); bien = bien && ok; }
   return bien;
 }

@@ -14,7 +14,7 @@
 import { InventoryType, Item } from '../types.js';
 import { familiaCanonica, familiaDe, nombreCorregido, normStr, raizDeFamilia } from '../utils/genus.js';
 import { nombreCompuesto } from '../utils/medida.js';
-import { medidaDicha, sinUnidadDicha } from '../utils/lote.js';
+import { medidaDicha, sinUnidadPura } from '../utils/lote.js';
 
 export interface Piezas { genero?: string; denominacion?: string }
 
@@ -27,7 +27,8 @@ const conMayuscula = (t: string) => (t ? t.charAt(0).toUpperCase() + t.slice(1) 
  */
 export const nombreDelDicho = (dicho: string, piezas: Piezas = {}): string => {
     // «10 kg lechada» nace «Lechada», no «Kg lechada»: la unidad no es el nombre.
-    dicho = sinUnidadDicha(dicho);
+    // Pero «tubos de 4» nace «Tubos 4"»: tubos es la cosa, no la unidad.
+    dicho = sinUnidadPura(dicho);
     const d = medidaDicha(dicho);
     const base = (d?.base ?? dicho).trim();
     const denominacion = piezas.denominacion?.trim() || d?.medida || '';
@@ -36,7 +37,7 @@ export const nombreDelDicho = (dicho: string, piezas: Piezas = {}): string => {
 
 /** Lo que se dijo, sin la medida: la familia que se le ofrece a `PasosDeNombre`. */
 export const baseDelDicho = (dicho: string): string => {
-    const sin = sinUnidadDicha(dicho);
+    const sin = sinUnidadPura(dicho);
     return conMayuscula((medidaDicha(sin)?.base ?? sin).trim());
 };
 

@@ -1008,6 +1008,10 @@ const App: React.FC = () => {
     const colaRef = React.useRef<Operacion[]>(leerCola(almacenLocal));
     const [pendientes, setPendientes] = useState<Operacion[]>(colaRef.current);
     const procesando = React.useRef(false);
+    /** Llegó algo nuevo mientras se procesaba: hay que dar otra vuelta al terminar. */
+    const otraVuelta = React.useRef(false);
+    /** Quien anotó una operación y espera su resultado (la orden de compra creada, por ejemplo). */
+    const esperando = React.useRef(new Map<string, (resultado: unknown) => void>());
 
     const fijarCola = (cola: Operacion[]) => {
         colaRef.current = cola;
@@ -1038,21 +1042,30 @@ const App: React.FC = () => {
     const procesarCola = async (): Promise<void> => {
         // Sin sesión la base rechaza todo: intentarlo solo gastaría intentos
         // hasta bloquear operaciones que no tienen nada malo.
-        if (procesando.current || !sesionRef.current) return;
+        if (!sesionRef.current) return;
+        // Si ya hay una vuelta en curso, NO se arranca otra en paralelo: se le
+        // avisa que al terminar mire de nuevo. Dos vueltas a la vez mandaban la
+        // misma operación dos veces (recorrido en navegador del 7-oct).
+        if (procesando.current) { otraVuelta.current = true; return; }
         procesando.current = true;
         try {
-            for (const op of porIntentar(colaRef.current)) {
-                try {
-                    await ejecutarOperacion(op);
-                    fijarCola(confirmar(colaRef.current, op.id));
-                } catch (e) {
-                    fijarCola(marcarFallo(colaRef.current, op.id, e instanceof Error ? e.message : String(e)));
-                    setSyncStatus('error');
-                    if (syncTimer.current) clearTimeout(syncTimer.current);
-                    syncTimer.current = setTimeout(() => setSyncStatus('idle'), 8000);
-                    return;
+            do {
+                otraVuelta.current = false;
+                for (const op of porIntentar(colaRef.current)) {
+                    try {
+                        const resultado = await ejecutarOperacion(op);
+                        fijarCola(confirmar(colaRef.current, op.id));
+                        esperando.current.get(op.id)?.(resultado);
+                        esperando.current.delete(op.id);
+                    } catch (e) {
+                        fijarCola(marcarFallo(colaRef.current, op.id, e instanceof Error ? e.message : String(e)));
+                        setSyncStatus('error');
+                        if (syncTimer.current) clearTimeout(syncTimer.current);
+                        syncTimer.current = setTimeout(() => setSyncStatus('idle'), 8000);
+                        return;
+                    }
                 }
-            }
+            } while (otraVuelta.current);
             if (colaRef.current.length === 0) setSyncStatus('idle');
         } finally {
             procesando.current = false;
@@ -1060,39 +1073,33 @@ const App: React.FC = () => {
     };
 
     /**
-     * Anota la operación y la intenta de una.
+     * Anota la operación y la manda a la fila.
      *
      * Se anota ANTES de intentarla, no después de que falle: si la app se cierra
      * con la escritura en vuelo, la operación ya está guardada y se reintenta al
      * abrir. Anotarla solo al fallar pierde justo el caso que más duele.
      *
-     * Devuelve la promesa del primer intento para quien necesite encadenar algo,
-     * pero NO hay que encadenarle nada que deba pasar sí o sí: ese primer intento
-     * puede fallar y la operación quedar pendiente para después.
+     * Y se sube POR LA FILA, en orden y de a una (`procesarCola`). Hasta el 7-oct
+     * cada operación se intentaba sola, al instante y en paralelo: «crear Lija
+     * 180» y «registrar el despacho» corrían juntas —el despacho podía llegar
+     * antes que el ítem y la base lo rechazaba, sumando fallos falsos—, y al
+     * terminar una, la fila volvía a mandar las que seguían en vuelo: todo
+     * subía DOS veces. Lo vio el recorrido en navegador real.
+     *
+     * La promesa se cumple con el resultado de ESTA operación cuando la fila la
+     * sube. Si queda pendiente (sin sesión, o falló), no se cumple: nadie debe
+     * encadenarle algo que tenga que pasar sí o sí.
      */
     const withSync = (tipo: string, args: unknown[], descripcion: string): Promise<unknown> => {
         const id = crypto.randomUUID();
         fijarCola(encolar(colaRef.current, { id, tipo, args, descripcion }));
         // Anotada queda igual. Sin sesión no se intenta: se sube al abrirla.
-        if (!sesionRef.current) return Promise.resolve();
+        if (!sesionRef.current) return Promise.resolve(undefined);
         setSyncStatus('syncing');
         if (syncTimer.current) clearTimeout(syncTimer.current);
-        const intento = ejecutarOperacion({ id, tipo, args, descripcion, creadaEn: '', intentos: 0 });
-        intento.then(
-            () => {
-                fijarCola(confirmar(colaRef.current, id));
-                setSyncStatus('idle');
-                syncTimer.current = setTimeout(() => setSyncStatus('idle'), 2000);
-                // Si había cosas viejas esperando, esta señal buena las arrastra.
-                if (colaRef.current.length > 0) void procesarCola();
-            },
-            e => {
-                fijarCola(marcarFallo(colaRef.current, id, e instanceof Error ? e.message : String(e)));
-                setSyncStatus('error');
-                syncTimer.current = setTimeout(() => setSyncStatus('idle'), 8000);
-            },
-        );
-        return intento;
+        const suya = new Promise<unknown>(listo => esperando.current.set(id, listo));
+        void procesarCola();
+        return suya;
     };
 
     /** Un humano pide que se vuelva a intentar algo que quedó bloqueado. */
@@ -1134,7 +1141,9 @@ const App: React.FC = () => {
     useEffect(() => {
         if (GRUPO_WHATSAPP.includes(effectiveView)) setWhatsappAbierto(true);
     }, [effectiveView]); // eslint-disable-line react-hooks/exhaustive-deps
-    const [isSidebarOpen, setSidebarOpen] = useState(true);
+    // En el celular arranca CERRADO: abierto tapaba toda la pantalla al entrar
+    // (recorrido en navegador del 7-oct). En computador, abierto como siempre.
+    const [isSidebarOpen, setSidebarOpen] = useState(() => typeof window === 'undefined' || window.innerWidth >= 768);
 
     const CONFIG_KEY = 'bodega_config';
     const [appConfig, setAppConfig] = useState<AppConfig>(() => {
@@ -2112,7 +2121,8 @@ const App: React.FC = () => {
         const newO = { ...o, id };
         setPurchaseOrders(prev => [newO, ...prev]);
         withSync('addPurchaseOrder', [o, id], `Crear la orden de compra a ${o.supplier}`)
-            .then(created => setPurchaseOrders(prev => prev.map(x => x.id === id ? (created as PurchaseOrder) : x)))
+            // Sin sesión vuelve vacío: la de la pantalla se queda (antes se cambiaba por `undefined`).
+            .then(created => { if (created) setPurchaseOrders(prev => prev.map(x => x.id === id ? (created as PurchaseOrder) : x)); })
             .catch(() => {/* queda en la cola; la orden ya está en pantalla */});
         addAuditLog('PO_CREATED', `Creó orden de compra a "${o.supplier}" (${o.items.length} ítem(s))`);
     };

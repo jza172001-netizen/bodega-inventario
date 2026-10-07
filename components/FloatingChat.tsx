@@ -1373,9 +1373,11 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                     ) : (
                         <div key={l.id} className={`rounded-2xl p-3 space-y-2 border ${(verif.porLinea.get(l.id) ?? []).length ? 'border-atencion bg-atencion-suave' : 'border-papel-borde bg-papel'}`}>
                             {/* Lo que heredó de su encabezado `@`, a la vista. */}
-                            {l.encabezado && (l.encabezado.obraTexto || l.encabezado.hora || l.encabezado.lugar || l.encabezado.sinObra) && (
+                            {l.encabezado && (l.encabezado.obraTexto || l.encabezado.hora || l.encabezado.lugar || l.encabezado.sinObra || l.encabezado.fechaDicha || l.encabezado.horaDicha) && (
                                 <p className="text-[10px] font-bold text-tinta-tenue">
-                                    📍 {[l.encabezado.sinObra ? 'Sin obra' : l.encabezado.obraTexto, l.encabezado.hora, l.encabezado.lugar].filter(Boolean).join(' · ')}
+                                    📍 {[l.encabezado.sinObra ? 'Sin obra' : l.encabezado.obraTexto,
+                                        l.encabezado.fecha ? l.encabezado.fecha.split('-').reverse().join('/') : l.encabezado.fechaDicha,
+                                        l.encabezado.hora ?? l.encabezado.horaDicha, l.encabezado.lugar].filter(Boolean).join(' · ')}
                                 </p>
                             )}
                             <div className="flex items-center gap-2">
@@ -1555,10 +1557,15 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                             {/* «El ítem no existe, ¿deseas crearlo?», como pregunta directa. */}
                                             {a.tipo === 'elemento' && !a.medidas && (
                                                 <div className="flex flex-wrap gap-1">
-                                                    {it.candidatos.length === 0 && (
+                                                    {/* Si NADA quedó elegido, crear va a un toque aunque haya
+                                                        parecidos («Lija 180» junto a «Lija 240»): antes solo salía
+                                                        sin ningún parecido y lo demás se creaba desde la lista
+                                                        (recorrido en navegador del 7-oct). Con dos iguales de
+                                                        buenos (dudoso con elegido) no se ofrece: es escoger. */}
+                                                    {!it.item && (
                                                         <button type="button" onClick={() => marcarNuevo(it)}
                                                             className="px-2.5 py-1 rounded-full text-[11px] font-black bg-marca text-tinta">
-                                                            Sí, crear «{baseDelDicho(it.nombre)}»
+                                                            Sí, crear «{nombreDelDicho(it.nombre)}»
                                                         </button>
                                                     )}
                                                     <button type="button" onClick={() => setLoteEscogiendo(loteEscogiendo === it.id ? null : it.id)}
@@ -1586,6 +1593,13 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                                             {m.etiqueta}
                                                         </button>
                                                     ))}
+                                                    {/* El aviso pregunta «¿cuál medida es, o se crea?»: la segunda
+                                                        respuesta también tiene que estar a un toque (recorrido en
+                                                        navegador del 7-oct: solo se podía desde la lista). */}
+                                                    <button type="button" onClick={() => marcarNuevo(it)}
+                                                        className="px-2.5 py-1 rounded-full text-[11px] font-black bg-marca text-tinta">
+                                                        Crear «{nombreDelDicho(it.nombre)}»
+                                                    </button>
                                                 </div>
                                             )}
                                         </div>

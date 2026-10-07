@@ -1,4 +1,5 @@
 import React from 'react';
+import { InventoryType } from '../types';
 import { CATEGORIAS, type ResumenLinea } from '../core/verificacion';
 
 /**
@@ -28,8 +29,10 @@ type Fila = ResumenLinea['sale'][number];
 /** Consumibles, manuales, eléctricas, EPP —en ese orden— y lo demás al final. */
 const gruposDe = (sale: Fila[]): Array<[string, Fila[]]> => {
     const conocidos = new Set(CATEGORIAS.map(([t]) => t));
-    const grupos: Array<[string, Fila[]]> = CATEGORIAS.map(([t, titulo]) => [titulo, sale.filter(s => s.tipo === t)]);
-    grupos.push(['Otros', sale.filter(s => !s.tipo || !conocidos.has(s.tipo))]);
+    // Un disco (Accesorio) va con los consumibles: así lo pegó el bloque.
+    const grupo = (t?: InventoryType) => (t === InventoryType.ACCESSORY ? InventoryType.SINGLE_USE : t);
+    const grupos: Array<[string, Fila[]]> = CATEGORIAS.map(([t, titulo]) => [titulo, sale.filter(s => grupo(s.tipo) === t)]);
+    grupos.push(['Otros', sale.filter(s => !s.tipo || !conocidos.has(grupo(s.tipo)!))]);
     return grupos.filter(([, filas]) => filas.length > 0);
 };
 

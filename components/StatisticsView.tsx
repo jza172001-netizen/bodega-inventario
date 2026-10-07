@@ -500,7 +500,9 @@ const StatisticsView: React.FC<StatisticsViewProps> = ({ items, movements, perso
                 <button onClick={showInventarioListDetail}
                     className="px-2 py-2.5 text-center hover:bg-papel-hondo active:bg-marca-suave transition-colors">
                     <span className="block text-xl font-black text-tinta leading-none">{kpis.totalItems}</span>
-                    <span className="block mt-1 text-[10px] font-bold text-tinta-tenue uppercase tracking-wide leading-tight">Ítems</span>
+                    {/* Cuenta los que TIENEN existencia (`totalItems`): decía «Ítems» y
+                        contradecía la lista de abajo, que muestra todos (7-oct). */}
+                    <span className="block mt-1 text-[10px] font-bold text-tinta-tenue uppercase tracking-wide leading-tight">Con stock</span>
                 </button>
                 <button onClick={showPrestamosDetail}
                     className={`px-2 py-2.5 text-center transition-colors ${kpis.activeLoanCount > 0 ? 'bg-atencion-suave hover:bg-atencion-suave' : 'hover:bg-papel-hondo'} active:bg-marca-suave`}>
