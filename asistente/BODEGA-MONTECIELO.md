@@ -44,6 +44,7 @@ APP (chat → 📋 Bloque) → verifica contra la bodega: existencias, quién ti
 === ENTREGA ===
 TRABAJADOR: Adrián Echeverry
 PROYECTO: CRISTO
+FECHA: 03/10/2026
 HORA: 08:04
 LUGAR: contenedor
 
@@ -62,7 +63,11 @@ LUGAR: contenedor
   app antes de «✓ Pedido correcto».
 - **Campos:**
   - `TRABAJADOR` y `PROYECTO` van siempre;
-  - `HORA` (HH:MM) y `LUGAR` (contenedor, segundo piso…) son opcionales;
+  - `FECHA` (DD/MM/AAAA), `HORA` (HH:MM) y `LUGAR` (contenedor, segundo piso…)
+    son opcionales;
+  - **`FECHA`** es el día en que salió. Si no viene, la app registra con la
+    fecha de hoy. Si es futura o no es una fecha (`31/02/2026`), la tarjeta
+    del trabajador lo avisa y esa entrega **no se registra** hasta corregirla;
   - van en cualquier orden.
 - **`PROYECTO: SIN PROYECTO`** es una decisión, no un olvido. Nunca va con
   consumibles.
@@ -198,6 +203,7 @@ dos trabajadores):
 === ENTREGA ===
 TRABAJADOR: Adrián Echeverry
 PROYECTO: CRISTO
+FECHA: 03/10/2026
 HORA: 08:04
 
 [CONSUMIBLES]
@@ -216,6 +222,7 @@ HORA: 08:04
 === ENTREGA ===
 TRABAJADOR: Jorman
 PROYECTO: ZONA GENERAL
+FECHA: 03/10/2026
 HORA: 09:07
 
 [CONSUMIBLES]

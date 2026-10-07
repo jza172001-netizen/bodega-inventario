@@ -15,7 +15,7 @@ import { tonoDe, raizDeColor, coloresUnificados, PALETA } from '../utils/colores
 import { generosDe, denominacionesDe, nombreCompuesto } from '../utils/medida';
 import { medidaDe } from '../utils/medida';
 import { leerLote, contarDudas, LoteParseado, ItemLote, LineaLote, moverItem } from '../utils/lote';
-import { verificarLote, listoParaRegistrar, obraDe, huellaDeLinea, resumenDeLinea } from '../core/verificacion';
+import { verificarLote, listoParaRegistrar, obraDe, fechaDe, huellaDeLinea, resumenDeLinea } from '../core/verificacion';
 import { ResumenTrabajador } from './ResumenTrabajador';
 import { PasosDeNombre } from './PasosDeNombre';
 import { fichaDelBloque, identicoDe, baseDelDicho, nombreDelDicho, Piezas } from '../core/crearItem';
@@ -1056,7 +1056,9 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             // La obra y la hora de SU encabezado, no una para todo el bloque.
             const obra = obraDe(l, general);
             const projectId = obra && obra.startsWith('nueva:') ? op.obras?.get(obra.slice(6)) : (obra ?? undefined);
-            const ts = momentoConHora(loteFecha, l.encabezado?.hora);
+            // La FECHA de su entrega, si la trae; si no, la del bloque. Una
+            // fecha mala o futura ni llega acá: la verificación la frena.
+            const ts = momentoConHora(fechaDe(l, loteFecha), l.encabezado?.hora);
             for (const it of l.items) {
                 if (op.listo && !op.listo(l, it)) continue;
                 /**
@@ -1275,7 +1277,8 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
             return (
                 <ResumenTrabajador
                     trabajador={trabajador} detalle={detalle} obra={obra}
-                    cuando={[l.encabezado?.hora, l.encabezado?.lugar].filter(Boolean).join(' · ') || undefined}
+                    cuando={[l.encabezado?.fecha ? l.encabezado.fecha.split('-').reverse().join('/') : undefined, l.encabezado?.hora, l.encabezado?.lugar]
+                        .filter(Boolean).join(' · ') || undefined}
                     resumen={resumenDeLinea(l, verif, loteNuevos, resuelto,
                         it => (loteNuevos.has(it.id) ? fichaNueva(it.nombre, loteNuevos.get(it.id)!, loteNombres.get(it.id)) : undefined))}
                     confirmado={estaConfirmado}

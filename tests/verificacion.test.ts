@@ -6,9 +6,9 @@
  * Lo que la pantalla hace con esto lo cubre `tests/pantalla.test.ts`.
  */
 import { InventoryType, Item, Movement, MovementType, Personnel, Project } from '../types';
-import { leerLote, leerHora, partirPersona, moverItem, medidaDicha, leerCategoria } from '../utils/lote';
+import { leerLote, leerHora, partirPersona, moverItem, medidaDicha, leerCategoria, leerFecha, problemaDeFecha } from '../utils/lote';
 import { nombreDelDicho } from '../core/crearItem';
-import { verificarLote, listoParaRegistrar, resumenDeLinea, huellaDeLinea, Contexto } from '../core/verificacion';
+import { verificarLote, listoParaRegistrar, resumenDeLinea, huellaDeLinea, fechaDe, Contexto } from '../core/verificacion';
 import { igual, esCierto, grupo, cerrar } from './correr';
 
 const P: Personnel[] = [{ id: 'alex', name: 'Alex Ferreira', isTeamLeader: true }, { id: 'juan', name: 'Juan Puerta', teamLeaderId: 'alex' }];
@@ -189,6 +189,56 @@ grupo('la categoría del bloque contra la de la BODEGA: la bodega manda y se avi
     const res = resumenDeLinea(r.lineas[0], v, new Map(), x => !!x.item);
     igual(res.sale.map(x => [x.nombre, x.prestamo, x.tipo]), [['Pala', true, InventoryType.HAND_TOOL], ['Cemento', false, InventoryType.SINGLE_USE]],
         'en el resumen sale con el tipo de la bodega');
+});
+
+// ── FECHA: DD/MM/AAAA dentro de cada entrega (6-oct) ──────────────────────
+grupo('FECHA: se lee DD/MM/AAAA y nada que no sea una fecha de verdad', () => {
+    igual([leerFecha('06/10/2026'), leerFecha('6/1/26'), leerFecha('03-10-2026'), leerFecha('3.10.2026')],
+        ['2026-10-06', '2026-01-06', '2026-10-03', '2026-10-03'], 'formatos dictados');
+    igual([leerFecha('31/02/2026'), leerFecha('13/13/2026'), leerFecha('mañana'), leerFecha('2026-10-06'), leerFecha('06/10')],
+        [undefined, undefined, undefined, undefined, undefined], 'lo que no es fecha no se adivina');
+});
+
+const conFecha = (f: string, extra = '') => leerLote(`=== ENTREGA ===\nTRABAJADOR: Juan\nPROYECTO: El Cristo\nFECHA: ${f}\nHORA: 08:04${extra}\n[HERRAMIENTAS MANUALES]\n- 1 pala\n=== FIN ===`, P, I, O);
+
+grupo('FECHA: la entrega va con SU fecha; sin FECHA, con la del bloque', () => {
+    const r = conFecha('03/10/2026');
+    igual([r.lineas[0].encabezado?.fecha, r.lineas[0].encabezado?.hora], ['2026-10-03', '08:04'], 'fecha y hora de la entrega');
+    igual(fechaDe(r.lineas[0], '2026-10-06'), '2026-10-03', 'manda la de la entrega');
+    const sin = leerLote('=== ENTREGA ===\nTRABAJADOR: Juan\n- 1 pala\n=== FIN ===', P, I, O);
+    igual(fechaDe(sin.lineas[0], '2026-10-06'), '2026-10-06', 'sin FECHA, la del bloque (hoy), como antes');
+    igual(r.ignoradas, [], 'FECHA es un campo, no un elemento');
+});
+
+grupo('FECHA mala o futura: aviso en la tarjeta y NO se registra', () => {
+    const hoy = '2026-10-06';
+    for (const [f, como] of [['31/02/2026', 'no es una fecha'], ['07/10/2026', 'es futura']] as const) {
+        const r = conFecha(f);
+        const v = verificarLote(r, ctx({ hoy }));
+        const a = v.porLinea.get(r.lineas[0].id) ?? [];
+        igual(a.map(x => [x.tipo, x.nivel]), [['fecha', 'decidir']], `${f}: frena`);
+        esCierto(a[0].texto.includes(como) && a[0].texto.includes(f), `${f}: dice por qué`);
+        esCierto(!listoParaRegistrar(r.lineas[0], r.lineas[0].items[0].id, v, new Set([r.lineas[0].items[0].id])), `${f}: no se registra`);
+    }
+    for (const f of ['06/10/2026', '03/10/2026']) {
+        const r = conFecha(f);
+        igual(verificarLote(r, ctx({ hoy })).porLinea.get(r.lineas[0].id), undefined, `${f}: hoy o pasada, pasa`);
+    }
+    igual(problemaDeFecha(undefined, hoy), undefined, 'sin FECHA no hay problema');
+});
+
+grupo('FECHA: «ya le salió» se mira en el día de la entrega, no en hoy', () => {
+    const el3: Movement = { id: 'h', itemId: 'pala', type: MovementType.CHECK_OUT, quantity: 1, timestamp: new Date('2026-10-03T15:00:00Z'), personnelId: 'juan' };
+    const r = conFecha('03/10/2026');
+    const v3 = verificarLote(r, ctx({ movements: [el3], fecha: '2026-10-06', hoy: '2026-10-06' }));
+    igual(tipos(v3.porItem, r.lineas[0].items[0].id), ['duplicado'], 'el 3-oct ya le había salido: se pregunta');
+    esCierto(v3.porItem.get(r.lineas[0].items[0].id)![0].texto.includes('ya le salió el 03/10/2026'), 'y dice ese día, no «hoy»');
+    const hoyMismo = leerLote('=== ENTREGA ===\nTRABAJADOR: Juan\nPROYECTO: El Cristo\n- 1 pala\n=== FIN ===', P, I, O);
+    igual(tipos(verificarLote(hoyMismo, ctx({ movements: [el3], fecha: '2026-10-06', hoy: '2026-10-06' })).porItem, hoyMismo.lineas[0].items[0].id), [],
+        'sin FECHA es hoy, y hoy no le ha salido');
+    const a = huellaDeLinea(conFecha('03/10/2026').lineas[0], null, new Map(), { fecha: '2026-10-06' });
+    const b = huellaDeLinea(conFecha('04/10/2026').lineas[0], null, new Map(), { fecha: '2026-10-06' });
+    esCierto(a !== b, 'cambiar la FECHA desconfirma al trabajador');
 });
 
 // ── Primero el accesorio, después la pulgada ─────────────────────────────

@@ -38,7 +38,7 @@ export const ResumenTrabajador: React.FC<Props> = ({ trabajador, detalle, obra, 
         <div className="space-y-0.5 text-[11px]">
             <div className="flex gap-2"><span className="text-tinta-tenue w-16 flex-shrink-0">Trabajador</span><span className="font-bold text-tinta">{trabajador}{detalle ? ` · ${detalle}` : ''}</span></div>
             <div className="flex gap-2"><span className="text-tinta-tenue w-16 flex-shrink-0">Proyecto</span><span className="font-bold text-tinta">{obra}</span></div>
-            {cuando && <div className="flex gap-2"><span className="text-tinta-tenue w-16 flex-shrink-0">Hora</span><span className="font-bold text-tinta">{cuando}</span></div>}
+            {cuando && <div className="flex gap-2"><span className="text-tinta-tenue w-16 flex-shrink-0">Cuándo</span><span className="font-bold text-tinta">{cuando}</span></div>}
         </div>
 
         {/* Agrupado como el bloque: solo las categorías que traen algo. */}
