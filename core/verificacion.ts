@@ -20,7 +20,7 @@
 import { InventoryType, Item, Movement, MovementType } from '../types.js';
 import { getActiveLoans, isAsset } from '../utils/inventory.js';
 import { tipoExigeObra } from './despacho.js';
-import { medidaDicha } from '../utils/lote.js';
+import { medidaDicha, problemaDeFecha } from '../utils/lote.js';
 import type { ItemLote, LineaLote, LoteParseado } from '../utils/lote.js';
 import { medidaDe, sinMedida, valorDeMedida } from '../utils/medida.js';
 
@@ -33,7 +33,8 @@ export type TipoAlerta =
     | 'ya_la_tiene'      // la herramienta ya la tiene otro y no alcanza la bodega
     | 'duplicado'        // lo mismo a la misma persona, dos veces
     | 'falta_stock'      // no hay lo que se pide: se cargaría la diferencia
-    | 'categoria';       // el bloque dice una categoría y la bodega tiene otra
+    | 'categoria'        // el bloque dice una categoría y la bodega tiene otra
+    | 'fecha';           // la FECHA de la entrega no es fecha, o es futura
 
 export interface Alerta {
     tipo: TipoAlerta;
@@ -95,12 +96,20 @@ export interface Contexto {
     faltantes: Map<string, number>;
     /** AAAA-MM-DD del bloque, para ver qué salió «hoy». */
     fecha: string;
+    /** AAAA-MM-DD de hoy en Colombia: una FECHA después de esta es futura. Sin él, la del teléfono. */
+    hoy?: string;
     nombreDe: (personnelId?: string) => string;
 }
 
 /** La obra que vale para un renglón: la suya, o la general de arriba. */
 export const obraDe = (l: LineaLote, general?: string | null): string | null | undefined =>
     l.obraNueva ? `nueva:${l.obraNueva}` : l.obraId !== undefined ? l.obraId : general;
+
+/**
+ * La fecha que vale para un renglón: la `FECHA:` de su entrega, o la del bloque.
+ * Una sola regla para registrar, para ver duplicados del día y para la huella.
+ */
+export const fechaDe = (l: LineaLote, general: string): string => l.encabezado?.fecha ?? general;
 
 /** El día en Colombia (UTC−5, sin cambio de hora): a las 8 p. m. sigue siendo hoy. */
 const diaBogota = (d: Date | string) => new Date(+new Date(d) - 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -146,6 +155,10 @@ export const verificarLote = (lote: LoteParseado, c: Contexto): {
                 texto: `${l.persona.name} es oficial${suyos ? ` (${suyos} en su cuadrilla)` : ''}. ¿Es para él o para alguien de su cuadrilla?`,
             });
         }
+
+        // ── Fecha: mala o futura NO se registra, ni con la de hoy en su lugar ──
+        const malaFecha = problemaDeFecha(l.encabezado, c.hoy ?? diaBogota(new Date()));
+        if (malaFecha) anotar(porLinea, l.id, { tipo: 'fecha', nivel: 'decidir', texto: malaFecha });
 
         // ── Obra: se pregunta siempre, como el chat ──
         const obra = obraDe(l, c.obraGeneral);
@@ -218,13 +231,13 @@ export const verificarLote = (lote: LoteParseado, c: Contexto): {
             if (quien) {
                 const enBloque = vecesEnBloque.get(`${quien}|${item.id}`) ?? 0;
                 const hoy = c.movements.some(m => m.type === MovementType.CHECK_OUT && m.itemId === item.id
-                    && m.personnelId === quien && diaBogota(m.timestamp) === c.fecha);
+                    && m.personnelId === quien && diaBogota(m.timestamp) === fechaDe(l, c.fecha));
                 if (enBloque > 1 || hoy) {
                     anotar(porItem, it.id, {
                         tipo: 'duplicado', nivel: 'mirar',
                         texto: enBloque > 1
                             ? `${item.name} sale ${enBloque} veces a ${c.nombreDe(quien)} en este bloque. ¿Son dos audios del mismo despacho?`
-                            : `${item.name} ya le salió hoy a ${c.nombreDe(quien)}. ¿Es otra entrega o la misma?`,
+                            : `${item.name} ya le salió ${fechaDe(l, c.fecha) === (c.hoy ?? diaBogota(new Date())) ? 'hoy' : `el ${fechaDe(l, c.fecha).split('-').reverse().join('/')}`} a ${c.nombreDe(quien)}. ¿Es otra entrega o la misma?`,
                     });
                 }
             }
@@ -270,7 +283,7 @@ export const huellaDeLinea = (
         l.crear ? `crear:${l.crear.nombre}:${l.crear.liderId ?? ''}` : '',
         l.paraId ?? '',
         obraDe(l, obraGeneral) ?? '?',
-        extra.fecha ?? '', l.encabezado?.hora ?? '',
+        fechaDe(l, extra.fecha ?? ''), l.encabezado?.hora ?? '',
         l.items.map(it => [it.id, it.item?.id ?? (nuevos.has(it.id)
             ? `nuevo:${nuevos.get(it.id)}:${extra.nombreNuevo ? extra.nombreNuevo(it) : it.nombre}` : ''), it.cantidad, it.dudoso]),
     ]);

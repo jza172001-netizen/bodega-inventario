@@ -86,6 +86,13 @@ export interface Encabezado {
     sinObra: boolean;
     /** HH:MM, ya normalizada. */
     hora?: string;
+    /**
+     * AAAA-MM-DD, del campo `FECHA:` de una entrega (DD/MM/AAAA). Sin él, la
+     * entrega va con la fecha del bloque, como siempre.
+     */
+    fecha?: string;
+    /** `FECHA:` tal cual vino, para decirla en el aviso si no sirve. */
+    fechaDicha?: string;
     /** Lo que no es obra ni hora: «contenedor», «segundo piso». */
     lugar?: string;
 }
@@ -423,6 +430,32 @@ export const leerHora = (t: string): string | undefined => {
     return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
 };
 
+/**
+ * «06/10/2026» → «2026-10-06». También D/M/AAAA, AA de dos cifras y guion o
+ * punto. Lo que no es una fecha de verdad —«31/02/2026», «mañana»— devuelve
+ * `undefined`: no se adivina.
+ */
+export const leerFecha = (t: string): string | undefined => {
+    const m = limpiar(t).match(/^(\d{1,2})\s*[/.-]\s*(\d{1,2})\s*[/.-]\s*(\d{2}|\d{4})$/);
+    if (!m) return undefined;
+    const [d, mes, a] = [Number(m[1]), Number(m[2]), Number(m[3].length === 2 ? `20${m[3]}` : m[3])];
+    const f = new Date(Date.UTC(a, mes - 1, d));
+    if (f.getUTCFullYear() !== a || f.getUTCMonth() !== mes - 1 || f.getUTCDate() !== d) return undefined;
+    return `${a}-${String(mes).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+};
+
+/**
+ * Por qué la FECHA de una entrega no sirve, o `undefined` si sirve (o no vino).
+ * `hoy` es AAAA-MM-DD en Colombia. La comparten la pantalla y /api/despacho:
+ * una fecha mala NO se registra, ni con la de hoy en su lugar.
+ */
+export const problemaDeFecha = (enc: Encabezado | undefined, hoy: string): string | undefined => {
+    if (!enc?.fechaDicha) return undefined;
+    if (!enc.fecha) return `La FECHA «${enc.fechaDicha}» no es una fecha (DD/MM/AAAA). Corregila en el bloque.`;
+    if (enc.fecha > hoy) return `La FECHA ${enc.fechaDicha} es futura: no se registra. Corregila en el bloque.`;
+    return undefined;
+};
+
 /** Lee un encabezado `@ obra · hora · lugar`. Las tres partes son opcionales. */
 export const leerEncabezado = (renglon: string, projects: Project[]): Encabezado => {
     const partes = renglon.replace(/^@\s*/, '').split(/\s*[·|]\s*|\s+[-–—]\s+/).map(limpiar).filter(Boolean);
@@ -471,6 +504,7 @@ export const partirPersona = (texto: string): { nombre: string; cuadrilla?: stri
  *     === ENTREGA ===
  *     TRABAJADOR: Adrián Echeverry
  *     PROYECTO: CRISTO
+ *     FECHA: 03/10/2026
  *     HORA: 08:04
  *     LUGAR: contenedor
  *     [CONSUMIBLES]
@@ -488,7 +522,7 @@ export const partirPersona = (texto: string): { nombre: string; cuadrilla?: stri
  */
 const INICIO_ENTREGA = /^=+\s*entrega\b.*$/i;
 const FIN_ENTREGA = /^=+\s*fin\b.*$/i;
-const CAMPO = /^(trabajador|persona|proyecto|obra|hora|lugar)\s*:\s*(.*)$/i;
+const CAMPO = /^(trabajador|persona|proyecto|obra|fecha|hora|lugar)\s*:\s*(.*)$/i;
 
 /** Sin emoji, corchetes ni signos alrededor: lo que queda para comparar. */
 const desnudo = (t: string): string =>
@@ -514,6 +548,7 @@ const renglonDeElemento = (renglon: string): string =>
 
 interface Entrega {
     obra?: string;
+    fecha?: string;
     hora?: string;
     lugar?: string;
     trabajadores: Array<{ texto: string; elementos: Array<{ texto: string; categoria?: InventoryType }> }>;
@@ -562,12 +597,15 @@ export const leerLote = (texto: string, personnel: Personnel[], items: Item[], p
         const conAlgo = e.trabajadores.filter(t => t.texto && t.elementos.length > 0);
         if (conAlgo.length === 0) { ignoradas.push(e.crudo.join(' / ')); return; }
         let enc: Encabezado | undefined;
-        if (e.obra !== undefined || e.hora || e.lugar) {
+        const fechaDicha = limpiar(e.fecha ?? '');
+        if (e.obra !== undefined || e.hora || e.lugar || fechaDicha) {
             const obra = limpiar(e.obra ?? '');
             const sinObra = /^sin (obra|proyecto)$/.test(normStr(obra));
+            const fecha = fechaDicha ? leerFecha(fechaDicha) : undefined;
             enc = resolverObra({
                 obraDudosa: false, candidatosObra: [], sinObra,
                 ...(obra && !sinObra ? { obraTexto: obra } : {}),
+                ...(fechaDicha ? { fechaDicha, ...(fecha ? { fecha } : {}) } : {}),
                 ...(e.hora ? { hora: leerHora(e.hora) } : {}),
                 ...(e.lugar ? { lugar: limpiar(e.lugar) } : {}),
             }, projects);
@@ -609,6 +647,7 @@ export const leerLote = (texto: string, personnel: Personnel[], items: Item[], p
                 const clave = normStr(nombre);
                 if (clave === 'trabajador' || clave === 'persona') { entrega.trabajadores.push({ texto: limpiar(valor), elementos: [] }); categoria = undefined; }
                 else if (clave === 'proyecto' || clave === 'obra') entrega.obra = valor;
+                else if (clave === 'fecha') entrega.fecha = valor;
                 else if (clave === 'hora') entrega.hora = valor;
                 else entrega.lugar = valor;
                 continue;

@@ -19,8 +19,9 @@ LA PRIORIDAD: que ningún movimiento se pierda y que nada se invente.
 
 ═══ 1 · CAPTURA ═══
 - Agrupá todo por TRABAJADOR, aunque llegue en desorden.
-- Hora: la del mensaje de WhatsApp ([3/10, 8:04 a.m.] → 08:04) o la que
-  dijeron. Si no hay, va sin hora. NUNCA la inventes.
+- Fecha y hora: las del mensaje de WhatsApp ([3/10, 8:04 a.m.] → FECHA
+  03/10/AAAA del año en curso, HORA 08:04) o las que dijeron. Si no hay, van
+  sin fecha o sin hora. NUNCA las inventes.
 - Cantidad no dicha: queda 1 y se marca ⚠ en la revisión.
 - Lo que no es una salida (devolución, traslado, daño, hallazgo, pedido) va
   aparte, como ficha (ver 7).
@@ -91,6 +92,7 @@ una ENTREGA por trabajador, este formato exacto:
 === ENTREGA ===
 TRABAJADOR: Adrián Echeverry
 PROYECTO: CRISTO
+FECHA: 03/10/2026
 HORA: 08:04
 LUGAR: contenedor
 
@@ -103,14 +105,15 @@ LUGAR: contenedor
 === FIN ===
 
 Reglas del bloque:
-- TRABAJADOR y PROYECTO siempre. HORA y LUGAR solo si se saben.
+- TRABAJADOR y PROYECTO siempre. FECHA, HORA y LUGAR solo si se saben.
+- FECHA: DD/MM/AAAA, el día en que salió. Sin FECHA, la app registra hoy.
+  Nunca una fecha futura: la app no la registra.
 - PROYECTO: SIN PROYECTO cuando se decidió así (nunca con consumibles).
 - Cuadrilla: «TRABAJADOR: Juan Echeverry (cuadrilla de Alex)».
 - Un elemento por renglón: «- cantidad nombre», con el nombre del catálogo.
 - Solo las categorías que tengan algo, en este orden: [CONSUMIBLES],
   [HERRAMIENTAS MANUALES], [HERRAMIENTAS ELÉCTRICAS], [EPP].
 - Nada de emojis, comentarios ni numeración dentro del bloque.
-- Si el despacho no es de hoy, avisá: «En la app, poné la fecha DD/MM».
 
 Las devoluciones, traslados, daños, hallazgos y pedidos van DEBAJO del
 bloque, como fichas, con «No especificado» en lo que no se dijo:

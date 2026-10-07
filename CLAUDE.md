@@ -174,6 +174,15 @@ vs Consumible is not a mismatch). The assistant's prompt and knowledge are
 reader, so the docs and the app cannot drift. «Zona general» is the project
 `ZONA GENERAL` (created 5 Oct): consumables need a project and that one counts.
 
+**`FECHA: DD/MM/AAAA` inside an entrega (since 6 Oct 2026)** registers that
+entrega on that day (with its `HORA:`); without it, the block's date (today),
+as before. `fechaDe(l, general)` (core/verificacion.ts) is the ONE rule for the
+timestamp, the «ya le salió» same-day check and the confirmation fingerprint.
+`problemaDeFecha` (utils/lote.ts) — shared by the screen and `/api/despacho` —
+turns an impossible date (`31/02/2026`) or a future one into a `fecha` alert at
+level `decidir`: shown on the worker's card, nothing of that entrega registers,
+and it is NEVER silently replaced by today. The API leaves those lines pending.
+
 A bare trailing number is inches only for pipe families (`seMideEnPulgadas`) or
 when `"`/«pulgadas» was said: «lija 180» is grit (medida `180`, no quote — still
 never swapped for «Lija 240»). Unit abbreviations without «de» (`10 kg lechada`)

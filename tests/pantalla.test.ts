@@ -28,7 +28,7 @@ import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { Item, InventoryType, Movement, MovementType, Personnel, Project } from '../types';
 import { planearLote, tipoExigeObra } from '../core/despacho';
-import { verificarLote, listoParaRegistrar, obraDe, huellaDeLinea } from '../core/verificacion';
+import { verificarLote, listoParaRegistrar, obraDe, fechaDe, huellaDeLinea } from '../core/verificacion';
 import { fichaDelBloque, identicoDe } from '../core/crearItem';
 import { momentoConHora } from '../utils/date';
 import { normStr } from '../utils/genus';
@@ -129,7 +129,7 @@ const panel = (items: Item[], texto: string, conProyecto = false, sinSubir = 0,
         huellaDeLinea, fichaDelBloque, identicoDe,
         movements: extra.movimientos ?? [],
         personnel: personal,
-        verificarLote, listoParaRegistrar, obraDe, normStr, tipoExigeObra,
+        verificarLote, listoParaRegistrar, obraDe, fechaDe, normStr, tipoExigeObra,
         momentoConHora: (iso: string, hora?: string) => new Date(`${iso}T${hora ?? '12:00'}:00-05:00`),
         onCreatePersonnel: (p: Omit<Personnel, 'id'>) => {
             const nuevo = { ...p, id: `persona-${visto.personasCreadas.length + 1}` } as Personnel;
@@ -560,6 +560,28 @@ grupo('el ítem nuevo nace con la CATEGORÍA del bloque, no con la adivinanza', 
     q.fn.marcarNuevo(lineas(q.c)[0].items[0] as { id: string; nombre: string });
     igual([...(q.c.loteNuevos as Map<string, InventoryType>).values()], [adivinarTipo('soudal') ?? InventoryType.HAND_TOOL],
         'sin categoría en el bloque, la adivinanza de siempre');
+});
+
+grupo('FECHA: cada entrega se registra en SU día, a SU hora', () => {
+    const texto = [
+        '=== ENTREGA ===', 'TRABAJADOR: Alex', 'PROYECTO: El Cristo', 'FECHA: 03/10/2026', 'HORA: 08:04', '[HERRAMIENTAS MANUALES]', '- 1 Pala', '=== FIN ===',
+        '=== ENTREGA ===', 'TRABAJADOR: Alex', 'PROYECTO: El Cristo', 'HORA: 09:15', '[HERRAMIENTAS MANUALES]', '- 1 Pala', '=== FIN ===',
+    ].join('\n');
+    const p = panel([ficha(PALA, 'Pala', 5)], texto, false, 0, { obras: [CRISTO], obra: '' });
+    registrar(p);
+    igual(p.visto.enviados.map(m => new Date(m.timestamp).toISOString()), ['2026-10-03T13:04:00.000Z', '2026-09-12T14:15:00.000Z'],
+        'la primera el 3-oct a las 8:04; la segunda, sin FECHA, con la del bloque');
+});
+
+grupo('FECHA futura o inválida: se queda en pantalla, no se registra NADA de esa entrega', () => {
+    const texto = (f: string) => ['=== ENTREGA ===', 'TRABAJADOR: Alex', 'PROYECTO: El Cristo', `FECHA: ${f}`, '[HERRAMIENTAS MANUALES]', '- 1 Pala', '=== FIN ==='].join('\n');
+    for (const f of ['01/01/2099', '31/02/2026']) {
+        const p = panel([ficha(PALA, 'Pala', 5)], texto(f), false, 0, { obras: [CRISTO], obra: '' });
+        registrar(p);
+        igual(p.visto.enviados.length, 0, `${f}: nada sale`);
+        igual(p.visto.cerrado, false, `${f}: el panel sigue abierto`);
+        igual(p.fn.verificacionDelLote().v.porLinea.get(lineas(p.c)[0].id)?.map(a => a.tipo), ['fecha'], `${f}: el aviso es la fecha`);
+    }
 });
 
 await cerrar();

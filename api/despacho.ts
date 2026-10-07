@@ -42,7 +42,7 @@ import { Item, Movement, MovementType, Personnel, InventoryType } from '../types
 import { planearLote, tipoExigeObra } from '../core/despacho.js';
 import { momentoConHora } from '../utils/date.js';
 import { idDeterminista, firmaDe } from './identidad.js';
-import { leerLote, personaClara } from '../utils/lote.js';
+import { leerLote, personaClara, problemaDeFecha } from '../utils/lote.js';
 import { isAsset } from '../utils/inventory.js';
 import { rankMatches } from '../utils/search.js';
 import { uuidDe } from './identidad.js';
@@ -224,8 +224,17 @@ export default async function handler(req: Peticion, res: Respuesta): Promise<vo
             for (const it of linea.items) pendientes.push({ renglon: `${linea.personaTexto}: ${it.texto}`, motivo: `No se reconoció la obra «${enc.obraTexto}»` });
             continue;
         }
+        // La FECHA de la entrega, la misma regla que la pantalla: mala o futura
+        // queda pendiente, nunca se registra con la de hoy en su lugar.
+        const malaFecha = problemaDeFecha(enc, new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString().slice(0, 10));
+        if (malaFecha) {
+            for (const it of linea.items) pendientes.push({ renglon: `${linea.personaTexto}: ${it.texto}`, motivo: malaFecha });
+            continue;
+        }
         const obraLinea = linea.obraId === null ? undefined : (linea.obraId ?? proyectoId);
-        const tsLinea = enc?.hora ? momentoConHora(diaBogota, enc.hora, '-05:00') : ts;
+        const tsLinea = enc?.fecha
+            ? momentoConHora(enc.fecha, enc.hora ?? '12:00', '-05:00')
+            : enc?.hora ? momentoConHora(diaBogota, enc.hora, '-05:00') : ts;
         for (const it of linea.items) {
             if (!it.item) {
                 pendientes.push({ renglon: `${linea.personaTexto}: ${it.texto}`, motivo: 'No se identificó el elemento' });

@@ -44,6 +44,9 @@ grupo('el system prompt cabe en cualquier asistente (menos de 8.000 caracteres)'
     const doc = leer('INSTRUCCIONES.md');
     const prompt = doc.slice(doc.indexOf('```\n') + 4, doc.lastIndexOf('```'));
     esCierto(prompt.length > 3000 && prompt.length < 8000, `mide ${prompt.length}`);
+    // La fecha va EN el bloque: el aviso de ponerla a mano en la app sobra.
+    esCierto(!/poné la fecha/i.test(prompt), 'ya no le pide a Juli poner la fecha en la app');
+    esCierto(/FECHA: DD\/MM\/AAAA/.test(prompt), 'y le dice el formato de FECHA');
 });
 
 grupo('cada bloque escrito en los documentos lo lee la app, completo', () => {
@@ -54,6 +57,7 @@ grupo('cada bloque escrito en los documentos lo lee la app, completo', () => {
         igual(r.ignoradas, [], 'nada se queda sin leer');
         esCierto(r.lineas.length > 0 && r.lineas.every(l => l.persona && l.obraId), 'cada entrega con su trabajador y su obra');
         esCierto(r.lineas.every(l => l.items.every(x => x.categoria)), 'cada elemento con su categoría');
+        esCierto(r.lineas.every(l => l.encabezado?.fecha === '2026-10-03'), 'cada entrega con su FECHA, leída como fecha');
     }
 });
 

@@ -149,6 +149,7 @@ Cada recorrido termina **recargando la página** y comprobando que lo hecho sigu
 | R20 | **Bloque nuevo — categorías:** pegar una `=== ENTREGA ===` con un consumible, una manual, una eléctrica y un EPP | La tarjeta del trabajador los muestra agrupados con los mismos títulos; nada en «no leídos» |
 | R21 | **Bloque nuevo — proyecto:** `PROYECTO: ZONA GENERAL` con consumibles, y otra con `PROYECTO: SIN PROYECTO` y consumibles | La primera sale a ZONA GENERAL; la segunda NO deja registrar el consumible |
 | R22 | **Bloque nuevo — lo que no existe:** «- 2 Soudal» en `[CONSUMIBLES]`, «- 5 Lija 180» | Pregunta si los crea; nacen como Consumible, «Soudal» y «Lija 180» (sin comillas); la 180 no se cambia por la 240 |
+| R24 | **Bloque nuevo — FECHA:** una entrega con `FECHA: 03/10/2026` y `HORA: 08:04`, otra sin FECHA, y otra con `FECHA: 01/01/2099` | La primera queda en el Kardex el 3-oct a las 8:04; la segunda, hoy; la tercera dice en su tarjeta que la fecha es futura y no se registra |
 | R23 | **Bloque nuevo vs. viejo:** pegar la misma mañana en los dos formatos (dos días distintos o borrando el primero) | Las mismas tarjetas y los mismos movimientos en el Kardex |
 
 **Aprobado el bloque:** los 19 recorridos sin un error. Cada fallo se arregla, con su prueba automática, antes de seguir.
