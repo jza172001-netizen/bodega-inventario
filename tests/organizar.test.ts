@@ -127,8 +127,8 @@ grupo('pulgadas: las familias de la bodega están en PLURAL', () => {
         esCierto(seMideEnPulgadas(f), `${f} se mide en pulgadas`);
     for (const f of ['Pala', 'Taladro', 'Teja', 'Yeso'])
         esCierto(!seMideEnPulgadas(f), `${f} no`);
-    igual(rutaSugerida('Codos'), 'Tubería / Accesorios', 'el accesorio va en Accesorios');
-    igual(rutaSugerida('Tubos'), 'Tubería', 'los tubos YA son el subgénero');
+    igual(rutaSugerida('Codos'), 'Tubería y accesorios / Accesorios', 'el accesorio va en Accesorios (árbol de Juli, 13-nov)');
+    igual(rutaSugerida('Tubos'), 'Tubería y accesorios / Tubos', 'los tubos van en Tubos, por color');
     igual(rutaSugerida('Llaves'), null, 'una llave también es herramienta: no se adivina');
     igual(medidaDe('Codos 4"-2"'), null, 'la reducción con guion no es de 4"');
 });

@@ -11,6 +11,8 @@ interface GlobalSearchModalProps {
     personnel: Personnel[];
     onClose: () => void;
     onNavigate: (view: string, tab?: string) => void;
+    /** Una persona encontrada abre SU ficha en Personal, no el Kardex. */
+    onOpenPerson?: (personId: string) => void;
     onBehaviorLog?: (action: string, detail: string) => void;
 }
 
@@ -53,7 +55,7 @@ type Hit =
 const hitKey = (h: Hit) => h.kind === 'item' ? `i:${h.item.id}` : `p:${h.person.id}`;
 
 export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
-    items, movements, personnel, onClose, onNavigate, onBehaviorLog,
+    items, movements, personnel, onClose, onNavigate, onOpenPerson, onBehaviorLog,
 }) => {
     const [query, setQuery] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
@@ -129,7 +131,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
 
     const PersonRow: React.FC<{ h: Hit & { kind: 'person' }; showCat?: boolean }> = ({ h, showCat }) => (
         <button
-            onClick={() => { onBehaviorLog?.('SEARCH_SELECT', `Seleccionó personal: ${h.person.name}`); onNavigate('kardex', 'loans'); onClose(); }}
+            onClick={() => { onBehaviorLog?.('SEARCH_SELECT', `Seleccionó personal: ${h.person.name}`); if (onOpenPerson) onOpenPerson(h.person.id); else onNavigate('personnel'); onClose(); }}
             className="w-full text-left px-4 py-3 hover:bg-marca-suave border-b border-papel-borde transition-colors"
         >
             <div className="flex items-start justify-between gap-2">

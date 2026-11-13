@@ -1157,6 +1157,8 @@ const App: React.FC = () => {
 
     const [isInvoiceReaderOpen, setInvoiceReaderOpen] = useState(false);
     const [isSearchOpen, setSearchOpen] = useState(false);
+    /** La persona que el buscador mandó a abrir en Personal. */
+    const [personaAbierta, setPersonaAbierta] = useState<string | null>(null);
     const [isSettingsOpen, setSettingsOpen] = useState(false);
     const [isAddItemModalOpen, setAddItemModalOpen] = useState(false);
     const [isEditModalOpen, setEditModalOpen] = useState(false);
@@ -2448,6 +2450,8 @@ const App: React.FC = () => {
                         )}
                         {effectiveView === 'personnel' && (
                             <PersonnelView
+                                abrirPersonaId={personaAbierta}
+                                onPersonaAbierta={() => setPersonaAbierta(null)}
                                 personnel={personnel}
                                 movements={movements}
                                 items={items}
@@ -2484,6 +2488,7 @@ const App: React.FC = () => {
                             <ReviewFamiliesView
                                 items={items}
                                 onEditItem={handleReorganizar}
+                                onAddItem={handleAddItem}
                                 onGoBack={() => selectView('kardex')}
                                 onBehaviorLog={addBehaviorLog}
                             />
@@ -2585,6 +2590,7 @@ const App: React.FC = () => {
                     personnel={personnel}
                     onClose={() => setSearchOpen(false)}
                     onNavigate={(v, tab) => { selectView(v as View, tab as KardexTab | undefined); setSearchOpen(false); }}
+                    onOpenPerson={id => { selectView('personnel'); setPersonaAbierta(id); setSearchOpen(false); }}
                     onBehaviorLog={addBehaviorLog}
                 />
             )}

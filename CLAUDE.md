@@ -254,6 +254,27 @@ a preview and saves through `handleEditItem`. **Reorganizing never touches
 `ponerMedida` only adds a size to an item WITHOUT one: turning a 2" elbow into a
 4" one would carry the 2" stock.
 
+**The warehouse groups itself (since 13 Nov 2026): `core/taxonomia.ts`.**
+Juli's tree: `Tubería y accesorios` › `Tubos` (family = colour: `Tubería
+amarilla`, `Tubería naranja`…) | `Accesorios` (`Codos`, `T`, `Y`, `Bujes`,
+`Uniones`, `Sifones`…) › the size (species) › quantity. Until then NO
+production item had a `ruta`, so the tree existed and nothing fell into it.
+`clasificar(item)` places an item from its NAME with a short explicit list
+(material de consumo only; a «llave» may be a tool); `sugerenciasDeOrden`
+returns only the items that change (name, familia, ruta — never quantity) and
+never renames two items into twins. Organizar shows it as «🪄 N ítems se pueden
+agrupar solos» with the usual preview. A NEW item from the block lands in place
+(`fichaDelBloque`) unless its family already has a sibling — then the sibling's
+place wins, so Juli's manual organizing is never overwritten. Tubes are counted
+by whole tube: unit `tubos (6 m)`. `medidaDicha` drops the LENGTH («que mide 6
+m», «enteros 6 m» → `sinLargo`) and reads «uno y media» / «dos y medio» as
+`1 1/2"` / `2 1/2"`; the ladder (`PULGADAS_ESTANDAR`) goes to 6" including
+3 1/2". In Organizar each inch family shows its ladder with «+ medida» to create
+the missing sizes at zero. Genus folders sort before loose families.
+
+**The global search opens a PERSON in Personal** (her profile), not the
+Kardex loans tab (13 Nov).
+
 **A dudoso match is a DECISION, not a pick.** `escoger` (utils/lote.ts) returns
 the first of two equally good candidates *with* `dudoso: true`; until 1 Oct the
 block registered that first one silently (22 of 60 items in the real-data

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Personnel, UserRole, Movement, Item, Project } from '../types';
 import { PlusIcon } from './icons/PlusIcon';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
@@ -23,6 +23,9 @@ interface PersonnelViewProps {
     onTransferLoan?: (movementId: string, newPersonnelId: string) => void;
     userRole?: UserRole;
     onBehaviorLog?: (action: string, detail: string) => void;
+    /** El buscador manda a una persona: se abre su ficha apenas se llega. */
+    abrirPersonaId?: string | null;
+    onPersonaAbierta?: () => void;
 }
 
 export const PersonnelView: React.FC<PersonnelViewProps> = ({
@@ -41,9 +44,18 @@ export const PersonnelView: React.FC<PersonnelViewProps> = ({
     onTransferLoan,
     userRole,
     onBehaviorLog,
+    abrirPersonaId,
+    onPersonaAbierta,
 }) => {
     const [detailPerson, setDetailPerson] = useState<Personnel | null>(null);
     const [editPerson, setEditPerson] = useState<Personnel | null>(null);
+
+    useEffect(() => {
+        if (!abrirPersonaId) return;
+        const p = personnel.find(x => x.id === abrirPersonaId);
+        if (p) setDetailPerson(p);
+        onPersonaAbierta?.();
+    }, [abrirPersonaId, personnel, onPersonaAbierta]);
 
     const isOwner = userRole !== UserRole.VISITOR;
 

@@ -118,7 +118,9 @@ export const medidaDe = (nombre: string): string | null => {
  * media, de tres cuartos o de una; ofrecer la escalera evita que cada quien
  * invente su forma de escribirla.
  */
-export const PULGADAS_ESTANDAR = ['1/2"', '3/4"', '1"', '1 1/4"', '1 1/2"', '2"', '2 1/2"', '3"', '4"', '6"'];
+// 13-nov-2026, Juli: «de media, de uno, de 1 1/2, de 2, de 2 1/2, de 3, de 3 1/2,
+// de 4… 4 1/2, 5, 5 1/2, 6». El 3 1/2" faltaba y el codo de esa medida no salía.
+export const PULGADAS_ESTANDAR = ['1/2"', '3/4"', '1"', '1 1/4"', '1 1/2"', '2"', '2 1/2"', '3"', '3 1/2"', '4"', '4 1/2"', '5"', '5 1/2"', '6"'];
 
 /**
  * Familias que se miden en pulgadas: el tubo y todo lo que se le enrosca.
@@ -128,6 +130,7 @@ export const PULGADAS_ESTANDAR = ['1/2"', '3/4"', '1"', '1 1/4"', '1 1/2"', '2"'
  * familia de palas sería ruido en la pantalla del que está despachando.
  */
 const FAMILIAS_EN_PULGADAS = [
+    'collarin',
     // «T» e «Y» sueltas son como están escritas en la bodega real («T 2"», «Y 4-2»).
     'tubo', 'tuberia', 'codo', 'semicodo', 'tee', 'te', 't', 'y', 'yee', 'union', 'reduccion',
     'adaptador', 'buje', 'niple', 'tapon', 'sifon', 'registro', 'llave', 'valvula',
@@ -162,8 +165,10 @@ export const seMideEnPulgadas = (familia: string): boolean => FAMILIAS_EN_PULGAD
  */
 export const rutaSugerida = (familia: string): string | null => {
     const r = primeraRaiz(familia);
-    if (r === 'tubo' || r === 'tuberia') return 'Tubería';
-    return ACCESORIOS_DE_TUBERIA.has(r) ? 'Tubería / Accesorios' : null;
+    // El mismo árbol que `core/taxonomia.ts` (13-nov): Tubería y accesorios ›
+    // Tubos | Accesorios. Las cadenas se repiten acá para no amarrar este archivo.
+    if (r === 'tubo' || r === 'tuberia') return 'Tubería y accesorios / Tubos';
+    return ACCESORIOS_DE_TUBERIA.has(r) ? 'Tubería y accesorios / Accesorios' : null;
 };
 
 /**

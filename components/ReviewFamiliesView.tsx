@@ -8,6 +8,7 @@ import { OrganizarBodega } from './OrganizarBodega';
 interface Props {
     items: Item[];
     onEditItem: (item: Item) => void;
+    onAddItem?: (item: Omit<Item, 'id'>) => void;
     onGoBack: () => void;
     onBehaviorLog?: (action: string, detail: string) => void;
 }
@@ -29,7 +30,7 @@ const formaMandante = (formas: string[]): string => {
  * que confirmar, y llenarle la pantalla de decisiones vacías es la forma más
  * rápida de que deje de leerlas.
  */
-export const ReviewFamiliesView: React.FC<Props> = ({ items, onEditItem, onGoBack, onBehaviorLog }) => {
+export const ReviewFamiliesView: React.FC<Props> = ({ items, onEditItem, onAddItem, onGoBack, onBehaviorLog }) => {
     // «Organizar» primero: es lo que se usa. «Por confirmar» son las
     // sugerencias viejas del nombre, que casi siempre quedan vacías.
     const [pestana, setPestana] = useState<'organizar' | 'confirmar'>('organizar');
@@ -150,7 +151,7 @@ export const ReviewFamiliesView: React.FC<Props> = ({ items, onEditItem, onGoBac
             </div>
 
             {pestana === 'organizar' ? (
-                <OrganizarBodega items={items} onEditItem={onEditItem} onBehaviorLog={onBehaviorLog} />
+                <OrganizarBodega items={items} onEditItem={onEditItem} onAddItem={onAddItem} onBehaviorLog={onBehaviorLog} />
             ) : pendientes.length === 0 ? (
                 <div className="text-center py-20 text-tinta-tenue">
                     <p className="text-4xl mb-3">✅</p>
