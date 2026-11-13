@@ -274,6 +274,7 @@ const MEDIDA_EN_PALABRAS: Array<[RegExp, string]> = [
     [/\s+(?:de\s+)?dos\s+pulgadas$/i, '2"'],
     [/\s+(?:de\s+)?tres\s+pulgadas$/i, '3"'],
     [/\s+(?:de\s+)?cuatro\s+pulgadas$/i, '4"'],
+    [/\s+(?:de\s+)?cinco\s+pulgadas$/i, '5"'],
     [/\s+(?:de\s+)?seis\s+pulgadas$/i, '6"'],
 ];
 /**
@@ -286,8 +287,31 @@ const SE_PIDEN_EN_PULGADAS = new Set(['brocha', 'disco', 'clavo', 'puntilla', 't
 
 const MEDIDA_EN_NUMERO = /\s+(?:de\s+)?(\d+\s+\d+\s*\/\s*\d+|\d+\s*\/\s*\d+|\d+(?:[.,]\d+)?)\s*(?:"|''|pulgadas?|pulg\.?)?$/i;
 
+/**
+ * El LARGO no es parte del nombre ni es la medida: «tubo amarillo de 2
+ * pulgadas que mide 6 m» o «… enteros 6 m». El 13-nov el tubo nació con la
+ * frase entera de nombre y sin medida, porque el número del final era el 6 de
+ * los metros. El tubo se cuenta por tubo entero (6 m); el largo se suelta.
+ */
+const LARGO_DICHO = /\s+(?:(?:que\s+)?miden?\s+|de\s+|x\s+)?\d+(?:[.,]\d+)?\s*(?:m|mts?|metros?)\.?(?:\s+de\s+largo)?$/i;
+const ENTERO_DICHO = /\s+(?:enteros?|completos?)$/i;
+export const sinLargo = (nombre: string): string => {
+    let t = limpiar(nombre), antes = '';
+    while (t !== antes) { antes = t; t = limpiar(t.replace(LARGO_DICHO, '').replace(ENTERO_DICHO, '')); }
+    return t || limpiar(nombre);
+};
+
+/** «uno y media», «dos y medio», «3 y media» → 1 1/2", 2 1/2", 3 1/2". */
+const Y_MEDIA = /\s+(?:de\s+)?(una|uno|dos|tres|cuatro|cinco|seis|\d+)\s+y\s+(?:media|medio)(?:\s+pulgadas?)?$/i;
+const NUMERO_DICHO: Record<string, string> = { una: '1', uno: '1', dos: '2', tres: '3', cuatro: '4', cinco: '5', seis: '6' };
+
 export const medidaDicha = (nombre: string): { base: string; medida: string } | null => {
-    const t = limpiar(nombre);
+    const t = sinLargo(nombre);
+    const ym = t.match(Y_MEDIA);
+    if (ym && ym.index) {
+        const n = NUMERO_DICHO[ym[1].toLowerCase()] ?? ym[1];
+        return { base: limpiar(t.slice(0, ym.index)), medida: `${n} 1/2"` };
+    }
     for (const [re, medida] of MEDIDA_EN_PALABRAS) {
         if (re.test(t)) return { base: limpiar(t.replace(re, '')), medida };
     }

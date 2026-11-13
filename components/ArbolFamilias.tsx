@@ -127,7 +127,8 @@ export const ArbolFamilias: React.FC<Props> = ({ items, fila, escogidos, abrirTo
         const entradas: Array<{ nombre: string; nodo?: Nodo; arbol?: Arbol }> = [
             ...n.hijos.map(h => ({ nombre: h.nombre, nodo: h })),
             ...n.familias.map(f => ({ nombre: f.familia, arbol: f })),
-        ].sort((x, y) => x.nombre.localeCompare(y.nombre, 'es'));
+        // Las carpetas (géneros) primero, después las familias sueltas (13-nov).
+        ].sort((x, y) => Number(!('nodo' in x)) - Number(!('nodo' in y)) || x.nombre.localeCompare(y.nombre, 'es'));
         return entradas.map(e => e.nodo ? genero(e.nodo) : familia(e.arbol!, n.camino));
     };
 

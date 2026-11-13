@@ -15,6 +15,7 @@ import { InventoryType, Item } from '../types.js';
 import { familiaCanonica, familiaDe, nombreCorregido, normStr, raizDeFamilia } from '../utils/genus.js';
 import { nombreCompuesto } from '../utils/medida.js';
 import { medidaDicha, sinUnidadPura } from '../utils/lote.js';
+import { clasificar } from './taxonomia.js';
 
 export interface Piezas { genero?: string; denominacion?: string }
 
@@ -55,17 +56,25 @@ export const fichaDelBloque = (dicho: string, tipo: InventoryType, items: Item[]
     const crudo = nombreDelDicho(dicho, piezas);
     const familia = familiaCanonica(familiaDe(crudo), items);
     const hermano = items.find(i => raizDeFamilia(i.familia?.trim() || familiaDe(i.name)) === raizDeFamilia(familia));
+    // Si es tubería y su familia todavía no está en ningún lado, nace ya en su
+    // lugar del árbol (13-nov): «tubo amarillo sanitario de 2» → «Tubería
+    // amarilla 2"» en Tubería y accesorios › Tubos, por tubo entero de 6 m.
+    // Si la familia YA tiene hermanos, mandan ellos: lo que Juli organizó a
+    // mano no lo pisa una regla.
+    const nombre = nombreCorregido(crudo, familia);
+    const lugar = hermano ? null : clasificar({ name: nombre, inventoryType: tipo });
+    const ruta = hermano?.ruta ?? lugar?.ruta;
     return {
-        name: nombreCorregido(crudo, familia),
-        familia,
-        ...(hermano?.ruta ? { ruta: hermano.ruta } : {}),
+        name: lugar?.nombre ?? nombre,
+        familia: lugar?.familia ?? familia,
+        ...(ruta ? { ruta } : {}),
         category: ES_HERRAMIENTA.has(tipo) ? 'Herramientas' : 'Materiales',
         subCategory: hermano?.subCategory ?? '',
         inventoryType: tipo,
         quantity: 0,
         minStock: 0,
         price: 0,
-        unit: hermano?.unit ?? 'unidades',
+        unit: lugar?.unidad ?? hermano?.unit ?? 'unidades',
     };
 };
 

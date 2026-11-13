@@ -8,6 +8,8 @@ import {
     quitarGenero, renombrarFamilia, renombrarGenero,
     gemelosQueNacerian,
 } from '../core/organizar';
+import { sugerenciasDeOrden } from '../core/taxonomia';
+import { identicoDe } from '../core/crearItem';
 
 /**
  * Organizar la bodega a mano: géneros, familias y pulgadas.
@@ -29,6 +31,8 @@ import {
 interface Props {
     items: Item[];
     onEditItem: (item: Item) => void;
+    /** Crear la medida que falta (nace en cero; la entrada la pone el despacho). */
+    onAddItem?: (item: Omit<Item, 'id'>) => void;
     onBehaviorLog?: (action: string, detail: string) => void;
 }
 
@@ -38,7 +42,7 @@ const boton = 'text-[10px] font-bold px-2 py-0.5 rounded-full border border-pape
 
 const NUEVO = '__nuevo__';
 
-export const OrganizarBodega: React.FC<Props> = ({ items, onEditItem, onBehaviorLog }) => {
+export const OrganizarBodega: React.FC<Props> = ({ items, onEditItem, onAddItem, onBehaviorLog }) => {
     const [buscar, setBuscar] = useState('');
     const [abiertos, setAbiertos] = useState<Set<string>>(new Set());
     const [marcados, setMarcados] = useState<Set<string>>(new Set());
@@ -52,6 +56,10 @@ export const OrganizarBodega: React.FC<Props> = ({ items, onEditItem, onBehavior
 
     const raiz = useMemo(() => construirRuta(filtrados), [filtrados]);
     const caminos = useMemo(() => caminosDe(construirRuta(items)), [items]);
+    // «Que todo se agrupe solo» (Juli, 13-nov): lo que la app sabe ubicar sin
+    // preguntar —la tubería y sus accesorios—, con vista previa antes de guardar.
+    const solos = useMemo(() => sugerenciasDeOrden(items), [items]);
+
     const familias = useMemo(() => {
         const vistas = new Map<string, { nombre: string; ruta: string }>();
         for (const i of items) {
@@ -137,6 +145,20 @@ export const OrganizarBodega: React.FC<Props> = ({ items, onEditItem, onBehavior
             ponerFamilia(items, ids, nombre, { ruta: existente ? existente.ruta : undefined, corregirNombre: corregir }));
     };
 
+    /** La medida que la familia todavía no tiene: se crea en cero, junto a sus hermanas. */
+    const crearMedida = (a: Arbol, molde: Item, m: string) => {
+        if (!onAddItem) return;
+        const nuevo: Omit<Item, 'id'> = {
+            name: `${a.familia} ${m}`, familia: a.familia, ...(molde.ruta ? { ruta: molde.ruta } : {}),
+            category: molde.category, subCategory: molde.subCategory, inventoryType: molde.inventoryType,
+            quantity: 0, minStock: 0, price: 0, unit: molde.unit,
+        };
+        if (identicoDe(nuevo, items)) { window.alert(`«${nuevo.name}» ya existe.`); return; }
+        if (!window.confirm(`¿Crear «${nuevo.name}»?\nNace en cero; la cantidad entra cuando se despache o se compre.`)) return;
+        onAddItem(nuevo);
+        onBehaviorLog?.('ACTION', `Organizar: creó la medida ${m} de «${a.familia}»`);
+    };
+
     const medida = (i: Item, m: string) => {
         const cambiado = ponerMedida(i, m);
         if (!cambiado) return;
@@ -185,6 +207,19 @@ export const OrganizarBodega: React.FC<Props> = ({ items, onEditItem, onBehavior
                         💡 ¿Va en {partirRuta(sugerida).join(' › ')}?
                     </button>
                 )}
+                {abierto(llave) && enPulgadas && (
+                    <div className="ml-7 mb-1 flex flex-wrap gap-1">
+                        {escalera.map(m => {
+                            const tiene = suyos.some(i => medidaDe(i.name) === m);
+                            return tiene
+                                ? <span key={m} className="text-[10px] font-black px-2 py-0.5 rounded-full border border-marca bg-marca-suave text-tinta">{m}</span>
+                                : onAddItem
+                                    ? <button key={m} onClick={() => crearMedida(a, suyos[0], m)} title={`Crear ${a.familia} ${m}`}
+                                        className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-dashed border-papel-borde text-tinta-tenue hover:border-marca">+ {m}</button>
+                                    : null;
+                        })}
+                    </div>
+                )}
                 {abierto(llave) && (
                     <div className="ml-7 pb-1.5 space-y-0.5">
                         {suyos.map(i => {
@@ -216,13 +251,12 @@ export const OrganizarBodega: React.FC<Props> = ({ items, onEditItem, onBehavior
         );
     };
 
-    const contenido = (n: Nodo): React.ReactNode[] =>
-        [
-            ...n.hijos.map(h => ({ nombre: h.nombre, render: () => genero(h) })),
-            ...n.familias.map(f => ({ nombre: f.familia, render: () => familia(f, n.camino) })),
-        ]
-            .sort((x, y) => x.nombre.localeCompare(y.nombre, 'es'))
-            .map(e => e.render());
+    // Primero las carpetas grandes (Tubería y accesorios…), después las familias
+    // sueltas: la carpeta perdida al final de la lista no se veía.
+    const contenido = (n: Nodo): React.ReactNode[] => [
+        ...[...n.hijos].sort((x, y) => x.nombre.localeCompare(y.nombre, 'es')).map(h => genero(h)),
+        ...[...n.familias].sort((x, y) => x.familia.localeCompare(y.familia, 'es')).map(f => familia(f, n.camino)),
+    ];
 
     const genero = (n: Nodo) => {
         const llave = `g:${n.camino}`;
@@ -247,9 +281,21 @@ export const OrganizarBodega: React.FC<Props> = ({ items, onEditItem, onBehavior
     return (
         <div className="space-y-3">
             <p className="text-xs text-tinta-tenue leading-snug">
-                Géneros → familias → medida. Ej.: <strong>Tubería › Accesorios › Codos › 2"</strong>.
+                Géneros → familias → medida. Ej.: <strong>Tubería y accesorios › Accesorios › Codos › 2"</strong>.
                 Todo muestra antes qué cambia, y nada toca cantidades.
             </p>
+
+            {solos.length > 0 && (
+                <div className="rounded-xl border border-marca bg-marca-suave px-3 py-2.5 space-y-1.5">
+                    <p className="text-xs font-black text-tinta">🪄 {solos.length} ítem(s) se pueden agrupar solos</p>
+                    <p className="text-[11px] text-tinta-suave leading-snug">
+                        Tubería y accesorios › Tubos (por color) | Accesorios (codos, T, Y, bujes…) › medida.
+                        Primero te muestra qué cambia; las cantidades no se tocan.
+                    </p>
+                    <button onClick={() => proponer('Agrupar solo', solos)}
+                        className="w-full py-2 text-xs font-black bg-marca text-tinta rounded-lg">Ver y agrupar</button>
+                </div>
+            )}
 
             <input value={buscar} onChange={e => setBuscar(e.target.value)} placeholder="Buscar ítem, familia o género…"
                 className="w-full px-3 py-2 text-sm border border-papel-borde rounded-lg bg-papel" autoComplete="off" />

@@ -222,6 +222,47 @@ console.log('\n4. El formato viejo sigue registrando');
     await s.ctx.close();
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+console.log('\n5. El buscador manda a Personal, y la bodega se agrupa sola (13-nov)');
+{
+    const s = await abrir();
+    await entrar(s);
+    await s.page.locator('button[title="Buscar"]').click();
+    await s.page.locator('input').last().fill('jorman');
+    await s.page.waitForTimeout(400);
+    await s.page.getByText('Jorman').first().click();
+    await s.page.waitForTimeout(600);
+    await s.foto('buscador-a-personal');
+    const cuerpo = await s.page.innerText('body');
+    ok(/Personal/i.test(cuerpo) && !/Préstamos activos/i.test(cuerpo.slice(0, 200)), 'tocar a Jorman lleva a Personal, no al Kardex');
+    ok(await s.page.getByText('Jorman').count() >= 1, 'y abre la ficha de Jorman');
+    await s.page.getByLabel('Cerrar').first().click();
+
+    // Organizar bodega, desde el menú
+    await s.page.locator('header button').first().click();
+    await s.page.getByText('Organizar bodega').first().click();
+    await s.page.waitForTimeout(500);
+    await s.foto('organizar');
+    ok(await s.page.getByText(/se pueden agrupar solos/).isVisible(), 'aparece «🪄 … se pueden agrupar solos»');
+    await s.page.getByText('Ver y agrupar').click();
+    await s.page.waitForTimeout(300);
+    await s.foto('agrupar-vista-previa');
+    await s.page.getByText(/Guardar \d+ cambio/).click();
+    await s.page.waitForTimeout(1500);
+    const cambios = s.est.escrituras.filter(e => e.tabla === 'items' && e.metodo === 'PATCH').map(e => e.cambio);
+    ok(cambios.length > 0, `se guardaron ${cambios.length} ítems reorganizados`);
+    ok(cambios.every(c => !('quantity' in c)), 'NINGÚN cambio lleva cantidad');
+    const db = (id) => s.est.db.items.find(i => i.id === id);
+    igual([db('i-codo2').ruta, db('i-codo2').familia, db('i-codo2').name], ['Tubería y accesorios / Accesorios', 'Codos', 'Codos 2"'], 'el codo quedó en Tubería y accesorios › Accesorios');
+    igual([db('i-codo2').quantity, db('i-codo4').quantity], [30, 10], 'las cantidades, intactas');
+    igual(db('i-pala').ruta, null, 'la pala no se tocó');
+    await s.page.getByText(/se pueden agrupar solos/).waitFor({ state: 'detached', timeout: 3000 }).catch(() => {});
+    ok(!(await s.page.getByText(/se pueden agrupar solos/).isVisible().catch(() => false)), 'después de agrupar, no queda nada por agrupar');
+    await s.foto('agrupado');
+    ok(s.errores.length === 0, `sin errores de página${s.errores.length ? ': ' + s.errores.join(' | ') : ''}`);
+    await s.ctx.close();
+}
+
 await browser.close();
 servidor.close();
 console.log(fallas ? `\n✗ ${fallas} falla(s)` : '\n✓ todo bien');
