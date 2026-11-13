@@ -253,9 +253,9 @@ console.log('\n5. El buscador manda a Personal, y la bodega se agrupa sola (13-n
     ok(cambios.length > 0, `se guardaron ${cambios.length} ítems reorganizados`);
     ok(cambios.every(c => !('quantity' in c)), 'NINGÚN cambio lleva cantidad');
     const db = (id) => s.est.db.items.find(i => i.id === id);
-    igual([db('i-codo2').ruta, db('i-codo2').familia, db('i-codo2').name], ['Tubería y accesorios / Accesorios', 'Codos', 'Codos 2"'], 'el codo quedó en Tubería y accesorios › Accesorios');
+    igual([db('i-codo2').ruta, db('i-codo2').familia, db('i-codo2').name], ['Materiales de consumo / Tubería y accesorios / Accesorios', 'Codos', 'Codos 2"'], 'el codo quedó en Materiales de consumo › Tubería y accesorios › Accesorios');
     igual([db('i-codo2').quantity, db('i-codo4').quantity], [30, 10], 'las cantidades, intactas');
-    igual(db('i-pala').ruta, null, 'la pala no se tocó');
+    igual([db('i-pala').ruta, db('i-pala').name], ['Herramientas / Manuales', 'Pala'], 'la pala se ubicó en Herramientas › Manuales, con su mismo nombre');
     await s.page.getByText(/se pueden agrupar solos/).waitFor({ state: 'detached', timeout: 3000 }).catch(() => {});
     ok(!(await s.page.getByText(/se pueden agrupar solos/).isVisible().catch(() => false)), 'después de agrupar, no queda nada por agrupar');
     await s.foto('agrupado');

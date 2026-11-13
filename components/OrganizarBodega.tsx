@@ -281,7 +281,7 @@ export const OrganizarBodega: React.FC<Props> = ({ items, onEditItem, onAddItem,
     return (
         <div className="space-y-3">
             <p className="text-xs text-tinta-tenue leading-snug">
-                Géneros → familias → medida. Ej.: <strong>Tubería y accesorios › Accesorios › Codos › 2"</strong>.
+                De lo grande a lo específico. Ej.: <strong>Materiales de consumo › Tubería y accesorios › Accesorios › Codos › 2"</strong>.
                 Todo muestra antes qué cambia, y nada toca cantidades.
             </p>
 
@@ -289,7 +289,7 @@ export const OrganizarBodega: React.FC<Props> = ({ items, onEditItem, onAddItem,
                 <div className="rounded-xl border border-marca bg-marca-suave px-3 py-2.5 space-y-1.5">
                     <p className="text-xs font-black text-tinta">🪄 {solos.length} ítem(s) se pueden agrupar solos</p>
                     <p className="text-[11px] text-tinta-suave leading-snug">
-                        Tubería y accesorios › Tubos (por color) | Accesorios (codos, T, Y, bujes…) › medida.
+                        Herramientas · Materiales de consumo (tubería, pinturas y líquidos, polvos, eléctricos, varios) · EPP.
                         Primero te muestra qué cambia; las cantidades no se tocan.
                     </p>
                     <button onClick={() => proponer('Agrupar solo', solos)}

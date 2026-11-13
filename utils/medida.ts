@@ -167,8 +167,8 @@ export const rutaSugerida = (familia: string): string | null => {
     const r = primeraRaiz(familia);
     // El mismo árbol que `core/taxonomia.ts` (13-nov): Tubería y accesorios ›
     // Tubos | Accesorios. Las cadenas se repiten acá para no amarrar este archivo.
-    if (r === 'tubo' || r === 'tuberia') return 'Tubería y accesorios / Tubos';
-    return ACCESORIOS_DE_TUBERIA.has(r) ? 'Tubería y accesorios / Accesorios' : null;
+    if (r === 'tubo' || r === 'tuberia') return 'Materiales de consumo / Tubería y accesorios / Tubos';
+    return ACCESORIOS_DE_TUBERIA.has(r) ? 'Materiales de consumo / Tubería y accesorios / Accesorios' : null;
 };
 
 /**

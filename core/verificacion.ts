@@ -23,6 +23,7 @@ import { tipoExigeObra } from './despacho.js';
 import { medidaDicha, problemaDeFecha, problemaDeHora } from '../utils/lote.js';
 import type { ItemLote, LineaLote, LoteParseado } from '../utils/lote.js';
 import { medidaDe, sinMedida, valorDeMedida } from '../utils/medida.js';
+import { COLORES_TUBO, metrosPorTubo, tuboSinColor } from './taxonomia.js';
 
 export type TipoAlerta =
     | 'persona'          // no se sabe quién es (no existe o hay dos parecidos)
@@ -34,7 +35,9 @@ export type TipoAlerta =
     | 'duplicado'        // lo mismo a la misma persona, dos veces
     | 'falta_stock'      // no hay lo que se pide: se cargaría la diferencia
     | 'categoria'        // el bloque dice una categoría y la bodega tiene otra
-    | 'fecha';           // la FECHA de la entrega no es fecha, o es futura
+    | 'fecha'            // la FECHA de la entrega no es fecha, o es futura
+    | 'color'            // un tubo sin color: ¿verde, rojo, amarillo, azul, violeta?
+    | 'metros';          // se pidió en metros un tubo que sale por tubo entero
 
 export interface Alerta {
     tipo: TipoAlerta;
@@ -99,6 +102,8 @@ export interface Contexto {
     /** AAAA-MM-DD de hoy en Colombia: una FECHA después de esta es futura. Sin él, la del teléfono. */
     hoy?: string;
     nombreDe: (personnelId?: string) => string;
+    /** Cómo nacería cada ítem nuevo (con lo elegido en pantalla). Sin él, lo dicho. */
+    nombreNuevo?: (it: ItemLote) => string;
 }
 
 /** La obra que vale para un renglón: la suya, o la general de arriba. */
@@ -199,6 +204,32 @@ export const verificarLote = (lote: LoteParseado, c: Contexto): {
                 });
                 continue;
             }
+            // El tubo va por color (13-nov): uno nuevo sin color no se crea —sería
+            // «Tubería 2"», que no es ninguno—; uno que existe y se eligió solo
+            // porque es el único de esa medida, se mira antes de que salga.
+            const nombreFinal = c.nuevos.has(it.id) ? (c.nombreNuevo?.(it) ?? it.nombre) : it.nombre;
+            if (c.nuevos.has(it.id) && c.nuevos.get(it.id) === InventoryType.SINGLE_USE && tuboSinColor(nombreFinal)) {
+                anotar(porItem, it.id, {
+                    tipo: 'color', nivel: 'decidir',
+                    texto: `«${it.nombre}»: ¿de qué color es el tubo? ${COLORES_TUBO.slice(0, 5).join(', ')}…`,
+                });
+            } else if (it.item && tuboSinColor(it.nombre) && !tuboSinColor(it.item.name) && metrosPorTubo(it.item.name)) {
+                anotar(porItem, it.id, {
+                    tipo: 'color', nivel: 'mirar',
+                    texto: `No dijeron el color del tubo: sale como «${it.item.name}». ¿Es ese?`,
+                });
+            }
+            if (it.metros !== undefined) {
+                const largo = metrosPorTubo(it.item?.name ?? nombreFinal) ?? metrosPorTubo(it.nombre) ?? 6;
+                const exacto = it.cantidad * largo === it.metros;
+                anotar(porItem, it.id, {
+                    tipo: 'metros', nivel: exacto ? 'aviso' : 'mirar',
+                    texto: exacto
+                        ? `Pidieron ${it.metros} m: son ${it.cantidad} tubo${it.cantidad === 1 ? '' : 's'} de ${largo} m.`
+                        : `Pidieron ${it.metros} m y el tubo es de ${largo} m: salen ${it.cantidad} tubo${it.cantidad === 1 ? '' : 's'} (${it.cantidad * largo} m). Revisá la cantidad.`,
+                });
+            }
+
             const item = it.item;
             if (!item) continue;
 

@@ -27,6 +27,7 @@ import { InventoryType, Item, Personnel, Project } from '../types.js';
 import { rankMatches, Scored } from './search.js';
 import { normStr, raizDeFamilia } from './genus.js';
 import { medidaDe, seMideEnPulgadas, valorDeMedida } from './medida.js';
+import { metrosPorTubo } from '../core/taxonomia.js';
 
 /** Un ítem pedido dentro de un renglón. */
 export interface ItemLote {
@@ -65,7 +66,29 @@ export interface ItemLote {
      * no coincide con la de la bodega, la verificación lo avisa.
      */
     categoria?: InventoryType;
+    /**
+     * Si se pidió en METROS un tubo que se despacha por tubo entero: los metros
+     * dichos. `cantidad` ya viene en tubos; la verificación muestra la cuenta y,
+     * si no da exacta, la deja para mirar (13-nov).
+     */
+    metros?: number;
 }
+
+const METROS_DE = /^(?:metros?|mts?|m)\.?\s+(?:de\s+)?/i;
+
+/**
+ * «12 metros de tubo amarillo de 2» → 2 tubos de 6 m. «8 m de tubo» → 2 tubos
+ * (12 m): se redondea hacia ARRIBA, porque un tubo no se parte en la bodega, y
+ * la verificación lo marca para mirar. Lo que no es tubo no se toca: la
+ * manguera y el cable se despachan en metros.
+ */
+export const tubosDeMetros = (cantidad: number, nombre: string): { cantidad: number; nombre: string; metros: number } | null => {
+    if (!METROS_DE.test(nombre)) return null;
+    const resto = limpiar(nombre.replace(METROS_DE, ''));
+    const largo = metrosPorTubo(resto);
+    if (!largo) return null;
+    return { cantidad: Math.max(1, Math.ceil(cantidad / largo - 1e-9)), nombre: resto, metros: cantidad };
+};
 
 /**
  * Lo que dice un encabezado `@ El Cristo · 07:30 · contenedor`, y que heredan
@@ -623,10 +646,15 @@ export const leerLote = (texto: string, personnel: Personnel[], items: Item[], p
     const nuevoId = (): string => `L${++siguiente}`;
 
     const leerElemento = (trozo: string, categoria?: InventoryType): ItemLote => {
-        const { cantidad, nombre } = partirCantidad(trozo);
+        const dicho = partirCantidad(trozo);
+        const enTubos = tubosDeMetros(dicho.cantidad, dicho.nombre);
+        const { cantidad, nombre } = enTubos ?? dicho;
         const ri = buscarItem(items, nombre);
         const { elegido: item, dudoso } = escoger(ri);
-        return { id: nuevoId(), texto: trozo, cantidad, nombre, item, candidatos: ri.map(r => r.value), dudoso, ...(categoria ? { categoria } : {}) };
+        return {
+            id: nuevoId(), texto: trozo, cantidad, nombre, item, candidatos: ri.map(r => r.value), dudoso,
+            ...(categoria ? { categoria } : {}), ...(enTubos ? { metros: enTubos.metros } : {}),
+        };
     };
 
     const armarLinea = (personaTexto: string, itemsLinea: ItemLote[], encabezado?: Encabezado): LineaLote => {
