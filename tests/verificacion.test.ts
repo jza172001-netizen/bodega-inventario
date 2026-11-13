@@ -374,4 +374,30 @@ grupo('el resumen nombra al ítem nuevo como VA A QUEDAR', () => {
     igual(res.sale.map(x => [x.nombre, x.unidad]), [['Codos 5"', 'und']], 'el nombre de la ficha, no lo dictado');
 });
 
+
+grupo('el tubo: sin color no nace, y en metros se cuenta por tubo (13-nov)', () => {
+    const tubo = it('naranja2', 'Tubos Naranja 2"', 5, InventoryType.SINGLE_USE);
+    const r = leerLote('Juan: 2 tubos de 3', P, [...I, tubo], O);
+    const x = r.lineas[0].items[0];
+    const nuevos = new Map([[x.id, InventoryType.SINGLE_USE]]);
+    igual(tipos(verificarLote(r, ctx({ items: [...I, tubo], nuevos })).porItem, x.id), ['color'], 'tubo nuevo sin color: se pregunta');
+    esCierto(!listoParaRegistrar(r.lineas[0], x.id, verificarLote(r, ctx({ items: [...I, tubo], nuevos })), new Set()), 'y no se registra');
+    const conColor = verificarLote(r, ctx({ items: [...I, tubo], nuevos, nombreNuevo: () => 'Tubería verde 3"' }));
+    igual(tipos(conColor.porItem, x.id), [], 'elegido el color en pantalla, ya puede nacer');
+
+    const r2 = leerLote('Juan: 2 tubos de 2', P, [...I, tubo], O);
+    const y = r2.lineas[0].items[0];
+    igual(y.item?.id, 'naranja2', 'el único de 2" se elige');
+    const a = verificarLote(r2, ctx({ items: [...I, tubo] })).porItem.get(y.id) ?? [];
+    igual(a.map(z => [z.tipo, z.nivel]), [['color', 'mirar']], 'pero sin color dicho, se mira antes de que salga');
+
+    const r3 = leerLote('Juan: 12 metros de tubo naranja de 2', P, [...I, tubo], O);
+    const z = r3.lineas[0].items[0];
+    igual([z.cantidad, z.metros, z.item?.id], [2, 12, 'naranja2'], '12 m = 2 tubos');
+    igual((verificarLote(r3, ctx({ items: [...I, tubo] })).porItem.get(z.id) ?? []).map(q => q.nivel), ['aviso'], 'exacto: solo se avisa');
+    const r4 = leerLote('Juan: 8 metros de tubo naranja de 2', P, [...I, tubo], O);
+    const w = r4.lineas[0].items[0];
+    igual((verificarLote(r4, ctx({ items: [...I, tubo] })).porItem.get(w.id) ?? []).map(q => [q.tipo, q.nivel]), [['metros', 'mirar']], 'no exacto: se mira');
+});
+
 await cerrar();

@@ -104,6 +104,13 @@ funcionando, pero el oficial es este.
 ## 4. Medidas y unidades
 
 - **`"` es pulgada** y va pegada: `Brocha 2"`, `Codos 4"`, `Tornillos 1"`.
+- **El tubo va por color.** Si no lo dijeron, se pregunta: verde, rojo,
+  amarillo, azul o violeta (también hay naranja, gris y blanco). El color va
+  en el nombre: `Tubo verde 2"`. El tubo eléctrico (conduit) no lleva color.
+  Si llega sin color, la app no lo crea: pregunta el color en pantalla.
+- **El tubo se despacha por tubo entero:** 6 m; el eléctrico, 2 m. Si lo piden
+  en metros, se pasa a tubos (12 m = 2 tubos). Si no da exacto, se redondea
+  hacia arriba y la app lo deja para mirar.
 - **Se pregunta la medida** cuando el ítem va por medida y no la dijeron:
   - brochas, codos, semicodos, tubos, uniones, Y, T, bujes, sifones;
   - tornillos y clavos;

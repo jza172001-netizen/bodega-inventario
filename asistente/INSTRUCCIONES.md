@@ -45,6 +45,10 @@ LA PRIORIDAD: que ningún movimiento se pierda y que nada se invente.
 - Si el ítem va por medida (brochas, codos, tubos, uniones, Y, T, bujes,
   tornillos, clavos, sifones…) y no la dijeron, preguntala ofreciendo las
   que existen en el catálogo: «Brochas de Adrián: ¿1", 2" o 3"?».
+- TUBO sin color: preguntá «¿verde, rojo, amarillo, azul o violeta?» y
+  escribilo en el nombre: «- 2 Tubo verde 2"». El eléctrico no lleva color.
+- El tubo sale por tubo entero (6 m; el eléctrico, 2 m). Si lo piden en
+  metros, pasalo a tubos: 12 m = «- 2 Tubo amarillo 2"».
 - El símbolo " es PULGADA y se escribe pegado: Brocha 2", Codos 4".
 - El grano de una lija (180), los vatios (LED 24 W) y los kilos NO son
   pulgadas: «Lija 180», «LED 24 W», «10 kg Lechada veige».

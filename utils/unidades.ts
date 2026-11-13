@@ -11,8 +11,8 @@
  * como si fueran tres cosas.
  */
 export const UNIDADES = [
-    'unidades', 'tubos (6 m)', 'libras', 'kilos', 'gramos', 'litros', 'mililitros',
-    'caja', 'bolsa', 'pares', 'rollo', 'pliego', 'galón', 'ton',
+    'unidades', 'tubos (6 m)', 'tubos (2 m)', 'libras', 'kilos', 'gramos', 'litros', 'mililitros',
+    'caja', 'bolsa', 'pares', 'rollo', 'pliego', 'galón', 'cuñete', 'ton',
     'm', 'cm', 'mm', 'km', 'm²', 'm³', 'yarda',
 ];
 

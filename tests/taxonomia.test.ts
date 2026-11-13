@@ -6,7 +6,8 @@
  * de abajo son los de PRODUCCIÓN leídos el 13-nov, no inventados.
  */
 import { InventoryType, Item } from '../types';
-import { clasificar, normalizarMedidas, sugerenciasDeOrden, RUTA_TUBOS, RUTA_ACCESORIOS, UNIDAD_TUBO } from '../core/taxonomia';
+import { clasificar, normalizarMedidas, sugerenciasDeOrden, tuboSinColor, metrosPorTubo, RUTA_TUBOS, RUTA_ACCESORIOS, RUTA_OTROS, UNIDAD_TUBO, UNIDAD_TUBO_ELECTRICO } from '../core/taxonomia';
+import { tubosDeMetros } from '../utils/lote';
 import { fichaDelBloque } from '../core/crearItem';
 import { medidaDicha, sinLargo } from '../utils/lote';
 import { denominacionesDe } from '../utils/medida';
@@ -44,11 +45,51 @@ grupo('los accesorios van a su familia, y la medida se escribe una sola vez', ()
     igual(normalizarMedidas('2 1/2'), '2 1/2"', 'dos y media');
 });
 
-grupo('lo que no es tubería NO se toca', () => {
-    for (const n of ['Pega pvc', 'Lija 180', 'Pala', 'Estuco tipo 3', 'Brocha 2"'])
-        igual(lugar(n), null, `${n}: sin lugar adivinado`);
-    igual(clasificar({ name: 'Llave 2"', inventoryType: InventoryType.HAND_TOOL }), null, 'una herramienta nunca entra al árbol de tubería');
-    igual(clasificar({ name: 'Codos 2"', inventoryType: InventoryType.ACCESSORY }), null, 'solo material de consumo');
+grupo('el árbol completo: cada cosa en su rama, sin renombrar lo que no es tubería', () => {
+    const M = 'Materiales de consumo';
+    const casos: Array<[string, string]> = [
+        ['Pintura Tipo 1', `${M} / Pinturas y líquidos`], ['Estuco tipo 3', `${M} / Pinturas y líquidos`],
+        ['Thinner', `${M} / Pinturas y líquidos`], ['Varsol', `${M} / Pinturas y líquidos`],
+        ['Barniz', `${M} / Pinturas y líquidos`], ['3 en en 1 galón', `${M} / Pinturas y líquidos`],
+        ['Hiperciclyl', `${M} / Pinturas y líquidos`], ['Secador rápido', `${M} / Pinturas y líquidos`],
+        ['Polvo enchape', `${M} / Polvos`], ['Lechada veige', `${M} / Polvos`], ['G plac polvo', `${M} / Polvos`],
+        ['Clabe #12', `${M} / Eléctricos`], ['Toma doble Mercuri', `${M} / Eléctricos`], ['Cinta (negra)', `${M} / Eléctricos`],
+        ['Brocha 2"', `${M} / Varios / Brochas y rodillos`], ['Rodillo', `${M} / Varios / Brochas y rodillos`],
+        ['Clavos acero 1', `${M} / Varios / Fijaciones`], ['Tiros', `${M} / Varios / Fijaciones`],
+        ['Tornillos autoperforantes con tuerca', `${M} / Varios / Fijaciones`],
+        ['Lija 180', `${M} / Varios / Abrasivos`], ['Disco muro pequeño', `${M} / Varios / Abrasivos`],
+        ['Pega pvc', `${M} / Varios / Adhesivos y selladores`], ['Silicona transparente', `${M} / Varios / Adhesivos y selladores`],
+        ['Vasos meseyose', RUTA_OTROS], ['Estopa', RUTA_OTROS],
+    ];
+    for (const [n, ruta] of casos) igual(lugar(n), { ruta, ...(lugar(n)?.unidad ? { unidad: lugar(n)!.unidad } : {}) }, `${n} → ${ruta}`);
+    igual(lugar('Estuco tipo 3')?.unidad, 'cuñete', 'el estuco va en cuñete, como la pintura');
+    igual(lugar('Gasolina')?.unidad, 'galón', 'la gasolina, en galón');
+    igual(lugar('Brocha 2"')?.nombre, undefined, 'el nombre no se toca');
+    igual(clasificar({ name: 'Pala', inventoryType: InventoryType.HAND_TOOL }), { ruta: 'Herramientas / Manuales' }, 'la herramienta va por su tipo');
+    igual(clasificar({ name: 'Llave 2"', inventoryType: InventoryType.HAND_TOOL })?.ruta, 'Herramientas / Manuales', 'una «llave» herramienta nunca entra a tubería');
+    igual(clasificar({ name: 'Radial (Roja · Cinhell)', inventoryType: InventoryType.ELECTRICAL_TOOL })?.ruta, 'Herramientas / Eléctricas', 'eléctrica');
+    igual(clasificar({ name: 'Codos 2"', inventoryType: InventoryType.ACCESSORY })?.ruta, 'Herramientas / Accesorios', 'un accesorio de herramienta no es un codo');
+    igual(clasificar({ name: 'Guantes', inventoryType: InventoryType.PPE })?.ruta, 'EPP', 'EPP');
+});
+
+grupo('el color del tubo: rojo y violeta existen, y sin color se pregunta', () => {
+    igual(lugar('tubo rojo 2"')?.familia, 'Tubería roja', 'rojo');
+    igual(lugar('tubo violeta 1/2"')?.familia, 'Tubería violeta', 'violeta');
+    esCierto(tuboSinColor('tubos de 2'), 'sin color: hay que preguntar');
+    esCierto(!tuboSinColor('tubo verde de 2'), 'con color, no');
+    esCierto(!tuboSinColor('Codos 2"'), 'un codo no tiene color que preguntar');
+    esCierto(!tuboSinColor('tubo eléctrico 1/2"'), 'el eléctrico no va por color');
+});
+
+grupo('largos: el tubo es de 6 m; el eléctrico, de 2 m', () => {
+    igual(lugar('tubo eléctrico 3/4"'), { ruta: RUTA_TUBOS, familia: 'Tubería eléctrica', nombre: 'Tubería eléctrica 3/4"', unidad: UNIDAD_TUBO_ELECTRICO }, 'eléctrico');
+    igual(lugar('Tubo conduit 1/2"')?.familia, 'Tubería eléctrica', 'conduit es eléctrico');
+    igual([metrosPorTubo('tubo amarillo 2"'), metrosPorTubo('tubo electrico 1/2"'), metrosPorTubo('Pega pvc')], [6, 2, null], 'metros por tubo');
+    igual(tubosDeMetros(12, 'metros de tubo amarillo de 2'), { cantidad: 2, nombre: 'tubo amarillo de 2', metros: 12 }, '12 m = 2 tubos');
+    igual(tubosDeMetros(8, 'm de tubo naranja')?.cantidad, 2, '8 m: dos tubos, hacia arriba (un tubo no se parte)');
+    igual(tubosDeMetros(6, 'metros de tubo electrico 1/2')?.cantidad, 3, '6 m de eléctrico = 3 tubos de 2 m');
+    igual(tubosDeMetros(10, 'metros de manguera'), null, 'la manguera sigue en metros');
+    igual(tubosDeMetros(3, 'tubos naranja'), null, 'sin «metros» no se toca');
 });
 
 grupo('«Agrupar solo»: cambia lugar y nombre, NUNCA cantidad', () => {
@@ -60,7 +101,9 @@ grupo('«Agrupar solo»: cambia lugar y nombre, NUNCA cantidad', () => {
         it('e', 'Pega pvc', 'Pega'),
     ];
     const cambios = sugerenciasDeOrden(bodega);
-    igual(cambios.map(c => c.id).sort(), ['a', 'b', 'c'], 'solo la tubería');
+    igual(cambios.map(c => c.id).sort(), ['a', 'b', 'c', 'd', 'e'], 'todos se ubican');
+    igual(cambios.find(c => c.id === 'e')?.name, 'Pega pvc', 'lo que no es tubería conserva su nombre');
+    igual(cambios.find(c => c.id === 'e')?.familia, 'Pega', 'y su familia');
     for (const c of cambios) {
         const antes = bodega.find(i => i.id === c.id)!;
         igual([c.quantity, c.price, c.unit, c.inventoryType], [antes.quantity, antes.price, antes.unit, antes.inventoryType], `${antes.name}: cantidad, precio y tipo intactos`);

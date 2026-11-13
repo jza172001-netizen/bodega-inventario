@@ -272,6 +272,21 @@ m», «enteros 6 m» → `sinLargo`) and reads «uno y media» / «dos y medio»
 3 1/2". In Organizar each inch family shows its ladder with «+ medida» to create
 the missing sizes at zero. Genus folders sort before loose families.
 
+**The whole warehouse has a tree (13 Nov, second pass).** `clasificar` now
+places EVERYTHING: tools/EPP/accessories by TYPE (`Herramientas / Manuales |
+Eléctricas | Accesorios`, `EPP`); consumables by name under `Materiales de
+consumo / Tubería y accesorios | Pinturas y líquidos | Polvos | Eléctricos |
+Varios / (Brochas y rodillos | Fijaciones | Abrasivos | Adhesivos y selladores
+| Otros)`. Only pipe items are renamed; the rest keep name and familia
+(`Lugar.familia/nombre` are optional). Unknown consumables go to `Varios /
+Otros`, never guessed. Default units (`cuñete`, `galón`) apply only to NEW items.
+Tube colours include rojo and violeta; a NEW tube without colour raises
+`color`/`decidir` (chips on screen set the colour), an existing tube picked
+without a colour said raises `color`/`mirar`. Electrical tube (eléctrico /
+conduit / EMT) is `Tubería eléctrica`, unit `tubos (2 m)` — Juli said «como de
+2 metros»: one constant. «12 metros de tubo…» becomes 2 tubes (`tubosDeMetros`,
+rounds UP; not exact → `metros`/`mirar`).
+
 **The global search opens a PERSON in Personal** (her profile), not the
 Kardex loans tab (13 Nov).
 

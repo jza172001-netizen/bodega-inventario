@@ -19,6 +19,7 @@ import { verificarLote, listoParaRegistrar, obraDe, fechaDe, huellaDeLinea, resu
 import { ResumenTrabajador } from './ResumenTrabajador';
 import { PasosDeNombre } from './PasosDeNombre';
 import { fichaDelBloque, identicoDe, baseDelDicho, nombreDelDicho, Piezas } from '../core/crearItem';
+import { COLORES_TUBO, tuboSinColor } from '../core/taxonomia';
 import { planearLote, tipoExigeObra } from '../core/despacho';
 import { isAsset, isConsumable, adivinarTipo } from '../utils/inventory';
 
@@ -1121,6 +1122,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
         const v = lote ? verificarLote(lote, {
             items, movements, personnel, nuevos: loteNuevos, obraGeneral: obraGeneral(), faltantes,
             fecha: loteFecha, nombreDe: id => personnel.find(p => p.id === id)?.name ?? 'alguien',
+            nombreNuevo: extraDeHuella().nombreNuevo,
         }) : { porLinea: new Map(), porItem: new Map() };
         return { v, faltantes };
     };
@@ -1527,6 +1529,20 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                                         denominacion={piezas.denominacion ?? (nombreDelDicho(it.nombre) !== baseDelDicho(it.nombre) ? nombreDelDicho(it.nombre).slice(baseDelDicho(it.nombre).length).trim() : '')}
                                                         onGenero={g => poner({ genero: g })}
                                                         onDenominacion={d => poner({ denominacion: d })} />
+                                                )}
+                                                {/* Un tubo nuevo sin color no se crea: se pregunta el color. */}
+                                                {nace === InventoryType.SINGLE_USE && tuboSinColor(ficha.name) && (
+                                                    <div className="space-y-1">
+                                                        <p className="text-[10px] font-semibold text-atencion">⚠ ¿De qué color es el tubo?</p>
+                                                        <div className="flex flex-wrap gap-1">
+                                                            {COLORES_TUBO.map(color => (
+                                                                <button key={color} type="button" onClick={() => poner({ genero: color })}
+                                                                    className="px-2 py-0.5 rounded-full text-[10px] font-bold border border-papel-borde bg-papel text-tinta-suave hover:border-marca">
+                                                                    {color}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
                                                 )}
                                                 <p className="text-[10px] font-bold text-marca-oscuro">Va a quedar: «{ficha.name}»{ficha.ruta ? ` · en ${ficha.ruta.replace(/\s*\/\s*/g, ' › ')}` : ''}</p>
                                                 {gemelo && (
