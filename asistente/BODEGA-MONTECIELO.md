@@ -5,9 +5,10 @@
 > cuándo pregunta, el formato exacto— está en `asistente/INSTRUCCIONES.md`, que
 > va en **Instrucciones**.
 >
-> **Catálogo, personas y obras leídos de producción el 5-oct-2026. Reglas
-> actualizadas el 11-oct-2026 (el asistente supone y avisa; NO pregunta el
-> proyecto).** Cuando cambie el inventario, pedir en Claude Code: «regenerá el
+> **Catálogo, personas y obras leídos de producción el 14-nov-2026. Reglas de
+> Juli del 11-oct y del 19-oct (el asistente supone y avisa, NO pregunta el
+> proyecto y entrega revisión y bloque de una vez), conciliadas con la app el
+> 14-nov: la FECHA va en el bloque, el tubo va por color y por tubo entero.** Cuando cambie el inventario, pedir en Claude Code: «regenerá el
 > catálogo de asistente/BODEGA-MONTECIELO.md desde producción», y volver a
 > subirlo.
 
@@ -20,8 +21,9 @@ JULI / ENCARGADA → dicta o pega, regado
         ↓
 ASISTENTE → corrige solo lo obvio y avisa · clasifica · ordena por trabajador
           → deduce el proyecto (NUNCA lo pregunta)
-          → pregunta SOLO persona «nuevo» o entrega duplicada
-          → muestra la revisión → espera «CONFIRMADO»
+          → pregunta SOLO: persona «nuevo», entrega repetida, trabajador
+            que ya tuvo entrega, tubo sin color
+          → entrega revisión Y bloque de una vez (no espera «CONFIRMADO»)
         ↓
 BLOQUE (=== ENTREGA ===, uno por trabajador)
         ↓
@@ -34,7 +36,7 @@ APP (chat → 📋 Bloque) → verifica contra la bodega: existencias, quién ti
 
 - **El asistente** revisa contra **lo que se dijo**. Corrige solo los errores
   de dictado (silicomas → Silicona), completa lo obvio y lo deja listado en
-  «Lo que supuse». Pregunta solo la persona «nuevo» y la entrega repetida.
+  «Lo que supuse». Pregunta solo lo de la sección 7.
 - **La app** revisa contra **la bodega**:
   - ¿esa pulidora la tiene otro?, ¿cuál de las pulidoras?;
   - ¿hay existencias? (si no hay, «entra lo que falta y sale»);
@@ -50,6 +52,7 @@ APP (chat → 📋 Bloque) → verifica contra la bodega: existencias, quién ti
 === ENTREGA ===
 TRABAJADOR: Adrián Echeverry
 PROYECTO: CRISTO
+FECHA: 03/10/2026
 HORA: 08:04
 LUGAR: contenedor
 
@@ -67,12 +70,14 @@ LUGAR: contenedor
 - **Una ENTREGA por trabajador.** Es lo mismo que la tarjeta que muestra la
   app antes de «✓ Pedido correcto».
 - **Campos:**
-  - `TRABAJADOR` y `PROYECTO` van siempre;
+  - `TRABAJADOR`, `PROYECTO` y `FECHA` (DD/MM/AAAA) van siempre;
   - `HORA` (HH:MM) y `LUGAR` (contenedor, segundo piso…) son opcionales;
   - van en cualquier orden.
-- **La fecha no va en el bloque**: la app todavía no lee `FECHA:`. Va en la
-  revisión de cada trabajador y, si el despacho no es de hoy, debajo del
-  bloque: «En la app, poné la fecha 03/10/2026».
+- **La fecha VA en el bloque** (la app la lee desde el 6-oct): cada entrega
+  se registra en SU día, aunque se pegue días después o en un mismo bloque
+  vengan varios días. Sin `FECHA`, la app registra hoy. Una fecha futura o
+  imposible (31/02) la app no la registra: la deja en la tarjeta para
+  corregir. Ya no hace falta «poné la fecha en la app».
 - **`PROYECTO: SIN PROYECTO`** es una decisión, no un olvido. Nunca va con
   consumibles.
 - **Cuadrilla:** `TRABAJADOR: Juan Echeverry (cuadrilla de Alex)`.
@@ -122,7 +127,7 @@ funcionando, pero el oficial es este.
 - **`"` es pulgada** y va pegada: `Brocha 2"`, `Codos 4"`, `Tornillos 1"`.
 - **Medida que no dijeron** (brochas, codos, semicodos, tubos, uniones, Y, T,
   bujes, sifones, tornillos, clavos, lijas):
-  - el catálogo tiene **una sola** → se usa y se avisa (`Brocha 2"`);
+  - el catálogo tiene **una sola** → se usa y se avisa (`Sifón 2"`);
   - tiene **varias** o ninguna → va sin medida (`3 Codos`) y la app pregunta
     con botones.
 - **No son pulgadas:**
@@ -132,6 +137,14 @@ funcionando, pero el oficial es este.
   - los metros, las libras, los bultos.
 - **Nunca se cambia una medida por la más parecida.** Si piden «Codos 5"» y no
   hay, el bloque dice `Codos 5"` y la app pregunta si lo crea.
+- **El tubo va por color** (Juli, 13-nov): verde, rojo, amarillo, azul,
+  violeta; en la bodega también hay naranja, gris y blanco. Si no lo dijeron,
+  se pregunta (sección 7). El color va en el nombre: `- 2 Tubo verde 2"`. El
+  tubo eléctrico (conduit) no lleva color. Si un tubo nuevo llega sin color,
+  la app no lo crea: pregunta el color con botones.
+- **El tubo sale por tubo entero:** 6 m; el eléctrico, 2 m. Pedido en metros
+  → se pasa a tubos y se avisa la cuenta (12 m = 2 tubos). Si no da exacto
+  (8 m), la app redondea hacia arriba y lo deja para mirar.
 - **Las unidades de la app** están entre corchetes en el catálogo: `[Kg]`,
   `[m]`, `[libras]`, `[caja]`, `[Cuñete]`. Sin corchete, son unidades.
 
@@ -166,7 +179,7 @@ Se aplican solos. Lo que dice «se avisa» va en «Lo que supuse».
 | Soudal | Soudal, **Consumible** (sellador/espuma) | Juli, 5-oct |
 | silicoma(s) | Silicona (negra, si lo dicen) | Juli, 6-oct. Error de dictado |
 | espuma polibreta | Espuma de poliuretano · Consumible | Juli, 6-oct. Error de dictado |
-| Brochas (sin medida) | Brocha 2" | Juli, 6-oct. Es la única del catálogo; se avisa |
+| Brochas (sin medida) | Brocha (sin medida) | Desde el 14-nov hay 2", 3" y 4": va sin medida y la app pregunta |
 | Rodillo pequeño | Rodillo | Juli, 6-oct. Es el rodillo normal |
 | pistola de calafateo | Pistola de calafateo · Herramienta manual | Juli, 6-oct |
 | Almadana nuevo | Almadana nueva · Herramienta manual · ítem nuevo | Juli, 6-oct. La app pregunta si la crea |
@@ -219,9 +232,10 @@ regenere el archivo.
      mensaje nuevo.
    - Si no la ha registrado → una sola entrega con todo, y reemplaza el
      bloque anterior.
-   - **Esta regla manda sobre** la línea de «El asistente supone y avisa» que
-     dice «dos mensajes del mismo trabajador con cosas distintas → una
-     entrega, con la hora del primero».
+   - Manda sobre «dos mensajes del mismo trabajador → una entrega»: esa vale
+     solo para mensajes que llegan juntos, antes de entregar el bloque.
+4. **Tubo sin color** (regla de Juli, 13-nov): «¿verde, rojo, amarillo, azul
+   o violeta?».
 
 **El proyecto NO se pregunta nunca.** Se deduce (sección 5).
 
@@ -232,8 +246,6 @@ regenere el archivo.
 - Cierra siempre con: «Si está malo, decime qué le modificamos. Si está
   bueno, dejalo así, Juli.»
 - Si Juli corrige, sale revisión y bloque de nuevo, y reemplaza al anterior.
-- **Esta regla manda sobre** el diagrama de la sección 1, el ejemplo de la
-  sección 8 y la prueba A8, que hablan de esperar «CONFIRMADO».
 
 **Renglón suelto:** si algo queda sin trabajador (una nota pegada por error,
 un pendiente anotado donde no era), NO se adjudica a nadie. Va aparte, al
@@ -273,7 +285,7 @@ Fecha: 03/10/2026 · Hora: 08:04 · Proyecto: ZONA GENERAL
 Consumibles:
 * 2 Soudal
 * 4 Silicona negra
-* 1 Brocha 2"
+* 1 Brocha
 * 1 Rodillo
 * 1 Espuma de poliuretano
 
@@ -302,21 +314,22 @@ Lo que supuse (si algo está mal, corregilo):
 Lo que falta (sin esto no sale):
 * Ricardo nuevo: ¿el Ricardo de la bodega u otro?
 
-Corregí lo que haga falta o decí CONFIRMADO.
+Falta definir lo de Ricardo; su entrega no está en el bloque todavía.
 ```
 
-**Con las respuestas y «CONFIRMADO»**, sale el bloque:
+**Justo debajo, en la misma respuesta**, sale el bloque:
 
 ```
 === ENTREGA ===
 TRABAJADOR: Adrián Echeverry
 PROYECTO: CRISTO
+FECHA: 03/10/2026
 HORA: 08:04
 
 [CONSUMIBLES]
 - 2 Soudal
 - 4 Silicona negra
-- 1 Brocha 2"
+- 1 Brocha
 - 1 Rodillo
 - 1 Espuma de poliuretano
 
@@ -329,6 +342,7 @@ HORA: 08:04
 === ENTREGA ===
 TRABAJADOR: Jorman
 PROYECTO: ZONA GENERAL
+FECHA: 03/10/2026
 HORA: 09:07
 
 [CONSUMIBLES]
@@ -341,7 +355,8 @@ HORA: 09:07
 === FIN ===
 ```
 
-Debajo: «En la app, poné la fecha 03/10/2026.»
+Y cierra: «Si está malo, decime qué le modificamos. Si está bueno, dejalo
+así, Juli.»
 
 **En la app pasa esto:**
 - pregunta si crea lo que no existe (Soudal, Silicona negra, Tapa plus, Lija
@@ -350,10 +365,12 @@ Debajo: «En la app, poné la fecha 03/10/2026.»
 - muestra la tarjeta de cada trabajador, agrupada por categoría, con
   «✓ Pedido correcto».
 
-**Nota (19-oct) sobre este ejemplo:** con la regla de «entrega de una vez»,
-el bloque no espera el «CONFIRMADO»: sale junto con la revisión (sin la
-entrega de Ricardo mientras siga la pregunta pendiente), y el cierre es
-«Si está malo, decime qué le modificamos. Si está bueno, dejalo así, Juli.»
+**La brocha** sale sin medida porque desde el 14-nov hay de 2", 3" y 4": la
+app pregunta cuál con botones. **Jorman** tiene dos mensajes en el MISMO
+material pegado (09:07 y 10:00): todavía no había entrega suya en la
+conversación, entonces van juntos y se avisa. La pregunta «¿ya la
+registraste?» es para cuando llega algo nuevo DESPUÉS de haber entregado su
+bloque.
 
 ## 9. Catálogo (por categoría y familia)
 
@@ -365,11 +382,11 @@ paréntesis, color · marca.
 - **Barniz**: Barniz
 - **Bisturi**: Bisturi
 - **Bombillos**: Bombillos vintage grandes
-- **Brocha**: Brocha 2"
+- **Brocha**: Brocha 2" · Brocha 3" · Brocha 4"
 - **Bujes**: Bujes pvc · Bujes tapa de 6"
 - **Cinta**: Cinta (negra) · Cinta bandy [m]
 - **Clabe**: Clabe #12
-- **Clavos**: Clavos [libras] · clavos 2 acero [libras] · Clavos acero 1 [libras] · Clavos acero 1.5" · clavos hierro 2 [libras] · Clavos hierro 3" · Clavos Tiro
+- **Clavos**: Clavos [libras] · clavos 2 acero [libras] · Clavos acero 1 [libras] · Clavos acero 1.5" · Clavos acero 2.5" [libras] · clavos hierro 2 [libras] · Clavos hierro 2.5" [libras] · Clavos hierro 3" · Clavos Tiro
 - **Codos**: Codos 2" · Codos 4" · Codos 4"-2" · Codos 6"
 - **Conector**: Conector macho
 - **Disco**: Disco · Disco muro pequeño
@@ -383,6 +400,7 @@ paréntesis, color · marca.
 - **Lápiz**: Lápiz
 - **Lechada**: Lechada gris claro [Kg] · Lechada veige [Kg]
 - **Lija**: Lija 240 · Lijas 150
+- **Limpiador**: Limpiador grande
 - **Pega**: Pega pvc
 - **Pintura**: Pintura Tipo 1
 - **Polvo**: Polvo enchape
@@ -391,12 +409,19 @@ paréntesis, color · marca.
 - **Semicodos**: Semicodos 6"
 - **Separador**: Separador de enchape (catapis)
 - **Sifón**: Sifón 2"
+- **Silicona**: Silicona transparente
 - **T**: T 2"
+- **Tela**: Tela poliéster
+- **Thinner**: Thinner
 - **Tiros**: Tiros [caja]
+- **Toma**: Toma doble Mercuri
 - **Tornillos**: Tornillos autoperforantes con tuerca
-- **Tubos**: Tubos Naranja 2"
+- **Tubos** (por color; se despachan por tubo entero de 6 m): Tubos amarillo sanitario 2" · Tubos Naranja 2"
 - **Unión**: Unión 2"
+- **Varsol**: Varsol
+- **Vasos**: Vasos meseyose
 - **Y**: Y 4_4 · Y 4-2 · Y 6"-6"
+- **3 en 1**: 3 en 1 galón
 - *Discos que salen con su herramienta (en la app, Accesorio):* Disco corte lámina · Disco diamante · Disco fla
 
 ### HERRAMIENTAS MANUALES
@@ -405,6 +430,7 @@ paréntesis, color · marca.
 - **Almadana**: Almadana
 - **Arnés**: Arnés y slinga
 - **Espátula**: Espátula pequeña
+- **Lima**: Lima
 - **Lasos**: Lasos (Rojo con blanco)
 - **Llana**: Llana lisa
 - **Machete**: Machete
@@ -414,6 +440,7 @@ paréntesis, color · marca.
 - **Palín**: Palín
 - **Palustre**: Palustre
 - **Pica**: Pica
+- **Pistola de calafateo**: Pistola de calafateo
 - **Pistola**: Pistola impacto ⚠ *(también existe como eléctrica: va como «Pistola impacto» y la app pregunta cuál)*
 - **Rodilleras**: Rodilleras
 - **Ruedas**: Ruedas de andamio
@@ -446,7 +473,7 @@ paréntesis, color · marca.
 ### EPP
 
 - **Gafas**: Gafas · Gafas de seguridad
-- **Guantes**: Guantes · Guantes naranja
+- **Guantes**: Guantes · Guantes goma · Guantes naranja
 - **Línea de vida**: Línea de vida con arnes
 - **Tapabocas**: Tapabocas
 
@@ -539,25 +566,15 @@ Pasale la mañana del 3-oct (sección 8) tal cual.
 |---|---|---|
 | A1 | Corrige solo | Escribe Silicona negra, Espuma de poliuretano y Alexander Ferreiro sin preguntar, y los avisa en «Lo que supuse» |
 | A2 | Pregunta poco | «Lo que falta» trae SOLO Ricardo nuevo. Nada de proyecto, medidas, categorías ni cuál taladro |
-| A3 | Medida | Brocha 2" supuesta y avisada. `Lija 180` y `LED 24 W` sin `"` |
+| A3 | Medida | Brocha sin medida (hay tres). `Lija 180` y `LED 24 W` sin `"` |
 | A4 | Clasificación | Tapa plus → Consumibles; pistola de calafateo → Herramientas manuales; LED 24 W → Consumibles. Sin preguntar |
-| A5 | Fecha | Cada trabajador dice Fecha: 03/10/2026, y debajo del bloque: «En la app, poné la fecha 03/10/2026» |
+| A5 | Fecha | Cada trabajador dice Fecha: 03/10/2026 en la revisión y `FECHA: 03/10/2026` en su entrega |
 | A6 | Formato | Sin emojis, un ítem por renglón con asterisco, «FALTA» en vez de «?» |
 | A7 | Proyecto deducido | Ningún trabajador queda sin proyecto y NO se pregunta: sale el habitual o ZONA GENERAL, avisado en «Lo que supuse» |
-| A8 | Confirmación | Sin «confirmado» no hay bloque |
 | A9 | El bloque en la app | Pegado en 📋 Bloque, cada trabajador sale en su tarjeta, agrupado por categoría, sin «no leídos» |
 | A10 | Material a granel | «1 acero 1-1/2"» sale como `1 Clavos acero 1.5"`, avisado |
 | A11 | Renglón suelto | Una línea sin trabajador NO se adjudica a nadie: sale bajo «Renglones sueltos» |
 | A12 | Mensaje nuevo de un trabajador ya atendido | Pregunta en «Lo que falta»: «¿ya la registraste en la app o la junto con esta?». Con «ya la registré» sale entrega nueva solo con lo nuevo; con «no» sale una sola entrega que reemplaza la anterior |
 | A13 | Entrega de una vez | Sin que Juli diga «confirmado», la respuesta trae la revisión y el bloque. Si hay pregunta pendiente, el bloque sale sin esa entrega y lo avisa. Cierra con «Si está malo, decime qué le modificamos. Si está bueno, dejalo así, Juli.» |
-
-**Nota (19-oct) sobre A2 y el ejemplo de la sección 8:** con la regla nueva de
-mensajes repetidos del mismo trabajador, la mañana del 3-oct trae una
-pregunta más en «Lo que falta»: «Jorman: ¿ya registraste la entrega de las
-09:07 o la junto con la lija de las 10:00?». Hasta que Juli responda, el
-supuesto «la lija va en la misma entrega» del ejemplo no aplica; A2 se aprueba
-si «Lo que falta» trae SOLO Ricardo nuevo y esa pregunta.
-
-**Nota (19-oct) sobre A8:** con la «entrega de una vez», A8 ya no aplica tal
-cual: ahora se aprueba si el bloque sale junto con la revisión y el cierre es
-el de A13.
+| A14 | Tubo sin color | «2 tubos de 2» pregunta en «Lo que falta»: ¿verde, rojo, amarillo, azul o violeta? Con el color, «- 2 Tubo verde 2"» |
+| A15 | Tubo en metros | «12 metros de tubo naranja de 2» sale como «- 2 Tubos Naranja 2"», con la cuenta avisada |
