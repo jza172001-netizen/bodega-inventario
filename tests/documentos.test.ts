@@ -78,7 +78,7 @@ grupo('el ejemplo del 3-oct: lo que existe se reconoce, lo que no, no se adivina
     esCierto(!!brocha && (!brocha.item || brocha.dudoso), 'la brocha sin medida queda para escoger, no se adivina la de 2"');
     esCierto(porNombre.has('Lija 180'), 'el ejemplo trae la lija 180');
     igual(porNombre.get('Lija 180')?.item, undefined, 'y NO se cambia por la 240');
-    igual(r.lineas.map(l => l.obraId), ['o0', 'o1'], 'CRISTO y ZONA GENERAL');
+    igual(r.lineas.map(l => l.obraId), ['o1', 'o1'], 'ZONA GENERAL los dos, como dice la revisión del ejemplo (antes el bloque decía CRISTO y la revisión no)');
 });
 
 await cerrar();

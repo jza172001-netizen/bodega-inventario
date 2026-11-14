@@ -287,6 +287,19 @@ conduit / EMT) is `Tubería eléctrica`, unit `tubos (2 m)` — Juli said «como
 2 metros»: one constant. «12 metros de tubo…» becomes 2 tubes (`tubosDeMetros`,
 rounds UP; not exact → `metros`/`mirar`).
 
+**The assistant docs are Juli's 19-Oct versions reconciled (14 Nov).** He had
+polished them elsewhere; the repo still had 6-Oct ones. His decisions stand
+(suppose-and-report, never ask the project, review + block in one reply); the
+reconciliation put `FECHA:` back in the block (his copy said the app could not
+read it), removed the leftover «CONFIRMADO» rules, and added tube colour and
+metres. Ask Juli for the copy he actually uses before editing them.
+`asistente/banco/` holds 20 scenarios + `verificar.ts`, which parses an
+agent-played assistant's replies with the real `leerLote` against the catalog
+in the knowledge file — run it after any prompt change. **`/api/despacho` does
+not run `verificarLote`**: tube-without-colour (`colorSupuesto`) and non-exact
+metres are pushed to `pendientes` there by hand. Colours are also read in
+plural («tubos verdes»). A tube's colour is its own `Piezas.color`, not `genero`.
+
 **The global search opens a PERSON in Personal** (her profile), not the
 Kardex loans tab (13 Nov).
 

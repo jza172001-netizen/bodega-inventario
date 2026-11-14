@@ -6,8 +6,8 @@
  * de abajo son los de PRODUCCIÓN leídos el 13-nov, no inventados.
  */
 import { InventoryType, Item } from '../types';
-import { clasificar, normalizarMedidas, sugerenciasDeOrden, tuboSinColor, metrosPorTubo, RUTA_TUBOS, RUTA_ACCESORIOS, RUTA_OTROS, UNIDAD_TUBO, UNIDAD_TUBO_ELECTRICO } from '../core/taxonomia';
-import { tubosDeMetros } from '../utils/lote';
+import { colorSupuesto, clasificar, normalizarMedidas, sugerenciasDeOrden, tuboSinColor, metrosPorTubo, RUTA_TUBOS, RUTA_ACCESORIOS, RUTA_OTROS, UNIDAD_TUBO, UNIDAD_TUBO_ELECTRICO } from '../core/taxonomia';
+import { tubosDeMetros, leerLote } from '../utils/lote';
 import { fichaDelBloque } from '../core/crearItem';
 import { medidaDicha, sinLargo } from '../utils/lote';
 import { denominacionesDe } from '../utils/medida';
@@ -75,6 +75,7 @@ grupo('el árbol completo: cada cosa en su rama, sin renombrar lo que no es tube
 grupo('el color del tubo: rojo y violeta existen, y sin color se pregunta', () => {
     igual(lugar('tubo rojo 2"')?.familia, 'Tubería roja', 'rojo');
     igual(lugar('tubo violeta 1/2"')?.familia, 'Tubería violeta', 'violeta');
+    igual(lugar('Tubos verdes 4"')?.familia, 'Tubería verde', 'el color en plural también');
     esCierto(tuboSinColor('tubos de 2'), 'sin color: hay que preguntar');
     esCierto(!tuboSinColor('tubo verde de 2'), 'con color, no');
     esCierto(!tuboSinColor('Codos 2"'), 'un codo no tiene color que preguntar');
@@ -146,6 +147,24 @@ grupo('el ítem que nace en el bloque cae solo en su lugar', () => {
     // Si la familia ya tiene hermanos, mandan ellos: lo que Juli organizó a mano no se pisa.
     const h = fichaDelBloque('codo de 3', C, [it('k', 'Codo 2"', 'Codo', { ruta: 'Mi tubería' })]);
     igual([h.name, h.familia, h.ruta], ['Codo 3"', 'Codo', 'Mi tubería'], 'el hermano manda sobre la regla');
+});
+
+
+grupo('auditoría 14-nov: el color supuesto, el eléctrico y el género', () => {
+    esCierto(colorSupuesto('tubos de 2', { name: 'Tubos Naranja 2"' }), 'sin color dicho, el naranja es un supuesto');
+    esCierto(!colorSupuesto('tubos de 1/2', { name: 'Tubería eléctrica 1/2"' }), 'el eléctrico no lleva color: no se pregunta');
+    esCierto(!colorSupuesto('tubos verdes de 2', { name: 'Tubería verde 2"' }), 'con color dicho, no');
+    const f = fichaDelBloque('tubos de 3', C, [], { genero: 'sanitario', color: 'verde' });
+    igual(f.familia, 'Tubería verde', 'sin hermanos, cae en Tubería verde');
+    // Con hermanos (producción tiene la familia «Tubos»), el nombre conserva las dos piezas.
+    const h = fichaDelBloque('tubos de 3', C, [it('n', 'Tubos Naranja 2"', 'Tubos')], { genero: 'sanitario', color: 'verde' });
+    esCierto(/sanitario/.test(h.name) && /verde/.test(h.name), `el color no borra el género, ni al revés: «${h.name}»`);
+});
+
+grupo('auditoría 14-nov: un tubo que se cuenta en metros no se pasa a tubos', () => {
+    const flex = it('fx', 'Tubo flexible 1/2"', 'Tubo', { unit: 'm' });
+    const r = leerLote('Juan: 10 metros de tubo flexible de 1/2', [{ id: 'j', name: 'Juan' }], [flex], []);
+    igual([r.lineas[0].items[0].cantidad, r.lineas[0].items[0].metros, r.lineas[0].items[0].item?.id], [10, undefined, 'fx'], '10 m siguen siendo 10 m');
 });
 
 await cerrar();

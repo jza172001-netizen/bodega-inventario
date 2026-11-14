@@ -64,6 +64,10 @@ const COLORES: Record<string, string> = {
     verde: 'verde', amarilla: 'amarilla', amarillo: 'amarilla', naranja: 'naranja', anaranjada: 'naranja',
     gris: 'gris', blanca: 'blanca', blanco: 'blanca', negra: 'negra', negro: 'negra', azul: 'azul',
     roja: 'roja', rojo: 'roja', violeta: 'violeta',
+    // Dicho en plural: «3 tubos verdes de 4» (banco de pruebas, 14-nov).
+    verdes: 'verde', amarillas: 'amarilla', amarillos: 'amarilla', naranjas: 'naranja', grises: 'gris',
+    blancas: 'blanca', blancos: 'blanca', negras: 'negra', negros: 'negra', azules: 'azul',
+    rojas: 'roja', rojos: 'roja', violetas: 'violeta',
 };
 
 /** «tubo eléctrico», «tubo conduit», «tubería EMT»: el de 2 m. */
@@ -182,6 +186,13 @@ export const clasificar = (item: Pick<Item, 'name' | 'inventoryType'>): Lugar | 
 /** Un tubo dicho sin color (y que no es eléctrico): hay que preguntar cuál. */
 export const tuboSinColor = (nombre: string): boolean =>
     !!clasificar({ name: nombre, inventoryType: InventoryType.SINGLE_USE })?.sinColor;
+
+/**
+ * Se pidió un tubo SIN color y se escogió uno CON color —el único de esa
+ * medida—: no se sabe si es ese. El eléctrico no cuenta: no lleva color.
+ */
+export const colorSupuesto = (dicho: string, item?: Pick<Item, 'name'>): boolean =>
+    !!item && tuboSinColor(dicho) && !tuboSinColor(item.name) && metrosPorTubo(item.name) === METROS_POR_TUBO;
 
 /** Cuántos metros trae un tubo de este ítem (6, o 2 el eléctrico); null si no es tubo. */
 export const metrosPorTubo = (nombre: string): number | null => {

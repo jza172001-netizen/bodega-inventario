@@ -139,12 +139,13 @@ funcionando, pero el oficial es este.
   hay, el bloque dice `Codos 5"` y la app pregunta si lo crea.
 - **El tubo va por color** (Juli, 13-nov): verde, rojo, amarillo, azul,
   violeta; en la bodega también hay naranja, gris y blanco. Si no lo dijeron,
-  se pregunta (sección 7). El color va en el nombre: `- 2 Tubo verde 2"`. El
+  se pregunta (sección 7). El color va en el nombre: `- 2 Tubos verde 2"`. El
   tubo eléctrico (conduit) no lleva color. Si un tubo nuevo llega sin color,
   la app no lo crea: pregunta el color con botones.
 - **El tubo sale por tubo entero:** 6 m; el eléctrico, 2 m. Pedido en metros
-  → se pasa a tubos y se avisa la cuenta (12 m = 2 tubos). Si no da exacto
-  (8 m), la app redondea hacia arriba y lo deja para mirar.
+  → el asistente lo pasa a tubos y avisa la cuenta (12 m = 2 tubos). Si no da
+  exacto (8 m), redondea hacia arriba (2 tubos) y lo avisa; si llega en
+  metros a la app, la app hace lo mismo y lo deja para mirar.
 - **Las unidades de la app** están entre corchetes en el catálogo: `[Kg]`,
   `[m]`, `[libras]`, `[caja]`, `[Cuñete]`. Sin corchete, son unidades.
 
@@ -236,6 +237,10 @@ regenere el archivo.
      solo para mensajes que llegan juntos, antes de entregar el bloque.
 4. **Tubo sin color** (regla de Juli, 13-nov): «¿verde, rojo, amarillo, azul
    o violeta?».
+5. **Fecha futura** (un [20/12] cuando hoy es 14/11): «¿qué fecha es?». La app
+   tampoco la registra.
+
+Si todas las entregas quedan esperando respuesta, no sale bloque y se dice.
 
 **El proyecto NO se pregunta nunca.** Se deduce (sección 5).
 
@@ -322,7 +327,7 @@ Falta definir lo de Ricardo; su entrega no está en el bloque todavía.
 ```
 === ENTREGA ===
 TRABAJADOR: Adrián Echeverry
-PROYECTO: CRISTO
+PROYECTO: ZONA GENERAL
 FECHA: 03/10/2026
 HORA: 08:04
 
@@ -441,7 +446,7 @@ paréntesis, color · marca.
 - **Palustre**: Palustre
 - **Pica**: Pica
 - **Pistola de calafateo**: Pistola de calafateo
-- **Pistola**: Pistola impacto ⚠ *(también existe como eléctrica: va como «Pistola impacto» y la app pregunta cuál)*
+- **Pistola**: Pistola impacto ⚠ *(también existe como eléctrica: va como «Pistola impacto» en [HERRAMIENTAS ELÉCTRICAS] y la app pregunta cuál)*
 - **Rodilleras**: Rodilleras
 - **Ruedas**: Ruedas de andamio
 - **Tenazas**: Tenazas
@@ -564,7 +569,7 @@ Pasale la mañana del 3-oct (sección 8) tal cual.
 
 | # | Qué se prueba | Aprobado si… |
 |---|---|---|
-| A1 | Corrige solo | Escribe Silicona negra, Espuma de poliuretano y Alexander Ferreiro sin preguntar, y los avisa en «Lo que supuse» |
+| A1 | Corrige solo | Escribe Silicona negra, Espuma de poliuretano y Alexander Ferreiro sin preguntar. En «Lo que supuse» van solo los que la tabla de la sección 6 marca «se avisa» (Alex F) y los errores que NO están en la tabla |
 | A2 | Pregunta poco | «Lo que falta» trae SOLO Ricardo nuevo. Nada de proyecto, medidas, categorías ni cuál taladro |
 | A3 | Medida | Brocha sin medida (hay tres). `Lija 180` y `LED 24 W` sin `"` |
 | A4 | Clasificación | Tapa plus → Consumibles; pistola de calafateo → Herramientas manuales; LED 24 W → Consumibles. Sin preguntar |
@@ -578,3 +583,4 @@ Pasale la mañana del 3-oct (sección 8) tal cual.
 | A13 | Entrega de una vez | Sin que Juli diga «confirmado», la respuesta trae la revisión y el bloque. Si hay pregunta pendiente, el bloque sale sin esa entrega y lo avisa. Cierra con «Si está malo, decime qué le modificamos. Si está bueno, dejalo así, Juli.» |
 | A14 | Tubo sin color | «2 tubos de 2» pregunta en «Lo que falta»: ¿verde, rojo, amarillo, azul o violeta? Con el color, «- 2 Tubo verde 2"» |
 | A15 | Tubo en metros | «12 metros de tubo naranja de 2» sale como «- 2 Tubos Naranja 2"», con la cuenta avisada |
+| A16 | Fecha futura | «[20/12, …]» con hoy 14/11: pregunta «¿qué fecha es?» y esa entrega no sale |
