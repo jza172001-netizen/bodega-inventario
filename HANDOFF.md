@@ -1,4 +1,4 @@
-# HANDOFF — Bodega Montecielo (al 19-oct-2026)
+# HANDOFF — Bodega Montecielo (al 14-nov-2026)
 
 > Traspaso para un chat nuevo. **Leé esto completo, y después `CLAUDE.md`, antes
 > de tocar nada.** El historial largo (hasta el 2-oct) está entero en
@@ -16,38 +16,28 @@
   - `npm run test` y `node verificar-lint.cjs` con código de salida 0;
   - `npm run build` con código de salida 0;
   - cada arreglo con prueba de mutación;
+  - recorridos del navegador (`tests/navegador/recorrido.mjs`);
   - PR, merge y Vercel READY;
   - comprobar las 3 ventanillas (`/api/*` responden 405 a GET).
-- **Juli dijo el 2-oct: «estas son las últimas ediciones de código».** No
-  proponer funciones nuevas. Solo auditar, arreglar lo roto y cerrar lo pendiente.
 
-## 2. Producción y cierre del 3-oct
+## 2. Producción al 14-nov
 
 - App: `bodega-montecielo.vercel.app` (Vercel, Node 24). Base: Supabase
-  `xmizawuhiounkiaqrwxd` (`sa-east-1`).
-- **Datos (2-oct):** 129 ítems, 234 movimientos, 35 personas, 8 obras activas.
-  El último movimiento es del 8-sep.
-- **⚠ EL CIERRE DEL 3-OCT ESTÁ EN EL REPO, NO EN PRODUCCIÓN** (auditoría del
-  7-oct, `AUDITORIA-2026-10-07.md`). Hoy la llave pública lee y escribe todo,
-  `authenticate_user` vive y hay 3 claves en texto plano. Se aplica pegando
-  `supabase/APLICAR-3-OCT.sql` en el editor SQL de Supabase (ver §4).
-- **Cierre del 3-oct (rige cuando se aplique):** todos los huecos de la
-  auditoría del 2-oct.
-  - Nadie se vuelve administrador editando la tabla de accesos.
-  - La llave pública ya no lee ni mueve inventario: hace falta la sesión de
-    alguien de la bodega.
-  - La entrada vieja (`authenticate_user`) y las claves en texto plano se
-    retiraron.
-  - El tope de intentos del código de alta cuenta de verdad.
-  - El bloque no crea gemelos; la API no adivina personas; Organizar no toca
-    cantidades.
-  - El Kardex queda en cero, sin mover stock.
-  - Un latido diario evita que Supabase se pause.
-- **Accesos:** solo Juli tiene clave. Kate y Camilo entran como primera vez,
-  con el código que Juli genera en Accesos → «🔑 Código».
-- **Orden de despliegue:** primero el código (PR, merge, Vercel), después las 3
-  migraciones `20261003*`. El código nuevo funciona con la base vieja; al revés,
-  no.
+  `xmizawuhiounkiaqrwxd` (`sa-east-1`), plan gratis: se ha pausado varias
+  veces pese al latido.
+- **Datos:** 152 ítems vivos, 36 personas, 9 obras activas, 376 movimientos.
+- **Préstamos restablecidos el 13-nov** (permiso de Juli): los 34 abiertos
+  (40 unidades, 17 personas) se cerraron con su devolución ligada (`devuelve_a`)
+  y la nota «Cierre por reconteo 13-nov-2026». Nada se borró. Stock 92 → 132.
+  **Falta el conteo físico de herramientas de Juli** para ajustar lo que no
+  esté.
+- **⚠ EL CIERRE DEL 3-OCT SIGUE SIN APLICAR.** Los asesores de Supabase del
+  14-nov lo confirman: la llave pública ejecuta las funciones de stock y
+  `authenticate_user`, y lee y escribe las tablas. `supabase/APLICAR-3-OCT.sql`
+  cierra cada uno de esos hallazgos (revisado el 14-nov). Quedan públicos a
+  propósito solo `get_users_safe` y `dar_de_alta`.
+- **Kardex:** 21 ítems descuadrados, todos de antes. Los cuadra la migración
+  `20261003140000` incluida en ese mismo SQL.
 
 ## 3. Cómo funciona (mapa corto; el detalle está en CLAUDE.md)
 
@@ -59,71 +49,63 @@
   - `verificacion.ts`: alertas del bloque, resumen y huella;
   - `crearItem.ts`: cómo nace un ítem;
   - `organizar.ts`: géneros y familias;
+  - `taxonomia.ts` (13-nov): el árbol de la bodega, el color y el largo del tubo;
   - `consultas.ts` y `registro.ts`: el asistente.
-- **El chat** (`components/FloatingChat.tsx`, unas 3.000 líneas) tiene 4 botones:
-  - **📋 Bloque:** se pega lo que entrega el Gem;
-  - **🚀 Despacho:** el flujo de 4 pasos, el mejor diseñado según Juli;
-  - **⚡ Rápido;**
-  - **➕ Agregar.**
-- **El flujo de Juli:** dicta al Gem durante la mañana → «unificá» → verifica
-  contra los audios → «confirmado» → el Gem entrega el bloque → se pega en 📋
-  Bloque → la app verifica contra la bodega → «✓ Pedido correcto» por trabajador
-  → Registrar.
-- **El asistente (Gem / Proyecto, desde el 5-oct):** `asistente/INSTRUCCIONES.md`
-  es el system prompt; `asistente/BODEGA-MONTECIELO.md` es el conocimiento único
-  (reglas, sinónimos, ejemplo del 3-oct y catálogo de producción, que se regenera
-  cuando cambia el inventario). Entrega el bloque nuevo `=== ENTREGA ===`, uno
-  por trabajador y agrupado por categoría; la app lee también el formato viejo.
-  `tests/documentos.test.ts` lee los bloques escritos en los documentos con el
-  lector de la app.
+- **El árbol (13-nov):** Herramientas › Manuales | Eléctricas | Accesorios ·
+  Materiales de consumo › Tubería y accesorios | Pinturas y líquidos | Polvos |
+  Eléctricos | Varios (Brochas y rodillos, Fijaciones, Abrasivos, Adhesivos y
+  selladores, Otros) · EPP. Se aplica con «🪄 Agrupar solo» en Organizar
+  bodega, con vista previa; **Juli todavía no lo ha aplicado.**
+- **Tubo:** va por color (verde, rojo, amarillo, azul, violeta, naranja, gris,
+  blanco) y por tubo entero de 6 m; el eléctrico, de 2 m. Los metros dichos se
+  pasan a tubos.
+- **El asistente** (Gem / Proyecto): `asistente/INSTRUCCIONES.md` es el system
+  prompt y `asistente/BODEGA-MONTECIELO.md` el conocimiento. **Desde el 14-nov
+  son las versiones de Juli del 19-oct conciliadas con la app** (supone y
+  avisa; no pregunta el proyecto; revisión y bloque de una vez; la `FECHA` va
+  en el bloque). Hay que **volver a subir los dos** al Gem.
+- **Banco de pruebas del asistente** (`asistente/banco/`, 14-nov): 20
+  escenarios y un verificador que lee con el lector real de la app lo que
+  responde un agente que hace de asistente. Cómo correrlo, en el encabezado de
+  `verificar.ts`.
 
 ## 4. Pendientes, en orden
 
 1. **Juli pega `supabase/APLICAR-3-OCT.sql`** en supabase.com → SQL Editor →
    New query → Run. Debe salir «LISTO»; «NO SE APLICÓ NADA» = no quedó nada.
-   No se puede desde una sesión remota de Claude: el conector pide confirmar
-   cada `DROP` y se corta a los 60 s. Después, comprobar en la base.
-   - El proyecto amaneció PAUSADO el 19-oct pese al latido: revisar que
-     `/api/latido` responda 200 y que el cron de Vercel corra.
-   - Juli decide: pistola de Héctor, «Estuco tipo 3» gemelos, los 2 préstamos
-     de lijadora Stanley de Diego, prueba A1–A7 del asistente.
-2. **Juli:** generar el código de Kate y el de Camilo, y que entren.
-3. **Inventario definitivo.**
-   - **Decisión de Juli:** la Lista 5 (lo que cada uno tiene hoy o lo que tuvo
-     alguna vez).
-   - **Pendiente de su revisión:** `herramientas/INFORME-VINCULACION.md`.
-   - Se aplica con una entrada de apertura por unidad; la consulta 4 de
-     `supabase/RESTAURAR.md` tiene que seguir en cero.
-4. **Recorridos R1–R19 en el teléfono** (`VERIFICACION-ENTREGA.md`); nunca hubo
-   prueba en navegador real. Incluye la prueba de dos teléfonos a la vez.
-5. **pdfjs-dist:** la única vulnerabilidad que queda; su arreglo es la versión 6
-   (cambio mayor). Probarla en navegador antes de subirla.
-6. **Opcional:**
-   - `CRON_SECRET` en Vercel, para que solo Vercel llame el latido;
-   - desconectar Netlify, que falla en cada PR;
-   - fase B: el «+ Crear nuevo» del chat pasa a `core/crearItem.ts`.
+   No se puede desde una sesión remota de Claude. Después, comprobar
+   `pg_policies` (`solo_la_bodega`) y volver a pedir los asesores.
+2. **Juli sube al Gem** los dos archivos de `asistente/` del 14-nov.
+3. **Conteo físico de herramientas** (después del cierre de préstamos):
+   lo que esté queda; lo que alguien tenga se vuelve a prestar; lo que falte se
+   da de baja con su ajuste.
+4. **«🪄 Agrupar solo»** en Organizar bodega, mirando la vista previa.
+5. **Confirmar el largo del tubo eléctrico** (Juli dijo «como de 2 metros»).
+   Es una constante en `core/taxonomia.ts`.
+6. **Decisiones de negocio que salieron del banco de pruebas** (14-nov):
+   - el proyecto habitual de cada trabajador (sección 11 del conocimiento) está
+     VACÍO: hoy todo sale a ZONA GENERAL;
+   - unidades dichas distintas a las de la app: «2 galones de thinner» (la app
+     cuenta unidades), «1 libra de clavos de 3"» (se cuentan por unidad);
+   - «Almadana nueva»: ahora hay «Almadana» en el catálogo;
+   - nombres dobles: «Estuco tipo 3» / «Estuco Tipo 3», «clavos hierro 2» sin `"`.
+7. **Opcional:** plan Pro de Supabase (se pausa); protección de claves filtradas
+   en Supabase Auth; `CRON_SECRET` en Vercel; pdfjs-dist 6 (probar en navegador).
+8. **Juli:** pasar `Copia-bodega` a privado y revocar la llave de Google que
+   quedó en el historial.
 
 ## 5. Prompt para abrir el chat nuevo (copiar y pegar)
 
 ```
 Recupera sesión. Leé HANDOFF.md y CLAUDE.md completos.
 
-Primero una AUDITORÍA FINAL, solo lectura, sin tocar nada:
-1. Estado real de producción (Supabase y Vercel): accesos (quién entró ya por
-   la identidad nueva), conteos, que las migraciones del repo coincidan con lo
-   instalado, y que la reconciliación del Kardex de supabase/RESTAURAR.md dé
-   cero filas (descontando los préstamos viejos sin entrada).
-2. Corré npm run test, node verificar-lint.cjs, npm run build y
-   node supabase/verificar-baseline.cjs, y juzgalos por su código de salida.
-3. Revisá por defectos (no por estilo) lo que cambió en los PR #100 a #103:
-   el bloque (FloatingChat renderLote/registrarLote, core/verificacion,
-   core/crearItem, utils/lote), los accesos (migración 20261002120000,
-   LoginView, UserManagementModal) y Organizar bodega.
-4. Entregá una lista de fallas reales con su evidencia (archivo:línea, consulta
-   o prueba), de la más grave a la menor, y qué propondrías. No arregles nada
-   todavía.
-
-Juli no quiere funciones nuevas: solo cerrar lo roto y lo pendiente.
+Primero, solo lectura:
+1. Estado real de producción: ¿ya se aplicó APLICAR-3-OCT.sql? (pg_policies,
+   asesores de seguridad de Supabase), conteos, Kardex descuadrado.
+2. Corré npm run test, node verificar-lint.cjs, npm run build y los recorridos
+   del navegador, y juzgalos por su código de salida.
+3. Decime qué de la sección 4 del HANDOFF sigue pendiente y qué ya hizo Juli.
+No toques nada sin plan y «Ejecuta».
 ```
 
 ## 6. Cosas que ya se aprendieron (no volver a caer)
@@ -132,13 +114,17 @@ Juli no quiere funciones nuevas: solo cerrar lo roto y lo pendiente.
   decía `lang="en"`. Ya está en español y sin traducción.
 - **Lo dudoso se decide, no se adivina.** El bloque registraba el primer
   parecido: 22 de 60 elementos en la prueba con datos reales.
-- **Las familias reales están en plural** («Codos»). Las obras se escriben como
-  en el catálogo («CRISTO»): «El Cristo» no la reconoce.
+- **Las familias reales están en plural** («Codos»), y los colores también se
+  dicen en plural («tubos verdes»): el 14-nov no se reconocían.
 - **Un `CHECK` o un `NOT NULL` de la base puede tumbar una función nueva.**
-  `app_users.password` es NOT NULL: por eso se usa `''`, y `authenticate_user`
-  rechaza las claves vacías.
-- **Antes de aplicar una migración en producción**, se prueba dentro de una
-  transacción que termina en `raise exception` con los resultados: así se
-  revierte sola. Por el conector solo sirve sin `DROP`.
+- **Antes de tocar datos de producción**, se ensaya dentro de una transacción
+  que termina en `raise exception` con los resultados: así se revierte sola.
+  Así se cerraron los préstamos el 13-nov.
 - **Que esté en el repo no es que esté en producción.** El estado se lee en la
-  base (`pg_policies`, `list_migrations`), nunca en CLAUDE.md ni acá.
+  base, nunca en CLAUDE.md ni acá.
+- **Las instrucciones que usa Juli pueden no ser las del repo.** El 14-nov las
+  del Gem eran del 19-oct y el repo tenía las del 6-oct; las de Juli habían
+  sacado la `FECHA` del bloque. Antes de tocar el asistente, pedirle las que
+  usa.
+- **La API no pasa por `verificarLote`.** Lo que en pantalla es «mirar» (tubo
+  sin color, metros no exactos) en la API tiene que ir a pendientes a mano.

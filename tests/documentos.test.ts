@@ -31,6 +31,8 @@ const it = (id: string, name: string, t: InventoryType): Item =>
     ({ id, name, quantity: 5, inventoryType: t, category: 'x', subCategory: '', minStock: 0, unit: 'und' });
 const ITEMS = [
     it('brocha', 'Brocha 2"', InventoryType.SINGLE_USE),
+    it('brocha3', 'Brocha 3"', InventoryType.SINGLE_USE),
+    it('brocha4', 'Brocha 4"', InventoryType.SINGLE_USE),
     it('almadana', 'Almadana', InventoryType.HAND_TOOL),
     it('tal-stanley', 'Taladro Inhalambrico (Amarillo · Stanley)', InventoryType.ELECTRICAL_TOOL),
     it('tal-dwalt', 'Taladro inhalambrico (Amarillo · Dwalt)', InventoryType.ELECTRICAL_TOOL),
@@ -47,6 +49,10 @@ grupo('el system prompt cabe en cualquier asistente (menos de 8.000 caracteres)'
     // La fecha va EN el bloque: el aviso de ponerla a mano en la app sobra.
     esCierto(!/poné la fecha/i.test(prompt), 'ya no le pide a Juli poner la fecha en la app');
     esCierto(/FECHA: DD\/MM\/AAAA/.test(prompt), 'y le dice el formato de FECHA');
+    // Las decisiones de Juli del 19-oct siguen ahí (14-nov).
+    esCierto(/NUNCA se pregunta/.test(prompt) && /sin esperar «CONFIRMADO»/.test(prompt), 'no pregunta el proyecto y entrega de una vez');
+    esCierto(!/decí CONFIRMADO/.test(prompt) && !/solo después de/i.test(prompt), 'sin restos del «CONFIRMADO» que se contradecían');
+    esCierto(/verde, rojo, amarillo, azul/.test(prompt) && /12 m = 2/.test(prompt), 'pregunta el color del tubo y pasa metros a tubos');
 });
 
 grupo('cada bloque escrito en los documentos lo lee la app, completo', () => {
@@ -67,10 +73,12 @@ grupo('el ejemplo del 3-oct: lo que existe se reconoce, lo que no, no se adivina
     const porNombre = new Map(r.lineas.flatMap(l => l.items).map(x => [x.nombre, x]));
     igual(porNombre.get('Taladro Inhalambrico Amarillo Stanley')?.item?.id, 'tal-stanley', 'el taladro es el Stanley, no otro inalámbrico');
     igual(porNombre.get('Taladro Inhalambrico Amarillo Stanley')?.dudoso, false, 'y sin duda');
-    igual(porNombre.get('Brocha 2"')?.item?.id, 'brocha', 'la brocha de 2" de Adrián');
+    // Desde el 14-nov hay tres brochas: sin medida, la app NO escoge sola.
+    const brocha = porNombre.get('Brocha');
+    esCierto(!!brocha && (!brocha.item || brocha.dudoso), 'la brocha sin medida queda para escoger, no se adivina la de 2"');
     esCierto(porNombre.has('Lija 180'), 'el ejemplo trae la lija 180');
     igual(porNombre.get('Lija 180')?.item, undefined, 'y NO se cambia por la 240');
-    igual(r.lineas.map(l => l.obraId), ['o0', 'o1'], 'CRISTO y ZONA GENERAL');
+    igual(r.lineas.map(l => l.obraId), ['o1', 'o1'], 'ZONA GENERAL los dos, como dice la revisión del ejemplo (antes el bloque decía CRISTO y la revisión no)');
 });
 
 await cerrar();

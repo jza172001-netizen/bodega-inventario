@@ -1536,7 +1536,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
                                                         <p className="text-[10px] font-semibold text-atencion">⚠ ¿De qué color es el tubo?</p>
                                                         <div className="flex flex-wrap gap-1">
                                                             {COLORES_TUBO.map(color => (
-                                                                <button key={color} type="button" onClick={() => poner({ genero: color })}
+                                                                <button key={color} type="button" onClick={() => poner({ color })}
                                                                     className="px-2 py-0.5 rounded-full text-[10px] font-bold border border-papel-borde bg-papel text-tinta-suave hover:border-marca">
                                                                     {color}
                                                                 </button>

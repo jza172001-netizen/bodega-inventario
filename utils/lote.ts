@@ -647,9 +647,15 @@ export const leerLote = (texto: string, personnel: Personnel[], items: Item[], p
 
     const leerElemento = (trozo: string, categoria?: InventoryType): ItemLote => {
         const dicho = partirCantidad(trozo);
-        const enTubos = tubosDeMetros(dicho.cantidad, dicho.nombre);
-        const { cantidad, nombre } = enTubos ?? dicho;
+        let enTubos = tubosDeMetros(dicho.cantidad, dicho.nombre);
+        let { cantidad, nombre } = enTubos ?? dicho;
         const ri = buscarItem(items, nombre);
+        // Si el tubo que se encontró ya se cuenta EN METROS, los metros dichos
+        // son la cantidad: pasarlos a tubos descontaría 2 m en vez de 10.
+        const enMetros = (u?: string) => /^(?:m|mts?|metros?)$/i.test((u ?? '').trim());
+        if (enTubos && enMetros(escoger(ri).elegido?.unit)) {
+            enTubos = null; cantidad = dicho.cantidad;
+        }
         const { elegido: item, dudoso } = escoger(ri);
         return {
             id: nuevoId(), texto: trozo, cantidad, nombre, item, candidatos: ri.map(r => r.value), dudoso,

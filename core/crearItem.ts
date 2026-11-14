@@ -17,7 +17,8 @@ import { nombreCompuesto } from '../utils/medida.js';
 import { medidaDicha, sinUnidadPura } from '../utils/lote.js';
 import { clasificar } from './taxonomia.js';
 
-export interface Piezas { genero?: string; denominacion?: string }
+/** `color`: el del tubo (13-nov); va aparte del género para que uno no borre al otro. */
+export interface Piezas { genero?: string; denominacion?: string; color?: string }
 
 const conMayuscula = (t: string) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t);
 
@@ -33,7 +34,7 @@ export const nombreDelDicho = (dicho: string, piezas: Piezas = {}): string => {
     const d = medidaDicha(dicho);
     const base = (d?.base ?? dicho).trim();
     const denominacion = piezas.denominacion?.trim() || d?.medida || '';
-    return nombreCompuesto(conMayuscula(base), piezas.genero?.trim(), denominacion);
+    return nombreCompuesto(conMayuscula(base), [piezas.genero?.trim(), piezas.color?.trim()].filter(Boolean).join(' '), denominacion);
 };
 
 /** Lo que se dijo, sin la medida: la familia que se le ofrece a `PasosDeNombre`. */

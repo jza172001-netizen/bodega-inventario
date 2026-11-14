@@ -23,7 +23,7 @@ import { tipoExigeObra } from './despacho.js';
 import { medidaDicha, problemaDeFecha, problemaDeHora } from '../utils/lote.js';
 import type { ItemLote, LineaLote, LoteParseado } from '../utils/lote.js';
 import { medidaDe, sinMedida, valorDeMedida } from '../utils/medida.js';
-import { COLORES_TUBO, metrosPorTubo, tuboSinColor } from './taxonomia.js';
+import { COLORES_TUBO, colorSupuesto, metrosPorTubo, tuboSinColor } from './taxonomia.js';
 
 export type TipoAlerta =
     | 'persona'          // no se sabe quién es (no existe o hay dos parecidos)
@@ -213,10 +213,10 @@ export const verificarLote = (lote: LoteParseado, c: Contexto): {
                     tipo: 'color', nivel: 'decidir',
                     texto: `«${it.nombre}»: ¿de qué color es el tubo? ${COLORES_TUBO.slice(0, 5).join(', ')}…`,
                 });
-            } else if (it.item && tuboSinColor(it.nombre) && !tuboSinColor(it.item.name) && metrosPorTubo(it.item.name)) {
+            } else if (colorSupuesto(it.nombre, it.item)) {
                 anotar(porItem, it.id, {
                     tipo: 'color', nivel: 'mirar',
-                    texto: `No dijeron el color del tubo: sale como «${it.item.name}». ¿Es ese?`,
+                    texto: `No dijeron el color del tubo: sale como «${it.item!.name}». ¿Es ese?`,
                 });
             }
             if (it.metros !== undefined) {

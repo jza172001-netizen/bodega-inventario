@@ -44,6 +44,7 @@ import { momentoConHora } from '../utils/date.js';
 import { idDeterminista, firmaDe } from './identidad.js';
 import { leerLote, personaClara, problemaDeFecha, problemaDeHora } from '../utils/lote.js';
 import { isAsset } from '../utils/inventory.js';
+import { colorSupuesto, metrosPorTubo, METROS_POR_TUBO } from '../core/taxonomia.js';
 import { rankMatches } from '../utils/search.js';
 import { uuidDe } from './identidad.js';
 
@@ -242,6 +243,16 @@ export default async function handler(req: Peticion, res: Respuesta): Promise<vo
             }
             if (it.dudoso) {
                 pendientes.push({ renglon: `${linea.personaTexto}: ${it.texto}`, motivo: `Hay más de una opción parecida: ${it.candidatos.map(c => c.name).join(', ')}` });
+                continue;
+            }
+            // El tubo (13-nov): sin color dicho, o en metros que no dan tubos
+            // enteros, en pantalla se MIRA antes de salir. Acá no hay quién mire.
+            if (colorSupuesto(it.nombre, it.item)) {
+                pendientes.push({ renglon: `${linea.personaTexto}: ${it.texto}`, motivo: `No dijeron el color del tubo; el único de esa medida es «${it.item.name}». Confirmalo en la app` });
+                continue;
+            }
+            if (it.metros !== undefined && it.cantidad * (metrosPorTubo(it.item.name) ?? METROS_POR_TUBO) !== it.metros) {
+                pendientes.push({ renglon: `${linea.personaTexto}: ${it.texto}`, motivo: `Pidieron ${it.metros} m y no da en tubos enteros. Decí cuántos tubos` });
                 continue;
             }
             // La regla del chat: el material de consumo no sale sin obra. Por
