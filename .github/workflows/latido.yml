@@ -1,0 +1,18 @@
+# Segundo latido para que Supabase no pause el proyecto (ver api/latido.ts).
+# Vercel Hobby solo permite un cron diario; esto llama el mismo endpoint cada 6 h.
+name: latido
+on:
+  schedule:
+    - cron: '41 */6 * * *'
+  workflow_dispatch:
+jobs:
+  latido:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Llamar /api/latido
+        run: |
+          curl -fsS --retry 3 --retry-delay 20 \
+            ${CRON_SECRET:+-H "Authorization: Bearer $CRON_SECRET"} \
+            https://bodega-montecielo.vercel.app/api/latido
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
